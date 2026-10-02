@@ -226,15 +226,20 @@ public:
                 hiveIds.push_back(rootHiveId);
             }
         }
-        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
-            const auto& resultSet = DatabaseNavigateResponse->Get()->Request->ResultSet;
-            if (!resultSet.empty()) {
-                const auto& entry = resultSet.front();
-                if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
-                    hiveIds.push_back(entry.DomainInfo->Params.GetHive());
+        auto addHive = [&](const auto& navigateResponse) {
+            if (navigateResponse && navigateResponse->IsOk()) {
+                const auto& resultSet = navigateResponse->Get()->Request->ResultSet;
+                if (!resultSet.empty()) {
+                    const auto& entry = resultSet.front();
+                    if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
+                        hiveIds.push_back(entry.DomainInfo->Params.GetHive());
+                    }
                 }
             }
-        }
+        };
+        addHive(DatabaseNavigateResponse);
+        // Serverless tablets may be managed by the shared database's Hive.
+        addHive(ResourceNavigateResponse);
         std::ranges::sort(hiveIds);
         auto duplicates = std::ranges::unique(hiveIds);
         hiveIds.erase(duplicates.begin(), duplicates.end());
@@ -486,7 +491,11 @@ public:
         const auto& vDiskInfo(VDiskRequests[requestIndex]);
         for (const auto& record : vDiskInfo.VDiskRequest->Record.stat().tablets()) {
             TTabletId tabletId = record.tablet_id();
-            auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
+            auto it = TabletStorageInfo.find(tabletId);
+            if (it == TabletStorageInfo.end()) {
+                continue;
+            }
+            auto& tabletStorageInfo = it->second;
             for (const auto& channel : record.channels()) {
                 auto& groupStorageInfo(tabletStorageInfo.Groups[vDiskInfo.GroupId]);
                 groupStorageInfo.StorageSize += channel.data_size();
@@ -545,7 +554,6 @@ public:
     void Handle(TEvGetLogoBlobIndexStatResponse::TPtr& ev) {
         if (ev->Cookie < VDiskRequests.size()) {
             if (VDiskRequests[ev->Cookie].VDiskRequest.Set(std::move(ev))) {
-                ProcessVDiskResponse(ev->Cookie);
                 RequestDone();
             }
         } else {
@@ -663,6 +671,13 @@ public:
     }
 
     void ReplyAndPassAway() override {
+        // Shared storage groups may contain tablets of other databases. Wait for
+        // tablet discovery before joining VDisk stats with the selected tablets.
+        for (size_t requestIndex = 0; requestIndex < VDiskRequests.size(); ++requestIndex) {
+            if (VDiskRequests[requestIndex].VDiskRequest.IsOk()) {
+                ProcessVDiskResponse(requestIndex);
+            }
+        }
         bool returnEverything = FromStringWithDefault<bool>(Params.Get("everything"), false);
         bool returnGroups = FromStringWithDefault<bool>(Params.Get("groups"), returnEverything);
         bool returnTablets = FromStringWithDefault<bool>(Params.Get("tablets"), returnEverything);

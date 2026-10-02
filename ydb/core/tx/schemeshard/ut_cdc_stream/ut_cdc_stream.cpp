@@ -1,5 +1,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -662,6 +663,61 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             DropColumns { Name: "value" }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning) {
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replica";
+        attrs["supports_topic_autopartitioning"] = supportsTopicAutopartitioning;
+
+        NKikimrSchemeOp::TCreateCdcStream op;
+        auto& descr = *op.MutableStreamDescription();
+        descr.SetName("Stream");
+        descr.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        descr.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        auto* attr = descr.AddUserAttributes();
+        attr->SetKey("__async_replication");
+        attr->SetValue(NJson::WriteJson(attrs, false));
+        return op;
+    }
+
+    // No tablets: the changefeed topic shape is decided before hive creates anything.
+    Y_UNIT_TEST(ReplicationTopicFor50000Shards) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+        UNIT_ASSERT(params.MinPartitionCount <= 10'000);
+        UNIT_ASSERT(params.MaxPartitionCount <= 20'000);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicMinPartitionCountIsCapped) {
+        // 200000 / 16 = 12500, which is above the 10000 ceiling.
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 10'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicForSmallTable) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 128);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 8);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicWithoutAutopartitioning) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000);
+        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
     Y_UNIT_TEST(DocApi) {

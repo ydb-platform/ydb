@@ -40,6 +40,18 @@ void DoCreateStream(
     const bool acceptExisted,
     const bool initialScan);
 
+struct TCdcPqPartParams {
+    ui32 TotalGroupCount = 0;
+    ui32 PartitionPerTablet = 2;
+    bool ReplicationAutoPartitioning = false;
+    ui32 MinPartitionCount = 0;
+    ui32 MaxPartitionCount = 0;
+};
+
+// Decides the changefeed topic shape from the source table size.
+// Replication autopartitioning caps min and max partition counts.
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount);
+
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,
     const NKikimrSchemeOp::TCreateCdcStream& op,

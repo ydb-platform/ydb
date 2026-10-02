@@ -677,6 +677,40 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
 
 } // anonymous
 
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount) {
+    // Replication topics are hash-partitioned. Cap the split range so a table
+    // with tens of thousands of shards still gets a creatable topic.
+    constexpr ui32 MinPartitionCountLimit = 10'000;
+    constexpr ui32 MaxPartitionCountLimit = 20'000;
+
+    TCdcPqPartParams params;
+    params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
+    params.PartitionPerTablet = 2;
+
+    if (!IsReplicationSupportTopicAutopartitioning(op)) {
+        return params;
+    }
+
+    const ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), MinPartitionCountLimit);
+    ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), MaxPartitionCountLimit);
+    if (minParts > maxParts) {
+        maxParts = minParts;
+    }
+
+    ui64 total = params.TotalGroupCount;
+    if (total < minParts) {
+        total = minParts;
+    } else if (total > maxParts) {
+        total = maxParts;
+    }
+
+    params.ReplicationAutoPartitioning = true;
+    params.TotalGroupCount = static_cast<ui32>(total);
+    params.MinPartitionCount = static_cast<ui32>(minParts);
+    params.MaxPartitionCount = static_cast<ui32>(maxParts);
+    return params;
+}
+
 void DoCreatePqPart(
         TVector<ISubOperation::TPtr>& result,
         const NKikimrSchemeOp::TCreateCdcStream& op,
@@ -690,10 +724,11 @@ void DoCreatePqPart(
     auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
 
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size());
+
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");
-    desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
-    desc.SetPartitionPerTablet(2);
+    desc.SetPartitionPerTablet(pqParams.PartitionPerTablet);
 
     auto& pqConfig = *desc.MutablePQTabletConfig();
     pqConfig.SetTopicName(streamName);
@@ -706,11 +741,11 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (IsReplicationSupportTopicAutopartitioning(op)) {
+    if (pqParams.ReplicationAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
-        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
+        ps->SetMinPartitionCount(pqParams.MinPartitionCount);
+        ps->SetMaxPartitionCount(pqParams.MaxPartitionCount);
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -748,6 +783,8 @@ void DoCreatePqPart(
             }
         }
     }
+
+    desc.SetTotalGroupCount(pqParams.TotalGroupCount);
 
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
 }

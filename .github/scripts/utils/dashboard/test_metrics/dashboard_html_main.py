@@ -148,9 +148,20 @@ def build_html_dashboard(
       margin-bottom: 8px;
     }}
     .headline-run {{
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 6px 16px;
       font-size: 13px;
-      line-height: 1.5;
-      margin-bottom: 10px;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }}
+    .headline-run b {{ font-variant-numeric: tabular-nums; }}
+    .headline-run .muted {{ color: #64748b; font-weight: 400; }}
+    .headline-run .group {{ white-space: nowrap; }}
+    .headline-run .group + .group {{
+      padding-left: 16px;
+      border-left: 1px solid #cbd5e1;
     }}
     .headline-tables {{
       display: flex;
@@ -538,36 +549,63 @@ def build_html_dashboard(
       const cRegularMuted = cRegularMutedBase + cMutedOther;
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
-      const durLabel = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
+      const wallExact = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
       const runLine =
         '<div class="headline-run">' +
-          '<b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites · ' +
-          '<b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks · ' +
-          '<b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests · ' +
-          '<b>' + durLabel + '</b>' +
-          '<br>tests failed <b>' + String(failedTotal) + '</b> (muted ' + String(failedMuted) + ')' +
-          ', timeout <b>' + String(timeoutTotal) + '</b>' +
-          ', skipped <b>' + String(skippedTotal) + '</b>' +
-          '<br>chunks failed <b>' + String(cFailedTotal) + '</b> (muted ' + String(cFailedMuted) + ')' +
-          ', timeout <b>' + String(cTimeoutTotal) + '</b>' +
+          '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
+          '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks</span>' +
+          '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests</span>' +
+          '<span class="group" title="From the first test start to the last test end">' +
+            '<b>' + wallExact + '</b> total duration</span>' +
+          '<span class="group">tests <b>' + String(failedTotal) + '</b> failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
+            ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
+          '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
+            ' · <b>' + String(cTimeoutTotal) + '</b> timeout</span>' +
         '</div>';
       function statCell(metric, stats, field) {{
         const s = (stats && typeof stats === 'object') ? stats : {{}};
         return '<td>' + formatHeadlineNumber(metric, s[field]) + '</td>';
       }}
-      function statTable(rows) {{
-        const body = rows.map(([label, metric, stats]) => (
-          '<tr><td>' + label + '</td>' +
+      function statTable(rows, withLimit) {{
+        const body = rows.map((row) => {{
+          const label = row[0];
+          const metric = row[1];
+          const stats = row[2];
+          const limit = row[3];
+          return '<tr><td>' + label + '</td>' +
+            (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
             statCell(metric, stats, 'median') +
-          '</tr>'
-        )).join('');
+          '</tr>';
+        }}).join('');
         return (
           '<table class="headline-table"><thead><tr>' +
-            '<th></th><th>max</th><th>p95</th><th>median</th>' +
+            '<th></th>' +
+            (withLimit ? '<th title="CPU and RAM are what /proc reported on this host. Disk is the provisioned SSD size.">limit</th>' : '') +
+            '<th>max</th><th>p95</th><th>median</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
+      }}
+      function hostCapacity(kind) {{
+        const ro = data.resources_overlay || {{}};
+        const lim = ro.runner_limits || {{}};
+        const measured = ro.measured || {{}};
+        if (kind === 'cpu') {{
+          const v = measured.cpu_cores || ro.cpu_cores || lim.cpu_cores_max;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? String(Math.round(n)) : null;
+        }}
+        if (kind === 'ram') {{
+          const v = measured.ram_gb || ro.ram_total_gb || lim.ram_gb_max;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? formatHeadlineNumber('ram', n) : null;
+        }}
+        if (kind === 'disk') {{
+          const n = Number(lim.disk_gb);
+          return Number.isFinite(n) && n > 0 ? (String(Math.round(n)) + ' GB') : null;
+        }}
+        return null;
       }}
       const testsTable = statTable([
         ['CPU, cores', 'cpu', hs.cpu],
@@ -586,11 +624,11 @@ def build_html_dashboard(
         hostBlock =
           '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
           statTable([
-            ['CPU, cores', 'cpu', cpuHost],
-            ['RAM, GB', 'ram', ramHost],
-            ['Disk read, MB/s', 'disk', diskRead],
-            ['Disk write, MB/s', 'disk', diskWrite],
-          ]) +
+            ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
+            ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
+            ['Disk read, MB/s', 'disk', diskRead, hostCapacity('disk')],
+            ['Disk write, MB/s', 'disk', diskWrite, hostCapacity('disk')],
+          ], true) +
           '</div>';
       }}
       grid.innerHTML =

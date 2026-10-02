@@ -1,13 +1,11 @@
 #include "node_database_metrics_aggregator.h"
 #include "detailed_metrics_binding.h"
-#include "detailed_metrics_counter_set.h"
 #include "detailed_metrics_descriptor.h"
 #include "detailed_values_accumulator.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/sys_view/service/db_counters_codec.h>
-#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
@@ -546,13 +544,13 @@ struct TRoleTrees {
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- * A reader thread, which runs the given check over and over under the shared tree lock,
- * the way the SysView Service actor reads the tree off its own mailbox, until the writer
+ * A reader thread, which runs the given check over and over under DetailedMetricsLock(),
+ * the way the SysView Service actor calls Pack() off its own thread, until the writer
  * on the main thread says it is done.
  *
  * @param[in] check Returns the description of the very first violation it finds, or an
  *                   empty string when the tree looks whole
- * @param[in] lockTree Whether the reader takes the shared tree lock around the check. A check,
+ * @param[in] lockTree Whether the reader takes DetailedMetricsLock() around the check. A check,
  *                     which is supposed to take the lock on its own (e.g. Pack()), runs without
  *                     it, so that the reader does not cover up the lock the check misses
  *
@@ -2390,7 +2388,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * Verify that a tablet type with no detailed metrics allow-list publishes nothing.
      *
      * @note This is the production path: the aggregator falls back to
-     *       GetDetailedMetricsCounterNames(tabletType), which returns nullptr for
+     *       GetDetailedMetricsDescriptor(tabletType), which returns nullptr for
      *       ColumnShard.
      */
     Y_UNIT_TEST(UnsupportedTabletTypePublishesNothing) {
@@ -2485,7 +2483,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that a reader, which holds the shared tree lock, never observes a partially
+     * Verify that a reader, which holds DetailedMetricsLock(), never observes a partially
      * rebuilt histogram while the writer recalculates the aggregates.
      *
      * @note This is the regression test for the guard in RecalculateAllCounters().
@@ -3363,48 +3361,5 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             }
             UNIT_ASSERT_VALUES_EQUAL(measure(), bytes);
         }
-    }
-
-    Y_UNIT_TEST(NonDerivativeHistogramsOfDataShardAreConsumedCpuOnly) {
-        // Of the published executor histograms only HIST(ConsumedCPU) is non-derivative
-        // (the current state rather than increments), so it alone travels as its full value
-        NTabletFlatExecutor::TExecutorCounters executorCounters;
-        const auto* names = GetDetailedMetricsCounterNames(TTabletTypes::DataShard);
-        UNIT_ASSERT(names);
-
-        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        aggregated.Initialize(&executorCounters, &names->ExecutorNames);
-        const auto& indices = aggregated.GetNonDerivativeHistogramIndices();
-        UNIT_ASSERT_VALUES_EQUAL(indices.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(indices[0], (ui32)NTabletFlatExecutor::TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
-    }
-
-    Y_UNIT_TEST(NonDerivativeHistogramIndicesFollowTheDerivativeRule) {
-        // A percentile counter is non-derivative when it is Integral or a HIST(x) aggregate,
-        // whatever its Integral flag; an unpublished one is skipped and keeps no index
-        constexpr const char* simpleNames[] = {"Gauge"};
-        constexpr const char* percentileNames[] = {
-            "Increments",
-            "UnpublishedState",
-            "State",
-            "HIST(Gauge)",
-            "Increments2",
-        };
-        TTabletCountersBase counters(
-            Y_ARRAY_SIZE(simpleNames), 0, Y_ARRAY_SIZE(percentileNames),
-            simpleNames, nullptr, percentileNames);
-        counters.Percentile()[0].Initialize(PERCENTILE_RANGES, false /* integral */);
-        counters.Percentile()[1].Initialize(PERCENTILE_RANGES, true /* integral */);
-        counters.Percentile()[2].Initialize(PERCENTILE_RANGES, true /* integral */);
-        counters.Percentile()[3].Initialize(PERCENTILE_RANGES, false /* integral */);
-        counters.Percentile()[4].Initialize(PERCENTILE_RANGES, false /* integral */);
-
-        const THashSet<TString> published = {"Gauge", "Increments", "State", "HIST(Gauge)", "Increments2"};
-        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        aggregated.Initialize(&counters, &published);
-
-        // Indices into the full-size histogram list of ToProto ({2, 3}), not into
-        // the published ones, where the unpublished counter leaves no gap ({1, 2})
-        UNIT_ASSERT_VALUES_EQUAL(aggregated.GetNonDerivativeHistogramIndices(), TVector<ui32>({2, 3}));
     }
 }

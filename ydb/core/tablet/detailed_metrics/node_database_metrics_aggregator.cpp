@@ -384,9 +384,10 @@ namespace NKikimr {
              */
             void RecalculateAllCounters() override {
                 NProfiling::TMemoryTagScope memoryScope(NodeMemoryTag());
-                // The guard is here  for the READER of the published counter VALUES
-                // TAggregatedTabletCounters republishes every HIST(x) by clearing and
-                // refilling it one tablet at a time
+                // The guard serializes the walk with Pack(), which runs on the SysView Service
+                // thread. TAggregatedTabletCounters republishes every HIST(x) by clearing and
+                // refilling it one tablet at a time, so only a reader, which holds the lock too,
+                // never sees one half refilled
                 TGuard<TMutex> guard(DetailedMetricsLock());
 
                 for (auto& [_, entry] : Tables) {
@@ -742,10 +743,10 @@ namespace NKikimr {
                 RetireBucket(entry.TablePath, Nothing(), tabletType, entry.TableBucket->GetValues());
                 entry.TableBucket.Reset();
 
-                TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(Nothing(), tabletType, {
-                                                                                                     {DATABASE_LABEL, DatabasePath},
-                                                                                                     {TABLE_LABEL, relativePath},
-                                                                                                 }));
+                TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(tabletType, {
+                                                                                          {DATABASE_LABEL, DatabasePath},
+                                                                                          {TABLE_LABEL, relativePath},
+                                                                                      }));
                 entry.TableGroup.Reset();
             }
 

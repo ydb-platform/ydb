@@ -1,4 +1,3 @@
-#include "detailed_metrics_counter_set.h"
 #include "detailed_metrics_descriptor.h"
 #include "ydb_metrics_mapper.h"
 
@@ -314,15 +313,11 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsDescriptorTest) {
             "DataShard/UploadRows",
             "DataShard/UploadRowsBytes",
         }));
-
-        // The counter set is a view of the descriptor
-        UNIT_ASSERT_EQUAL(GetDetailedMetricsCounterNames(TTabletTypes::DataShard), &descriptor.RawNames);
     }
 
     Y_UNIT_TEST(UnsupportedTabletTypeHasNoDescriptor) {
         UNIT_ASSERT(!GetDetailedMetricsDescriptor(TTabletTypes::SchemeShard));
         UNIT_ASSERT(!GetDetailedMetricsDescriptor(TTabletTypes::TypeInvalid));
-        UNIT_ASSERT(!GetDetailedMetricsCounterNames(TTabletTypes::SchemeShard));
     }
 
     Y_UNIT_TEST(ParseSourceRefSpellings) {

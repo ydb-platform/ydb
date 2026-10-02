@@ -17,11 +17,28 @@
 namespace NKikimr {
 
 /**
- * Guards the VALUES published into the detailed metrics counter tree, so that a reader
- * never observes an aggregate midway through being republished.
+ * Serializes the calls into the TNodeDatabaseMetricsAggregator instances of the node,
+ * which come from two sides:
+ * - the Tablet Counters Aggregator actors, the leader and the follower one: AddCounters(),
+ *   ForgetTablet() and RecalculateAllCounters(), the last of which refreshes the low level
+ *   counters of the TABLE buckets in the counter tree;
+ * - the SysView Service actor: Pack(), which is a writer as well, as it drains the rate and
+ *   the increment deltas of the buckets and the final values of the retired ones.
  *
- * A reader MUST hold it across its whole traversal. Locking from inside a traversal
- * deadlocks.
+ * Each of these methods takes the lock on its own, for its whole call: the two sides run
+ * on different threads and share the tables, the buckets and their values, so they race
+ * without it.
+ *
+ * @note A single lock for all the databases and both roles of the node. It is recursive
+ *       (a TMutex), though nothing re-enters it.
+ *
+ * @note The readers of the counter tree do NOT take it: the monitoring pages walk the tree
+ *       under the locks of its counter groups only, so they may see a HIST(x) aggregate
+ *       of a TABLE bucket midway through RecalculateAllCounters(). A reader, which holds
+ *       the lock across its whole traversal (as the tests do), sees whole aggregates.
+ *
+ * @note It is always taken before the locks of the counter groups, never while one of them
+ *       is held.
  */
 TMutex& DetailedMetricsLock();
 

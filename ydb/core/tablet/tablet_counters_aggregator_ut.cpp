@@ -1106,8 +1106,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     constexpr ui32 LEVEL_PARTITION = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
     constexpr ui32 LEVEL_DISABLED = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
 
-    // The only tablet type with a detailed metrics counter set is DataShard, and
-    // GetDetailedMetricsCounterNames() allow-lists this Executor counter name (it is
+    // The only tablet type with detailed metrics is DataShard, and the RawNames of its
+    // TDetailedMetricsDescriptor allow-list this Executor counter name (it is
     // the source of the public table.datashard.row_count metric, see
     // counters_detailed_datashard.proto)
     const TString ALLOWED_EXECUTOR_COUNTER = "DbUniqueRowsTotal";

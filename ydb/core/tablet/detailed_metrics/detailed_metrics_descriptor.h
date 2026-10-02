@@ -1,11 +1,10 @@
 #pragma once
 
-#include "detailed_metrics_counter_set.h"
-
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/counters.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -169,6 +168,15 @@ struct TMetricSpec {
     size_t BucketCount() const {
         return Bounds.size() + 1;
     }
+};
+
+/**
+ * The names of the low level counters of one tablet type by category, as reported
+ * by the tablets (for example, "HIST(ConsumedCPU)" and "ConsumedCPU").
+ */
+struct TDetailedMetricsCounterNames {
+    THashSet<TString> ExecutorNames;
+    THashSet<TString> AppNames;
 };
 
 /**

@@ -352,7 +352,7 @@ void TAggregatedHistogramCounters::Reserve(size_t hint) {
     CountersByTabletId.reserve(hint);
 }
 
-bool TAggregatedHistogramCounters::AddCounter(
+void TAggregatedHistogramCounters::AddCounter(
     const char* name,
     const NKikimr::TTabletPercentileCounter& percentileCounter,
     THashMap<TString, THolder<THistogramCounter>>& histogramAggregates) {
@@ -394,7 +394,6 @@ bool TAggregatedHistogramCounters::AddCounter(
     Histograms.push_back(histogram);
 
     CountersByTabletId.emplace_back(TCountersByTabletIdMap());
-    return isDerivative;
 }
 
 void TAggregatedHistogramCounters::SetValue(

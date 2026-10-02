@@ -1,7 +1,5 @@
 #include "db_counters_codec.h"
 
-#include <ydb/core/base/tablet_types.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NSysView {
@@ -104,20 +102,20 @@ Y_UNIT_TEST_SUITE(TDbCountersCodecTest) {
         UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(1), 2);
     }
 
-    Y_UNIT_TEST(TabletMaximaRemainAbsoluteAcrossReports) {
-        NKikimrSysView::TDbTabletCounters previous, current, wire;
-        previous.SetType(TTabletTypes::DataShard);
-        previous.MutableMaxExecutorCounters()->AddCumulative(7);
-        current = previous;
-        current.MutableMaxExecutorCounters()->SetCumulative(0, 9);
-        CalculateCountersDiff(&wire, current, &previous);
-        NKikimrSysView::TDbCounters restored;
-        TAggregateCumulative<true>::Apply(&restored, wire.GetMaxExecutorCounters());
+    Y_UNIT_TEST(MaximaRemainAbsoluteAcrossReports) {
+        // The tablet maxima are copied as absolute values on every report,
+        // the receiver keeps the maximum and resets it for the next interval
+        NKikimrSysView::TDbCounters current, wire, restored;
+        current.AddCumulative(9);
+        CopyCounters(&wire, current);
+        TAggregateCumulative<true>::Apply(&restored, wire);
         UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(0), 9);
+
         ResetMaxCounters(&restored);
-        current.MutableMaxExecutorCounters()->SetCumulative(0, 2);
-        CalculateCountersDiff(&wire, current, &previous);
-        TAggregateCumulative<true>::Apply(&restored, wire.GetMaxExecutorCounters());
+        current.SetCumulative(0, 2);
+        wire.Clear();
+        CopyCounters(&wire, current);
+        TAggregateCumulative<true>::Apply(&restored, wire);
         UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(0), 2);
     }
 
@@ -191,44 +189,6 @@ Y_UNIT_TEST_SUITE(TDbCountersCodecTest) {
         UNIT_ASSERT_VALUES_EQUAL(current.GetHistogram(0).GetBucketsCount(), 3);
         // The unchanged middle bucket has no entry in the merged delta.
         UNIT_ASSERT_VALUES_EQUAL(current.GetHistogram(0).BucketsSize(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(pending.SerializeAsString(), pendingBefore);
-    }
-
-    Y_UNIT_TEST(MergedTabletDeltasKeepLatestStatefulCounters) {
-        const auto setCounters = [](NKikimrSysView::TDbCounters& counters, ui64 simple, ui64 cumulative) {
-            counters.AddSimple(simple);
-            counters.AddCumulative(cumulative);
-        };
-        NKikimrSysView::TDbTabletCounters pendingSnapshot, currentSnapshot, pending, current;
-        setCounters(*pendingSnapshot.MutableExecutorCounters(), 80, 10);
-        setCounters(*pendingSnapshot.MutableAppCounters(), 90, 20);
-        setCounters(*pendingSnapshot.MutableMaxExecutorCounters(), 70, 30);
-        setCounters(*pendingSnapshot.MutableMaxAppCounters(), 100, 40);
-        currentSnapshot.SetType(TTabletTypes::DataShard);
-        setCounters(*currentSnapshot.MutableExecutorCounters(), 0, 3);
-        setCounters(*currentSnapshot.MutableAppCounters(), 5, 7);
-        setCounters(*currentSnapshot.MutableMaxExecutorCounters(), 2, 11);
-        setCounters(*currentSnapshot.MutableMaxAppCounters(), 0, 13);
-        CalculateCountersDiff(&pending, pendingSnapshot);
-        CalculateCountersDiff(&current, currentSnapshot);
-        const auto pendingBefore = pending.SerializeAsString();
-        const auto maxExecutorBefore = current.GetMaxExecutorCounters().SerializeAsString();
-        const auto maxAppBefore = current.GetMaxAppCounters().SerializeAsString();
-
-        MergeCounterDeltas(current, pending);
-
-        NKikimrSysView::TDbCounters executor, app;
-        TAggregateSimple<false>::Apply(&executor, current.GetExecutorCounters());
-        TAggregateCumulative<false>::Apply(&executor, current.GetExecutorCounters());
-        TAggregateSimple<false>::Apply(&app, current.GetAppCounters());
-        TAggregateCumulative<false>::Apply(&app, current.GetAppCounters());
-        UNIT_ASSERT_VALUES_EQUAL(executor.GetSimple(0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(executor.GetCumulative(0), 13);
-        UNIT_ASSERT_VALUES_EQUAL(app.GetSimple(0), 5);
-        UNIT_ASSERT_VALUES_EQUAL(app.GetCumulative(0), 27);
-        UNIT_ASSERT_VALUES_EQUAL(current.GetType(), TTabletTypes::DataShard);
-        UNIT_ASSERT_VALUES_EQUAL(current.GetMaxExecutorCounters().SerializeAsString(), maxExecutorBefore);
-        UNIT_ASSERT_VALUES_EQUAL(current.GetMaxAppCounters().SerializeAsString(), maxAppBefore);
         UNIT_ASSERT_VALUES_EQUAL(pending.SerializeAsString(), pendingBefore);
     }
 
@@ -348,34 +308,6 @@ Y_UNIT_TEST_SUITE(TDbCountersCodecTest) {
         UNIT_ASSERT_VALUES_EQUAL(current.HistogramSize(), 2);
         AssertEncodedHistogram(current.GetHistogram(0), 3, {1, 6}, true);
         AssertEncodedHistogram(current.GetHistogram(1), 2, {0, 2}, false);
-    }
-
-    Y_UNIT_TEST(MergedTabletDeltasKeepNonDerivativeHistogramOfCurrent) {
-        NKikimrSysView::TDbTabletCounters pending, current;
-        AddEncodedHistogram(*pending.MutableExecutorCounters(), 3, {1, 1}, true);
-        AddEncodedHistogram(*pending.MutableAppCounters(), 2, {0, 2}, true);
-        AddEncodedHistogram(*current.MutableExecutorCounters(), 3, {0, 1, 2, 1}, true);
-        AddEncodedHistogram(*current.MutableAppCounters(), 2, {}, true);
-
-        MergeCounterDeltas(current, pending);
-
-        AssertEncodedHistogram(current.GetExecutorCounters().GetHistogram(0), 3, {0, 1, 2, 1}, true);
-        AssertEncodedHistogram(current.GetAppCounters().GetHistogram(0), 2, {}, true);
-    }
-
-    Y_UNIT_TEST(MarkHistogramsNonDerivativeMarksOnlyGivenIndices) {
-        NKikimrSysView::TDbCounters counters;
-        for (int i = 0; i < 3; ++i) {
-            AddDenseHistogram(counters, {1, 2});
-        }
-
-        // Index 7 is out of range and ignored
-        MarkHistogramsNonDerivative(&counters, {2, 7});
-
-        UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 3);
-        UNIT_ASSERT(!counters.GetHistogram(0).GetNonDerivative());
-        UNIT_ASSERT(!counters.GetHistogram(1).GetNonDerivative());
-        UNIT_ASSERT(counters.GetHistogram(2).GetNonDerivative());
     }
 }
 

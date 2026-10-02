@@ -4,6 +4,7 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -1827,6 +1828,11 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         size_t firstDot = fullHostName.find_first_of('.');
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
+
+    /* NKikimr::NKqp::NEventLog::TKqpEventLogWriter::TDatabaseSettings settings;
+    settings.Path = "/local/testdb";
+    auto ptr = std::make_shared<NKikimr::NKqp::NEventLog::TKqpEventLogWriter>(settings);
+    LogSettings->Sinks.push_back(ptr); */
 }
 
 void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)

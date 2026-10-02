@@ -1,6 +1,9 @@
 #pragma once
 
 #include "log_iface.h"
+
+#include <ydb/library/actors/struct_log/log_sink.h>
+
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
@@ -173,6 +176,9 @@ namespace NActors {
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
             void SetEnableStructuredLogInJson(bool value);
+
+            using TLogSinkVector = std::vector<NStructuredLog::ILogSinkSPtr>;
+            TLogSinkVector Sinks;
 
         private:
             int SetLevelImpl(

@@ -100,6 +100,7 @@ namespace {
 }
 
 namespace NActors {
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -538,6 +539,23 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
+        // @todo Более умное создание синков
+        if (!Settings->Sinks.empty()) {
+            NStructuredLog::TLogMessage message {
+                .Time = evLog->Stamp,
+                .Priority = evLog->Level.ToPrio(),
+                .Component = evLog->Component,
+                .NodeId = Settings->NodeId,
+                .FileName = evLog->FileName,
+                .LineNumber = evLog->LineNumber,
+                .TextMessage = evLog->Line,
+                .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
+
+            // @todo Может ли Settings удалиться в этот момент
+            for(auto& sink: Settings->Sinks) {
+                sink->Write(message);
+            }
+        }
         return OutputRecord(
             evLog->Stamp,
             evLog->Level.ToPrio(),

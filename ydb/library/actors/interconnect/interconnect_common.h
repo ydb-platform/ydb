@@ -82,6 +82,7 @@ namespace NActors {
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
 <<<<<<< HEAD
+<<<<<<< HEAD
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
         // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
@@ -89,6 +90,8 @@ namespace NActors {
         bool EnableInterconnectSessionV2 = false;
 =======
         TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
+=======
+>>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
 

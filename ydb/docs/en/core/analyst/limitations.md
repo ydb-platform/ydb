@@ -118,26 +118,51 @@ SELECT * FROM $base WHERE event_ts > CurrentUtcTimestamp()
 
 {{ ydb-short-name }} guarantees that when a named expression is used multiple times within a single transaction, the same data will be read. This is ensured by the transaction isolation level [Serializable](../concepts/transactions.md#modes).
 
-### Correlated subqueries are not supported
+### Lack of support for correlated subqueries
 
-A correlated subquery is a subquery that references columns from an external query. In YQL, such subqueries are not supported.
-Most cases of using correlated subqueries can be replaced with `JOIN` and aggregate functions.
+A correlated subquery is a subquery that references columns from an outer query. Such subqueries are not supported in YQL.
+Most use cases of correlated subqueries can be replaced using `JOIN` and aggregate functions.
+The complete support matrix and rewrite rules are available in [Correlated subqueries, EXISTS, and NOT EXISTS](../yql/reference/syntax/correlated-subqueries.md).
 
 #### EXISTS
 
-Conversion of `EXISTS` → `INNER JOIN` using `DISTINCT`.
+Transformation of correlated `EXISTS` → `LEFT SEMI JOIN` or `INNER JOIN`
+with unique keys on the right side.
 
 Original query:
 
-```sql
+
+```yql
 SELECT a.* FROM A a WHERE EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
 ```
 
-##### Solution
 
-```sql
+##### Solution with LEFT SEMI JOIN
+
+
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+);
+
+SELECT a.*
+FROM A AS a
+LEFT SEMI JOIN $B_match AS b
+ON b.key = a.key;
+```
+
+##### Alternative with INNER JOIN
+
+Deduplicate the matching keys on the right side before joining. This prevents
+several matching rows from duplicating a row from the left side. Applying
+`DISTINCT` to the left-side columns is unnecessary and can collapse equal rows
+from the outer input.
+
+```yql
 $B_match = (
   SELECT key
   FROM B
@@ -145,11 +170,12 @@ $B_match = (
   GROUP BY key
 );
 
-SELECT DISTINCT a.*
+SELECT a.*
 FROM A AS a
-JOIN $B_match AS b
+INNER JOIN $B_match AS b
 ON b.key = a.key;
 ```
+
 
 #### Subquery with an aggregate
 
@@ -157,14 +183,17 @@ Scalar subquery with an aggregate → aggregation + JOIN
 
 Original query:
 
-```sql
+
+```yql
 SELECT a.*, (SELECT MAX(ts) FROM B b WHERE b.user_id = a.user_id) AS last_ts
 FROM A a;
 ```
 
+
 ##### Solution
 
-```sql
+
+```yql
 $B_last = (
   SELECT user_id, MAX(ts) AS last_ts
   FROM B
@@ -177,24 +206,35 @@ LEFT JOIN $B_last AS bl
 ON bl.user_id = a.user_id;
 ```
 
+
 #### NOT EXISTS
 
-`NOT EXISTS` → anti-JOIN
+Transformation of correlated `NOT EXISTS` → `LEFT ONLY JOIN`.
 
-Original query
+Original query:
 
-```sql
+
+```yql
 SELECT a.* FROM A a WHERE NOT EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
 ```
 
+
 ##### Solution
 
-```sql
-$B_keys = (SELECT DISTINCT key FROM B);
 
-SELECT a.* FROM A AS a LEFT ONLY JOIN $B_keys AS b ON b.key = a.key;
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+);
+
+SELECT a.*
+FROM A AS a
+LEFT ONLY JOIN $B_match AS b
+ON b.key = a.key;
 ```
 
 ### Only equi-JOIN (JOIN by equality) is supported

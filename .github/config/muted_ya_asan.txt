@@ -20,6 +20,7 @@ ydb/core/kqp/executer_actor/ut KqpExecuter.OversizedTaskReturnsLimitExceeded
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.CustomQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery06
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery07
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14

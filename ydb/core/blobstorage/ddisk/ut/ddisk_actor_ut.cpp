@@ -1197,30 +1197,30 @@ void AssertTabletSyncStats(TTestContext& ctx, const TDiskHandle& disk, ui64 tabl
     const auto& row = stats->Get()->Tablets.front();
     const double seconds = row.Interval.MicroSeconds() / 1e6;
     UNIT_ASSERT_VALUES_EQUAL(row.DataMappedChunks, 1);
-    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].Iops * seconds, 1, 1e-9);
-    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].BytesPerSecond * seconds, bytes, 1e-9);
+    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].Iops * seconds, 1, 1e-6);
+    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].BytesPerSecond * seconds, bytes, bytes * 1e-6);
     UNIT_ASSERT_VALUES_EQUAL(row.Rates[1].Iops, 0); // Internal Sync writes are not logical Write requests.
 }
 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
-    Y_UNIT_TEST(TabletStatsShutdownWithPendingAck) {
+    Y_UNIT_TEST(TabletStatsShutdownWithPendingBatch) {
         TTestContext ctx;
         const auto disk = ctx.CreateDDisk(125, 1);
         Connect(ctx, disk.ServiceId, 42, 1);
-        std::unique_ptr<IEventHandle> heldAck;
+        std::unique_ptr<IEventHandle> heldBatch;
         TActorId statsActor;
         ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsAck::EventType) {
-                statsActor = ev->Sender;
-                heldAck = std::move(ev);
+            if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsBatch::EventType) {
+                statsActor = ev->Recipient;
+                heldBatch = std::move(ev);
                 return false;
             }
             return true;
         };
         AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
-        UNIT_ASSERT(heldAck);
+        UNIT_ASSERT(heldBatch);
         TShutdownObserver shutdown(ctx, disk);
         shutdown.HoldChildGone = true;
         shutdown.AcknowledgeForget = true;
@@ -1277,16 +1277,17 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const auto disk = ctx.CreateDDisk(124, 1);
         size_t batches = 0;
-        std::unique_ptr<IEventHandle> heldAck;
+        std::unique_ptr<IEventHandle> heldBatch;
         bool hold = true;
         ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsBatch::EventType) {
                 UNIT_ASSERT(ev->Get<NDDisk::TEvTabletStatsBatch>()->Samples.size() <= 100);
                 ++batches;
-            } else if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsAck::EventType && hold) {
-                UNIT_ASSERT(!heldAck);
-                heldAck = std::move(ev);
-                return false;
+                if (hold) {
+                    UNIT_ASSERT(!heldBatch);
+                    heldBatch = std::move(ev);
+                    return false;
+                }
             }
             return true;
         };
@@ -1295,13 +1296,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         const auto advance = [&](TDuration duration) { AdvanceDDiskTestTime(ctx, duration); };
         advance(TDuration::MilliSeconds(1100));
-        UNIT_ASSERT(heldAck);
+        UNIT_ASSERT(heldBatch);
         UNIT_ASSERT_VALUES_EQUAL(batches, 1);
-        Connect(ctx, disk.ServiceId, 999, 1); // Mutation while the collector awaits its ack.
+        Connect(ctx, disk.ServiceId, 999, 1); // Mutation while the collector awaits its batch.
         advance(TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(batches, 1);
         hold = false;
-        ctx.Runtime.Send(heldAck.release(), NodeId);
+        ctx.Runtime.Send(heldBatch.release(), NodeId);
         advance(TDuration::MilliSeconds(100));
         UNIT_ASSERT(batches >= 3);
         auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
@@ -1339,9 +1340,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto row = reply->Get()->Tablets.front();
         UNIT_ASSERT_VALUES_EQUAL(row.DataMappedChunks, 1); // Excludes PB and integrity chunks.
         const double seconds = row.Interval.MicroSeconds() / 1e6;
-        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[0].Iops * seconds, 1, 1e-9);
-        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].Iops * seconds, 1, 1e-9); // Parked allocation was replayed once.
-        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].BytesPerSecond * seconds, BlockSize, 1e-9);
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[0].Iops * seconds, 1, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].Iops * seconds, 1, 1e-6); // Parked allocation was replayed once.
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].BytesPerSecond * seconds, BlockSize, BlockSize * 1e-6);
         advance(TDuration::Seconds(4));
         reply = query();
         for (const auto& rate : reply->Get()->Tablets.front().Rates) {

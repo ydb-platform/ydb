@@ -814,9 +814,6 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
         switch (ev->Get()->Tag) {
-            case EWakeupTag::WakeupCollectTabletStats:
-                CollectTabletStats();
-                break;
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
                 break;

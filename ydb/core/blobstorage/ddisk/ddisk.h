@@ -142,9 +142,10 @@ namespace NKikimr::NDDisk {
             EvGetPersistentBufferRegistrationToken,
             EvGetPersistentBufferRegistrationTokenResult,
             EvTabletStatsBatch,
-            EvTabletStatsAck,
+            EvCollectTabletStats,
             EvGetTabletStats,
             EvTabletStats,
+            EvTabletStatsChanged,
         };
     };
 

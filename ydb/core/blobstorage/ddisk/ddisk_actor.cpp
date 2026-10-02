@@ -613,7 +613,7 @@ namespace {
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
-            hFunc(TEvTabletStatsAck, Handle)
+            hFunc(TEvCollectTabletStats, Handle)
             hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
 
@@ -885,7 +885,7 @@ namespace {
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
             hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
-            hFunc(TEvTabletStatsAck, Handle)
+            hFunc(TEvCollectTabletStats, Handle)
             hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)

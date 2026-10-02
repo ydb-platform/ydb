@@ -11,9 +11,41 @@ namespace {
 class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> {
     const NActors::TActorId Owner;
     std::map<ui64, TTabletStats> Tablets;
+    bool RequestInFlight = false;
+    bool TimerScheduled = false;
+    bool WakeupPending = false;
+    bool Available = true;
+
+    void RequestBatch() {
+        WakeupPending = false;
+        RequestInFlight = true;
+        Send(Owner, new TEvCollectTabletStats());
+    }
+
+    void Handle(TEvTabletStatsChanged::TPtr ev) {
+        if (ev->Sender != Owner || !Available) {
+            return;
+        }
+        if (RequestInFlight) {
+            WakeupPending = true;
+        } else if (!TimerScheduled) {
+            RequestBatch();
+        }
+    }
+
+    void Collect() {
+        TimerScheduled = false;
+        RequestBatch();
+    }
 
     void Handle(TEvTabletStatsBatch::TPtr ev) {
-        if (ev->Sender != Owner) {
+        if (ev->Sender != Owner || !RequestInFlight) {
+            return;
+        }
+        RequestInFlight = false;
+        Available = ev->Get()->Available;
+        if (!Available) {
+            WakeupPending = false;
             return;
         }
         Y_ABORT_UNLESS(ev->Get()->Samples.size() <= TTabletStatsTracker::MaxBatch);
@@ -31,12 +63,26 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
                 row.Rates[i] = CalculateTabletIoRate(sample.Previous[i], sample.Current[i], sample.Elapsed);
             }
         }
-        Send(Owner, new TEvTabletStatsAck());
+        if (WakeupPending) {
+            // A wakeup can arrive before a delayed final batch. Do not lose it
+            // when that batch reports an empty queue.
+            RequestBatch();
+        } else if (const auto deadline = ev->Get()->NextDeadline) {
+            const auto now = NActors::TActivationContext::Monotonic();
+            TimerScheduled = true;
+            Schedule(*deadline > now ? *deadline - now : TDuration::MilliSeconds(1),
+                new NActors::TEvents::TEvWakeup());
+        }
     }
 
     void Handle(TEvGetTabletStats::TPtr ev) {
         const auto& query = *ev->Get();
         auto result = std::make_unique<TEvTabletStats>();
+        result->Available = Available;
+        if (!Available) {
+            Send(ev->Sender, result.release(), 0, ev->Cookie);
+            return;
+        }
         if (query.TabletId) {
             if (auto it = Tablets.find(*query.TabletId); it != Tablets.end()) {
                 result->Tablets.push_back(it->second);
@@ -64,7 +110,9 @@ public:
     }
 
     STRICT_STFUNC(StateWork,
+        hFunc(TEvTabletStatsChanged, Handle)
         hFunc(TEvTabletStatsBatch, Handle)
+        cFunc(NActors::TEvents::TSystem::Wakeup, Collect)
         hFunc(TEvGetTabletStats, Handle)
         cFunc(NActors::TEvents::TSystem::Poison, PassAway)
     )

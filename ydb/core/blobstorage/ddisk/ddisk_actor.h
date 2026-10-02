@@ -510,7 +510,6 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
-            WakeupCollectTabletStats = 8,
         };
 
         struct TPbOpSnapshot {
@@ -632,17 +631,6 @@ namespace NKikimr::NDDisk {
             std::queue<TPendingEvent> PendingSerializedWrites;
         };
 
-        TTabletStatsTracker TabletStats;
-        TActorId TabletStatsActor;
-        bool TabletStatsScheduled = false;
-        bool TabletStatsAwaitingAck = false;
-        void ScheduleTabletStats();
-        void CollectTabletStats();
-        void Handle(TEvTabletStatsAck::TPtr ev);
-        void Handle(TEvGetTabletStats::TPtr ev);
-        void CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes);
-        void CountTabletChunks(ui64 tabletId, i64 delta);
-        void SetDataChunkMapping(ui64 tabletId, TChunkRef* ref, TChunkIdx chunkIdx);
         THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
@@ -677,6 +665,8 @@ namespace NKikimr::NDDisk {
         }
 
         // Chunk management code
+
+        void SetDataChunkMapping(ui64 tabletId, TChunkRef* ref, TChunkIdx chunkIdx);
 
         // DDisk may pull an integrity chunk from the same reserve as a data
         // chunk, so it keeps a larger reserve than PersistentBuffer.
@@ -1355,6 +1345,20 @@ namespace NKikimr::NDDisk {
         void HandleWakeup(TEvents::TEvWakeup::TPtr &ev);
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr ev);
         void UpdateFreeSpaceInfo();
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Per-tablet statistics (DDisk mode only)
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        TTabletStatsTracker TabletStats;
+        TActorId TabletStatsActor;
+        bool TabletStatsActive = false;
+
+        void NotifyTabletStats();
+        void Handle(TEvCollectTabletStats::TPtr ev);
+        void Handle(TEvGetTabletStats::TPtr ev);
+        void CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes);
+        void CountTabletChunks(ui64 tabletId, i64 delta);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Monitoring page (DDisk mode only)

@@ -12,7 +12,9 @@
 
 namespace NKikimr::NDDisk {
 
-enum class ETabletOperation : size_t { Read, Write, Sync };
+enum class ETabletOperation : size_t { Read, Write, Sync, Count };
+
+inline constexpr size_t TabletOperationCount = static_cast<size_t>(ETabletOperation::Count);
 
 struct TTabletIoCounters {
     ui64 Requests = 0;
@@ -23,8 +25,8 @@ struct TTabletIoCounters {
 struct TTabletStatsSample {
     ui64 TabletId = 0;
     ui64 Chunks = 0;
-    std::array<TTabletIoCounters, 3> Previous;
-    std::array<TTabletIoCounters, 3> Current;
+    std::array<TTabletIoCounters, TabletOperationCount> Previous;
+    std::array<TTabletIoCounters, TabletOperationCount> Current;
     TDuration Elapsed;
     bool Retired = false;
 };
@@ -100,8 +102,8 @@ private:
     struct TEntry {
         ui64 Chunks = 0;
         ui64 Sessions = 0;
-        std::array<TTabletIoCounters, 3> Current = {};
-        std::array<TTabletIoCounters, 3> Previous = {};
+        std::array<TTabletIoCounters, TabletOperationCount> Current = {};
+        std::array<TTabletIoCounters, TabletOperationCount> Previous = {};
         TMonotonic CollectedAt;
         ui8 Unchanged = 0;
         bool Changed = false;

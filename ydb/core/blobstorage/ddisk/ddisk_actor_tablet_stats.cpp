@@ -2,46 +2,38 @@
 
 namespace NKikimr::NDDisk {
 
-void TDDiskActor::ScheduleTabletStats() {
-    if (Stopping || TabletStatsScheduled || TabletStatsAwaitingAck || !TabletStatsActor) {
-        return;
-    }
-    if (const auto deadline = TabletStats.NextDeadline()) {
-        const auto now = TActivationContext::Monotonic();
-        TabletStatsScheduled = true;
-        Schedule(*deadline > now ? *deadline - now : TDuration::MilliSeconds(1),
-            new TEvents::TEvWakeup(EWakeupTag::WakeupCollectTabletStats));
+void TDDiskActor::NotifyTabletStats() {
+    if (!Stopping && TabletStatsActor && !TabletStatsActive && TabletStats.NextDeadline()) {
+        TabletStatsActive = true;
+        Send(TabletStatsActor, new TEvTabletStatsChanged());
     }
 }
 
 void TDDiskActor::CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes) {
     TabletStats.AddIo(tabletId, operation, requests, bytes, TActivationContext::Monotonic());
-    ScheduleTabletStats();
+    NotifyTabletStats();
 }
 
 void TDDiskActor::CountTabletChunks(ui64 tabletId, i64 delta) {
     TabletStats.AddChunks(tabletId, delta, TActivationContext::Monotonic());
-    ScheduleTabletStats();
+    NotifyTabletStats();
 }
 
-void TDDiskActor::CollectTabletStats() {
-    TabletStatsScheduled = false;
+void TDDiskActor::Handle(TEvCollectTabletStats::TPtr ev) {
+    if (ev->Sender != TabletStatsActor) {
+        return;
+    }
     auto batch = std::make_unique<TEvTabletStatsBatch>();
-    batch->Samples = TabletStats.Collect(TActivationContext::Monotonic());
-    batch->SampledAt = TActivationContext::Now();
-    if (!batch->Samples.empty()) {
-        TabletStatsAwaitingAck = true;
-        Send(TabletStatsActor, batch.release());
-    } else {
-        ScheduleTabletStats();
+    batch->Available = !Stopping;
+    if (!Stopping) {
+        batch->Samples = TabletStats.Collect(TActivationContext::Monotonic());
+        batch->SampledAt = TActivationContext::Now();
+        batch->NextDeadline = TabletStats.NextDeadline();
+        // Clear before replying: a later mutation emits a wakeup even if this
+        // final batch is still being delivered or processed by the collector.
+        TabletStatsActive = batch->NextDeadline.has_value();
     }
-}
-
-void TDDiskActor::Handle(TEvTabletStatsAck::TPtr ev) {
-    if (ev->Sender == TabletStatsActor && TabletStatsAwaitingAck) {
-        TabletStatsAwaitingAck = false;
-        ScheduleTabletStats();
-    }
+    Send(TabletStatsActor, batch.release());
 }
 
 void TDDiskActor::SetDataChunkMapping(ui64 tabletId, TChunkRef* ref, TChunkIdx chunkIdx) {

@@ -9,8 +9,8 @@
 namespace NKikimr::NDDisk {
 
 struct TTabletIoRate {
-    double Iops = 0;
-    double BytesPerSecond = 0;
+    float Iops = 0;
+    float BytesPerSecond = 0;
 };
 
 inline TTabletIoRate CalculateTabletIoRate(const TTabletIoCounters& previous,
@@ -19,13 +19,14 @@ inline TTabletIoRate CalculateTabletIoRate(const TTabletIoCounters& previous,
         return {};
     }
     const double seconds = elapsed.MicroSeconds() / 1e6;
-    return {(current.Requests - previous.Requests) / seconds, (current.Bytes - previous.Bytes) / seconds};
+    return {static_cast<float>((current.Requests - previous.Requests) / seconds),
+        static_cast<float>((current.Bytes - previous.Bytes) / seconds)};
 }
 
 struct TTabletStats {
     ui64 TabletId = 0;
     ui64 DataMappedChunks = 0;
-    std::array<TTabletIoRate, 3> Rates; // ETabletOperation order; logical DDisk I/O only.
+    std::array<TTabletIoRate, TabletOperationCount> Rates; // ETabletOperation order; logical DDisk I/O only.
     TInstant SampledAt;
     TDuration Interval;
 };
@@ -33,9 +34,12 @@ struct TTabletStats {
 struct TEvTabletStatsBatch : NActors::TEventLocal<TEvTabletStatsBatch, TEv::EvTabletStatsBatch> {
     std::vector<TTabletStatsSample> Samples;
     TInstant SampledAt;
+    std::optional<TMonotonic> NextDeadline;
+    bool Available = true;
 };
 
-struct TEvTabletStatsAck : NActors::TEventLocal<TEvTabletStatsAck, TEv::EvTabletStatsAck> {};
+struct TEvCollectTabletStats : NActors::TEventLocal<TEvCollectTabletStats, TEv::EvCollectTabletStats> {};
+struct TEvTabletStatsChanged : NActors::TEventLocal<TEvTabletStatsChanged, TEv::EvTabletStatsChanged> {};
 
 // Send to DDisk or directly to its statistics actor. Results are bounded and
 // ordered by ID. Samples are asynchronous: SampledAt exposes backlog freshness.

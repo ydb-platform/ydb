@@ -115,7 +115,9 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(RateNormalizationAndCounterReset) {
-        const auto rate = CalculateTabletIoRate({10, 100}, {13, 1100}, TDuration::MilliSeconds(250));
+        constexpr ui64 baseline = 1ull << 60;
+        const auto rate = CalculateTabletIoRate({baseline, baseline}, {baseline + 3, baseline + 1000},
+            TDuration::MilliSeconds(250));
         UNIT_ASSERT_VALUES_EQUAL(rate.Iops, 12);
         UNIT_ASSERT_VALUES_EQUAL(rate.BytesPerSecond, 4000);
         UNIT_ASSERT_VALUES_EQUAL(CalculateTabletIoRate({}, {1, 1}, {}).Iops, 0);
@@ -150,12 +152,55 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Chunks, 0);
     }
 
+    Y_UNIT_TEST(WakeupDuringOutstandingPullIsNotLost) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto owner = runtime.AllocateEdgeActor(1);
+        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        size_t requests = 0;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            requests += ev->GetTypeRewrite() == TEvCollectTabletStats::EventType;
+            return true;
+        };
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+        runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+        // The old final response reports sleep after a newer wakeup arrived.
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsBatch()), 1);
+        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2);
+        auto batch = std::make_unique<TEvTabletStatsBatch>();
+        TTabletStatsSample sample;
+        sample.TabletId = 42;
+        sample.Chunks = 2;
+        sample.Current[0] = {1, 100};
+        sample.Elapsed = TDuration::Seconds(1);
+        batch->Samples.push_back(sample);
+        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+        const auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.front().Rates[0].Iops, 1);
+        runtime.FilterFunction = {};
+        runtime.Stop();
+    }
+
     Y_UNIT_TEST(ActorPaginationCookiesNormalizationAndRetirement) {
         TTestActorSystem runtime(1);
         runtime.Start();
         const auto owner = runtime.AllocateEdgeActor(1);
         const auto reader = runtime.AllocateEdgeActor(1);
         const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        const auto publish = [&](std::unique_ptr<TEvTabletStatsBatch> batch) {
+            runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+            runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+            runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+            runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+            runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        };
         for (ui64 first = 1; first <= 201; first += 100) {
             auto batch = std::make_unique<TEvTabletStatsBatch>();
             batch->SampledAt = TInstant::Seconds(12);
@@ -167,8 +212,7 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
                 sample.Elapsed = TDuration::MilliSeconds(250);
                 batch->Samples.push_back(sample);
             }
-            runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
-            runtime.WaitForEdgeActorEvent<TEvTabletStatsAck>(owner, false);
+            publish(std::move(batch));
         }
         const auto query = [&](std::optional<ui64> after, std::optional<ui64> id, ui32 limit) {
             auto request = std::make_unique<TEvGetTabletStats>();
@@ -202,8 +246,7 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
         sample.TabletId = 42;
         sample.Retired = true;
         batch->Samples.push_back(sample);
-        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
-        runtime.WaitForEdgeActorEvent<TEvTabletStatsAck>(owner, false);
+        publish(std::move(batch));
         UNIT_ASSERT(query({}, 42, 100)->Get()->Tablets.empty());
         UNIT_ASSERT_VALUES_EQUAL(query({}, {}, 0)->Get()->Tablets.size(), 1);
         runtime.Stop();

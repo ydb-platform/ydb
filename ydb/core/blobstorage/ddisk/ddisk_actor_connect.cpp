@@ -109,7 +109,7 @@ namespace NKikimr::NDDisk {
         connection.InterconnectSessionId = ev->InterconnectSession;
         if (!connection.Active && !IsPersistentBufferActor) {
             TabletStats.AddSessions(creds.TabletId, 1, TActivationContext::Monotonic());
-            ScheduleTabletStats();
+            NotifyTabletStats();
         }
         connection.Active = true;
         if (!sameSession) {
@@ -148,7 +148,7 @@ namespace NKikimr::NDDisk {
             RememberConnectionToken( connection, EConnectionTokenInvalidationReason::Disconnect);
             if (!IsPersistentBufferActor) {
                 TabletStats.AddSessions(connection.TabletId, -1, TActivationContext::Monotonic());
-                ScheduleTabletStats();
+                NotifyTabletStats();
             }
             connection.Active = false;
             connection.Token = {};

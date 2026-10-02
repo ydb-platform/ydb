@@ -537,7 +537,7 @@ def build_html_dashboard(
           '</div>'
         );
       }}).join('');
-      const hostOrder = [['max', 'max'], ['p90', 'p90'], ['p95', 'p95'], ['median', 'median']];
+      const hostOrder = [['max', 'max'], ['p95', 'p95'], ['median', 'median']];
       const cpuHost = (hs.cpu_host && typeof hs.cpu_host === 'object') ? hs.cpu_host : null;
       const ramHost = (hs.ram_host && typeof hs.ram_host === 'object') ? hs.ram_host : null;
       const diskRead = (hs.disk_read_host && typeof hs.disk_read_host === 'object') ? hs.disk_read_host : null;

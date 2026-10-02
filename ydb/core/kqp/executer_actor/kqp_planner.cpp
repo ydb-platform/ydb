@@ -94,6 +94,24 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 
 }
 
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
+    TKqpStatsReportingSettings settings;
+    settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero();
+
+    if (context.IsStreamingQuery) {
+        settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            TDuration::Seconds(1), TDuration::Seconds(5)};
+    }
+    if (settings.CollectCurrentQueryStats) {
+        const auto interval = context.CurrentQueryStatsInterval;
+        // Remote tasks already send periodic stats. Only local tasks need an extra timer.
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
+    }
+    return settings;
+}
+
 bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
@@ -107,7 +125,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
-    , WithProgressStats(args.WithProgressStats)
+    , StatsReportingSettings(args.StatsReportingSettings)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
@@ -274,7 +292,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
+    request.MutableRuntimeSettings()->SetWithProgressStats(StatsReportingSettings.WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -311,9 +329,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
+    if (StatsReportingSettings.RemoteReportStatsSettings) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MinInterval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MaxInterval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -592,7 +610,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxInfo = QueryQuotaManager->GetTx(),
         .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = Nothing(),
+        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
@@ -600,7 +618,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = WithProgressStats,
+        .WithProgressStats = StatsReportingSettings.WithProgressStats,
         // Compute actor should not arm a timeout timer: in case of timeout it will receive
         // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
         // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.

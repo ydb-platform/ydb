@@ -10,6 +10,7 @@
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
@@ -1039,6 +1040,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerSubscribeDatabaseSpace, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
@@ -1126,6 +1128,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerProposeGroupKey:              return 1;
         case TEvBlobStorage::EvControllerGetGroup:                     return 1;
         case TEvBlobStorage::EvControllerGroupDecommittedNotify:       return 1;
+        case TEvBlobStorage::EvControllerSubscribeDatabaseSpace:       return 1;
 
         // auxiliary messages that are not usually urgent (also includes RW transactions in TConfigRequest and UpdateDiskStatus)
         case TEvPrivate::EvDropDonor:                                  return 2;
@@ -1158,6 +1161,15 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                 if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->GetStatus() > item.GetStatus()) {
                     return 1;
                 } else if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskStatus > item.GetStatus()) {
+                    return 1;
+                }
+            }
+            for (const auto& m : record.GetVDisksMetrics()) {
+                // space color getting worse is essential for blocking database writes in time
+                if (!m.HasStatusFlags()) {
+                    continue;
+                } else if (const TVSlotInfo *slot = FindVSlot(VDiskIDFromVDiskID(m.GetVDiskId())); slot &&
+                        StatusFlagToSpaceColor(m.GetStatusFlags()) > StatusFlagToSpaceColor(slot->Metrics.GetStatusFlags())) {
                     return 1;
                 }
             }

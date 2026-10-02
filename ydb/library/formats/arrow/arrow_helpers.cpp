@@ -490,16 +490,6 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
     return ScalarCompare(*x, *y);
 }
 
-std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
-    std::shared_ptr<arrow::Array> out;
-    arrow::BooleanBuilder builder;
-    for (const auto val : vec) {
-        Y_ABORT_UNLESS(builder.Append(val).ok());
-    }
-    Y_ABORT_UNLESS(builder.Finish(&out).ok());
-    return out;
-}
-
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {
     bool res = lhs->length() == rhs->length();
     for (int64_t i = 0; i < lhs->length() && res; ++i) {

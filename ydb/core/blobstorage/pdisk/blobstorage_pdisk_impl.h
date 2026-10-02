@@ -134,6 +134,9 @@ public:
     // sensors. Can be toggled via ICB without a cluster restart to revert to the
     // old algorithm if something goes wrong with the new one.
     TControlWrapper UseDeviceOverestimationRatioMerged;
+    // Seconds without successful physical I/O before issuing a one-sector
+    // health read. Zero disables the probe; the ICB default is zero.
+    TControlWrapper IdleDeviceProbeIntervalSeconds;
     i64 SemiStrictSpaceIsolationCached = 0;
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
@@ -248,9 +251,9 @@ public:
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
 #if defined(__linux__)
-    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
-    // it during Stop() only when no clients remain; otherwise the final owner
-    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    // Created and used by the PDisk worker. Normal Stop() joins that worker
+    // before retiring the router; error stop runs on the worker. DDisk/PB may
+    // retain client references, but StopSync closes the duplicated device fd.
     std::shared_ptr<TUringRouter> SharedUringRouter;
 #endif
     bool SharedUringCreateAttempted = false;
@@ -267,6 +270,12 @@ public:
     volatile ui64 InitialNonceJumpSize = 0;
     TAtomic IsStarted = false;
     TMutex StopMutex;
+
+    ui64 ObservedDeviceIoCompletionGeneration = 0;
+    NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
+    // The generic device-halt watchdog detects an accepted probe that does not
+    // complete. Keep one probe in flight so its buffer remains uniquely owned.
+    std::atomic<bool> IdleDeviceProbeInFlight = false;
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
@@ -328,6 +337,7 @@ public:
     // Destruction
     virtual ~TPDisk();
     void Stop(); // Called by actor
+    void StopDeviceIo(bool isError);
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
@@ -441,6 +451,7 @@ public:
     void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
 #if defined(__linux__)
     TDeviceIoSampleSink MakeUringSampleSink() const;
+    TIoCompletionSink MakeUringCompletionSink() const;
 #endif
     void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
@@ -551,6 +562,9 @@ public:
     void EnqueueAll();
     void GetJobsFromForsetti();
     void Update() override;
+    // The result is used by tests to observe submission without racing its
+    // completion; production intentionally needs no action on successful submit.
+    bool MaybeScheduleIdleDeviceProbe();
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // External interface

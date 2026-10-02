@@ -1,10 +1,15 @@
 # x86-simd-sort
 
 C++ header file library for SIMD based 16-bit, 32-bit and 64-bit data type
-sorting algorithms on x86 processors. We currently have AVX-512 and AVX2
-(32-bit and 64-bit only) based implementation of quicksort, quickselect &
-partialsort and AVX-512 implementations of argsort, argselect and key-value
-sort. The following API's are currently supported:
+sorting algorithms on x86 processors. We currently have AVX-512 and AVX2 based
+implementation of quicksort, quickselect, partialsort, argsort, argselect &
+key-value sort. The static methods can be used by including
+`src/x86simdsort-static-incl.h` file. Compiling them with the appropriate
+compiler flags will choose either the AVX-512 or AVX2 versions. For AVX-512, we
+recommend using -march=skylake-avx512 for 32-bit and 64-bit datatypes,
+-march=icelake-client for 16-bit datatype and -march=sapphirerapids for
+_Float16. For AVX2 just using -mavx2 will suffice. The following API's are
+currently supported:
 
 #### Quicksort
 
@@ -13,8 +18,7 @@ Equivalent to `qsort` in
 `std::sort` in [C++](https://en.cppreference.com/w/cpp/algorithm/sort).
 
 ```cpp
-void avx512_qsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
-void avx2_qsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
+void x86simdsortStatic::qsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
 ```
 Supported datatypes: `uint16_t`, `int16_t`, `_Float16`, `uint32_t`, `int32_t`,
 `float`, `uint64_t`, `int64_t` and `double`. AVX2 versions currently support
@@ -30,8 +34,7 @@ Equivalent to `std::nth_element` in
 
 
 ```cpp
-void avx512_qselect<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
-void avx2_qselect<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
+void x86simdsortStatic::qselect<T>(T* arr, size_t k, size_t arrsize, bool hasnan = false, bool descending = false);
 ```
 Supported datatypes: `uint16_t`, `int16_t`, `_Float16`, `uint32_t`, `int32_t`,
 `float`, `uint64_t`, `int64_t` and `double`. AVX2 versions currently support
@@ -46,8 +49,7 @@ Equivalent to `std::partial_sort` in
 
 
 ```cpp
-void avx512_partial_qsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false)
-void avx2_partial_qsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false)
+void x86simdsortStatic::partial_qsort<T>(T* arr, size_t k, size_t arrsize, bool hasnan = false, bool descending = false)
 ```
 Supported datatypes: `uint16_t`, `int16_t`, `_Float16`, `uint32_t`, `int32_t`,
 `float`, `uint64_t`, `int64_t` and `double`. AVX2 versions currently support
@@ -61,8 +63,7 @@ Equivalent to `np.argsort` in
 [NumPy](https://numpy.org/doc/stable/reference/generated/numpy.argsort.html).
 
 ```cpp
-std::vector<size_t> arg = avx512_argsort<T>(T* arr, size_t arrsize, bool hasnan = false, bool descending = false);
-void avx512_argsort<T>(T* arr, size_t *arg, size_t arrsize, bool hasnan = false, bool descending = false);
+void x86simdsortStatic::argsort<T>(T* arr, size_t *arg, size_t arrsize, bool hasnan = false, bool descending = false);
 ```
 Supported datatypes: `uint32_t`, `int32_t`, `float`, `uint64_t`, `int64_t` and
 `double`.
@@ -74,8 +75,7 @@ Equivalent to `np.argselect` in
 [NumPy](https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html).
 
 ```cpp
-std::vector<size_t> arg = avx512_argselect<T>(T* arr, size_t k, size_t arrsize);
-void avx512_argselect<T>(T* arr, size_t *arg, size_t k, size_t arrsize);
+void x86simdsortStatic::argselect<T>(T* arr, size_t *arg, size_t k, size_t arrsize, bool hasnan = false);
 ```
 Supported datatypes: `uint32_t`, `int32_t`, `float`, `uint64_t`, `int64_t` and
 `double`.
@@ -84,9 +84,10 @@ The algorithm resorts to scalar `std::sort` if the array contains NaNs.
 
 #### Key-value sort
 ```cpp
-void avx512_qsort_kv<T>(T1* key, T2* value , size_t arrsize)
+void x86simdsortStatic::keyvalue_qsort<T1, T2>(T1* key, T2* value, size_t arrsize, bool hasnan = false, bool descending = false);
 ```
-Supported datatypes: `uint64_t, int64_t and double`
+Supported datatypes: `uint32_t`, `int32_t`, `float`, `uint64_t`, `int64_t` and
+`double`.
 
 ## Algorithm details
 
@@ -105,7 +106,7 @@ source code associated with that paper [3].
 ### Sample code `main.cpp`
 
 ```cpp
-#include "src/avx512-32bit-qsort.hpp"
+#include "src/x86simdsort-static-incl.h"
 
 int main() {
     const int ARRSIZE = 1000;
@@ -117,7 +118,7 @@ int main() {
     }
 
     /* call avx512 quicksort */
-    avx512_qsort(arr.data(), ARRSIZE);
+    x86simdsortStatic::qsort(arr.data(), ARRSIZE);
     return 0;
 }
 
@@ -126,7 +127,8 @@ int main() {
 ### Build using g++
 
 ```
-g++ main.cpp -mavx512f -mavx512dq -O3
+g++ main.cpp -mavx512f -mavx512dq -mavx512vl -O3 /* for AVX-512 */
+g++ main.cpp -mavx2 -O3 /* for AVX2 */
 ```
 
 If you are using src files directly, then it is a header file only and we do
@@ -139,7 +141,7 @@ to include and build this library with your source code.
 ## Build requirements
 
 The sorting routines relies only on the C++ Standard Library and requires a
-relatively modern compiler to build (gcc 8.x and above).
+relatively modern compiler to build (ex: gcc 8.x and above).
 
 ## Instruction set requirements
 

@@ -62,8 +62,8 @@ Setup runs on one thread before concurrent submission:
 
 1. Probe availability when choosing the backend. Ring creation first tries
    the modern single-issuer/deferred-task-run flags and then a plain ring.
-2. Construct the router and record any `RegisterFile`, `RegisterBuffers` and
-   `SetSampleSink` requests.
+2. Construct the router and record any `RegisterFile`, `RegisterBuffers`,
+   `SetSampleSink` and `SetIoCompletionSink` requests.
 3. Call `Start()` once. The dedicated I/O thread enables the ring and performs
    registrations; `Start()` waits for that work before opening admission.
 4. Check registration success and error accessors before using fixed I/O.
@@ -111,6 +111,12 @@ continues positive short I/O internally. A zero-byte result with data remaining
 becomes `-EIO`; if shutdown prevents an internal continuation, the operation
 completes with `-ECANCELED`. Keep all backing buffers alive until the terminal
 callback.
+
+The optional I/O-completion sink runs once for every positive data CQE, before
+the operation's terminal callback. Each positive short-I/O leg therefore calls
+the sink, while zero-progress and failed CQEs do not. PDisk uses this hook to
+observe successful DDisk/PersistentBuffer physical I/O without capturing actor
+or PDisk lifetime.
 
 `PrepareScatterGather`/`AddIov` support up to 64 segments on Linux, with 16
 stored inline. Fixed-buffer operations use one registered segment. A recycled

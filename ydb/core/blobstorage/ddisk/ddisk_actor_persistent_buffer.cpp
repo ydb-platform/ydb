@@ -1,6 +1,7 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
@@ -177,6 +178,13 @@ namespace NKikimr::NDDisk {
             update->Lifetime = TDuration::MilliSeconds(ui64(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds) * 3);
             update->Record.SetPDiskId(BaseInfo.PDiskId);
             update->Record.SetDDiskSlotId(BaseInfo.VDiskSlotId);
+            update->Record.SetAllocatedSize(ui64(ev->Get()->UsedChunks) * ChunkSize);
+            update->Record.SetTotalSize(ui64(ev->Get()->TotalChunks) * ChunkSize);
+            const ui32 ownerFree = ev->Get()->TotalChunks > ev->Get()->UsedChunks
+                ? ev->Get()->TotalChunks - ev->Get()->UsedChunks : 0;
+            update->Record.SetAvailableSize(ui64(Min(ev->Get()->FreeChunks, ownerFree)) * ChunkSize);
+            update->Record.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
+                SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId).ToString());
             if (ev->Get()->Status == NKikimrProto::OK && NormalizedOccupancy >= 0) {
                 update->Record.SetDDiskOccupancy(NormalizedOccupancy);
             }

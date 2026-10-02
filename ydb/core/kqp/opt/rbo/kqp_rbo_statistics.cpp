@@ -46,25 +46,49 @@ TOptimizerStatistics BuildOptimizerStatistics(IOperator& op, const TColumnLineag
     TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
 
     THashMap<TString, TColumnStatistics> columnStatsMap;
+    THashMap<TString, TMultiColumnStatistics> multiColumnStatsMap;
 
     if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
-        const auto& globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
+        const auto& globalStats = *typeCtx.ColumnStatisticsByTableName.at(table);
+        const auto& globalMap = globalStats.Data;
 
         // The statistics consumer sees the same decimal IDs as expression ASTs.
         // Multiple bindings of one storage field each receive its statistics.
+        THashMap<TString, TString> idByColumnName;
         for (const auto id : outputIUs) {
             const auto* source = FindSourceStatistics(op, id, lineage);
             if (!source) {
                 continue;
             }
+            idByColumnName[source->ColumnName] = ToString(id);
             if (const auto it = globalMap.find(source->ColumnName); it != globalMap.end()) {
                 columnStatsMap.emplace(ToString(id), it->second);
             }
         }
 
-        if (columnStatsMap.size()) {
+        for (const auto& [_, multiColumnStats] : globalStats.MultiData) {
+            TVector<TString> translatedColumns;
+            for (const auto& column : multiColumnStats.Columns) {
+                const auto it = idByColumnName.find(column);
+                if (it == idByColumnName.end()) {
+                    translatedColumns.clear();
+                    break;
+                }
+                translatedColumns.push_back(it->second);
+            }
+
+            if (translatedColumns.empty()) {
+                continue;
+            }
+
+            TMultiColumnStatistics translated(multiColumnStats);
+            translated.Columns = translatedColumns;
+            multiColumnStatsMap[MakeMultiColumnKey(translatedColumns)] = std::move(translated);
+        }
+
+        if (columnStatsMap.size() || multiColumnStatsMap.size()) {
             ColumnStatistics = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>(
-                TOptimizerStatistics::TColumnStatMap(columnStatsMap));
+                std::move(columnStatsMap), std::move(multiColumnStatsMap));
         }
     }
 

@@ -272,6 +272,10 @@ public:
         Reader.readStructEnd();
     }
 
+    ui64 GetEstimate() const {
+        return Estimate;
+    }
+
 private:
     void WalkSchemaElement() {
         NThrift::TInputRecursionTracker tracker(Reader);
@@ -484,7 +488,8 @@ private:
     std::string Scratch; // the strings passed over land here
 };
 
-std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui64 bufferSizeLimit) {
+// Returns what the parsed footer will take in memory, by the walk.
+std::expected<ui64, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui64 bufferSizeLimit) {
     static constexpr int64_t FooterTail = 8; // the length of the footer and the magic
 
     auto size = source.GetSize();
@@ -515,6 +520,7 @@ std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui
             << (footer.ok() ? "short read" : footer.status().ToString()));
     }
 
+    ui64 estimate = 0;
     try {
         using TTransport = apache::thrift::transport::TMemoryBuffer;
         auto transport = std::make_shared<TTransport>(const_cast<uint8_t*>((*footer)->data()), footerLength);
@@ -524,13 +530,14 @@ std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui
         NThrift::TCompactProtocolT<TTransport> reader(transport, limit, limit);
         TFooterWalker walker(*transport, reader, footerLength, bufferSizeLimit);
         walker.Walk();
+        estimate = walker.GetEstimate();
     } catch (const TFooterWalker::TRejected& rejected) {
         return std::unexpected(rejected.Message);
     } catch (const std::exception& ex) {
         return std::unexpected(TStringBuilder() << "failed to parse the parquet footer: " << ex.what());
     }
 
-    return {};
+    return estimate;
 }
 
 // Parquet throws for some errors; the parser runs in an actor, so every entry point
@@ -633,6 +640,7 @@ struct TParquetFileSession {
     TDecodeMemoryPool* Memory = nullptr; // the parser's, which outlives the session
     std::shared_ptr<arrow::io::RandomAccessFile> Source;
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
+    ui64 FooterMemoryEstimate = 0; // by the walk over the footer, see CheckFooter()
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
     std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> CastColumns; // see IsWriterCoercion
     std::vector<int> RowGroups; // the row groups to read, in that order
@@ -809,9 +817,11 @@ public:
         Memory.ResetRefused();
         session->Source = std::move(source);
 
-        if (auto result = CheckFooter(*session->Source, BufferSizeLimit); !result) {
-            return result;
+        auto footerMemory = CheckFooter(*session->Source, BufferSizeLimit);
+        if (!footerMemory) {
+            return std::unexpected(std::move(footerMemory.error()));
         }
+        session->FooterMemoryEstimate = *footerMemory;
 
         parquet::arrow::FileReaderBuilder builder;
         if (auto st = builder.Open(session->Source, parquet::ReaderProperties(session->Memory)); !st.ok()) {
@@ -925,6 +935,10 @@ public:
 
     std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const override {
         return Session && Session->FileReader ? Session->FileReader->parquet_reader()->metadata() : nullptr;
+    }
+
+    ui64 GetFooterMemoryEstimate() const override {
+        return Session ? Session->FooterMemoryEstimate : 0;
     }
 
     std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) override {

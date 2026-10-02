@@ -1264,7 +1264,10 @@ private:
             Parser->ResetFile();
             return std::unexpected(std::move(footerLength.error()));
         }
-        const ui64 footerMemory = EstimateParquetFooterMemory(*metadata, *footerLength);
+        // the larger of the shared estimate, which the exporter keeps its files within,
+        // and the parser's count of the lists inside the footer
+        const ui64 footerMemory = Max(EstimateParquetFooterMemory(*metadata, *footerLength),
+            Parser->GetFooterMemoryEstimate());
         if (footerMemory >= BufferSizeLimit) {
             Parser->ResetFile();
             return std::unexpected(TStringBuilder() << "Parquet footer takes about " << footerMemory

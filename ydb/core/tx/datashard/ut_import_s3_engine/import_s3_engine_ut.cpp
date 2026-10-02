@@ -1159,24 +1159,36 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
         UNIT_ASSERT_C(!remainingMetadataRange, "parquet metadata is still incomplete");
     }
 
-    auto dataRangesResult = sparseFile->PlanColumnChunkRanges(sparseFile);
-    UNIT_ASSERT_C(dataRangesResult.has_value(), dataRangesResult.error());
-    auto dataRanges = std::move(*dataRangesResult);
-    UNIT_ASSERT_VALUES_EQUAL(dataRanges.empty(), !usesSparseReads);
-    for (const auto& range : dataRanges) {
-        PutSparseRange(source.Data, sparseFile, range.Offset, range.Length);
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(sparseFile->IsFullyBuffered(), !usesSparseReads);
-
     const auto scheme = MakeLargeParquetTableScheme();
     TUserTable::TPtr userTable = new TUserTable(1, scheme, 0);
     const TTableInfo tableInfo(1, userTable);
     auto parser = CreateParquetDataParser(/*bufferSizeLimit=*/0);
     auto configureResult = parser->Configure(tableInfo, scheme);
     UNIT_ASSERT_C(configureResult.has_value(), configureResult.error());
-
     auto* streamParser = parser.Get();
+
+    // The row groups' ranges are planned the way the engine does it, from the footer the
+    // parser has checked and parsed; what the footer tail already holds is not loaded again.
+    auto metadataResult = streamParser->OpenMetadata(
+        sparseFile->MakeRandomAccessFile(sparseFile, streamParser->GetMemoryPool()));
+    UNIT_ASSERT_C(metadataResult.has_value(), metadataResult.error());
+    const auto metadata = streamParser->GetFileMetadata();
+    UNIT_ASSERT(metadata);
+    auto rowGroupRangesResult = sparseFile->PlanColumnChunkRangesByRowGroup(*metadata, streamParser->GetColumnIndices());
+    UNIT_ASSERT_C(rowGroupRangesResult.has_value(), rowGroupRangesResult.error());
+    ui64 loadedDataBytes = 0;
+    for (const auto& rowGroupRanges : *rowGroupRangesResult) {
+        for (const auto& range : rowGroupRanges) {
+            const ui64 end = Min(range.Offset + range.Length, footerRange.Offset);
+            if (range.Offset < end) {
+                PutSparseRange(source.Data, sparseFile, range.Offset, end - range.Offset);
+                loadedDataBytes += end - range.Offset;
+            }
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(loadedDataBytes > 0, usesSparseReads);
+    UNIT_ASSERT_VALUES_EQUAL(sparseFile->IsFullyBuffered(), !usesSparseReads);
+
     auto openResult = streamParser->OpenFile(sparseFile->MakeRandomAccessFile(sparseFile));
     UNIT_ASSERT_C(openResult.has_value(), openResult.error());
 

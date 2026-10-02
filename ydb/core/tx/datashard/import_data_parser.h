@@ -92,6 +92,9 @@ public:
     // The metadata of the open file, parsed once.
     virtual std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const = 0;
 
+    // What the parsed footer takes in memory, by the walk over it before it was parsed.
+    virtual ui64 GetFooterMemoryEstimate() const = 0;
+
     // The pool the decoding takes its memory from, with its limit.
     virtual arrow::MemoryPool* GetMemoryPool() = 0;
 

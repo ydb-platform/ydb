@@ -366,33 +366,6 @@ std::expected<ui64, TString> TParquetSparseFile::FooterMetadataLength() const {
     return static_cast<ui64>(*metadataLen);
 }
 
-std::expected<TVector<TParquetFetchRange>, TString> TParquetSparseFile::PlanColumnChunkRanges(
-    const std::shared_ptr<TParquetSparseFile>& owner) const
-{
-    try {
-        auto source = MakeRandomAccessFile(owner);
-        const auto metadata = parquet::ReadMetaData(source);
-
-        TVector<ReadRange> ranges;
-        ranges.reserve(metadata->num_row_groups() * metadata->num_columns());
-        for (int32_t row = 0; row < metadata->num_row_groups(); ++row) {
-            for (int32_t col = 0; col < metadata->num_columns(); ++col) {
-                ranges.push_back(ComputeColumnChunkRange(
-                    metadata.get(),
-                    static_cast<int64_t>(FileSize),
-                    row,
-                    col));
-            }
-        }
-
-        return SubtractLoaded(CoalesceReadRanges(std::move(ranges)));
-    } catch (const parquet::ParquetException& ex) {
-        return std::unexpected(TString(ex.what()));
-    } catch (const std::exception& ex) {
-        return std::unexpected(TString(ex.what()));
-    }
-}
-
 std::expected<TVector<TVector<TParquetFetchRange>>, TString>
 TParquetSparseFile::PlanColumnChunkRangesByRowGroup(
     const parquet::FileMetaData& metadata,
@@ -458,36 +431,6 @@ void TParquetSparseFile::ClearBefore(ui64 offset) {
     for (const auto& segment : Segments) {
         BufferedBytes_ += segment.Data.size();
     }
-}
-
-TVector<TParquetFetchRange> TParquetSparseFile::SubtractLoaded(const TVector<ReadRange>& ranges) const {
-    TVector<TParquetFetchRange> result;
-    for (const auto& range : ranges) {
-        const ui64 rangeEnd = static_cast<ui64>(range.offset) + static_cast<ui64>(range.length);
-        ui64 pos = static_cast<ui64>(range.offset);
-
-        for (auto it = FindSegment(pos); it != Segments.end() && it->Offset < rangeEnd; ++it) {
-            if (pos < it->Offset) {
-                result.push_back({
-                    .Offset = pos,
-                    .Length = it->Offset - pos,
-                });
-            }
-            pos = Max(pos, it->End());
-            if (pos >= rangeEnd) {
-                break;
-            }
-        }
-
-        if (pos < rangeEnd) {
-            result.push_back({
-                .Offset = pos,
-                .Length = rangeEnd - pos,
-            });
-        }
-    }
-
-    return result;
 }
 
 ui64 EstimateParquetFooterMemory(const parquet::FileMetaData& metadata, ui64 footerBytes) {

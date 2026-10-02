@@ -60,9 +60,6 @@ public:
     // The footer length from the last bytes of the file, which must be loaded.
     std::expected<ui64, TString> FooterMetadataLength() const;
 
-    std::expected<TVector<TParquetFetchRange>, TString> PlanColumnChunkRanges(
-        const std::shared_ptr<TParquetSparseFile>& owner) const;
-
     // The ranges of the given columns per row group; the other columns are not downloaded.
     std::expected<TVector<TVector<TParquetFetchRange>>, TString> PlanColumnChunkRangesByRowGroup(
         const parquet::FileMetaData& metadata,
@@ -91,19 +88,18 @@ private:
     // First segment ending after offset (i.e. the one containing offset, if any).
     TVector<TSegment>::const_iterator FindSegment(ui64 offset) const;
 
-    TVector<TParquetFetchRange> SubtractLoaded(const TVector<arrow::io::ReadRange>& ranges) const;
-
     ui64 FileSize = 0;
     ui64 BufferedBytes_ = 0;
     TVector<TSegment> Segments;
 };
 
-// What a parsed footer takes: thrift structures of a few hundred bytes per column chunk,
-// row group and column (sizeof 560, 96 and 320), while a chunk is as little as 3 bytes
-// in the footer.
+// What a parsed footer takes: thrift structures of a few hundred bytes per column chunk
+// and row group (sizeof 560 and 96), while a chunk is as little as 3 bytes in the footer;
+// and per column, next to its 320-byte thrift element, the schema node, column descriptor,
+// manifest field and Arrow field that Arrow builds for it.
 constexpr ui64 ParquetFooterBytesPerColumnChunk = 640;
 constexpr ui64 ParquetFooterBytesPerRowGroup = 128;
-constexpr ui64 ParquetFooterBytesPerColumn = 384;
+constexpr ui64 ParquetFooterBytesPerColumn = 2048;
 
 ui64 EstimateParquetFooterMemory(const parquet::FileMetaData& metadata, ui64 footerBytes);
 

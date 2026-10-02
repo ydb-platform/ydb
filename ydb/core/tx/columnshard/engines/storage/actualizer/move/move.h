@@ -54,31 +54,6 @@ public:
 
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
 
-protected:
-    // Protected test helpers: unit tests subclass to reach them, production code cannot.
-    void SimulateTaskSubmissionForTest(ui64 portionId) {
-        RemoveFromActiveQueue(portionId);
-        InFlightPortionIds.emplace(portionId);
-    }
-
-    bool IsInPendingPortionIds(ui64 portionId) const {
-        return PendingPortionIds.contains(portionId);
-    }
-
-    void AddToInitialAndPendingForTest(ui64 portionId) {
-        InitialPortionIds.emplace(portionId);
-        InFlightPortionIds.erase(portionId);
-        PendingPortionIds.emplace(portionId);
-    }
-
-    void ConfirmPortionForTest(ui64 portionId) {
-        PendingPortionIds.erase(portionId);
-        TRWAddress addr({ IStoragesManager::DefaultStorageId }, { IStoragesManager::DefaultStorageId });
-        PortionsToMove[addr].emplace(portionId);
-        PortionAddress.emplace(portionId, std::move(addr));
-    }
-
-public:
     // Asks for every pending portion: the caller runs it only while no move request is in flight.
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self);

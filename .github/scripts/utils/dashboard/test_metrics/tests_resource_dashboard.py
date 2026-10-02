@@ -1059,15 +1059,20 @@ def _build_resources_overlay(
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
         disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
-    ram_total_gb: Optional[float] = None
-    for rec in records:
-        v = rec.get("ram_total_gb")
-        if v is not None:
+    def _first_positive(key: str) -> Optional[float]:
+        for rec in records:
+            raw = rec.get(key)
+            if raw is None:
+                continue
             try:
-                ram_total_gb = float(v)
-                break
+                value = float(raw)
             except (TypeError, ValueError):
                 continue
+            if value > 0:
+                return value
+        return None
+
+    ram_total_gb = _first_positive("ram_total_gb")
     if not xs_evlog:
         return None
     return {

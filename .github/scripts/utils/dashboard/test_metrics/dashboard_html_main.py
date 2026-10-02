@@ -582,7 +582,7 @@ def build_html_dashboard(
         return (
           '<table class="headline-table"><thead><tr>' +
             '<th></th>' +
-            (withLimit ? '<th title="CPU and RAM are what /proc reported on this host. Disk is the provisioned SSD size.">limit</th>' : '') +
+            (withLimit ? '<th title="CPU cores and MemTotal from /proc on this host. Disk rows are throughput, so they have no capacity limit.">limit</th>' : '') +
             '<th>max</th><th>p95</th><th>median</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
@@ -591,21 +591,14 @@ def build_html_dashboard(
         const ro = data.resources_overlay || {{}};
         const lim = ro.runner_limits || {{}};
         const measured = ro.measured || {{}};
-        if (kind === 'cpu') {{
-          const v = measured.cpu_cores || ro.cpu_cores || lim.cpu_cores_max;
-          const n = Number(v);
-          return Number.isFinite(n) && n > 0 ? String(Math.round(n)) : null;
-        }}
-        if (kind === 'ram') {{
-          const v = measured.ram_gb || ro.ram_total_gb || lim.ram_gb_max;
-          const n = Number(v);
-          return Number.isFinite(n) && n > 0 ? formatHeadlineNumber('ram', n) : null;
-        }}
-        if (kind === 'disk') {{
-          const n = Number(lim.disk_gb);
-          return Number.isFinite(n) && n > 0 ? (String(Math.round(n)) + ' GB') : null;
-        }}
-        return null;
+        const live = kind === 'cpu'
+          ? (measured.cpu_cores || ro.cpu_cores)
+          : (measured.ram_gb || ro.ram_total_gb);
+        const fallback = kind === 'cpu' ? lim.cpu_cores_max : lim.ram_gb_max;
+        const n = Number(live != null && live !== '' ? live : fallback);
+        if (!Number.isFinite(n) || n <= 0) return null;
+        if (kind === 'cpu') return String(Math.round(n));
+        return formatHeadlineNumber('ram', n);
       }}
       const testsTable = statTable([
         ['CPU, cores', 'cpu', hs.cpu],
@@ -626,8 +619,8 @@ def build_html_dashboard(
           statTable([
             ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
             ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
-            ['Disk read, MB/s', 'disk', diskRead, hostCapacity('disk')],
-            ['Disk write, MB/s', 'disk', diskWrite, hostCapacity('disk')],
+            ['Disk read, MB/s', 'disk', diskRead, null],
+            ['Disk write, MB/s', 'disk', diskWrite, null],
           ], true) +
           '</div>';
       }}

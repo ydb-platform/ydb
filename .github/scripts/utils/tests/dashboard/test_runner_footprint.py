@@ -28,7 +28,6 @@ def test_resolve_release_asan_footprint():
     fp = resolve_runner_footprint(build_preset="release-asan")
     assert fp.vcpu == 64
     assert fp.ram_gb == 320.0
-    assert fp.disk_gb == 2418.0
     assert fp.mem_budget_gb == 320.0 * 0.70
     assert fp.ya_make_mem_limit_gb == 320.0 * 0.95
     assert fp.footprint_key == "build-preset-release-asan"
@@ -59,7 +58,6 @@ def test_enrich_resources_overlay_adds_limits():
     assert out is not None
     assert out["runner_limits"]["cpu_cores_max"] == 64
     assert out["runner_limits"]["ram_gb_max"] == 320.0
-    assert out["runner_limits"]["disk_gb"] == 2418.0
     assert out["measured"]["ram_gb"] == 280.5
     assert out["runner_footprint"]["build_preset"] == "release-asan"
 

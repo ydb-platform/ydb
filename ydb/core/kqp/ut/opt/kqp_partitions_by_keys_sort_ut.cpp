@@ -161,6 +161,22 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             UseSortForPartitionsByKeys);
     }
 
+    Y_UNIT_TEST_TWIN(WindowFunctionMixedDirectionsAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    row_number() OVER (PARTITION BY Text ORDER BY Data DESC, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionRepeatedKeyAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    row_number() OVER (PARTITION BY Text ORDER BY Text DESC, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys);
+    }
+
     Y_UNIT_TEST_TWIN(WindowFunctionLagMultiPartitionKeyAst, UseSortForPartitionsByKeys) {
         CheckWindowFunctionAst(
             "SELECT Key, Text, Data,\n"

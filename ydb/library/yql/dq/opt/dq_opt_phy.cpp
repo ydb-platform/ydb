@@ -350,88 +350,55 @@ TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
         .Build();
 }
 
-TExprNode::TPtr BuildWideSortForStructFlow(
-    TPositionHandle pos,
-    const TExprNode::TPtr& input,
-    const TExprNode::TPtr& sortDirections,
-    const TExprNode::TPtr& sortKeySelector,
-    const TStructExprType& structType,
-    TExprContext& ctx)
+TExprNode::TPtr BuildWideSort(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortDirections,
+    const TExprNode& sortKeySelector, const TStructExprType& structType, TExprContext& ctx)
 {
-    constexpr ui32 wideLimit = 101;
-    if (structType.GetSize() == 0 || structType.GetSize() > wideLimit) {
+    constexpr size_t wideLimit = 101;
+    const auto keyExprs = sortKeySelector.Tail().IsList()
+        ? sortKeySelector.Tail().ChildrenList()
+        : TExprNode::TListType{sortKeySelector.TailPtr()};
+    if (structType.GetSize() + keyExprs.size() > wideLimit) {
         return {};
     }
 
-    const auto keyExprs = sortKeySelector->Tail().IsList()
-        ? sortKeySelector->Tail().ChildrenList()
-        : TExprNode::TListType{sortKeySelector->TailPtr()};
-    const TExprNode& selectorArg = sortKeySelector->Head().Head();
-    TVector<TString> columns;
-    columns.reserve(structType.GetSize());
+    const auto& selectorArg = sortKeySelector.Head().Head();
+    auto row = ctx.NewArgument(pos, "row");
+    TExprNode::TListType wideItems;
+    TExprNode::TListType wideArgs;
+    TExprNode::TListType narrowItems;
     for (const auto* item : structType.GetItems()) {
-        columns.emplace_back(item->GetName());
+        auto name = ctx.NewAtom(pos, item->GetName());
+        wideItems.push_back(ctx.NewCallable(pos, "Member", {row, name}));
+        wideArgs.push_back(ctx.NewArgument(pos, "field"));
+        narrowItems.push_back(ctx.NewList(pos, {std::move(name), wideArgs.back()}));
     }
 
     THashSet<ui32> usedIndexes;
-    TExprNode::TListType wideKeys;
-    TVector<TString> extraColumns;
-    auto row = ctx.NewArgument(pos, "row");
-    TExprNode::TPtr mappedRow = row;
+    TExprNode::TListType keys;
     for (ui32 i = 0; i < keyExprs.size(); ++i) {
-        const auto& keyExpr = keyExprs[i];
-        TMaybe<ui32> index;
-        if (keyExpr->IsCallable("Member") && &keyExpr->Head() == &selectorArg && keyExpr->Tail().IsAtom()) {
-            index = structType.FindItem(keyExpr->Tail().Content());
+        const auto& key = keyExprs[i];
+        ui32 index = wideItems.size();
+        if (key->IsCallable("Member") && &key->Head() == &selectorArg) {
+            index = *structType.FindItem(key->Tail().Content());
         } else {
-            if (columns.size() >= wideLimit) {
-                return {};
-            }
-            const TString name = TStringBuilder() << "_yql_wide_sort_key_" << i;
-            if (structType.FindItem(name)) {
-                return {};
-            }
-            index = columns.size();
-            columns.push_back(name);
-            extraColumns.push_back(name);
-            mappedRow = ctx.NewCallable(pos, "AddMember", {
-                std::move(mappedRow), ctx.NewAtom(pos, name),
-                ctx.ReplaceNode(TExprNode::TPtr(keyExpr), selectorArg, row)});
+            wideItems.push_back(ctx.ReplaceNode(TExprNode::TPtr(key), selectorArg, row));
+            wideArgs.push_back(ctx.NewArgument(pos, "key"));
         }
-        if (!index) {
-            return {};
+        // WideSort rejects repeated keys
+        if (usedIndexes.insert(index).second) {
+            keys.push_back(ctx.NewList(pos, {
+                ctx.NewAtom(pos, index),
+                sortDirections->IsList() ? sortDirections->ChildPtr(i) : sortDirections}));
         }
-        if (!usedIndexes.insert(*index).second) {
-            continue;
-        }
-
-        wideKeys.push_back(ctx.NewList(pos, {
-            ctx.NewAtom(pos, ToString(*index)),
-            sortDirections->IsList() ? sortDirections->ChildPtr(i) : sortDirections}));
-    }
-    if (wideKeys.empty()) {
-        return {};
     }
 
-    auto flow = input;
-    if (!flow->GetTypeAnn() || flow->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
-        flow = ctx.NewCallable(pos, "ToFlow", {std::move(flow)});
-    }
-    if (!extraColumns.empty()) {
-        flow = ctx.NewCallable(pos, "OrderedMap", {
-            std::move(flow), ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(mappedRow))});
-    }
-
-    auto sorted = MakeNarrowMap(pos, columns, ctx.NewCallable(pos, "WideSort", {
-        MakeExpandMap(pos, columns, std::move(flow), ctx), ctx.NewList(pos, std::move(wideKeys))}), ctx);
-    if (extraColumns.empty()) {
-        return sorted;
-    }
-
-    row = ctx.NewArgument(pos, "row");
-    return ctx.NewCallable(pos, "OrderedMap", {
-        std::move(sorted),
-        ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), RemoveMembers(pos, row, extraColumns, ctx))});
+    auto wide = ctx.NewCallable(pos, "ExpandMap", {
+        ctx.NewCallable(pos, "ToFlow", {input}),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(row)}), std::move(wideItems))});
+    auto sorted = ctx.NewCallable(pos, "WideSort", {std::move(wide), ctx.NewList(pos, std::move(keys))});
+    return ctx.NewCallable(pos, "NarrowMap", {std::move(sorted),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(wideArgs)),
+            ctx.NewCallable(pos, "AsStruct", std::move(narrowItems)))});
 }
 
 template <typename TPartition>
@@ -457,8 +424,7 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
     if (const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
         itemType && itemType->GetKind() == ETypeAnnotationKind::Struct)
     {
-        sorted = BuildWideSortForStructFlow(
-            pos, input, sortDirections, sortKeySelector, *itemType->template Cast<TStructExprType>(), ctx);
+        sorted = BuildWideSort(pos, input, sortDirections, *sortKeySelector, *itemType->template Cast<TStructExprType>(), ctx);
     }
     if (!sorted) {
         sorted = ctx.Builder(pos)

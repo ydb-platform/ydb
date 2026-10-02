@@ -1245,7 +1245,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto sender = runtime.AllocateEdgeActor();
         bool withSample = true;
         bool includeDDisks = false;
+        ui32 storagePoolRequests = 0;
+        ui32 groupRequests = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
+                ++storagePoolRequests;
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
+                ++groupRequests;
+            }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
                 record.ClearEntries();
@@ -1364,6 +1371,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
                 checkDisks(json["Whiteboard"], sample, true);
                 for (bool offload : {false, true}) {
+                    storagePoolRequests = 0;
+                    groupRequests = 0;
+                    NHttp::THttpIncomingRequestPtr minimalRequest = new NHttp::THttpIncomingRequest(
+                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId"
+                            << extraParams << "&offload_merge=" << (offload ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
+                    runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(minimalRequest)));
+                    TAutoPtr<IEventHandle> minimalHandle;
+                    auto* minimalResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(minimalHandle);
+                    NJson::TJsonValue minimalJson;
+                    NJson::ReadJsonTree(minimalResult->Response->Body, &minimalJson, true);
+                    UNIT_ASSERT_VALUES_EQUAL(minimalJson["Nodes"].GetArray().size(), 1);
+                    UNIT_ASSERT(!minimalJson["Nodes"][0].Has("DDisks"));
+                    UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
                     NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
                         TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
                             << extraParams << "&offload_merge=" << (offload ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});

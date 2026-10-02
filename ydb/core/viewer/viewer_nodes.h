@@ -1269,7 +1269,7 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
-        if (IncludeDDisks) {
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
             if (!StoragePoolsResponse) {
                 StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             }

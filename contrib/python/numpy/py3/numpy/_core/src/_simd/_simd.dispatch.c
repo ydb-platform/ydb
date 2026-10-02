@@ -8,7 +8,6 @@
  */
 
 #line 1
-/*@targets #simd_test*/
 #include "_simd.h"
 #include "_simd_inc.h"
 
@@ -22,26 +21,26 @@
 //#########################################################################
 //## Defining NPYV intrinsics as module functions
 //#########################################################################
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_u8, vu8, qu8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_u8, vu8, qu8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_u8, vu8, qu8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_u8, vu8, qu8)
 
 SIMD_IMPL_INTRIN_1(load_u8x2, vu8x2, qu8)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -65,7 +64,7 @@ simd__intrin_store_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -89,7 +88,7 @@ simd__intrin_storea_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -113,7 +112,7 @@ simd__intrin_stores_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -137,7 +136,7 @@ simd__intrin_storel_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -161,7 +160,7 @@ simd__intrin_storeh_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u8x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -202,7 +201,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_u8, vu8, qu8, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_store_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -232,7 +231,7 @@ simd__intrin_store_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_store2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -262,7 +261,7 @@ simd__intrin_store2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_store2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -293,7 +292,7 @@ simd__intrin_store2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -364,7 +363,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -435,7 +434,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -506,7 +505,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -577,7 +576,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -648,7 +647,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -719,7 +718,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_tillz_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -790,7 +789,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_tillz_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -861,7 +860,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_tillz_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -934,7 +933,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_storen_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -992,7 +991,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_storen2_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1050,7 +1049,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_storen2_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1108,7 +1107,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_storen_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1166,7 +1165,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_storen2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1224,7 +1223,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_storen2_till_u8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1301,52 +1300,52 @@ SIMD_IMPL_INTRIN_1(extract0_u8, u8, vu8)
 SIMD_IMPL_INTRIN_1(setall_u8, vu8, u8)
 SIMD_IMPL_INTRIN_3(select_u8, vu8, vb8, vu8, vu8)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_u8, vu8, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_u8, vs8, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_u8, vu16, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_u8, vs16, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_u8, vu32, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_u8, vs32, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_u8, vu64, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_u8, vs64, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_u8, vf32, vu8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_u8, vf64, vu8)
 #endif // simd_sup2
@@ -1356,7 +1355,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_u8, vf64, vu8)
  * special definition due to the nature of intrinsics
  * npyv_setf_u8 and npy_set_u8.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -1379,7 +1378,7 @@ simd__intrin_setf_u8(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vu8);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -1406,20 +1405,20 @@ simd__intrin_set_u8(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_u8, vu8, vu8, vu8)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_u8, vu8, vu8, vu8)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_u8, vu8x2, vu8, vu8)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_u8, vu8x2, vu8, vu8)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_u8, vu8x2, vu8, vu8)
 
 
@@ -1434,21 +1433,21 @@ SIMD_IMPL_INTRIN_1(rev64_u8, vu8, vu8)
 NPY_FINLINE npyv_u8
 npyv_permi128_u8_(npyv_u8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_u8 ve0;
     npyv_lanetype_u8 de0[npyv_nlanes_u8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_u8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_u8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_u8(a, 3, 3, 3, 3);
     }
@@ -1458,21 +1457,21 @@ npyv_permi128_u8_(npyv_u8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_u8(de0, ve0);
     
-#line 360
+#line 359
     npyv_u8 ve1;
     npyv_lanetype_u8 de1[npyv_nlanes_u8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_u8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_u8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_u8(a, 3, 3, 3, 3);
     }
@@ -1482,21 +1481,21 @@ npyv_permi128_u8_(npyv_u8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_u8(de1, ve1);
     
-#line 360
+#line 359
     npyv_u8 ve2;
     npyv_lanetype_u8 de2[npyv_nlanes_u8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_u8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_u8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_u8(a, 3, 3, 3, 3);
     }
@@ -1506,21 +1505,21 @@ npyv_permi128_u8_(npyv_u8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_u8(de2, ve2);
     
-#line 360
+#line 359
     npyv_u8 ve3;
     npyv_lanetype_u8 de3[npyv_nlanes_u8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_u8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_u8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_u8(a, 3, 3, 3, 3);
     }
@@ -1570,34 +1569,34 @@ SIMD_IMPL_INTRIN_2IMM(shli_u8, vu8, vu8, 0)
 SIMD_IMPL_INTRIN_2IMM(shri_u8, vu8, vu8, 0)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_u8, vu8, vu8, vu8)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_u8, vu8, vu8, vu8)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_u8, vu8, vu8, vu8)
 
 
 SIMD_IMPL_INTRIN_1(not_u8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_u8, vb8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_u8, vb8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_u8, vb8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_u8, vb8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_u8, vb8, vu8, vu8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_u8, vb8, vu8, vu8)
 
 
@@ -1609,10 +1608,10 @@ SIMD_IMPL_INTRIN_2(xnor_b8, vb8, vb8, vb8)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_u8, u8, vu8)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_u8, u8, vu8)
 
 /***************************
@@ -1626,18 +1625,18 @@ SIMD_IMPL_INTRIN_1(expand_u16_u8, vu16x2, vu8)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_u8, vu8, vu8, vu8)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_u8, vu8, vu8, vu8)
 
 
 #if 1
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_u8, vu8, vu8, vu8)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_u8, vu8, vu8, vu8)
 
 #endif // sat_sup
@@ -1656,19 +1655,19 @@ SIMD_IMPL_INTRIN_2(divc_u8, vu8, vu8, vu8x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_u8, vu8, vu8, vu8, vu8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_u8, vu8, vu8, vu8, vu8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_u8, vu8, vu8, vu8, vu8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_u8, vu8, vu8, vu8, vu8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_u8, vu8, vu8, vu8, vu8)
 
 #endif // fused_sup
@@ -1685,55 +1684,55 @@ SIMD_IMPL_INTRIN_1(sumup_u8, u16, vu8)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_u8, vu8, vu8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_u8, vu8, vu8)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_max_u8, u8, vu8)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_min_u8, u8, vu8)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_maxp_u8, u8, vu8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_minp_u8, u8, vu8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_maxn_u8, u8, vu8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_u8, vu8, vu8, vu8)
 SIMD_IMPL_INTRIN_1(reduce_minn_u8, u8, vu8)
 
@@ -1743,10 +1742,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_u8, u8, vu8)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_u8, vu8, vb8, vu8, vu8, vu8)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_u8, vu8, vb8, vu8, vu8, vu8)
 
 
@@ -1757,26 +1756,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_u8, vu8, vb8, vu8, vu8)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_s8, vs8, qs8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_s8, vs8, qs8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_s8, vs8, qs8)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_s8, vs8, qs8)
 
 SIMD_IMPL_INTRIN_1(load_s8x2, vs8x2, qs8)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1800,7 +1799,7 @@ simd__intrin_store_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1824,7 +1823,7 @@ simd__intrin_storea_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1848,7 +1847,7 @@ simd__intrin_stores_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1872,7 +1871,7 @@ simd__intrin_storel_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1896,7 +1895,7 @@ simd__intrin_storeh_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s8x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1937,7 +1936,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_s8, vs8, qs8, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_store_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1967,7 +1966,7 @@ simd__intrin_store_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_store2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -1997,7 +1996,7 @@ simd__intrin_store2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_store2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2028,7 +2027,7 @@ simd__intrin_store2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2099,7 +2098,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2170,7 +2169,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2241,7 +2240,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2312,7 +2311,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2383,7 +2382,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2454,7 +2453,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_loadn_tillz_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2525,7 +2524,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_loadn2_tillz_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2596,7 +2595,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_loadn2_tillz_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2669,7 +2668,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_storen_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2727,7 +2726,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_storen2_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2785,7 +2784,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_storen2_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2843,7 +2842,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 8
 static PyObject *
 simd__intrin_storen_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2901,7 +2900,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 8
 static PyObject *
 simd__intrin_storen2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -2959,7 +2958,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 8
 static PyObject *
 simd__intrin_storen2_till_s8(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3036,52 +3035,52 @@ SIMD_IMPL_INTRIN_1(extract0_s8, s8, vs8)
 SIMD_IMPL_INTRIN_1(setall_s8, vs8, s8)
 SIMD_IMPL_INTRIN_3(select_s8, vs8, vb8, vs8, vs8)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_s8, vu8, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_s8, vs8, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_s8, vu16, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_s8, vs16, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_s8, vu32, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_s8, vs32, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_s8, vu64, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_s8, vs64, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_s8, vf32, vs8)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_s8, vf64, vs8)
 #endif // simd_sup2
@@ -3091,7 +3090,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_s8, vf64, vs8)
  * special definition due to the nature of intrinsics
  * npyv_setf_s8 and npy_set_s8.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -3114,7 +3113,7 @@ simd__intrin_setf_s8(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vs8);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -3141,20 +3140,20 @@ simd__intrin_set_s8(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_s8, vs8, vs8, vs8)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_s8, vs8, vs8, vs8)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_s8, vs8x2, vs8, vs8)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_s8, vs8x2, vs8, vs8)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_s8, vs8x2, vs8, vs8)
 
 
@@ -3169,21 +3168,21 @@ SIMD_IMPL_INTRIN_1(rev64_s8, vs8, vs8)
 NPY_FINLINE npyv_s8
 npyv_permi128_s8_(npyv_s8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_s8 ve0;
     npyv_lanetype_s8 de0[npyv_nlanes_s8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_s8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_s8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_s8(a, 3, 3, 3, 3);
     }
@@ -3193,21 +3192,21 @@ npyv_permi128_s8_(npyv_s8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_s8(de0, ve0);
     
-#line 360
+#line 359
     npyv_s8 ve1;
     npyv_lanetype_s8 de1[npyv_nlanes_s8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_s8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_s8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_s8(a, 3, 3, 3, 3);
     }
@@ -3217,21 +3216,21 @@ npyv_permi128_s8_(npyv_s8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_s8(de1, ve1);
     
-#line 360
+#line 359
     npyv_s8 ve2;
     npyv_lanetype_s8 de2[npyv_nlanes_s8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_s8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_s8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_s8(a, 3, 3, 3, 3);
     }
@@ -3241,21 +3240,21 @@ npyv_permi128_s8_(npyv_s8 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
     }
     npyv_store_s8(de2, ve2);
     
-#line 360
+#line 359
     npyv_s8 ve3;
     npyv_lanetype_s8 de3[npyv_nlanes_s8];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_s8(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_s8(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_s8(a, 3, 3, 3, 3);
     }
@@ -3305,34 +3304,34 @@ SIMD_IMPL_INTRIN_2IMM(shli_s8, vs8, vs8, 0)
 SIMD_IMPL_INTRIN_2IMM(shri_s8, vs8, vs8, 0)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_s8, vs8, vs8, vs8)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_s8, vs8, vs8, vs8)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_s8, vs8, vs8, vs8)
 
 
 SIMD_IMPL_INTRIN_1(not_s8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_s8, vb8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_s8, vb8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_s8, vb8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_s8, vb8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_s8, vb8, vs8, vs8)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_s8, vb8, vs8, vs8)
 
 
@@ -3344,10 +3343,10 @@ SIMD_IMPL_INTRIN_2(xnor_b8, vb8, vb8, vb8)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_s8, u8, vs8)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_s8, u8, vs8)
 
 /***************************
@@ -3361,18 +3360,18 @@ SIMD_IMPL_INTRIN_1(expand_s8_s8, vs8x2, vs8)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_s8, vs8, vs8, vs8)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_s8, vs8, vs8, vs8)
 
 
 #if 1
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_s8, vs8, vs8, vs8)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_s8, vs8, vs8, vs8)
 
 #endif // sat_sup
@@ -3391,19 +3390,19 @@ SIMD_IMPL_INTRIN_2(divc_s8, vs8, vs8, vs8x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_s8, vs8, vs8, vs8, vs8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_s8, vs8, vs8, vs8, vs8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_s8, vs8, vs8, vs8, vs8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_s8, vs8, vs8, vs8, vs8)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_s8, vs8, vs8, vs8, vs8)
 
 #endif // fused_sup
@@ -3420,55 +3419,55 @@ SIMD_IMPL_INTRIN_1(sumup_s8, s8, vs8)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_s8, vs8, vs8)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_s8, vs8, vs8)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_max_s8, s8, vs8)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_min_s8, s8, vs8)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_maxp_s8, s8, vs8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_minp_s8, s8, vs8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_maxn_s8, s8, vs8)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_s8, vs8, vs8, vs8)
 SIMD_IMPL_INTRIN_1(reduce_minn_s8, s8, vs8)
 
@@ -3478,10 +3477,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_s8, s8, vs8)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_s8, vs8, vb8, vs8, vs8, vs8)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_s8, vs8, vb8, vs8, vs8, vs8)
 
 
@@ -3492,26 +3491,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_s8, vs8, vb8, vs8, vs8)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_u16, vu16, qu16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_u16, vu16, qu16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_u16, vu16, qu16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_u16, vu16, qu16)
 
 SIMD_IMPL_INTRIN_1(load_u16x2, vu16x2, qu16)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3535,7 +3534,7 @@ simd__intrin_store_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3559,7 +3558,7 @@ simd__intrin_storea_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3583,7 +3582,7 @@ simd__intrin_stores_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3607,7 +3606,7 @@ simd__intrin_storel_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3631,7 +3630,7 @@ simd__intrin_storeh_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u16x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3672,7 +3671,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_u16, vu16, qu16, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_store_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3702,7 +3701,7 @@ simd__intrin_store_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_store2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3732,7 +3731,7 @@ simd__intrin_store2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_store2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3763,7 +3762,7 @@ simd__intrin_store2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3834,7 +3833,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3905,7 +3904,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -3976,7 +3975,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4047,7 +4046,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4118,7 +4117,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4189,7 +4188,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_tillz_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4260,7 +4259,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_tillz_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4331,7 +4330,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_tillz_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4404,7 +4403,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_storen_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4462,7 +4461,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_storen2_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4520,7 +4519,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_storen2_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4578,7 +4577,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_storen_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4636,7 +4635,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_storen2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4694,7 +4693,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_storen2_till_u16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -4771,52 +4770,52 @@ SIMD_IMPL_INTRIN_1(extract0_u16, u16, vu16)
 SIMD_IMPL_INTRIN_1(setall_u16, vu16, u16)
 SIMD_IMPL_INTRIN_3(select_u16, vu16, vb16, vu16, vu16)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_u16, vu8, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_u16, vs8, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_u16, vu16, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_u16, vs16, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_u16, vu32, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_u16, vs32, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_u16, vu64, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_u16, vs64, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_u16, vf32, vu16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_u16, vf64, vu16)
 #endif // simd_sup2
@@ -4826,7 +4825,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_u16, vf64, vu16)
  * special definition due to the nature of intrinsics
  * npyv_setf_u16 and npy_set_u16.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -4849,7 +4848,7 @@ simd__intrin_setf_u16(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vu16);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -4876,20 +4875,20 @@ simd__intrin_set_u16(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_u16, vu16, vu16, vu16)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_u16, vu16, vu16, vu16)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_u16, vu16x2, vu16, vu16)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_u16, vu16x2, vu16, vu16)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_u16, vu16x2, vu16, vu16)
 
 
@@ -4904,21 +4903,21 @@ SIMD_IMPL_INTRIN_1(rev64_u16, vu16, vu16)
 NPY_FINLINE npyv_u16
 npyv_permi128_u16_(npyv_u16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_u16 ve0;
     npyv_lanetype_u16 de0[npyv_nlanes_u16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_u16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_u16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_u16(a, 3, 3, 3, 3);
     }
@@ -4928,21 +4927,21 @@ npyv_permi128_u16_(npyv_u16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u16(de0, ve0);
     
-#line 360
+#line 359
     npyv_u16 ve1;
     npyv_lanetype_u16 de1[npyv_nlanes_u16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_u16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_u16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_u16(a, 3, 3, 3, 3);
     }
@@ -4952,21 +4951,21 @@ npyv_permi128_u16_(npyv_u16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u16(de1, ve1);
     
-#line 360
+#line 359
     npyv_u16 ve2;
     npyv_lanetype_u16 de2[npyv_nlanes_u16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_u16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_u16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_u16(a, 3, 3, 3, 3);
     }
@@ -4976,21 +4975,21 @@ npyv_permi128_u16_(npyv_u16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u16(de2, ve2);
     
-#line 360
+#line 359
     npyv_u16 ve3;
     npyv_lanetype_u16 de3[npyv_nlanes_u16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_u16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_u16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_u16(a, 3, 3, 3, 3);
     }
@@ -5037,37 +5036,37 @@ SIMD_IMPL_INTRIN_2(shl_u16, vu16, vu16, u8)
 SIMD_IMPL_INTRIN_2(shr_u16, vu16, vu16, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_u16, vu16, vu16, 15)
-SIMD_IMPL_INTRIN_2IMM(shri_u16, vu16, vu16, 16)
+SIMD_IMPL_INTRIN_2IMM(shri_u16, vu16, vu16, 15)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_u16, vu16, vu16, vu16)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_u16, vu16, vu16, vu16)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_u16, vu16, vu16, vu16)
 
 
 SIMD_IMPL_INTRIN_1(not_u16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_u16, vb16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_u16, vb16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_u16, vb16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_u16, vb16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_u16, vb16, vu16, vu16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_u16, vb16, vu16, vu16)
 
 
@@ -5079,10 +5078,10 @@ SIMD_IMPL_INTRIN_2(xnor_b16, vb16, vb16, vb16)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_u16, u8, vu16)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_u16, u8, vu16)
 
 /***************************
@@ -5096,18 +5095,18 @@ SIMD_IMPL_INTRIN_1(expand_u32_u16, vu32x2, vu16)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_u16, vu16, vu16, vu16)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_u16, vu16, vu16, vu16)
 
 
 #if 1
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_u16, vu16, vu16, vu16)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_u16, vu16, vu16, vu16)
 
 #endif // sat_sup
@@ -5126,19 +5125,19 @@ SIMD_IMPL_INTRIN_2(divc_u16, vu16, vu16, vu16x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_u16, vu16, vu16, vu16, vu16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_u16, vu16, vu16, vu16, vu16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_u16, vu16, vu16, vu16, vu16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_u16, vu16, vu16, vu16, vu16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_u16, vu16, vu16, vu16, vu16)
 
 #endif // fused_sup
@@ -5155,55 +5154,55 @@ SIMD_IMPL_INTRIN_1(sumup_u16, u32, vu16)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_u16, vu16, vu16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_u16, vu16, vu16)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_max_u16, u16, vu16)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_min_u16, u16, vu16)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_maxp_u16, u16, vu16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_minp_u16, u16, vu16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_maxn_u16, u16, vu16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_u16, vu16, vu16, vu16)
 SIMD_IMPL_INTRIN_1(reduce_minn_u16, u16, vu16)
 
@@ -5213,10 +5212,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_u16, u16, vu16)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_u16, vu16, vb16, vu16, vu16, vu16)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_u16, vu16, vb16, vu16, vu16, vu16)
 
 
@@ -5227,26 +5226,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_u16, vu16, vb16, vu16, vu16)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_s16, vs16, qs16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_s16, vs16, qs16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_s16, vs16, qs16)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_s16, vs16, qs16)
 
 SIMD_IMPL_INTRIN_1(load_s16x2, vs16x2, qs16)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5270,7 +5269,7 @@ simd__intrin_store_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5294,7 +5293,7 @@ simd__intrin_storea_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5318,7 +5317,7 @@ simd__intrin_stores_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5342,7 +5341,7 @@ simd__intrin_storel_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5366,7 +5365,7 @@ simd__intrin_storeh_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s16x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5407,7 +5406,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_s16, vs16, qs16, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_store_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5437,7 +5436,7 @@ simd__intrin_store_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_store2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5467,7 +5466,7 @@ simd__intrin_store2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_store2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5498,7 +5497,7 @@ simd__intrin_store2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5569,7 +5568,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5640,7 +5639,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5711,7 +5710,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5782,7 +5781,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5853,7 +5852,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5924,7 +5923,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_loadn_tillz_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -5995,7 +5994,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_loadn2_tillz_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6066,7 +6065,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_loadn2_tillz_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6139,7 +6138,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_storen_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6197,7 +6196,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_storen2_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6255,7 +6254,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_storen2_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6313,7 +6312,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 16
 static PyObject *
 simd__intrin_storen_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6371,7 +6370,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 16
 static PyObject *
 simd__intrin_storen2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6429,7 +6428,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 16
 static PyObject *
 simd__intrin_storen2_till_s16(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -6506,52 +6505,52 @@ SIMD_IMPL_INTRIN_1(extract0_s16, s16, vs16)
 SIMD_IMPL_INTRIN_1(setall_s16, vs16, s16)
 SIMD_IMPL_INTRIN_3(select_s16, vs16, vb16, vs16, vs16)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_s16, vu8, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_s16, vs8, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_s16, vu16, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_s16, vs16, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_s16, vu32, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_s16, vs32, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_s16, vu64, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_s16, vs64, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_s16, vf32, vs16)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_s16, vf64, vs16)
 #endif // simd_sup2
@@ -6561,7 +6560,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_s16, vf64, vs16)
  * special definition due to the nature of intrinsics
  * npyv_setf_s16 and npy_set_s16.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -6584,7 +6583,7 @@ simd__intrin_setf_s16(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vs16);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -6611,20 +6610,20 @@ simd__intrin_set_s16(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_s16, vs16, vs16, vs16)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_s16, vs16, vs16, vs16)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_s16, vs16x2, vs16, vs16)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_s16, vs16x2, vs16, vs16)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_s16, vs16x2, vs16, vs16)
 
 
@@ -6639,21 +6638,21 @@ SIMD_IMPL_INTRIN_1(rev64_s16, vs16, vs16)
 NPY_FINLINE npyv_s16
 npyv_permi128_s16_(npyv_s16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_s16 ve0;
     npyv_lanetype_s16 de0[npyv_nlanes_s16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_s16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_s16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_s16(a, 3, 3, 3, 3);
     }
@@ -6663,21 +6662,21 @@ npyv_permi128_s16_(npyv_s16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s16(de0, ve0);
     
-#line 360
+#line 359
     npyv_s16 ve1;
     npyv_lanetype_s16 de1[npyv_nlanes_s16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_s16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_s16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_s16(a, 3, 3, 3, 3);
     }
@@ -6687,21 +6686,21 @@ npyv_permi128_s16_(npyv_s16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s16(de1, ve1);
     
-#line 360
+#line 359
     npyv_s16 ve2;
     npyv_lanetype_s16 de2[npyv_nlanes_s16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_s16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_s16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_s16(a, 3, 3, 3, 3);
     }
@@ -6711,21 +6710,21 @@ npyv_permi128_s16_(npyv_s16 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s16(de2, ve2);
     
-#line 360
+#line 359
     npyv_s16 ve3;
     npyv_lanetype_s16 de3[npyv_nlanes_s16];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_s16(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_s16(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_s16(a, 3, 3, 3, 3);
     }
@@ -6772,37 +6771,37 @@ SIMD_IMPL_INTRIN_2(shl_s16, vs16, vs16, u8)
 SIMD_IMPL_INTRIN_2(shr_s16, vs16, vs16, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_s16, vs16, vs16, 15)
-SIMD_IMPL_INTRIN_2IMM(shri_s16, vs16, vs16, 16)
+SIMD_IMPL_INTRIN_2IMM(shri_s16, vs16, vs16, 15)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_s16, vs16, vs16, vs16)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_s16, vs16, vs16, vs16)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_s16, vs16, vs16, vs16)
 
 
 SIMD_IMPL_INTRIN_1(not_s16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_s16, vb16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_s16, vb16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_s16, vb16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_s16, vb16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_s16, vb16, vs16, vs16)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_s16, vb16, vs16, vs16)
 
 
@@ -6814,10 +6813,10 @@ SIMD_IMPL_INTRIN_2(xnor_b16, vb16, vb16, vb16)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_s16, u8, vs16)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_s16, u8, vs16)
 
 /***************************
@@ -6831,18 +6830,18 @@ SIMD_IMPL_INTRIN_1(expand_s16_s16, vs16x2, vs16)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_s16, vs16, vs16, vs16)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_s16, vs16, vs16, vs16)
 
 
 #if 1
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_s16, vs16, vs16, vs16)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_s16, vs16, vs16, vs16)
 
 #endif // sat_sup
@@ -6861,19 +6860,19 @@ SIMD_IMPL_INTRIN_2(divc_s16, vs16, vs16, vs16x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_s16, vs16, vs16, vs16, vs16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_s16, vs16, vs16, vs16, vs16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_s16, vs16, vs16, vs16, vs16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_s16, vs16, vs16, vs16, vs16)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_s16, vs16, vs16, vs16, vs16)
 
 #endif // fused_sup
@@ -6890,55 +6889,55 @@ SIMD_IMPL_INTRIN_1(sumup_s16, s16, vs16)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_s16, vs16, vs16)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_s16, vs16, vs16)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_max_s16, s16, vs16)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_min_s16, s16, vs16)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_maxp_s16, s16, vs16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_minp_s16, s16, vs16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_maxn_s16, s16, vs16)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_s16, vs16, vs16, vs16)
 SIMD_IMPL_INTRIN_1(reduce_minn_s16, s16, vs16)
 
@@ -6948,10 +6947,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_s16, s16, vs16)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_s16, vs16, vb16, vs16, vs16, vs16)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_s16, vs16, vb16, vs16, vs16, vs16)
 
 
@@ -6962,26 +6961,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_s16, vs16, vb16, vs16, vs16)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_u32, vu32, qu32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_u32, vu32, qu32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_u32, vu32, qu32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_u32, vu32, qu32)
 
 SIMD_IMPL_INTRIN_1(load_u32x2, vu32x2, qu32)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7005,7 +7004,7 @@ simd__intrin_store_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7029,7 +7028,7 @@ simd__intrin_storea_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7053,7 +7052,7 @@ simd__intrin_stores_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7077,7 +7076,7 @@ simd__intrin_storel_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7101,7 +7100,7 @@ simd__intrin_storeh_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u32x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7142,7 +7141,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_u32, vu32, qu32, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_store_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7172,7 +7171,7 @@ simd__intrin_store_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_store2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7202,7 +7201,7 @@ simd__intrin_store2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_store2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7233,7 +7232,7 @@ simd__intrin_store2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7304,7 +7303,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7375,7 +7374,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7446,7 +7445,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7517,7 +7516,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7588,7 +7587,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7659,7 +7658,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_tillz_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7730,7 +7729,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7801,7 +7800,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7874,7 +7873,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7932,7 +7931,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -7990,7 +7989,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8048,7 +8047,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8106,7 +8105,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8164,7 +8163,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_till_u32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8241,52 +8240,52 @@ SIMD_IMPL_INTRIN_1(extract0_u32, u32, vu32)
 SIMD_IMPL_INTRIN_1(setall_u32, vu32, u32)
 SIMD_IMPL_INTRIN_3(select_u32, vu32, vb32, vu32, vu32)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_u32, vu8, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_u32, vs8, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_u32, vu16, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_u32, vs16, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_u32, vu32, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_u32, vs32, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_u32, vu64, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_u32, vs64, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_u32, vf32, vu32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_u32, vf64, vu32)
 #endif // simd_sup2
@@ -8296,7 +8295,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_u32, vf64, vu32)
  * special definition due to the nature of intrinsics
  * npyv_setf_u32 and npy_set_u32.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -8319,7 +8318,7 @@ simd__intrin_setf_u32(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vu32);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -8346,20 +8345,20 @@ simd__intrin_set_u32(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_u32, vu32, vu32, vu32)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_u32, vu32, vu32, vu32)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_u32, vu32x2, vu32, vu32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_u32, vu32x2, vu32, vu32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_u32, vu32x2, vu32, vu32)
 
 
@@ -8374,21 +8373,21 @@ SIMD_IMPL_INTRIN_1(rev64_u32, vu32, vu32)
 NPY_FINLINE npyv_u32
 npyv_permi128_u32_(npyv_u32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_u32 ve0;
     npyv_lanetype_u32 de0[npyv_nlanes_u32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_u32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_u32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_u32(a, 3, 3, 3, 3);
     }
@@ -8398,21 +8397,21 @@ npyv_permi128_u32_(npyv_u32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u32(de0, ve0);
     
-#line 360
+#line 359
     npyv_u32 ve1;
     npyv_lanetype_u32 de1[npyv_nlanes_u32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_u32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_u32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_u32(a, 3, 3, 3, 3);
     }
@@ -8422,21 +8421,21 @@ npyv_permi128_u32_(npyv_u32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u32(de1, ve1);
     
-#line 360
+#line 359
     npyv_u32 ve2;
     npyv_lanetype_u32 de2[npyv_nlanes_u32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_u32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_u32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_u32(a, 3, 3, 3, 3);
     }
@@ -8446,21 +8445,21 @@ npyv_permi128_u32_(npyv_u32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u32(de2, ve2);
     
-#line 360
+#line 359
     npyv_u32 ve3;
     npyv_lanetype_u32 de3[npyv_nlanes_u32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_u32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_u32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_u32(a, 3, 3, 3, 3);
     }
@@ -8507,37 +8506,37 @@ SIMD_IMPL_INTRIN_2(shl_u32, vu32, vu32, u8)
 SIMD_IMPL_INTRIN_2(shr_u32, vu32, vu32, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_u32, vu32, vu32, 31)
-SIMD_IMPL_INTRIN_2IMM(shri_u32, vu32, vu32, 32)
+SIMD_IMPL_INTRIN_2IMM(shri_u32, vu32, vu32, 31)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_u32, vu32, vu32, vu32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_u32, vu32, vu32, vu32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_u32, vu32, vu32, vu32)
 
 
 SIMD_IMPL_INTRIN_1(not_u32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_u32, vb32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_u32, vb32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_u32, vb32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_u32, vb32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_u32, vb32, vu32, vu32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_u32, vb32, vu32, vu32)
 
 
@@ -8549,10 +8548,10 @@ SIMD_IMPL_INTRIN_2(xnor_b32, vb32, vb32, vb32)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_u32, u8, vu32)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_u32, u8, vu32)
 
 /***************************
@@ -8566,18 +8565,18 @@ SIMD_IMPL_INTRIN_1(expand_u32_u32, vu32x2, vu32)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_u32, vu32, vu32, vu32)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_u32, vu32, vu32, vu32)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_u32, vu32, vu32, vu32)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_u32, vu32, vu32, vu32)
 
 #endif // sat_sup
@@ -8596,19 +8595,19 @@ SIMD_IMPL_INTRIN_2(divc_u32, vu32, vu32, vu32x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_u32, vu32, vu32, vu32, vu32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_u32, vu32, vu32, vu32, vu32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_u32, vu32, vu32, vu32, vu32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_u32, vu32, vu32, vu32, vu32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_u32, vu32, vu32, vu32, vu32)
 
 #endif // fused_sup
@@ -8625,55 +8624,55 @@ SIMD_IMPL_INTRIN_1(sumup_u32, u32, vu32)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_u32, vu32, vu32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_u32, vu32, vu32)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_max_u32, u32, vu32)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_min_u32, u32, vu32)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_maxp_u32, u32, vu32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_minp_u32, u32, vu32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_maxn_u32, u32, vu32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_u32, vu32, vu32, vu32)
 SIMD_IMPL_INTRIN_1(reduce_minn_u32, u32, vu32)
 
@@ -8683,10 +8682,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_u32, u32, vu32)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_u32, vu32, vb32, vu32, vu32, vu32)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_u32, vu32, vb32, vu32, vu32, vu32)
 
 
@@ -8697,26 +8696,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_u32, vu32, vb32, vu32, vu32)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_s32, vs32, qs32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_s32, vs32, qs32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_s32, vs32, qs32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_s32, vs32, qs32)
 
 SIMD_IMPL_INTRIN_1(load_s32x2, vs32x2, qs32)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8740,7 +8739,7 @@ simd__intrin_store_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8764,7 +8763,7 @@ simd__intrin_storea_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8788,7 +8787,7 @@ simd__intrin_stores_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8812,7 +8811,7 @@ simd__intrin_storel_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8836,7 +8835,7 @@ simd__intrin_storeh_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s32x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8877,7 +8876,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_s32, vs32, qs32, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_store_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8907,7 +8906,7 @@ simd__intrin_store_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_store2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8937,7 +8936,7 @@ simd__intrin_store2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_store2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -8968,7 +8967,7 @@ simd__intrin_store2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9039,7 +9038,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9110,7 +9109,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9181,7 +9180,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9252,7 +9251,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9323,7 +9322,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9394,7 +9393,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_tillz_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9465,7 +9464,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9536,7 +9535,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9609,7 +9608,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9667,7 +9666,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9725,7 +9724,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9783,7 +9782,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9841,7 +9840,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9899,7 +9898,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_till_s32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -9976,52 +9975,52 @@ SIMD_IMPL_INTRIN_1(extract0_s32, s32, vs32)
 SIMD_IMPL_INTRIN_1(setall_s32, vs32, s32)
 SIMD_IMPL_INTRIN_3(select_s32, vs32, vb32, vs32, vs32)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_s32, vu8, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_s32, vs8, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_s32, vu16, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_s32, vs16, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_s32, vu32, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_s32, vs32, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_s32, vu64, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_s32, vs64, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_s32, vf32, vs32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_s32, vf64, vs32)
 #endif // simd_sup2
@@ -10031,7 +10030,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_s32, vf64, vs32)
  * special definition due to the nature of intrinsics
  * npyv_setf_s32 and npy_set_s32.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -10054,7 +10053,7 @@ simd__intrin_setf_s32(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vs32);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -10081,20 +10080,20 @@ simd__intrin_set_s32(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_s32, vs32, vs32, vs32)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_s32, vs32, vs32, vs32)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_s32, vs32x2, vs32, vs32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_s32, vs32x2, vs32, vs32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_s32, vs32x2, vs32, vs32)
 
 
@@ -10109,21 +10108,21 @@ SIMD_IMPL_INTRIN_1(rev64_s32, vs32, vs32)
 NPY_FINLINE npyv_s32
 npyv_permi128_s32_(npyv_s32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_s32 ve0;
     npyv_lanetype_s32 de0[npyv_nlanes_s32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_s32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_s32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_s32(a, 3, 3, 3, 3);
     }
@@ -10133,21 +10132,21 @@ npyv_permi128_s32_(npyv_s32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s32(de0, ve0);
     
-#line 360
+#line 359
     npyv_s32 ve1;
     npyv_lanetype_s32 de1[npyv_nlanes_s32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_s32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_s32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_s32(a, 3, 3, 3, 3);
     }
@@ -10157,21 +10156,21 @@ npyv_permi128_s32_(npyv_s32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s32(de1, ve1);
     
-#line 360
+#line 359
     npyv_s32 ve2;
     npyv_lanetype_s32 de2[npyv_nlanes_s32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_s32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_s32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_s32(a, 3, 3, 3, 3);
     }
@@ -10181,21 +10180,21 @@ npyv_permi128_s32_(npyv_s32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s32(de2, ve2);
     
-#line 360
+#line 359
     npyv_s32 ve3;
     npyv_lanetype_s32 de3[npyv_nlanes_s32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_s32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_s32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_s32(a, 3, 3, 3, 3);
     }
@@ -10242,37 +10241,37 @@ SIMD_IMPL_INTRIN_2(shl_s32, vs32, vs32, u8)
 SIMD_IMPL_INTRIN_2(shr_s32, vs32, vs32, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_s32, vs32, vs32, 31)
-SIMD_IMPL_INTRIN_2IMM(shri_s32, vs32, vs32, 32)
+SIMD_IMPL_INTRIN_2IMM(shri_s32, vs32, vs32, 31)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_s32, vs32, vs32, vs32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_s32, vs32, vs32, vs32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_s32, vs32, vs32, vs32)
 
 
 SIMD_IMPL_INTRIN_1(not_s32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_s32, vb32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_s32, vb32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_s32, vb32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_s32, vb32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_s32, vb32, vs32, vs32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_s32, vb32, vs32, vs32)
 
 
@@ -10284,10 +10283,10 @@ SIMD_IMPL_INTRIN_2(xnor_b32, vb32, vb32, vb32)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_s32, u8, vs32)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_s32, u8, vs32)
 
 /***************************
@@ -10301,18 +10300,18 @@ SIMD_IMPL_INTRIN_1(expand_s32_s32, vs32x2, vs32)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_s32, vs32, vs32, vs32)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_s32, vs32, vs32, vs32)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_s32, vs32, vs32, vs32)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_s32, vs32, vs32, vs32)
 
 #endif // sat_sup
@@ -10331,19 +10330,19 @@ SIMD_IMPL_INTRIN_2(divc_s32, vs32, vs32, vs32x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_s32, vs32, vs32, vs32, vs32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_s32, vs32, vs32, vs32, vs32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_s32, vs32, vs32, vs32, vs32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_s32, vs32, vs32, vs32, vs32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_s32, vs32, vs32, vs32, vs32)
 
 #endif // fused_sup
@@ -10360,55 +10359,55 @@ SIMD_IMPL_INTRIN_1(sumup_s32, s32, vs32)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_s32, vs32, vs32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_s32, vs32, vs32)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_max_s32, s32, vs32)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_min_s32, s32, vs32)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_maxp_s32, s32, vs32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_minp_s32, s32, vs32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_maxn_s32, s32, vs32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_s32, vs32, vs32, vs32)
 SIMD_IMPL_INTRIN_1(reduce_minn_s32, s32, vs32)
 
@@ -10418,10 +10417,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_s32, s32, vs32)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_s32, vs32, vb32, vs32, vs32, vs32)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_s32, vs32, vb32, vs32, vs32, vs32)
 
 
@@ -10432,26 +10431,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_s32, vs32, vb32, vs32, vs32)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_u64, vu64, qu64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_u64, vu64, qu64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_u64, vu64, qu64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_u64, vu64, qu64)
 
 SIMD_IMPL_INTRIN_1(load_u64x2, vu64x2, qu64)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10475,7 +10474,7 @@ simd__intrin_store_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10499,7 +10498,7 @@ simd__intrin_storea_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10523,7 +10522,7 @@ simd__intrin_stores_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10547,7 +10546,7 @@ simd__intrin_storel_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10571,7 +10570,7 @@ simd__intrin_storeh_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_u64x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10612,7 +10611,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_u64, vu64, qu64, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_store_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10642,7 +10641,7 @@ simd__intrin_store_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_store2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10672,7 +10671,7 @@ simd__intrin_store2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_store2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10703,7 +10702,7 @@ simd__intrin_store2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10774,7 +10773,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10845,7 +10844,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10916,7 +10915,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -10987,7 +10986,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11058,7 +11057,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11129,7 +11128,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_tillz_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11200,7 +11199,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11271,7 +11270,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11344,7 +11343,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11402,7 +11401,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11460,7 +11459,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11518,7 +11517,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11576,7 +11575,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11634,7 +11633,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_till_u64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -11711,52 +11710,52 @@ SIMD_IMPL_INTRIN_1(extract0_u64, u64, vu64)
 SIMD_IMPL_INTRIN_1(setall_u64, vu64, u64)
 SIMD_IMPL_INTRIN_3(select_u64, vu64, vb64, vu64, vu64)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_u64, vu8, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_u64, vs8, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_u64, vu16, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_u64, vs16, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_u64, vu32, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_u64, vs32, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_u64, vu64, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_u64, vs64, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_u64, vf32, vu64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_u64, vf64, vu64)
 #endif // simd_sup2
@@ -11766,7 +11765,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_u64, vf64, vu64)
  * special definition due to the nature of intrinsics
  * npyv_setf_u64 and npy_set_u64.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -11789,7 +11788,7 @@ simd__intrin_setf_u64(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vu64);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -11816,20 +11815,20 @@ simd__intrin_set_u64(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_u64, vu64, vu64, vu64)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_u64, vu64, vu64, vu64)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_u64, vu64x2, vu64, vu64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_u64, vu64x2, vu64, vu64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_u64, vu64x2, vu64, vu64)
 
 
@@ -11844,21 +11843,21 @@ SIMD_IMPL_INTRIN_1(rev64_u64, vu64, vu64)
 NPY_FINLINE npyv_u64
 npyv_permi128_u64_(npyv_u64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_u64 ve0;
     npyv_lanetype_u64 de0[npyv_nlanes_u64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_u64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_u64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_u64(a, 3, 3, 3, 3);
     }
@@ -11868,21 +11867,21 @@ npyv_permi128_u64_(npyv_u64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u64(de0, ve0);
     
-#line 360
+#line 359
     npyv_u64 ve1;
     npyv_lanetype_u64 de1[npyv_nlanes_u64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_u64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_u64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_u64(a, 3, 3, 3, 3);
     }
@@ -11892,21 +11891,21 @@ npyv_permi128_u64_(npyv_u64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u64(de1, ve1);
     
-#line 360
+#line 359
     npyv_u64 ve2;
     npyv_lanetype_u64 de2[npyv_nlanes_u64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_u64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_u64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_u64(a, 3, 3, 3, 3);
     }
@@ -11916,21 +11915,21 @@ npyv_permi128_u64_(npyv_u64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_u64(de2, ve2);
     
-#line 360
+#line 359
     npyv_u64 ve3;
     npyv_lanetype_u64 de3[npyv_nlanes_u64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_u64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_u64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_u64(a, 3, 3, 3, 3);
     }
@@ -11977,37 +11976,37 @@ SIMD_IMPL_INTRIN_2(shl_u64, vu64, vu64, u8)
 SIMD_IMPL_INTRIN_2(shr_u64, vu64, vu64, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_u64, vu64, vu64, 63)
-SIMD_IMPL_INTRIN_2IMM(shri_u64, vu64, vu64, 64)
+SIMD_IMPL_INTRIN_2IMM(shri_u64, vu64, vu64, 63)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_u64, vu64, vu64, vu64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_u64, vu64, vu64, vu64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_u64, vu64, vu64, vu64)
 
 
 SIMD_IMPL_INTRIN_1(not_u64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_u64, vb64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_u64, vb64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_u64, vb64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_u64, vb64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_u64, vb64, vu64, vu64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_u64, vb64, vu64, vu64)
 
 
@@ -12019,10 +12018,10 @@ SIMD_IMPL_INTRIN_2(xnor_b64, vb64, vb64, vb64)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_u64, u8, vu64)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_u64, u8, vu64)
 
 /***************************
@@ -12036,18 +12035,18 @@ SIMD_IMPL_INTRIN_1(expand_u64_u64, vu64x2, vu64)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_u64, vu64, vu64, vu64)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_u64, vu64, vu64, vu64)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_u64, vu64, vu64, vu64)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_u64, vu64, vu64, vu64)
 
 #endif // sat_sup
@@ -12066,19 +12065,19 @@ SIMD_IMPL_INTRIN_2(divc_u64, vu64, vu64, vu64x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_u64, vu64, vu64, vu64, vu64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_u64, vu64, vu64, vu64, vu64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_u64, vu64, vu64, vu64, vu64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_u64, vu64, vu64, vu64, vu64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_u64, vu64, vu64, vu64, vu64)
 
 #endif // fused_sup
@@ -12095,55 +12094,55 @@ SIMD_IMPL_INTRIN_1(sumup_u64, u64, vu64)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_u64, vu64, vu64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_u64, vu64, vu64)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_max_u64, u64, vu64)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_min_u64, u64, vu64)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_maxp_u64, u64, vu64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_minp_u64, u64, vu64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_maxn_u64, u64, vu64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_u64, vu64, vu64, vu64)
 SIMD_IMPL_INTRIN_1(reduce_minn_u64, u64, vu64)
 
@@ -12153,10 +12152,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_u64, u64, vu64)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_u64, vu64, vb64, vu64, vu64, vu64)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_u64, vu64, vb64, vu64, vu64, vu64)
 
 
@@ -12167,26 +12166,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_u64, vu64, vb64, vu64, vu64)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if 1
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_s64, vs64, qs64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_s64, vs64, qs64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_s64, vs64, qs64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_s64, vs64, qs64)
 
 SIMD_IMPL_INTRIN_1(load_s64x2, vs64x2, qs64)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12210,7 +12209,7 @@ simd__intrin_store_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12234,7 +12233,7 @@ simd__intrin_storea_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12258,7 +12257,7 @@ simd__intrin_stores_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12282,7 +12281,7 @@ simd__intrin_storel_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12306,7 +12305,7 @@ simd__intrin_storeh_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_s64x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12347,7 +12346,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_s64, vs64, qs64, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_store_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12377,7 +12376,7 @@ simd__intrin_store_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_store2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12407,7 +12406,7 @@ simd__intrin_store2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_store2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12438,7 +12437,7 @@ simd__intrin_store2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12509,7 +12508,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12580,7 +12579,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12651,7 +12650,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12722,7 +12721,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12793,7 +12792,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12864,7 +12863,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_tillz_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -12935,7 +12934,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13006,7 +13005,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13079,7 +13078,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13137,7 +13136,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13195,7 +13194,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13253,7 +13252,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13311,7 +13310,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13369,7 +13368,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_till_s64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13446,52 +13445,52 @@ SIMD_IMPL_INTRIN_1(extract0_s64, s64, vs64)
 SIMD_IMPL_INTRIN_1(setall_s64, vs64, s64)
 SIMD_IMPL_INTRIN_3(select_s64, vs64, vb64, vs64, vs64)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_s64, vu8, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_s64, vs8, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_s64, vu16, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_s64, vs16, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_s64, vu32, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_s64, vs32, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_s64, vu64, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_s64, vs64, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_s64, vf32, vs64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_s64, vf64, vs64)
 #endif // simd_sup2
@@ -13501,7 +13500,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_s64, vf64, vs64)
  * special definition due to the nature of intrinsics
  * npyv_setf_s64 and npy_set_s64.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -13524,7 +13523,7 @@ simd__intrin_setf_s64(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vs64);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -13551,20 +13550,20 @@ simd__intrin_set_s64(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_s64, vs64, vs64, vs64)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_s64, vs64, vs64, vs64)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_s64, vs64x2, vs64, vs64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_s64, vs64x2, vs64, vs64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_s64, vs64x2, vs64, vs64)
 
 
@@ -13579,21 +13578,21 @@ SIMD_IMPL_INTRIN_1(rev64_s64, vs64, vs64)
 NPY_FINLINE npyv_s64
 npyv_permi128_s64_(npyv_s64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_s64 ve0;
     npyv_lanetype_s64 de0[npyv_nlanes_s64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_s64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_s64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_s64(a, 3, 3, 3, 3);
     }
@@ -13603,21 +13602,21 @@ npyv_permi128_s64_(npyv_s64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s64(de0, ve0);
     
-#line 360
+#line 359
     npyv_s64 ve1;
     npyv_lanetype_s64 de1[npyv_nlanes_s64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_s64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_s64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_s64(a, 3, 3, 3, 3);
     }
@@ -13627,21 +13626,21 @@ npyv_permi128_s64_(npyv_s64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s64(de1, ve1);
     
-#line 360
+#line 359
     npyv_s64 ve2;
     npyv_lanetype_s64 de2[npyv_nlanes_s64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_s64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_s64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_s64(a, 3, 3, 3, 3);
     }
@@ -13651,21 +13650,21 @@ npyv_permi128_s64_(npyv_s64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_s64(de2, ve2);
     
-#line 360
+#line 359
     npyv_s64 ve3;
     npyv_lanetype_s64 de3[npyv_nlanes_s64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_s64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_s64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_s64(a, 3, 3, 3, 3);
     }
@@ -13712,37 +13711,37 @@ SIMD_IMPL_INTRIN_2(shl_s64, vs64, vs64, u8)
 SIMD_IMPL_INTRIN_2(shr_s64, vs64, vs64, u8)
 // immediate constant
 SIMD_IMPL_INTRIN_2IMM(shli_s64, vs64, vs64, 63)
-SIMD_IMPL_INTRIN_2IMM(shri_s64, vs64, vs64, 64)
+SIMD_IMPL_INTRIN_2IMM(shri_s64, vs64, vs64, 63)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_s64, vs64, vs64, vs64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_s64, vs64, vs64, vs64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_s64, vs64, vs64, vs64)
 
 
 SIMD_IMPL_INTRIN_1(not_s64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_s64, vb64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_s64, vb64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_s64, vb64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_s64, vb64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_s64, vb64, vs64, vs64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_s64, vb64, vs64, vs64)
 
 
@@ -13754,10 +13753,10 @@ SIMD_IMPL_INTRIN_2(xnor_b64, vb64, vb64, vb64)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_s64, u8, vs64)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_s64, u8, vs64)
 
 /***************************
@@ -13771,18 +13770,18 @@ SIMD_IMPL_INTRIN_1(expand_s64_s64, vs64x2, vs64)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_s64, vs64, vs64, vs64)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_s64, vs64, vs64, vs64)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_s64, vs64, vs64, vs64)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_s64, vs64, vs64, vs64)
 
 #endif // sat_sup
@@ -13801,19 +13800,19 @@ SIMD_IMPL_INTRIN_2(divc_s64, vs64, vs64, vs64x3)
 #endif // intdiv_sup
 
 #if 0
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_s64, vs64, vs64, vs64, vs64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_s64, vs64, vs64, vs64, vs64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_s64, vs64, vs64, vs64, vs64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_s64, vs64, vs64, vs64, vs64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_s64, vs64, vs64, vs64, vs64)
 
 #endif // fused_sup
@@ -13830,55 +13829,55 @@ SIMD_IMPL_INTRIN_1(sumup_s64, s64, vs64)
  * Math
  ***************************/
 #if 0
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_s64, vs64, vs64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_s64, vs64, vs64)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_max_s64, s64, vs64)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_min_s64, s64, vs64)
 
 
 #if 0
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_maxp_s64, s64, vs64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_minp_s64, s64, vs64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_maxn_s64, s64, vs64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_s64, vs64, vs64, vs64)
 SIMD_IMPL_INTRIN_1(reduce_minn_s64, s64, vs64)
 
@@ -13888,10 +13887,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_s64, s64, vs64)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_s64, vs64, vb64, vs64, vs64, vs64)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_s64, vs64, vb64, vs64, vs64, vs64)
 
 
@@ -13902,26 +13901,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_s64, vs64, vb64, vs64, vs64)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if NPY_SIMD_F32
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_f32, vf32, qf32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_f32, vf32, qf32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_f32, vf32, qf32)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_f32, vf32, qf32)
 
 SIMD_IMPL_INTRIN_1(load_f32x2, vf32x2, qf32)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13945,7 +13944,7 @@ simd__intrin_store_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13969,7 +13968,7 @@ simd__intrin_storea_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -13993,7 +13992,7 @@ simd__intrin_stores_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14017,7 +14016,7 @@ simd__intrin_storel_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14041,7 +14040,7 @@ simd__intrin_storeh_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_f32x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14082,7 +14081,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_f32, vf32, qf32, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_store_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14112,7 +14111,7 @@ simd__intrin_store_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_store2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14142,7 +14141,7 @@ simd__intrin_store2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_store2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14173,7 +14172,7 @@ simd__intrin_store2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14244,7 +14243,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14315,7 +14314,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14386,7 +14385,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14457,7 +14456,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14528,7 +14527,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14599,7 +14598,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_loadn_tillz_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14670,7 +14669,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14741,7 +14740,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_loadn2_tillz_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14814,7 +14813,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14872,7 +14871,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14930,7 +14929,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -14988,7 +14987,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 32
 static PyObject *
 simd__intrin_storen_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15046,7 +15045,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 32
 static PyObject *
 simd__intrin_storen2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15104,7 +15103,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 32
 static PyObject *
 simd__intrin_storen2_till_f32(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15181,52 +15180,52 @@ SIMD_IMPL_INTRIN_1(extract0_f32, f32, vf32)
 SIMD_IMPL_INTRIN_1(setall_f32, vf32, f32)
 SIMD_IMPL_INTRIN_3(select_f32, vf32, vb32, vf32, vf32)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_f32, vu8, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_f32, vs8, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_f32, vu16, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_f32, vs16, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_f32, vu32, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_f32, vs32, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_f32, vu64, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_f32, vs64, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_f32, vf32, vf32)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_f32, vf64, vf32)
 #endif // simd_sup2
@@ -15236,7 +15235,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_f32, vf64, vf32)
  * special definition due to the nature of intrinsics
  * npyv_setf_f32 and npy_set_f32.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -15259,7 +15258,7 @@ simd__intrin_setf_f32(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vf32);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -15286,20 +15285,20 @@ simd__intrin_set_f32(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_f32, vf32, vf32, vf32)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_f32, vf32, vf32, vf32)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_f32, vf32x2, vf32, vf32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_f32, vf32x2, vf32, vf32)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_f32, vf32x2, vf32, vf32)
 
 
@@ -15314,21 +15313,21 @@ SIMD_IMPL_INTRIN_1(rev64_f32, vf32, vf32)
 NPY_FINLINE npyv_f32
 npyv_permi128_f32_(npyv_f32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_f32 ve0;
     npyv_lanetype_f32 de0[npyv_nlanes_f32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_f32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_f32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_f32(a, 3, 3, 3, 3);
     }
@@ -15338,21 +15337,21 @@ npyv_permi128_f32_(npyv_f32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f32(de0, ve0);
     
-#line 360
+#line 359
     npyv_f32 ve1;
     npyv_lanetype_f32 de1[npyv_nlanes_f32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_f32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_f32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_f32(a, 3, 3, 3, 3);
     }
@@ -15362,21 +15361,21 @@ npyv_permi128_f32_(npyv_f32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f32(de1, ve1);
     
-#line 360
+#line 359
     npyv_f32 ve2;
     npyv_lanetype_f32 de2[npyv_nlanes_f32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_f32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_f32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_f32(a, 3, 3, 3, 3);
     }
@@ -15386,21 +15385,21 @@ npyv_permi128_f32_(npyv_f32 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f32(de2, ve2);
     
-#line 360
+#line 359
     npyv_f32 ve3;
     npyv_lanetype_f32 de3[npyv_nlanes_f32];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_f32(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_f32(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_f32(a, 3, 3, 3, 3);
     }
@@ -15450,34 +15449,34 @@ SIMD_IMPL_INTRIN_2IMM(shli_f32, vf32, vf32, 0)
 SIMD_IMPL_INTRIN_2IMM(shri_f32, vf32, vf32, 0)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_f32, vf32, vf32, vf32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_f32, vf32, vf32, vf32)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_f32, vf32, vf32, vf32)
 
 
 SIMD_IMPL_INTRIN_1(not_f32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_f32, vb32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_f32, vb32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_f32, vb32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_f32, vb32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_f32, vb32, vf32, vf32)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_f32, vb32, vf32, vf32)
 
 
@@ -15489,10 +15488,10 @@ SIMD_IMPL_INTRIN_2(xnor_b32, vb32, vb32, vb32)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_f32, u8, vf32)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_f32, u8, vf32)
 
 /***************************
@@ -15506,18 +15505,18 @@ SIMD_IMPL_INTRIN_1(expand_f32_f32, vf32x2, vf32)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_f32, vf32, vf32, vf32)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_f32, vf32, vf32, vf32)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_f32, vf32, vf32, vf32)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_f32, vf32, vf32, vf32)
 
 #endif // sat_sup
@@ -15536,19 +15535,19 @@ SIMD_IMPL_INTRIN_2(divc_f32, vf32, vf32, vf32x3)
 #endif // intdiv_sup
 
 #if 1
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_f32, vf32, vf32, vf32, vf32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_f32, vf32, vf32, vf32, vf32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_f32, vf32, vf32, vf32, vf32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_f32, vf32, vf32, vf32, vf32)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_f32, vf32, vf32, vf32, vf32)
 
 #endif // fused_sup
@@ -15565,55 +15564,55 @@ SIMD_IMPL_INTRIN_1(sumup_f32, f32, vf32)
  * Math
  ***************************/
 #if 1
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_f32, vf32, vf32)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_f32, vf32, vf32)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_max_f32, f32, vf32)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_min_f32, f32, vf32)
 
 
 #if 1
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_maxp_f32, f32, vf32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_minp_f32, f32, vf32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_maxn_f32, f32, vf32)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_f32, vf32, vf32, vf32)
 SIMD_IMPL_INTRIN_1(reduce_minn_f32, f32, vf32)
 
@@ -15623,10 +15622,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_f32, f32, vf32)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_f32, vf32, vb32, vf32, vf32, vf32)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_f32, vf32, vb32, vf32, vf32, vf32)
 
 
@@ -15637,26 +15636,26 @@ SIMD_IMPL_INTRIN_3(ifdivz_f32, vf32, vb32, vf32, vf32)
 
 #endif // simd_sup
 
-#line 36
+#line 35
 #if NPY_SIMD_F64
 /***************************
  * Memory
  ***************************/
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(load_f64, vf64, qf64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loada_f64, vf64, qf64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loads_f64, vf64, qf64)
 
-#line 43
+#line 42
 SIMD_IMPL_INTRIN_1(loadl_f64, vf64, qf64)
 
 SIMD_IMPL_INTRIN_1(load_f64x2, vf64x2, qf64)
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15680,7 +15679,7 @@ simd__intrin_store_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storea
 static PyObject *
 simd__intrin_storea_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15704,7 +15703,7 @@ simd__intrin_storea_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of stores
 static PyObject *
 simd__intrin_stores_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15728,7 +15727,7 @@ simd__intrin_stores_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storel
 static PyObject *
 simd__intrin_storel_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15752,7 +15751,7 @@ simd__intrin_storel_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of storeh
 static PyObject *
 simd__intrin_storeh_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15776,7 +15775,7 @@ simd__intrin_storeh_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     Py_RETURN_NONE;
 }
 
-#line 51
+#line 50
 // special definition due to the nature of store
 static PyObject *
 simd__intrin_store_f64x2(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15817,7 +15816,7 @@ SIMD_IMPL_INTRIN_2(load_tillz_f64, vf64, qf64, u32)
 #endif
 
 // Partial Store
-#line 95
+#line 94
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_store_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15847,7 +15846,7 @@ simd__intrin_store_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_store2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15877,7 +15876,7 @@ simd__intrin_store2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 #endif // chksize
 
 
-#line 95
+#line 94
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_store2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15908,7 +15907,7 @@ simd__intrin_store2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 
 
 // Non-contiguous Load
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -15979,7 +15978,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16050,7 +16049,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16121,7 +16120,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16192,7 +16191,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16263,7 +16262,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16334,7 +16333,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_loadn_tillz_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16405,7 +16404,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16476,7 +16475,7 @@ err:
 }
 #endif // chksize
 
-#line 136
+#line 135
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_loadn2_tillz_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16549,7 +16548,7 @@ err:
 
 
 // Non-contiguous Store
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16607,7 +16606,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16665,7 +16664,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16723,7 +16722,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !0 || 0 == 64
 static PyObject *
 simd__intrin_storen_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16781,7 +16780,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !32 || 32 == 64
 static PyObject *
 simd__intrin_storen2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16839,7 +16838,7 @@ err:
 }
 #endif // chksize
 
-#line 216
+#line 215
 #if !64 || 64 == 64
 static PyObject *
 simd__intrin_storen2_till_f64(PyObject* NPY_UNUSED(self), PyObject *args)
@@ -16916,52 +16915,52 @@ SIMD_IMPL_INTRIN_1(extract0_f64, f64, vf64)
 SIMD_IMPL_INTRIN_1(setall_f64, vf64, f64)
 SIMD_IMPL_INTRIN_3(select_f64, vf64, vb64, vf64, vf64)
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u8_f64, vu8, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s8_f64, vs8, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u16_f64, vu16, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s16_f64, vs16, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u32_f64, vu32, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s32_f64, vs32, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_u64_f64, vu64, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if 1
 SIMD_IMPL_INTRIN_1(reinterpret_s64_f64, vs64, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F32
 SIMD_IMPL_INTRIN_1(reinterpret_f32_f64, vf32, vf64)
 #endif // simd_sup2
 
-#line 296
+#line 295
 #if NPY_SIMD_F64
 SIMD_IMPL_INTRIN_1(reinterpret_f64_f64, vf64, vf64)
 #endif // simd_sup2
@@ -16971,7 +16970,7 @@ SIMD_IMPL_INTRIN_1(reinterpret_f64_f64, vf64, vf64)
  * special definition due to the nature of intrinsics
  * npyv_setf_f64 and npy_set_f64.
 */
-#line 308
+#line 307
 static PyObject *
 simd__intrin_setf_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -16994,7 +16993,7 @@ simd__intrin_setf_f64(PyObject* NPY_UNUSED(self), PyObject *args)
     return (PyObject*)PySIMDVector_FromData(r, simd_data_vf64);
 }
 
-#line 308
+#line 307
 static PyObject *
 simd__intrin_set_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 {
@@ -17021,20 +17020,20 @@ simd__intrin_set_f64(PyObject* NPY_UNUSED(self), PyObject *args)
 /***************************
  * Reorder
  ***************************/
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combinel_f64, vf64, vf64, vf64)
 
-#line 337
+#line 336
 SIMD_IMPL_INTRIN_2(combineh_f64, vf64, vf64, vf64)
 
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(combine_f64, vf64x2, vf64, vf64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(zip_f64, vf64x2, vf64, vf64)
 
-#line 343
+#line 342
 SIMD_IMPL_INTRIN_2(unzip_f64, vf64x2, vf64, vf64)
 
 
@@ -17049,21 +17048,21 @@ SIMD_IMPL_INTRIN_1(rev64_f64, vf64, vf64)
 NPY_FINLINE npyv_f64
 npyv_permi128_f64_(npyv_f64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e3)
 {
-   #line 360
+   #line 359
     npyv_f64 ve0;
     npyv_lanetype_f64 de0[npyv_nlanes_f64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e0 == 1) {
         ve0 = npyv_permi128_f64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e0 == 2) {
         ve0 = npyv_permi128_f64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e0 == 3) {
         ve0 = npyv_permi128_f64(a, 3, 3, 3, 3);
     }
@@ -17073,21 +17072,21 @@ npyv_permi128_f64_(npyv_f64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f64(de0, ve0);
     
-#line 360
+#line 359
     npyv_f64 ve1;
     npyv_lanetype_f64 de1[npyv_nlanes_f64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e1 == 1) {
         ve1 = npyv_permi128_f64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e1 == 2) {
         ve1 = npyv_permi128_f64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e1 == 3) {
         ve1 = npyv_permi128_f64(a, 3, 3, 3, 3);
     }
@@ -17097,21 +17096,21 @@ npyv_permi128_f64_(npyv_f64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f64(de1, ve1);
     
-#line 360
+#line 359
     npyv_f64 ve2;
     npyv_lanetype_f64 de2[npyv_nlanes_f64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e2 == 1) {
         ve2 = npyv_permi128_f64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e2 == 2) {
         ve2 = npyv_permi128_f64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e2 == 3) {
         ve2 = npyv_permi128_f64(a, 3, 3, 3, 3);
     }
@@ -17121,21 +17120,21 @@ npyv_permi128_f64_(npyv_f64 a, unsigned e0, unsigned e1, unsigned e2, unsigned e
     }
     npyv_store_f64(de2, ve2);
     
-#line 360
+#line 359
     npyv_f64 ve3;
     npyv_lanetype_f64 de3[npyv_nlanes_f64];
     if (0) {}
-   #line 366
+   #line 365
     else if (e3 == 1) {
         ve3 = npyv_permi128_f64(a, 1, 1, 1, 1);
     }
     
-#line 366
+#line 365
     else if (e3 == 2) {
         ve3 = npyv_permi128_f64(a, 2, 2, 2, 2);
     }
     
-#line 366
+#line 365
     else if (e3 == 3) {
         ve3 = npyv_permi128_f64(a, 3, 3, 3, 3);
     }
@@ -17185,34 +17184,34 @@ SIMD_IMPL_INTRIN_2IMM(shli_f64, vf64, vf64, 0)
 SIMD_IMPL_INTRIN_2IMM(shri_f64, vf64, vf64, 0)
 #endif // shl_imm
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(and_f64, vf64, vf64, vf64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(or_f64, vf64, vf64, vf64)
 
-#line 418
+#line 417
 SIMD_IMPL_INTRIN_2(xor_f64, vf64, vf64, vf64)
 
 
 SIMD_IMPL_INTRIN_1(not_f64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpeq_f64, vb64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpneq_f64, vb64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpgt_f64, vb64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmpge_f64, vb64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmplt_f64, vb64, vf64, vf64)
 
-#line 426
+#line 425
 SIMD_IMPL_INTRIN_2(cmple_f64, vb64, vf64, vf64)
 
 
@@ -17224,10 +17223,10 @@ SIMD_IMPL_INTRIN_2(xnor_b64, vb64, vb64, vb64)
 #endif
 
 // test cross all vector lanes
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(any_f64, u8, vf64)
 
-#line 440
+#line 439
 SIMD_IMPL_INTRIN_1(all_f64, u8, vf64)
 
 /***************************
@@ -17241,18 +17240,18 @@ SIMD_IMPL_INTRIN_1(expand_f64_f64, vf64x2, vf64)
 /***************************
  * Arithmetic
  ***************************/
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(add_f64, vf64, vf64, vf64)
 
-#line 456
+#line 455
 SIMD_IMPL_INTRIN_2(sub_f64, vf64, vf64, vf64)
 
 
 #if 0
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(adds_f64, vf64, vf64, vf64)
 
-#line 463
+#line 462
 SIMD_IMPL_INTRIN_2(subs_f64, vf64, vf64, vf64)
 
 #endif // sat_sup
@@ -17271,19 +17270,19 @@ SIMD_IMPL_INTRIN_2(divc_f64, vf64, vf64, vf64x3)
 #endif // intdiv_sup
 
 #if 1
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladd_f64, vf64, vf64, vf64, vf64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(mulsub_f64, vf64, vf64, vf64, vf64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmuladd_f64, vf64, vf64, vf64, vf64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(nmulsub_f64, vf64, vf64, vf64, vf64)
 
-#line 484
+#line 483
 SIMD_IMPL_INTRIN_3(muladdsub_f64, vf64, vf64, vf64, vf64)
 
 #endif // fused_sup
@@ -17300,55 +17299,55 @@ SIMD_IMPL_INTRIN_1(sumup_f64, f64, vf64)
  * Math
  ***************************/
 #if 1
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(sqrt_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(recip_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(abs_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(square_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(rint_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(ceil_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(trunc_f64, vf64, vf64)
 
-#line 503
+#line 502
 SIMD_IMPL_INTRIN_1(floor_f64, vf64, vf64)
 
 #endif
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(max_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_max_f64, f64, vf64)
 
-#line 510
+#line 509
 SIMD_IMPL_INTRIN_2(min_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_min_f64, f64, vf64)
 
 
 #if 1
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxp_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_maxp_f64, f64, vf64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minp_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_minp_f64, f64, vf64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(maxn_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_maxn_f64, f64, vf64)
 
-#line 518
+#line 517
 SIMD_IMPL_INTRIN_2(minn_f64, vf64, vf64, vf64)
 SIMD_IMPL_INTRIN_1(reduce_minn_f64, f64, vf64)
 
@@ -17358,10 +17357,10 @@ SIMD_IMPL_INTRIN_1(reduce_minn_f64, f64, vf64)
 /***************************
  * Mask operations
  ***************************/
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifadd_f64, vf64, vb64, vf64, vf64, vf64)
 
-#line 530
+#line 529
  SIMD_IMPL_INTRIN_4(ifsub_f64, vf64, vb64, vf64, vf64, vf64)
 
 
@@ -17407,59 +17406,59 @@ SIMD_IMPL_INTRIN_0N(cleanup)
 /***************************
  * Operators
  ***************************/
-#line 578
+#line 577
 // Logical
 SIMD_IMPL_INTRIN_2(and_b8, vb8, vb8, vb8)
 SIMD_IMPL_INTRIN_2(or_b8,  vb8, vb8, vb8)
 SIMD_IMPL_INTRIN_2(xor_b8, vb8, vb8, vb8)
 SIMD_IMPL_INTRIN_1(not_b8, vb8, vb8)
 // test cross vector's lanes
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(any_b8, u8, vb8)
 
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(all_b8, u8, vb8)
 
 
-#line 578
+#line 577
 // Logical
 SIMD_IMPL_INTRIN_2(and_b16, vb16, vb16, vb16)
 SIMD_IMPL_INTRIN_2(or_b16,  vb16, vb16, vb16)
 SIMD_IMPL_INTRIN_2(xor_b16, vb16, vb16, vb16)
 SIMD_IMPL_INTRIN_1(not_b16, vb16, vb16)
 // test cross vector's lanes
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(any_b16, u8, vb16)
 
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(all_b16, u8, vb16)
 
 
-#line 578
+#line 577
 // Logical
 SIMD_IMPL_INTRIN_2(and_b32, vb32, vb32, vb32)
 SIMD_IMPL_INTRIN_2(or_b32,  vb32, vb32, vb32)
 SIMD_IMPL_INTRIN_2(xor_b32, vb32, vb32, vb32)
 SIMD_IMPL_INTRIN_1(not_b32, vb32, vb32)
 // test cross vector's lanes
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(any_b32, u8, vb32)
 
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(all_b32, u8, vb32)
 
 
-#line 578
+#line 577
 // Logical
 SIMD_IMPL_INTRIN_2(and_b64, vb64, vb64, vb64)
 SIMD_IMPL_INTRIN_2(or_b64,  vb64, vb64, vb64)
 SIMD_IMPL_INTRIN_2(xor_b64, vb64, vb64, vb64)
 SIMD_IMPL_INTRIN_1(not_b64, vb64, vb64)
 // test cross vector's lanes
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(any_b64, u8, vb64)
 
-#line 587
+#line 586
 SIMD_IMPL_INTRIN_1(all_b64, u8, vb64)
 
 
@@ -17467,16 +17466,16 @@ SIMD_IMPL_INTRIN_1(all_b64, u8, vb64)
  * Conversions
  ***************************/
 // Convert mask vector to integer bitfield
-#line 597
+#line 596
 SIMD_IMPL_INTRIN_1(tobits_b8, u64, vb8)
 
-#line 597
+#line 596
 SIMD_IMPL_INTRIN_1(tobits_b16, u64, vb16)
 
-#line 597
+#line 596
 SIMD_IMPL_INTRIN_1(tobits_b32, u64, vb32)
 
-#line 597
+#line 596
 SIMD_IMPL_INTRIN_1(tobits_b64, u64, vb64)
 
 
@@ -17489,44 +17488,44 @@ SIMD_IMPL_INTRIN_8(pack_b8_b64, vb8, vb64, vb64, vb64, vb64,
 //## Attach module functions
 //#########################################################################
 static PyMethodDef simd__intrinsics_methods[] = {
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_u8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_u8)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_u8x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_u8x2)
 
 
@@ -17534,78 +17533,78 @@ SIMD_INTRIN_DEF(store_u8x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 0
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_u8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_u8)
 
 #if 8 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_u8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_u8)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_u8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_u8)
     
 #endif
@@ -17623,92 +17622,92 @@ SIMD_INTRIN_DEF(lut16_u8)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_u8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_u8)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_u8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_u8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_u8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_u8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_u8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_u8)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_u8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_u8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_u8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_u8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_u8)
 
 
@@ -17724,54 +17723,54 @@ SIMD_INTRIN_DEF(rev64_u8)
  * Operators
  ***************************/
 #if 0 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_u8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_u8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_u8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_u8)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_u8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_u8)
 
 
@@ -17793,18 +17792,18 @@ SIMD_INTRIN_DEF(expand_u16_u8)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_u8)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_u8)
 
 
 #if 1
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_u8)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_u8)
 
 #endif // sat_sup
@@ -17823,19 +17822,19 @@ SIMD_INTRIN_DEF(divc_u8)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_u8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_u8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_u8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_u8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_u8)
 
 #endif // fused_sup
@@ -17851,55 +17850,55 @@ SIMD_INTRIN_DEF(sumup_u8)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_u8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_u8)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_u8)
 SIMD_INTRIN_DEF(reduce_max_u8)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_u8)
 SIMD_INTRIN_DEF(reduce_min_u8)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_u8)
 SIMD_INTRIN_DEF(reduce_maxp_u8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_u8)
 SIMD_INTRIN_DEF(reduce_minp_u8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_u8)
 SIMD_INTRIN_DEF(reduce_maxn_u8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_u8)
 SIMD_INTRIN_DEF(reduce_minn_u8)
 
@@ -17909,62 +17908,62 @@ SIMD_INTRIN_DEF(reduce_minn_u8)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_u8)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_u8)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_u8)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_u8)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_s8)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_s8)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_s8x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_s8x2)
 
 
@@ -17972,78 +17971,78 @@ SIMD_INTRIN_DEF(store_s8x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 0
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_s8)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_s8)
 
 #if 8 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_s8)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_s8)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_s8)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_s8)
     
 #endif
@@ -18061,92 +18060,92 @@ SIMD_INTRIN_DEF(lut16_s8)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_s8)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_s8)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_s8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_s8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_s8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_s8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_s8)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_s8)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_s8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_s8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_s8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_s8)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_s8)
 
 
@@ -18162,54 +18161,54 @@ SIMD_INTRIN_DEF(rev64_s8)
  * Operators
  ***************************/
 #if 0 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_s8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_s8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_s8)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_s8)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_s8)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_s8)
 
 
@@ -18231,18 +18230,18 @@ SIMD_INTRIN_DEF(expand_s8_s8)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_s8)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_s8)
 
 
 #if 1
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_s8)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_s8)
 
 #endif // sat_sup
@@ -18261,19 +18260,19 @@ SIMD_INTRIN_DEF(divc_s8)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_s8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_s8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_s8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_s8)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_s8)
 
 #endif // fused_sup
@@ -18289,55 +18288,55 @@ SIMD_INTRIN_DEF(sumup_s8)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_s8)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_s8)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_s8)
 SIMD_INTRIN_DEF(reduce_max_s8)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_s8)
 SIMD_INTRIN_DEF(reduce_min_s8)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_s8)
 SIMD_INTRIN_DEF(reduce_maxp_s8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_s8)
 SIMD_INTRIN_DEF(reduce_minp_s8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_s8)
 SIMD_INTRIN_DEF(reduce_maxn_s8)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_s8)
 SIMD_INTRIN_DEF(reduce_minn_s8)
 
@@ -18347,62 +18346,62 @@ SIMD_INTRIN_DEF(reduce_minn_s8)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_s8)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_s8)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_s8)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_s8)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_u16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_u16)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_u16x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_u16x2)
 
 
@@ -18410,78 +18409,78 @@ SIMD_INTRIN_DEF(store_u16x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 0
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_u16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_u16)
 
 #if 16 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_u16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_u16)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_u16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_u16)
     
 #endif
@@ -18499,92 +18498,92 @@ SIMD_INTRIN_DEF(lut16_u16)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_u16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_u16)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_u16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_u16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_u16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_u16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_u16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_u16)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_u16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_u16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_u16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_u16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_u16)
 
 
@@ -18600,54 +18599,54 @@ SIMD_INTRIN_DEF(rev64_u16)
  * Operators
  ***************************/
 #if 15 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_u16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_u16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_u16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_u16)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_u16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_u16)
 
 
@@ -18669,18 +18668,18 @@ SIMD_INTRIN_DEF(expand_u32_u16)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_u16)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_u16)
 
 
 #if 1
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_u16)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_u16)
 
 #endif // sat_sup
@@ -18699,19 +18698,19 @@ SIMD_INTRIN_DEF(divc_u16)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_u16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_u16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_u16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_u16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_u16)
 
 #endif // fused_sup
@@ -18727,55 +18726,55 @@ SIMD_INTRIN_DEF(sumup_u16)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_u16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_u16)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_u16)
 SIMD_INTRIN_DEF(reduce_max_u16)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_u16)
 SIMD_INTRIN_DEF(reduce_min_u16)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_u16)
 SIMD_INTRIN_DEF(reduce_maxp_u16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_u16)
 SIMD_INTRIN_DEF(reduce_minp_u16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_u16)
 SIMD_INTRIN_DEF(reduce_maxn_u16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_u16)
 SIMD_INTRIN_DEF(reduce_minn_u16)
 
@@ -18785,62 +18784,62 @@ SIMD_INTRIN_DEF(reduce_minn_u16)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_u16)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_u16)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_u16)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_u16)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_s16)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_s16)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_s16x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_s16x2)
 
 
@@ -18848,78 +18847,78 @@ SIMD_INTRIN_DEF(store_s16x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 0
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_s16)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_s16)
 
 #if 16 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_s16)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_s16)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_s16)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_s16)
     
 #endif
@@ -18937,92 +18936,92 @@ SIMD_INTRIN_DEF(lut16_s16)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_s16)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_s16)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_s16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_s16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_s16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_s16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_s16)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_s16)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_s16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_s16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_s16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_s16)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_s16)
 
 
@@ -19038,54 +19037,54 @@ SIMD_INTRIN_DEF(rev64_s16)
  * Operators
  ***************************/
 #if 15 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_s16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_s16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_s16)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_s16)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_s16)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_s16)
 
 
@@ -19107,18 +19106,18 @@ SIMD_INTRIN_DEF(expand_s16_s16)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_s16)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_s16)
 
 
 #if 1
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_s16)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_s16)
 
 #endif // sat_sup
@@ -19137,19 +19136,19 @@ SIMD_INTRIN_DEF(divc_s16)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_s16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_s16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_s16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_s16)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_s16)
 
 #endif // fused_sup
@@ -19165,55 +19164,55 @@ SIMD_INTRIN_DEF(sumup_s16)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_s16)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_s16)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_s16)
 SIMD_INTRIN_DEF(reduce_max_s16)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_s16)
 SIMD_INTRIN_DEF(reduce_min_s16)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_s16)
 SIMD_INTRIN_DEF(reduce_maxp_s16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_s16)
 SIMD_INTRIN_DEF(reduce_minp_s16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_s16)
 SIMD_INTRIN_DEF(reduce_maxn_s16)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_s16)
 SIMD_INTRIN_DEF(reduce_minn_s16)
 
@@ -19223,62 +19222,62 @@ SIMD_INTRIN_DEF(reduce_minn_s16)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_s16)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_s16)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_s16)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_s16)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_u32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_u32)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_u32x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_u32x2)
 
 
@@ -19286,78 +19285,78 @@ SIMD_INTRIN_DEF(store_u32x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_u32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_u32)
 
 #if 32 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_u32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_u32)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_u32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_u32)
     
 #endif
@@ -19375,92 +19374,92 @@ SIMD_INTRIN_DEF(lut16_u32)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_u32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_u32)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_u32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_u32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_u32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_u32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_u32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_u32)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_u32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_u32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_u32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_u32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_u32)
 
 
@@ -19476,54 +19475,54 @@ SIMD_INTRIN_DEF(rev64_u32)
  * Operators
  ***************************/
 #if 31 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_u32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_u32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_u32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_u32)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_u32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_u32)
 
 
@@ -19545,18 +19544,18 @@ SIMD_INTRIN_DEF(expand_u32_u32)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_u32)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_u32)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_u32)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_u32)
 
 #endif // sat_sup
@@ -19575,19 +19574,19 @@ SIMD_INTRIN_DEF(divc_u32)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_u32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_u32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_u32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_u32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_u32)
 
 #endif // fused_sup
@@ -19603,55 +19602,55 @@ SIMD_INTRIN_DEF(sumup_u32)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_u32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_u32)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_u32)
 SIMD_INTRIN_DEF(reduce_max_u32)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_u32)
 SIMD_INTRIN_DEF(reduce_min_u32)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_u32)
 SIMD_INTRIN_DEF(reduce_maxp_u32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_u32)
 SIMD_INTRIN_DEF(reduce_minp_u32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_u32)
 SIMD_INTRIN_DEF(reduce_maxn_u32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_u32)
 SIMD_INTRIN_DEF(reduce_minn_u32)
 
@@ -19661,62 +19660,62 @@ SIMD_INTRIN_DEF(reduce_minn_u32)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_u32)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_u32)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_u32)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_u32)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_s32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_s32)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_s32x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_s32x2)
 
 
@@ -19724,78 +19723,78 @@ SIMD_INTRIN_DEF(store_s32x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_s32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_s32)
 
 #if 32 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_s32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_s32)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_s32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_s32)
     
 #endif
@@ -19813,92 +19812,92 @@ SIMD_INTRIN_DEF(lut16_s32)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_s32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_s32)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_s32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_s32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_s32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_s32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_s32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_s32)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_s32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_s32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_s32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_s32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_s32)
 
 
@@ -19914,54 +19913,54 @@ SIMD_INTRIN_DEF(rev64_s32)
  * Operators
  ***************************/
 #if 31 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_s32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_s32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_s32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_s32)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_s32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_s32)
 
 
@@ -19983,18 +19982,18 @@ SIMD_INTRIN_DEF(expand_s32_s32)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_s32)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_s32)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_s32)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_s32)
 
 #endif // sat_sup
@@ -20013,19 +20012,19 @@ SIMD_INTRIN_DEF(divc_s32)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_s32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_s32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_s32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_s32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_s32)
 
 #endif // fused_sup
@@ -20041,55 +20040,55 @@ SIMD_INTRIN_DEF(sumup_s32)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_s32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_s32)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_s32)
 SIMD_INTRIN_DEF(reduce_max_s32)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_s32)
 SIMD_INTRIN_DEF(reduce_min_s32)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_s32)
 SIMD_INTRIN_DEF(reduce_maxp_s32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_s32)
 SIMD_INTRIN_DEF(reduce_minp_s32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_s32)
 SIMD_INTRIN_DEF(reduce_maxn_s32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_s32)
 SIMD_INTRIN_DEF(reduce_minn_s32)
 
@@ -20099,62 +20098,62 @@ SIMD_INTRIN_DEF(reduce_minn_s32)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_s32)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_s32)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_s32)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_s32)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_u64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_u64)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_u64x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_u64x2)
 
 
@@ -20162,78 +20161,78 @@ SIMD_INTRIN_DEF(store_u64x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_u64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_u64)
 
 #if 64 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_u64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_u64)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_u64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_u64)
     
 #endif
@@ -20251,92 +20250,92 @@ SIMD_INTRIN_DEF(lut16_u64)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_u64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_u64)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_u64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_u64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_u64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_u64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_u64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_u64)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_u64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_u64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_u64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_u64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_u64)
 
 
@@ -20352,54 +20351,54 @@ SIMD_INTRIN_DEF(rev64_u64)
  * Operators
  ***************************/
 #if 63 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_u64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_u64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_u64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_u64)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_u64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_u64)
 
 
@@ -20421,18 +20420,18 @@ SIMD_INTRIN_DEF(expand_u64_u64)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_u64)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_u64)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_u64)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_u64)
 
 #endif // sat_sup
@@ -20451,19 +20450,19 @@ SIMD_INTRIN_DEF(divc_u64)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_u64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_u64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_u64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_u64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_u64)
 
 #endif // fused_sup
@@ -20479,55 +20478,55 @@ SIMD_INTRIN_DEF(sumup_u64)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_u64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_u64)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_u64)
 SIMD_INTRIN_DEF(reduce_max_u64)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_u64)
 SIMD_INTRIN_DEF(reduce_min_u64)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_u64)
 SIMD_INTRIN_DEF(reduce_maxp_u64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_u64)
 SIMD_INTRIN_DEF(reduce_minp_u64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_u64)
 SIMD_INTRIN_DEF(reduce_maxn_u64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_u64)
 SIMD_INTRIN_DEF(reduce_minn_u64)
 
@@ -20537,62 +20536,62 @@ SIMD_INTRIN_DEF(reduce_minn_u64)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_u64)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_u64)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_u64)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_u64)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if 1
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_s64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_s64)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_s64x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_s64x2)
 
 
@@ -20600,78 +20599,78 @@ SIMD_INTRIN_DEF(store_s64x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_s64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_s64)
 
 #if 64 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_s64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_s64)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_s64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_s64)
     
 #endif
@@ -20689,92 +20688,92 @@ SIMD_INTRIN_DEF(lut16_s64)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_s64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_s64)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_s64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_s64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_s64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_s64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_s64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_s64)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_s64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_s64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_s64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_s64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_s64)
 
 
@@ -20790,54 +20789,54 @@ SIMD_INTRIN_DEF(rev64_s64)
  * Operators
  ***************************/
 #if 63 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_s64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_s64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_s64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_s64)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_s64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_s64)
 
 
@@ -20859,18 +20858,18 @@ SIMD_INTRIN_DEF(expand_s64_s64)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_s64)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_s64)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_s64)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_s64)
 
 #endif // sat_sup
@@ -20889,19 +20888,19 @@ SIMD_INTRIN_DEF(divc_s64)
 #endif // intdiv_sup
 
 #if 0
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_s64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_s64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_s64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_s64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_s64)
 
 #endif // fused_sup
@@ -20917,55 +20916,55 @@ SIMD_INTRIN_DEF(sumup_s64)
  * Math
  ***************************/
 #if 0
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_s64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_s64)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_s64)
 SIMD_INTRIN_DEF(reduce_max_s64)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_s64)
 SIMD_INTRIN_DEF(reduce_min_s64)
 
 
 #if 0
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_s64)
 SIMD_INTRIN_DEF(reduce_maxp_s64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_s64)
 SIMD_INTRIN_DEF(reduce_minp_s64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_s64)
 SIMD_INTRIN_DEF(reduce_maxn_s64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_s64)
 SIMD_INTRIN_DEF(reduce_minn_s64)
 
@@ -20975,62 +20974,62 @@ SIMD_INTRIN_DEF(reduce_minn_s64)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_s64)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_s64)
 
 
 #if 0
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_s64)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_s64)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if NPY_SIMD_F32
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_f32)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_f32)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_f32x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_f32x2)
 
 
@@ -21038,78 +21037,78 @@ SIMD_INTRIN_DEF(store_f32x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_f32)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_f32)
 
 #if 32 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_f32)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_f32)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_f32)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_f32)
     
 #endif
@@ -21127,92 +21126,92 @@ SIMD_INTRIN_DEF(lut16_f32)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_f32)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_f32)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_f32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_f32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_f32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_f32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_f32)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_f32)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_f32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_f32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_f32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_f32)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_f32)
 
 
@@ -21228,54 +21227,54 @@ SIMD_INTRIN_DEF(rev64_f32)
  * Operators
  ***************************/
 #if 0 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_f32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_f32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_f32)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_f32)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_f32)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_f32)
 
 
@@ -21297,18 +21296,18 @@ SIMD_INTRIN_DEF(expand_f32_f32)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_f32)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_f32)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_f32)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_f32)
 
 #endif // sat_sup
@@ -21327,19 +21326,19 @@ SIMD_INTRIN_DEF(divc_f32)
 #endif // intdiv_sup
 
 #if 1
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_f32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_f32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_f32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_f32)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_f32)
 
 #endif // fused_sup
@@ -21355,55 +21354,55 @@ SIMD_INTRIN_DEF(sumup_f32)
  * Math
  ***************************/
 #if 1
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_f32)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_f32)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_f32)
 SIMD_INTRIN_DEF(reduce_max_f32)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_f32)
 SIMD_INTRIN_DEF(reduce_min_f32)
 
 
 #if 1
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_f32)
 SIMD_INTRIN_DEF(reduce_maxp_f32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_f32)
 SIMD_INTRIN_DEF(reduce_minp_f32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_f32)
 SIMD_INTRIN_DEF(reduce_maxn_f32)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_f32)
 SIMD_INTRIN_DEF(reduce_minn_f32)
 
@@ -21413,62 +21412,62 @@ SIMD_INTRIN_DEF(reduce_minn_f32)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_f32)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_f32)
 
 
 #if 1
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_f32)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_f32)
 
 #endif
 
 #endif // simd_sup
 
-#line 630
+#line 629
 #if NPY_SIMD_F64
 
 /***************************
  * Memory
  ***************************/
-#line 638
+#line 637
 SIMD_INTRIN_DEF(load_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loada_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loads_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(loadl_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(store_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storea_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(stores_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storel_f64)
 
-#line 638
+#line 637
 SIMD_INTRIN_DEF(storeh_f64)
 
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(load_f64x2)
 
-#line 644
+#line 643
 SIMD_INTRIN_DEF(store_f64x2)
 
 
@@ -21476,78 +21475,78 @@ SIMD_INTRIN_DEF(store_f64x2)
  * Non-contiguous/Partial Memory access
  ****************************************/
 #if 1
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_till_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(load_tillz_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_till_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(loadn_tillz_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(store_till_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_f64)
 
-#line 655
+#line 654
 SIMD_INTRIN_DEF(storen_till_f64)
 
 #if 64 == 32
-    #line 662
+    #line 661
     SIMD_INTRIN_DEF(load2_till_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(load2_tillz_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_till_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(loadn2_tillz_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(store2_till_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_f64)
     
-#line 662
+#line 661
     SIMD_INTRIN_DEF(storen2_till_f64)
     
 #else
-    #line 669
+    #line 668
     SIMD_INTRIN_DEF(load2_till_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(load2_tillz_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_till_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(loadn2_tillz_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(store2_till_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_f64)
     
-#line 669
+#line 668
     SIMD_INTRIN_DEF(storen2_till_f64)
     
 #endif
@@ -21565,92 +21564,92 @@ SIMD_INTRIN_DEF(lut16_f64)
 /***************************
  * Misc
  ***************************/
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u8_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s8_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u16_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s16_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u32_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s32_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_u64_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if 1
 SIMD_INTRIN_DEF(reinterpret_s64_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F32
 SIMD_INTRIN_DEF(reinterpret_f32_f64)
 #endif // simd_sup2
 
-#line 690
+#line 689
 #if NPY_SIMD_F64
 SIMD_INTRIN_DEF(reinterpret_f64_f64)
 #endif // simd_sup2
 
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(set_f64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setf_f64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(setall_f64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(zero_f64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(select_f64)
 
-#line 698
+#line 697
 SIMD_INTRIN_DEF(extract0_f64)
 
 
 /***************************
  * Reorder
  ***************************/
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combinel_f64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combineh_f64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(combine_f64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(zip_f64)
 
-#line 707
+#line 706
 SIMD_INTRIN_DEF(unzip_f64)
 
 
@@ -21666,54 +21665,54 @@ SIMD_INTRIN_DEF(rev64_f64)
  * Operators
  ***************************/
 #if 0 > 0
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shl_f64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shr_f64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shli_f64)
 
-#line 725
+#line 724
 SIMD_INTRIN_DEF(shri_f64)
 
 #endif // shl_imm
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(and_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(or_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(xor_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(not_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpeq_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpneq_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpgt_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmpge_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmplt_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(cmple_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(any_f64)
 
-#line 733
+#line 732
 SIMD_INTRIN_DEF(all_f64)
 
 
@@ -21735,18 +21734,18 @@ SIMD_INTRIN_DEF(expand_f64_f64)
 /***************************
  * Arithmetic
  ***************************/
-#line 757
+#line 756
 SIMD_INTRIN_DEF(add_f64)
 
-#line 757
+#line 756
 SIMD_INTRIN_DEF(sub_f64)
 
 
 #if 0
-#line 764
+#line 763
 SIMD_INTRIN_DEF(adds_f64)
 
-#line 764
+#line 763
 SIMD_INTRIN_DEF(subs_f64)
 
 #endif // sat_sup
@@ -21765,19 +21764,19 @@ SIMD_INTRIN_DEF(divc_f64)
 #endif // intdiv_sup
 
 #if 1
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladd_f64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(mulsub_f64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmuladd_f64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(nmulsub_f64)
 
-#line 785
+#line 784
 SIMD_INTRIN_DEF(muladdsub_f64)
 
 #endif // fused_sup
@@ -21793,55 +21792,55 @@ SIMD_INTRIN_DEF(sumup_f64)
  * Math
  ***************************/
 #if 1
-#line 803
+#line 802
 SIMD_INTRIN_DEF(sqrt_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(recip_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(abs_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(square_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(rint_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(ceil_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(trunc_f64)
 
-#line 803
+#line 802
 SIMD_INTRIN_DEF(floor_f64)
 
 #endif
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(max_f64)
 SIMD_INTRIN_DEF(reduce_max_f64)
 
-#line 810
+#line 809
 SIMD_INTRIN_DEF(min_f64)
 SIMD_INTRIN_DEF(reduce_min_f64)
 
 
 #if 1
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxp_f64)
 SIMD_INTRIN_DEF(reduce_maxp_f64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minp_f64)
 SIMD_INTRIN_DEF(reduce_minp_f64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(maxn_f64)
 SIMD_INTRIN_DEF(reduce_maxn_f64)
 
-#line 818
+#line 817
 SIMD_INTRIN_DEF(minn_f64)
 SIMD_INTRIN_DEF(reduce_minn_f64)
 
@@ -21851,18 +21850,18 @@ SIMD_INTRIN_DEF(reduce_minn_f64)
 /***************************
  * Mask operations
  ***************************/
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifadd_f64)
 
-#line 830
+#line 829
  SIMD_INTRIN_DEF(ifsub_f64)
 
 
 #if 1
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdiv_f64)
 
-#line 837
+#line 836
 SIMD_INTRIN_DEF(ifdivz_f64)
 
 #endif
@@ -21904,59 +21903,59 @@ SIMD_INTRIN_DEF(cleanup)
 /***************************
  * Operators
  ***************************/
-#line 881
+#line 880
 // Logical
 SIMD_INTRIN_DEF(and_b8)
 SIMD_INTRIN_DEF(or_b8)
 SIMD_INTRIN_DEF(xor_b8)
 SIMD_INTRIN_DEF(not_b8)
 // test cross vector's lanes
-#line 890
+#line 889
 SIMD_INTRIN_DEF(any_b8)
 
-#line 890
+#line 889
 SIMD_INTRIN_DEF(all_b8)
 
 
-#line 881
+#line 880
 // Logical
 SIMD_INTRIN_DEF(and_b16)
 SIMD_INTRIN_DEF(or_b16)
 SIMD_INTRIN_DEF(xor_b16)
 SIMD_INTRIN_DEF(not_b16)
 // test cross vector's lanes
-#line 890
+#line 889
 SIMD_INTRIN_DEF(any_b16)
 
-#line 890
+#line 889
 SIMD_INTRIN_DEF(all_b16)
 
 
-#line 881
+#line 880
 // Logical
 SIMD_INTRIN_DEF(and_b32)
 SIMD_INTRIN_DEF(or_b32)
 SIMD_INTRIN_DEF(xor_b32)
 SIMD_INTRIN_DEF(not_b32)
 // test cross vector's lanes
-#line 890
+#line 889
 SIMD_INTRIN_DEF(any_b32)
 
-#line 890
+#line 889
 SIMD_INTRIN_DEF(all_b32)
 
 
-#line 881
+#line 880
 // Logical
 SIMD_INTRIN_DEF(and_b64)
 SIMD_INTRIN_DEF(or_b64)
 SIMD_INTRIN_DEF(xor_b64)
 SIMD_INTRIN_DEF(not_b64)
 // test cross vector's lanes
-#line 890
+#line 889
 SIMD_INTRIN_DEF(any_b64)
 
-#line 890
+#line 889
 SIMD_INTRIN_DEF(all_b64)
 
 
@@ -21964,16 +21963,16 @@ SIMD_INTRIN_DEF(all_b64)
  * Conversions
  ***************************/
 // Convert mask vector to integer bitfield
-#line 900
+#line 899
 SIMD_INTRIN_DEF(tobits_b8)
 
-#line 900
+#line 899
 SIMD_INTRIN_DEF(tobits_b16)
 
-#line 900
+#line 899
 SIMD_INTRIN_DEF(tobits_b32)
 
-#line 900
+#line 899
 SIMD_INTRIN_DEF(tobits_b64)
 
 
@@ -22036,52 +22035,52 @@ NPY_CPU_DISPATCH_CURFX(simd_create_module)(void)
     if (PySIMDVectorType_Init(m)) {
         goto err;
     }
-    #line 965
+    #line 964
     if (PyModule_AddIntConstant(m, "nlanes_u8", npyv_nlanes_u8)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_s8", npyv_nlanes_s8)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_u16", npyv_nlanes_u16)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_s16", npyv_nlanes_s16)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_u32", npyv_nlanes_u32)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_s32", npyv_nlanes_s32)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_u64", npyv_nlanes_u64)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_s64", npyv_nlanes_s64)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_f32", npyv_nlanes_f32)) {
         goto err;
     }
     
-#line 965
+#line 964
     if (PyModule_AddIntConstant(m, "nlanes_f64", npyv_nlanes_f64)) {
         goto err;
     }

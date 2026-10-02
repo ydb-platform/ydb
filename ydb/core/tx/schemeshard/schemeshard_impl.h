@@ -31,6 +31,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -2214,7 +2215,17 @@ public:
     void InitRootShred();
     void RunRootShred();
 
+    // storage space state of the database's storage pools, reported by BS_CONTROLLER through the local NodeWarden
+    std::map<TPathId, std::set<TPathId>> DatabaseSpaceScopes; // database key -> hosted domains with this key
+    bool DatabaseSpaceSubscriptionsActive = false; // subscriptions are maintained once the schemeshard is active
+    struct TTxUpdateStorageSpaceState;
+    void UnsubscribeFromDatabaseSpace();
+    void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr& ev, const TActorContext& ctx);
+
 public:
+    // to be called when the set of hosted domains changes (subscribes to space state of the databases)
+    void UpdateDatabaseSpaceSubscriptions();
+
     void ChangeStreamShardsCount(i64 delta) override;
     void ChangeStreamShardsQuota(i64 delta) override;
     void ChangeStreamReservedStorageCount(i64 delta) override;

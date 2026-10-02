@@ -216,6 +216,9 @@ public:
 
     // Streaming queries
 
+    // Allow the initial checkpoint, then hold checkpoint creation until the returned callback is called.
+    std::function<void()> BlockCheckpointCreation();
+
     void WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound = std::nullopt);
 
     ui64 GetLastCheckpointSeqNo(const TString& checkpointId);

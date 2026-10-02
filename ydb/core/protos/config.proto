@@ -143,7 +143,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18 [default = true];
-    optional bool UseUnitedPool = 22;
+    optional bool UseUnitedPool = 22 [default = true];
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
@@ -3060,6 +3060,7 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
+    optional bool EnableWeightedDataChannelSelection = 77 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

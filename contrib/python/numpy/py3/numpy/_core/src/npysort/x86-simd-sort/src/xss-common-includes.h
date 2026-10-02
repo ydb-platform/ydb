@@ -74,24 +74,28 @@
 #define X86_SIMD_SORT_UNROLL_LOOP(num)
 #endif
 
+#define NETWORK_REVERSE_4LANES 0, 1, 2, 3
+#define NETWORK_REVERSE_8LANES 0, 1, 2, 3, 4, 5, 6, 7
+#define NETWORK_REVERSE_16LANES \
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+#define NETWORK_REVERSE_32LANES \
+    31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, \
+            13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+
+#if defined(XSS_USE_OPENMP) && defined(_OPENMP)
+#define XSS_COMPILE_OPENMP
+#error #include <omp.h>
+
+// Limit the number of threads to 16: emperically determined, can be probably
+// better tuned at a later stage
+X86_SIMD_SORT_INLINE int xss_get_num_threads()
+{
+    return std::min(16, (int)omp_get_max_threads());
+}
+#endif
+
 template <class... T>
 constexpr bool always_false = false;
-
-/*
- * Constants used in sorting 8 elements in a ZMM registers. Based on Bitonic
- * sorting network (see
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg)
- */
-// ZMM                  7, 6, 5, 4, 3, 2, 1, 0
-#define NETWORK_64BIT_1 4, 5, 6, 7, 0, 1, 2, 3
-#define NETWORK_64BIT_2 0, 1, 2, 3, 4, 5, 6, 7
-#define NETWORK_64BIT_3 5, 4, 7, 6, 1, 0, 3, 2
-#define NETWORK_64BIT_4 3, 2, 1, 0, 7, 6, 5, 4
-#define NETWORK_32BIT_1 14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1
-#define NETWORK_32BIT_3 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7
-#define NETWORK_32BIT_5 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-#define NETWORK_32BIT_6 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4
-#define NETWORK_32BIT_7 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8
 
 typedef size_t arrsize_t;
 
@@ -111,5 +115,9 @@ enum class simd_type : int { AVX2, AVX512 };
 
 template <typename vtype, typename T = typename vtype::type_t>
 X86_SIMD_SORT_INLINE bool comparison_func(const T &a, const T &b);
+
+struct float16 {
+    uint16_t val;
+};
 
 #endif // XSS_COMMON_INCLUDES

@@ -17,6 +17,11 @@ namespace {
 struct TAggregationTraits {
     TVector<TExprNode::TPtr> AggTraitsList;
     TVector<TInfoUnit> KeyColumns;
+
+    // GROUP BY keys alone still need an Aggregate: it emits one row per distinct key, like DISTINCT.
+    bool NeedsAggregate() const {
+        return !AggTraitsList.empty() || !KeyColumns.empty();
+    }
 };
 
 const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1", "some"};
@@ -933,7 +938,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
                                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg,
                                          const TVector<TVector<TInfoUnit>>& groupingSets, const TGroupingIndicators& groupingIndicators,
                                          TExprContext& ctx, TPositionHandle pos, bool additivePostAggMap = false) {
-    Y_ENSURE(groupingIndicators.empty() || (!groupingSets.empty() && !aggTraits.AggTraitsList.empty()),
+    Y_ENSURE(groupingIndicators.empty() || (!groupingSets.empty() && aggTraits.NeedsAggregate()),
              "GROUPING() is supported only for grouping sets over an aggregation");
 
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
@@ -947,7 +952,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
         resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, pos);
     }
     // Build Aggreegate.
-    if (!aggTraits.AggTraitsList.empty()) {
+    if (aggTraits.NeedsAggregate()) {
         resultExpr = BuildAggregate(resultExpr, aggTraits.AggTraitsList, aggTraits.KeyColumns, /*distinct=*/false, ctx, pos);
         if (!groupingSets.empty()) {
             // Emit grouping sets.
@@ -1617,8 +1622,9 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
     TExprNode::TPtr newInput;
 
-    if (TCoMap::Match(tableEffectInput.Get()) && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
-        TCoMap map(tableEffectInput);
+    if ((TCoMap::Match(tableEffectInput.Get()) || TCoOrderedMap::Match(tableEffectInput.Get()))
+        && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
+        TCoMapBase map(tableEffectInput);
         auto root = map.Input().Cast<TKqpOpRoot>();
 
         auto lambda = map.Lambda();
@@ -1736,7 +1742,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
                 .Columns(upsert.Columns())
                 .ReturningColumns(upsert.ReturningColumns())
                 .IsBatch(upsert.IsBatch())
-                .DefaultColumns().Build()
+                .DefaultColumns(upsert.DefaultColumns())
                 .Settings(upsert.Settings())
                 .OnConflict().Build()
             .Build()
@@ -2209,7 +2215,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         bool additivePostAggMap = false;
         if (!windows.empty()) {
             ProcessWindowCalls(windows, expressionsMapPostAgg, expressionsMapPostWindow, usedWindowsInOrder, uniqueAggColumnId, ctx, node->Pos());
-            additivePostAggMap = !usedWindowsInOrder.empty() && !hasRollup && aggregationTraits.AggTraitsList.empty() &&
+            additivePostAggMap = !usedWindowsInOrder.empty() && !hasRollup && !aggregationTraits.NeedsAggregate() &&
                                  distinctAggregationTraitsPostAggregate.AggTraitsList.empty();
             if (!additivePostAggMap) {
                 TVector<TInfoUnit> alreadyProducedColumns = aggregationTraits.KeyColumns;

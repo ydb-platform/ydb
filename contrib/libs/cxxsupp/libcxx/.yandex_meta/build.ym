@@ -72,6 +72,29 @@ rm src/CMakeLists.txt include/CMakeLists.txt
 rm -r include/__cxx03
 
 sysincls ${SRC} ${SYSINCLS}/stl-to-libcxx.yml
+
+# Generate the module template using upstream's header information.
+python3 -B ${RESOURCES}/libcxx/utils/generate_libcxx_cppm_in.py std
+mkdir std_module
+mv ${RESOURCES}/libcxx/modules/std.cppm.in std_module/std.cppm
+rsync --recursive ${RESOURCES}/libcxx/modules/std std_module/
+
+# Expand the template with LIBCXX_MODULE_STD_SOURCES from upstream CMake.
+python3 - std_module/std.cppm ${RESOURCES}/libcxx/modules/CMakeLists.txt <<'PY'
+import pathlib
+import re
+import sys
+
+module = pathlib.Path(sys.argv[1])
+cmake = pathlib.Path(sys.argv[2]).read_text()
+sources = re.search(r"set\(LIBCXX_MODULE_STD_SOURCES\s+(.*?)\s*\)", cmake, re.DOTALL)
+if sources is None:
+    raise RuntimeError("LIBCXX_MODULE_STD_SOURCES not found")
+
+includes = "".join(f'#include "{source}"\n' for source in sources.group(1).split())
+module.write_text(module.read_text().replace("@LIBCXX_MODULE_STD_INCLUDE_SOURCES@", includes))
+PY
+
 {% endblock %}
 
 

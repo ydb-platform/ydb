@@ -4,6 +4,8 @@
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
 #include <ydb/core/audit/audit_log_service.h>
@@ -239,6 +241,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -625,10 +628,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
+    setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
+        .MemoryBytes = 8ull << 20,
+        .MaxLines = 4096,
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
+    }));
+
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
-    setup->AsyncFrameCacheSizeBytes = systemConfig.GetAsyncFrameCacheSizeBytes();
+    setup->RegisterSubSystem(std::make_unique<NActors::TAsyncFrameCache>(systemConfig.GetAsyncFrameCacheSizeBytes()));
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");

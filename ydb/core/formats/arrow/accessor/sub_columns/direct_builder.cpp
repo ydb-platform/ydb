@@ -144,7 +144,7 @@ TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf
         // The input array may be released before the next chunk is processed.
         Storage.emplace_back(key.data(), key.size());
         const TStringBuf storedKey(Storage.back().data(), Storage.back().size());
-        it = StorageHash.emplace(TStorageAddress(currentPrefix, storedKey), BuildString(currentPrefix, storedKey)).first;
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, storedKey), BuildSubcolumnName(currentPrefix, storedKey)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

@@ -190,6 +190,19 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
+// Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
+struct TMoveDataState {
+    TActorId HiveSender;
+    THashSet<ui32> TargetGroups;
+    bool Active = false;
+    // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
+    bool VacuumCompleted = false;
+    // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
+    ui64 ReportedRejections = 0;
+    // The driver restarts the actualizer for the new set before any gate check may pass.
+    bool TargetsChanged = false;
+};
+
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
@@ -347,7 +360,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
     // Returns a requested group that is still a channel's latest entry, i.e. still taking writes.
-    std::optional<ui32> FindLiveMoveDataGroup(const THashSet<ui32>& groups) const;
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);
@@ -548,19 +560,6 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
-
-    // Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
-    struct TMoveDataState {
-        TActorId HiveSender;
-        THashSet<ui32> TargetGroups;
-        bool Active = false;
-        // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
-        bool VacuumCompleted = false;
-        // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
-        ui64 ReportedRejections = 0;
-        // The driver restarts the actualizer for the new set before any gate check may pass.
-        bool TargetsChanged = false;
-    };
 
     TMoveDataState MoveDataState;
     // Owns the move; the tablet records requests, starts the vacuum leg and pokes it.

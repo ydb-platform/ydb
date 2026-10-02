@@ -60,6 +60,7 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/object_counter.h>
+#include <util/generic/size_literals.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -911,14 +912,6 @@ void TColumnShard::SetupMetadata() {
     StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight);
 }
 
-void TColumnShard::SetupMoveDataMetadata() {
-    if (!MoveDataState.Active || !HasIndex() || MoveDataMetadataRequestsInFlight->Val()) {
-        return;
-    }
-    StartMetadataRequests(
-        GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MoveDataTaskSubscription, MoveDataMetadataRequestsInFlight);
-}
-
 bool TColumnShard::SetupTtl() {
     const bool ttlEnabled = AppDataVerified().ColumnShardConfig.GetTTLEnabled() &&
                             NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL);
@@ -930,7 +923,7 @@ bool TColumnShard::SetupTtl() {
     }
     Counters.GetCSCounters().OnSetupTtl();
 
-    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
+    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : 512_MB;
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
         {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::ExceptMoveData);
 
@@ -942,19 +935,6 @@ bool TColumnShard::SetupTtl() {
     }
     StartTtlChanges(std::move(indexChanges));
     return true;
-}
-
-void TColumnShard::SetupMoveDataRewrites() {
-    if (!MoveDataState.Active || !HasIndex()) {
-        return;
-    }
-    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
-    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
-        {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::MoveDataOnly);
-    if (indexChanges.empty()) {
-        return;
-    }
-    StartTtlChanges(std::move(indexChanges));
 }
 
 void TColumnShard::StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges) {

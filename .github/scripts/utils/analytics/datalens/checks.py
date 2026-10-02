@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 from store import collect_texts
@@ -10,6 +11,31 @@ from store import collect_texts
 
 IN_PROGRESS_COALESCE = re.compile(r"COALESCE\s*\([^)]*in_progress", re.I)
 RUN_LABEL_DATE = "Unicode::Substring(CAST(s.started_at AS Utf8), 0, 10)"
+
+
+def _walk_nodes(node, found):
+    if isinstance(node, dict):
+        if node.get("id") == "seljobstatus":
+            found.append(node)
+        for value in node.values():
+            _walk_nodes(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _walk_nodes(item, found)
+
+
+def _seljobstatus_default(dash_text):
+    try:
+        payload = json.loads(dash_text)
+    except ValueError:
+        return None
+    widgets = []
+    _walk_nodes(payload, widgets)
+    for widget in widgets:
+        source = widget.get("source") or {}
+        if "defaultValue" in source:
+            return source["defaultValue"]
+    return None
 
 
 def check_texts(texts=None):
@@ -64,10 +90,9 @@ def check_texts(texts=None):
 
     dash = (texts.get("dashboard") or {}).get("dashboard") or ""
     if dash:
-        if '"job_conclusion"' in dash and "in_progress" in dash and '"defaultValue": ["success", "failure"]' not in dash:
-            # default may be stored under seljobstatus; require success+failure somewhere nearby
-            if "seljobstatus" in dash and "success" not in dash:
-                errors.append("dashboard: job status selector default must be success+failure")
+        defaults = _seljobstatus_default(dash)
+        if defaults is not None and list(defaults) != ["success", "failure"]:
+            errors.append("dashboard: job status selector default must be success+failure")
         if IN_PROGRESS_COALESCE.search(dash):
             errors.append("dashboard: do not invent in_progress via COALESCE")
 

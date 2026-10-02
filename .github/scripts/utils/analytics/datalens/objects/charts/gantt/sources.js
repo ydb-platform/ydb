@@ -80,6 +80,9 @@ if (runId) {
         where.push({column: 'build_preset', operation: 'IN', values: presets});
     }
 }
+if (!runId && jobNames.length) {
+    where.push({column: 'job_name', operation: 'IN', values: jobNames});
+}
 if (!runId && statuses.length) {
     where.push({column: 'job_conclusion', operation: 'IN', values: statuses});
 }
@@ -110,28 +113,9 @@ const source = buildSource({
     limit: maxRows,
 });
 
-const filterSource = Object.assign({}, buildSource({
-    datasetId: datasetId,
-    columns: [
-        'branch',
-        'pr_number',
-        'run_id',
-        'run_attempt',
-        'commit',
-        'workflow',
-        'build_preset',
-        'job_conclusion',
-        'event_date',
-        'start_ts',
-    ],
-    order_by: [{direction: 'DESC', column: 'start_ts'}],
-    limit: 60000,
-}), {ui: true});
-
 console.log('[sources] where', where);
 console.log('[sources] built source keys', source && Object.keys(source));
 
 module.exports = {
     data: source,
-    filters: filterSource,
 };

@@ -127,6 +127,10 @@ def update_dashboard(token, org_id, entry, mode, rev_id=None, workbook_id=None, 
 
 
 def publish_dashboard(token, org_id, entry, workbook_id=None, dashboard_id=None):
+    """Save creates a draft. Publish must use that draft revId."""
     saved = update_dashboard(token, org_id, entry, "save")
-    published = update_dashboard(token, org_id, entry, "publish")
-    return {"save": saved, "publish": published, "revId": walk_rev_id(published) or walk_rev_id(saved)}
+    draft = walk_rev_id(saved)
+    if not draft:
+        raise DataLensError("updateDashboard", 0, "save returned no revId: %s" % json.dumps(saved)[:400])
+    published = update_dashboard(token, org_id, entry, "publish", rev_id=draft)
+    return {"save": saved, "publish": published, "revId": draft}

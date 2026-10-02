@@ -151,7 +151,7 @@ def cmd_publish(args, manifest):
         for item in errors:
             print("  %s" % item, file=sys.stderr)
         return 1
-    token = iam_token()
+    token = iam_token() if args.apply else None
     org = manifest["org_id"]
     workbook = manifest["workbook_id"]
     for name in object_names(manifest, args.names):

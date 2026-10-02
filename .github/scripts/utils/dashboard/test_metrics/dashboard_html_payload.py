@@ -54,10 +54,9 @@ def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
 def _describe_distribution(values: list[float]) -> dict[str, float]:
     vals = [float(v or 0.0) for v in values]
     if not vals:
-        return {"max": 0.0, "p90": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
+        return {"max": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
     return {
         "max": float(max(vals)),
-        "p90": _percentile(vals, 0.90),
         "p95": _percentile(vals, 0.95),
         "median": _percentile(vals, 0.5),
         "samples": float(len(vals)),
@@ -75,7 +74,7 @@ def _numeric_series(values: Any) -> list[float]:
 
 
 def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
-    """max / p90 / p95 / median of /proc samples (host), not the stacked test model."""
+    """max / p95 / median of /proc samples (host), not the stacked test model."""
     if not resources_overlay:
         return {}
     series = {

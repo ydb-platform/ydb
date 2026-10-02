@@ -508,10 +508,12 @@ public:
 
         ui64 used = GetProperty(properties, "generic.physical_memory_used");
         ui64 caches = GetCachesSize(properties);
+        ui64 pageHeapFree = GetProperty(properties, "tcmalloc.page_heap_free");
 
         return {
             used - Min(used, caches),
-            caches
+            caches,
+            Min(pageHeapFree, caches)
         };
     }
 };

@@ -45,8 +45,26 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
                               join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly";
     const bool canPushLeft = join->JoinKind == "Inner" || join->JoinKind == "Cross" || join->JoinKind == "LeftSemi";
 
+    TJoinIUs joinConditions;
     for (const auto& filter : join->JoinFilters) {
-        if (canPushLeft && filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(leftIUs)) {
+        // Check whether we can push this filter into join conditions
+        if(filter.MaybeMaybeExprEquiJoinCondition()) {
+            TEquiJoinCondition cond(filter);
+            if (leftIUs.Contains(cond.GetLeftIU()) && rightIUs.Contains(cond.GetRightIU())) {
+                TJoinKey key(cond.GetLeftIU(), cond.GetRightIU());
+                key.FirstExpression = cond.GetLeftExpression();
+                key.SecondExpression = cond.GetRightExpression();
+                joinConditions.Add(key);
+                continue;
+            } else if (rightIUs.Contains(cond.GetLeftIU()) && leftIUs.Contains(cond.GetRightIU())) {
+                TJoinKey key(cond.GetRightIU(), cond.GetLeftIU());
+                key.FirstExpression = cond.GetRightExpression();
+                key.SecondExpression = cond.GetLeftExpression();
+                joinConditions.Add(key);
+                continue;
+            }
+        }
+        else if (canPushLeft && filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(leftIUs)) {
             pushLeft.push_back(filter);
         } else if (canPushRight && filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(rightIUs)) {
             pushRight.push_back(filter);
@@ -55,8 +73,12 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    if (!pushLeft.size() && !pushRight.size()) {
+    if (!joinConditions.Items().size() && !pushLeft.size() && !pushRight.size()) {
         return false;
+    }
+
+    for (auto & c : joinConditions.Items()){
+        join->JoinKeys.Add(c);
     }
 
     // When join conditions have been set for the join, replicate constant conditions from left/right side
@@ -72,7 +94,7 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
             if (expr.MaybeConstantCondition()) {
                 auto iu = *expr.GetInputIUs().begin();
                 if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
-                    {return iu == cond.first;}); it != join->JoinKeys.Items().end()) {
+                    {return iu == cond.First && !cond.ContainsExpression();}); it != join->JoinKeys.Items().end()) {
                     auto rightExpr = expr.ApplyRenames({{iu, it->second}});
                     pushConstantCondsRight.push_back(rightExpr);
                 }
@@ -83,7 +105,7 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
             if (expr.MaybeConstantCondition()) {
                 auto iu = *expr.GetInputIUs().begin();
                 if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
-                    {return iu == cond.second;}); it != join->JoinKeys.Items().end()) {
+                    {return iu == cond.Second && !cond.ContainsExpressions();}); it != join->JoinKeys.Items().end()) {
                     auto leftExpr = expr.ApplyRenames({{iu, it->first}});
                     pushConstantCondsLeft.push_back(leftExpr);
                 }

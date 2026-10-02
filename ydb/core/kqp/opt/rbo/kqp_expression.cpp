@@ -690,6 +690,35 @@ TInfoUnitId TEquiJoinCondition::GetRightIU() const {
     return *RightIUs.begin();
 }
 
+std::optional<TExpression> TEquiJoinCondition::GetLeftExpression() {
+    return GetExpressions().first;
+}
+
+std::optional<TExpression> TEquiJoinCondition::GetRightExpression() {
+    return GetExpressions().second;
+}
+
+std::pair<std::optional<TExpression>, std::optional<TExpression>> TEquiJoinCondition::GetExpressions() {
+    if (!IncludesExpressions) {
+        return make_pair(std::optional<TExpression>{}, std::optional<TExpression>{});
+    }
+
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+    std::optional<TExpression> leftExpr;
+    std::optional<TExpression> rightExpr;
+
+    Y_ENSURE(TestAndExtractEqualityPredicate(GetExpressionBody(), left, right));
+    const auto row = Expr.Node->Head().HeadPtr();
+    if (!IsRowMember(*left, *row)) {
+        leftExpr = TExpression(left);
+    }
+    if (!IsRowMember(*right, *row)) {
+        rightExpr = TExpression(right);
+    }
+    return std::make_pair(leftExpr, rightExpr);
+}
+
 bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& replacements,
     TMappedIUs<TExprNode::TPtr>& expressions)
 {

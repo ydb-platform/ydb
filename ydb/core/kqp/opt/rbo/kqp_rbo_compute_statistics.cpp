@@ -606,10 +606,10 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
-        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, leftKey));
-        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, rightKey));
-        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = equalNulls;
+    for (const auto& key : JoinKeys.Items()) {
+        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, key.first));
+        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, key.second));
+        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = key.EqualNulls;
     }
 
     TVector<TString> leftAliases;
@@ -681,8 +681,8 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         } else if (shuffleBy) {
             Props.Metadata->ShuffledByColumns = *shuffleBy;
         } else {
-            for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
-                Props.Metadata->ShuffledByColumns.Append(rightSided ? rightKey : leftKey);
+            for (const auto& key : JoinKeys.Items()) {
+                Props.Metadata->ShuffledByColumns.Append(rightSided ? key.second : key.first);
             }
         }
     }
@@ -704,10 +704,10 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
-        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, leftKey));
-        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, rightKey));
-        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = equalNulls;
+    for (const auto& key : JoinKeys.Items()) {
+        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, key.first));
+        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, keys.second));
+        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = key.EqualNulls;
     }
 
     TVector<TString> leftAliases;

@@ -61,12 +61,14 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
     NYql::TTypeAnnotationContext& typeCtx,
     const TColumnLineage& lineage,
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
-    const TVector<TCBOLeaf>& leaves);
+    const TVector<TCBOLeaf>& leaves,
+    THashMap<TInfoUnitId, TExpression>& joinExpressions);
 
 TIntrusivePtr<IOperator> ConvertOptimizedTree(
     std::shared_ptr<IBaseOptimizerNode> tree,
     const TVector<TCBOLeaf>& leaves,
-    TPositionHandle pos);
+    TPositionHandle pos,
+    const THashMap<TInfoUnitId, TExpression>& joinExpressions);
 
 std::string FormatJoinTree(const char* title, const std::shared_ptr<IBaseOptimizerNode>& joinTree);
 

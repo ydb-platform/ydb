@@ -440,7 +440,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
-    if constexpr (Protocol == EProtocol::Topic) {
+    if constexpr (!UseMigrationProtocol) {
         Request->CountResourcePath(event->Request.init_request().path());
     }
 

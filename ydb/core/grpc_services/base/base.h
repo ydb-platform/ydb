@@ -537,8 +537,6 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
-<<<<<<< HEAD
-=======
 
 protected:
     virtual void CountRequestBodyPaths() const {}
@@ -547,9 +545,6 @@ protected:
 private:
     mutable bool RelativeDatabaseCounted_ = false;
     mutable bool RelativeResourceCounted_ = false;
-    TMaybe<TString> EffectiveDatabaseName_;
-    bool PathNormalizationInitialized_ = false;
->>>>>>> ed1f2be23f6 ([Relative paths 1/5] Add usage metrics and feature flag (#54693))
 };
 
 // Request context

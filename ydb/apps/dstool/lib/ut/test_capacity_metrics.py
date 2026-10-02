@@ -8,9 +8,10 @@ from ydb.apps.dstool.lib import dstool_cmd_pool_list as pool_list
 from ydb.apps.dstool.lib import dstool_cmd_vdisk_list as vdisk_list
 
 
-@pytest.mark.parametrize('command, use_grpc', [(vdisk_list, False), (group_list, False),
-                                              (pool_list, False), (group_list, True)],
-                         ids=['vdisk', 'group', 'pool', 'group-grpc'])
+@pytest.mark.parametrize(
+    'command, use_grpc',
+    [(vdisk_list, False), (group_list, False), (pool_list, False), (group_list, True)],
+    ids=['vdisk', 'group', 'pool', 'group-grpc'])
 @pytest.mark.parametrize('group_size_in_units', [0, 1, 3, 20])
 @pytest.mark.parametrize('expected_slot_size', [0, 101])
 @pytest.mark.parametrize('slot_size_in_units', [0, 2, 5])

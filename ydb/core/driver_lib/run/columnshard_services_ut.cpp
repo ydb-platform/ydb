@@ -29,8 +29,9 @@ const NConveyorComposite::NConfig::TWorkersPool& Pool(
         if (pool.GetName() != poolName) {
             continue;
         }
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSchedulingMode(),
-            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable);
+        UNIT_ASSERT_C(pool.GetSchedulingMode() ==
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable,
+            pool.DebugString());
         for (const auto& link : pool.GetLinks()) {
             if (link.GetCategory() == category) {
                 return pool;
@@ -68,8 +69,9 @@ Y_UNIT_TEST_SUITE(ColumnShardServiceConfiguration) {
             }
         }
         UNIT_ASSERT(managed);
-        UNIT_ASSERT_VALUES_EQUAL(managed->GetSchedulingMode(),
-            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable);
+        UNIT_ASSERT_C(managed->GetSchedulingMode() ==
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable,
+            managed->DebugString());
         UNIT_ASSERT(!managed->GetWorkersCountInfo().GetCount());
         UNIT_ASSERT(managed->GetWorkersCountInfo().GetFraction());
         UNIT_ASSERT_DOUBLES_EQUAL(*managed->GetWorkersCountInfo().GetFraction(), 1.0, 1e-9);

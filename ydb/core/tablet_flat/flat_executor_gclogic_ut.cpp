@@ -474,12 +474,11 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(!env.Reply(0, NKikimrProto::ERROR));
         UNIT_ASSERT(env.Reply(1));
         UNIT_ASSERT(env.Cuts.empty());
-        env.Snapshot();
         UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        // Retry alone must resume the confirmed cut on an idle tablet.
         env.Execute([&](const TActorContext& ctx) {
             env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
         });
-        env.Snapshot();
         UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 4);
         env.Reply(2);
         UNIT_ASSERT(env.Cuts.empty());
@@ -554,8 +553,16 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             if (softGcPending) {
                 UNIT_ASSERT(!env.Collects[2].Hard);
                 UNIT_ASSERT(env.Cuts.empty());
-                env.Reply(2);
-                UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 3);
+                UNIT_ASSERT(env.Reply(2, NKikimrProto::ERROR));
+                // A failed soft batch must retain confirmation across its retry.
+                env.Execute([&](const TActorContext& ctx) {
+                    env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
+                });
+                UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 4);
+                UNIT_ASSERT(!env.Collects[3].Hard);
+                UNIT_ASSERT(env.Cuts.empty());
+                env.Reply(3);
+                UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 4);
             }
             UNIT_ASSERT_VALUES_EQUAL_C(env.Cuts.size(), 1,
                 "a confirmed cut without hard barriers must not wait for another GC reply");

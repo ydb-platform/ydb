@@ -3426,7 +3426,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    // GC completion may send the pending hard barriers; replies must come here.
+    // Deferred hard GC uses this context as its sender, so replies must return to the executor.
     if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, SelfCtx())) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }

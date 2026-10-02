@@ -17,6 +17,7 @@ SRCS(
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
+    kqp_unsafe_truncate_executer.cpp
     max_tasks_graph.cpp
     shard_key_ranges.cpp
 )

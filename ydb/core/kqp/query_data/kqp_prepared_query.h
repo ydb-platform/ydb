@@ -120,6 +120,10 @@ public:
         return Proto->GetTables();
     }
 
+    const NKqpProto::TKqpUnsafeTruncateOperation& GetUnsafeTruncate() const {
+        return Proto->GetUnsafeTruncate();
+    }
+
     const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
         return Proto->GetSchemeOperation();
     }

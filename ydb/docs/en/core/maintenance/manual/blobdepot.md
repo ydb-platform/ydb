@@ -20,7 +20,7 @@ Virtual groups are also created inside Storage Pools, like physical groups, but 
 
 ### How to run {#vg-create-params}
 
-A virtual group is created through BS\_CONTROLLER by sending a special command. The virtual group creation command is idempotent, so to avoid creating extra BlobDepots, each virtual group is assigned a name. The name must be unique within the entire cluster. If the command is executed again, an error will be returned with the field filled in `Already: true` and the number of the previously created virtual group.
+A virtual group is created through BS_CONTROLLER by sending a special command. The virtual group creation command is idempotent, so to avoid creating extra BlobDepots, each virtual group is assigned a name. The name must be unique within the entire cluster. If the command is executed again, an error will be returned with the field filled in `Already: true` and the number of the previously created virtual group.
 
 ```bash
 dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037968897 --storage-pool-name=/Root:virtual --log-channel-sp=/Root:ssd --data-channel-sp=/Root:ssd*8
@@ -28,27 +28,27 @@ dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037
 
 Command line parameters:
 
-* --name unique name for the virtual group (or several virtual groups with similar parameters);
-* --hive-id=N number of the Hive tablet that will manage this BlobDepot; you must specify the Hive of the tenant within which BlobDepot is running;
-* --storage-pool-name=POOL\_NAME name of the Storage Pool within which BlobDepot must be created;
-* --storage-pool-id=BOX:POOL alternative `--storage-pool-name`in which you can specify an explicit numeric pool identifier;
-* --log-channel-sp=POOL\_NAME name of the pool in which channel 0 of the BlobDepot tablet will be placed;
-* --snapshot-channel-sp=POOL\_NAME name of the pool in which channel 0 of the BlobDepot tablet will be placed; if not specified, the value from --log-channel-sp is used;
-* --data-channel-sp=POOL\_NAME[\*COUNT] name of the pool in which data channels are placed; if the COUNT parameter is specified (after the "asterisk" sign), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for BlobDepot in virtual group mode (64..250) to use storage most efficiently;
-* --wait wait for the creation of BlobDepots to complete; if this option is not specified, the command completes immediately after responding to the BlobDepot creation request, without waiting for the creation and launch of the tablets themselves.
+* `--name` unique name for the virtual group (or several virtual groups with similar parameters);
+* `--hive-id=N` number of the Hive tablet that will manage this BlobDepot; you must specify the Hive of the tenant within which BlobDepot is running;
+* `--storage-pool-name=POOL_NAME` name of the Storage Pool within which BlobDepot must be created;
+* `--storage-pool-id=BOX:POOL` alternative to `--storage-pool-name` in which you can specify an explicit numeric pool identifier;
+* `--log-channel-sp=POOL_NAME` name of the pool in which channel 0 of the BlobDepot tablet will be placed;
+* `--snapshot-channel-sp=POOL_NAME` name of the pool in which channel 0 of the BlobDepot tablet will be placed; if not specified, the value from `--log-channel-sp` is used;
+* `--data-channel-sp=POOL_NAME[*COUNT]` name of the pool in which data channels are placed; if the COUNT parameter is specified (after the "asterisk" sign), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for BlobDepot in virtual group mode (64..250) to use storage most efficiently;
+* `--wait` wait for the creation of BlobDepots to complete; if this option is not specified, the command completes immediately after responding to the BlobDepot creation request, without waiting for the creation and launch of the tablets themselves.
 
 ### How to verify that everything has started {#vg-check-running}
 
 You can view the result of creating a virtual group in the following ways:
 
-* via the BS\_CONTROLLER monitoring page;
+* via the BS_CONTROLLER monitoring page;
 * via the command `dstool group list --virtual-groups-only`.
 
-In both cases, you need to monitor creation via the VirtualGroupName field, which must match what was passed in the --name parameter. If the command `dstool group virtual create` completed successfully, the virtual group unconditionally appears in the list of groups, but the VirtualGroupState field can take one of the following values:
+In both cases, you need to monitor creation via the VirtualGroupName field, which must match what was passed in the `--name` parameter. If the command `dstool group virtual create` completed successfully, the virtual group unconditionally appears in the list of groups, but the VirtualGroupState field can take one of the following values:
 
 * NEW — the group is waiting for initialization (the tablet is being created via Hive, configured, and launched);
 * WORKING — the group is created and running, ready to process user requests;
-* CREATE\_FAILED — an error occurred during group creation, a text description of which can be seen in the ErrorReason field.
+* CREATE_FAILED — an error occurred during group creation, a text description of which can be seen in the ErrorReason field.
 
 ```bash
 $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
@@ -74,15 +74,15 @@ When BlobDepot operates in virtual group mode, agents (BlobDepotAgent) are used 
 
 The following mechanisms are provided for diagnosing BlobDepot health:
 
-* [BS\_CONTROLLER monitoring page](#diag-bscontroller);
+* [BS_CONTROLLER monitoring page](#diag-bscontroller);
 * [BlobDepot monitoring page](#diag-blobdepot);
 * [internal viewer](#diag-viewer);
 * [event log](#diag-log);
 * [charts](#diag-sensors).
 
-### BS\_CONTROLLER monitoring page {#diag-bscontroller}
+### BS_CONTROLLER monitoring page {#diag-bscontroller}
 
-On the BS\_CONTROLLER monitoring page there is a special Virtual groups tab that shows all groups that use BlobDepot:
+On the BS_CONTROLLER monitoring page there is a special Virtual groups tab that shows all groups that use BlobDepot:
 
 ![Virtual groups](_assets/virtual-groups.png "Virtual groups")
 
@@ -94,10 +94,10 @@ GroupId | Group number.
 StoragePoolName | Name of the pool in which the group is located.
 Name | Name of the virtual group; it is unique across the entire cluster. For decommissioned groups, this will be null.
 BlobDepotId | Number of the BlobDepot tablet responsible for serving this group.
-State | [BlobDepot state](#vg-check-running); can be NEW, WORKING, CREATED\_FAILED.
+State | [BlobDepot state](#vg-check-running); can be NEW, WORKING, CREATE_FAILED.
 HiveId | Number of the Hive tablet within which the specified BlobDepot was created.
-ErrorReason | When the state is CREATE\_FAILED, contains a text description of the reason for the creation error.
-DecommitStatus | [Group decommission state](blobdepot_decommit.md#decommit-check-running); can be NONE, PENDING, IN\_PROGRESS, DONE.
+ErrorReason | When the state is CREATE_FAILED, contains a text description of the reason for the creation error.
+DecommitStatus | [Group decommission state](blobdepot_decommit.md#decommit-check-running); can be NONE, PENDING, IN_PROGRESS, DONE.
 
 ### BlobDepot monitoring page {#diag-blobdepot}
 
@@ -167,7 +167,7 @@ The TotalStoredTrashSize and InFlightTrashSize metrics are formed from this tabl
 
 ![barriers tab](_assets/blobdepot-barriers.png "barriers tab")
 
-The barriers table contains information about client barriers passed to BlobDepot. It consists of the columns "tablet id" (tablet number), "channel" (channel number for which the barrier is recorded), as well as barrier values: "soft" and "hard". The value has the format gen:counter => collect\_gen:collect\_step, where gen is the tablet generation number in which this barrier was set, counter is the sequence number of the garbage collection command, collect\_gen:collect\_step is the barrier value (all blobs whose generation and step within the generation are less than or equal to the specified barrier are deleted).
+The barriers table contains information about client barriers passed to BlobDepot. It consists of the columns "tablet id" (tablet number), "channel" (channel number for which the barrier is recorded), as well as barrier values: "soft" and "hard". The value has the format gen:counter => collect_gen:collect_step, where gen is the tablet generation number in which this barrier was set, counter is the sequence number of the garbage collection command, collect_gen:collect_step is the barrier value (all blobs whose generation and step within the generation are less than or equal to the specified barrier are deleted).
 
 #### blocks {#mon-blocks}
 
@@ -178,7 +178,6 @@ The blocks table contains a list of client tablet locks and consists of the colu
 #### storage {#mon-storage}
 
 ![storage tab](_assets/blobdepot-storage.png "storage tab")
-
 
 The storage table shows statistics on stored data for each group in which BlobDepot stores data. This table contains the following columns:
 
@@ -204,11 +203,11 @@ In the Storage section, you can see virtual groups that work through BlobDepot. 
 
 The BlobDepot tablet writes events to the log with the following component names:
 
-* BLOB\_DEPOT — the BlobDepot tablet component.
-* BLOB\_DEPOT\_AGENT — the BlobDepot agent component.
-* BLOB\_DEPOT\_TRACE — a special component for debug tracing of all events related to data.
+* BLOB_DEPOT — the BlobDepot tablet component.
+* BLOB_DEPOT_AGENT — the BlobDepot agent component.
+* BLOB_DEPOT_TRACE — a special component for debug tracing of all events related to data.
 
-BLOB\_DEPOT and BLOB\_DEPOT\_AGENT are output as structured records with fields that allow identifying the BlobDepot and the group it serves. For BLOB\_DEPOT, this field is Id and has the format {TabletId:GroupId}:Generation, where TabletId is the BlobDepot tablet number, GroupId is the number of the group it serves, and Generation is the generation in which the running BlobDepot writes messages to the log. For BLOB\_DEPOT\_AGENT, this field is called AgentId and has the format {TabletId:GroupId}.
+BLOB_DEPOT and BLOB_DEPOT_AGENT are output as structured records with fields that allow identifying the BlobDepot and the group it serves. For BLOB_DEPOT, this field is Id and has the format {TabletId:GroupId}:Generation, where TabletId is the BlobDepot tablet number, GroupId is the number of the group it serves, and Generation is the generation in which the running BlobDepot writes messages to the log. For BLOB_DEPOT_AGENT, this field is called AgentId and has the format {TabletId:GroupId}.
 
 At the DEBUG level, most events occurring both on the tablet side and on the agent side will be written to the log. This mode is used for debugging and is not recommended in production environments due to the large number of generated events.
 

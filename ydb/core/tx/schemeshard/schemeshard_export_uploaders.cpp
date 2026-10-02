@@ -423,7 +423,14 @@ public:
     void Bootstrap() {
         TString error;
         if (!BuildCreateTableScheme(Context, Scheme, error)) {
-            return Finish(false, error);
+            YDB_LOG_WARN("Failed to build CREATE TABLE SQL, export will continue without it",
+                {"self", this->SelfId()},
+                {"exportId", ExportId},
+                {"itemIdx", ItemIdx},
+                {"tablePath", Context.TablePath},
+                {"error", error},
+            );
+            return Finish(true, {});
         }
 
         const TString createTableFileName = NYdb::NDump::NFiles::CreateTable().FileName;

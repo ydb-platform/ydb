@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import re
+import shlex
 import sys
 import zlib
 from datetime import datetime, timezone
@@ -67,8 +68,13 @@ RUN_SUITE_SOLE_RE = re.compile(
     r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)"
 )
 def _shell_escape(s: str) -> str:
-    """Escape for use inside double-quoted shell argument (e.g. jq --arg x \"...\")."""
-    return s.replace("\\", "\\\\").replace('"', '\\"')
+    """Escape for use inside a double-quoted shell argument (jq --arg x \"...\")."""
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
 
 
 def _default_repo_root() -> Optional[Path]:
@@ -253,8 +259,6 @@ def parse_report_chunks(
 ) -> tuple[
     dict[tuple[str, Optional[str], int], dict[str, Any]],
     dict[str, dict[str, dict[str, int]]],
-    dict[str, dict[str, set[Any]]],
-    dict[str, dict[Any, int]],
     dict[tuple[str, Optional[str], int], int],
     dict[str, int],
     dict[str, float],
@@ -267,9 +271,6 @@ def parse_report_chunks(
     results = report.get("results", []) if isinstance(report, dict) else []
     chunks: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     report_status_by_suite: dict[str, dict[str, dict[str, int]]] = {}
-    report_test_fail_chunk_hids_by_suite: dict[str, dict[str, set[Any]]] = defaultdict(
-        lambda: {"error_hids": set(), "timeout_hids": set()}
-    )
     muted_test_chunk_hids: set[Any] = set()
     issues_summary: dict[str, int] = {
         "failed_total": 0,
@@ -350,12 +351,6 @@ def parse_report_chunks(
                 issues_summary["regular"] += 1
                 if muted:
                     issues_summary["regular_muted"] += 1
-            chunk_hid = item.get("chunk_hid")
-            if chunk_hid is not None:
-                if timeout:
-                    report_test_fail_chunk_hids_by_suite[suite]["timeout_hids"].add(chunk_hid)
-                elif failedish and not muted:
-                    report_test_fail_chunk_hids_by_suite[suite]["error_hids"].add(chunk_hid)
         elif bucket_key == "chunks" and not is_suite_row:
             if status_u in {"SKIP", "SKIPPED"}:
                 suite_chunk_issues_summary["skipped"] += 1
@@ -400,8 +395,25 @@ def parse_report_chunks(
         # Use suite_raw as chunk key so partitioned suites (part0, part1, ...) keep distinct metrics.
         parsed_chunk_rows.append((suite_raw, group, idx, meta))
 
+    def _finish_sec(row: dict[str, Any]) -> Optional[float]:
+        raw_ts = row.get("suite_finish_timestamp")
+        try:
+            return float(raw_ts) if raw_ts is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    duplicate_chunk_rows = 0
     for suite_raw, group, idx, meta in parsed_chunk_rows:
-        chunks[(suite_raw, group, idx)] = meta
+        key = (suite_raw, group, idx)
+        prev = chunks.get(key)
+        if prev is not None:
+            duplicate_chunk_rows += 1
+            prev_fin = _finish_sec(prev)
+            new_fin = _finish_sec(meta)
+            # Later finish is the retry. Missing finish does not replace a known one.
+            if prev_fin is not None and (new_fin is None or new_fin < prev_fin):
+                continue
+        chunks[key] = meta
 
     affected_chunk_labels: set[str] = set()
     affected_suite_names: set[str] = set()
@@ -430,19 +442,14 @@ def parse_report_chunks(
             alias_meta = dict(meta)
             alias_meta["_fallback_alias"] = True
             chunks[(suite_raw, None, idx)] = alias_meta
-    # Build suite-local map: report chunk hid -> chunk idx (keyed by normalized suite for callers).
-    hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]] = defaultdict(dict)
-    for suite_raw, _group, idx, meta in parsed_chunk_rows:
-        hid = meta.get("hid")
-        suite_norm = normalize_suite_path(suite_raw)
-        if hid is not None and hid not in hid_to_chunk_idx_by_suite[suite_norm]:
-            hid_to_chunk_idx_by_suite[suite_norm][hid] = idx
 
     # Count tests per chunk.
     # Primary mapping: test row chunk_hid -> chunk row.
     # Secondary mapping: parse [i/N] chunk info from test subtest_name when chunk_hid is absent.
     hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
-    for suite_raw, group, idx, meta in parsed_chunk_rows:
+    for (suite_raw, group, idx), meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
         if meta.get("hid") is not None:
             hid_to_chunk_key[meta["hid"]] = (suite_raw, group, idx)
     muted_chunk_labels_from_tests: set[str] = set()
@@ -466,24 +473,23 @@ def parse_report_chunks(
             continue
         suite_raw = str(item.get("path", ""))
         test_info_ref: Optional[dict[str, Any]] = None
-        if suite_raw:
+        if suite_raw and not bool(item.get("suite")):
             suite_norm = normalize_suite_path(suite_raw)
             tests_per_suite[suite_norm] += 1
-            if not bool(item.get("suite")):
-                test_duration_sec = float(item.get("duration") or 0.0)
-                if test_duration_sec > max_test_duration_sec_by_suite[suite_norm]:
-                    max_test_duration_sec_by_suite[suite_norm] = test_duration_sec
-                if test_duration_sec > 0:
-                    test_durations_sec_by_suite[suite_norm].append(test_duration_sec)
-                    test_total_duration_sec_by_suite[suite_norm] += test_duration_sec
-                    if test_duration_sec >= MIN_HEAVY_TEST_CANDIDATE_SEC:
-                        test_info_ref = {
-                            "name": str(item.get("subtest_name") or item.get("name") or ""),
-                            "duration_sec": test_duration_sec,
-                            "chunk_idx": None,
-                            "chunk_group": None,
-                        }
-                        heavy_test_candidates_by_suite[suite_norm].append(test_info_ref)
+            test_duration_sec = float(item.get("duration") or 0.0)
+            if test_duration_sec > max_test_duration_sec_by_suite[suite_norm]:
+                max_test_duration_sec_by_suite[suite_norm] = test_duration_sec
+            if test_duration_sec > 0:
+                test_durations_sec_by_suite[suite_norm].append(test_duration_sec)
+                test_total_duration_sec_by_suite[suite_norm] += test_duration_sec
+                if test_duration_sec >= MIN_HEAVY_TEST_CANDIDATE_SEC:
+                    test_info_ref = {
+                        "name": str(item.get("subtest_name") or item.get("name") or ""),
+                        "duration_sec": test_duration_sec,
+                        "chunk_idx": None,
+                        "chunk_group": None,
+                    }
+                    heavy_test_candidates_by_suite[suite_norm].append(test_info_ref)
         chunk_key: Optional[tuple[str, Optional[str], int]] = None
         chunk_hid = item.get("chunk_hid")
         if chunk_hid is not None and chunk_hid in hid_to_chunk_key:
@@ -569,11 +575,10 @@ def parse_report_chunks(
             "heavy_test_candidates": heavy_candidates,
             "chunk_loads": chunk_loads,
         }
+    suite_chunk_issues_summary["duplicate_chunk_rows"] = duplicate_chunk_rows
     return (
         chunks,
         report_status_by_suite,
-        report_test_fail_chunk_hids_by_suite,
-        hid_to_chunk_idx_by_suite,
         dict(tests_per_chunk),
         dict(tests_per_suite),
         dict(max_test_duration_sec_by_suite),
@@ -1381,8 +1386,6 @@ def main() -> None:
     (
         chunks,
         report_status_by_suite,
-        report_test_fail_chunk_hids_by_suite,
-        hid_to_chunk_idx_by_suite,
         tests_per_chunk,
         tests_per_suite,
         max_test_duration_sec_by_suite,
@@ -1595,8 +1598,8 @@ def main() -> None:
                 path_match = '.path == $path or (.path | startswith($path + "/"))'
                 # When chunk_group is set, restrict to that group (e.g. only "[test_base.py 0/10] chunk" not all 0/10)
                 group_cond = '(if $group != "" then (.subtest_name | contains($group)) else true end)'
-                report_jq = _shell_escape(args.report.name)
-                evlog_jq = _shell_escape(args.evlog.name)
+                report_jq = shlex.quote(args.report.name)
+                evlog_jq = shlex.quote(args.evlog.name)
                 if chunk_idx == 0:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' {report_jq}'
                 else:

@@ -135,9 +135,40 @@ def io_delta_bytes(prev: tuple[int, int] | None, curr: tuple[int, int]) -> tuple
     return (max(curr[0] - prev[0], 0), max(curr[1] - prev[1], 0))
 
 
-def seed_ya_counters(processes: dict[int, dict], ya_pids: set[int]) -> tuple[dict[tuple[int, int], tuple[int, int]], dict[tuple[int, int], tuple[int, int]]]:
+_IO_UNSEEN = object()
+
+
+def apply_io_sample(
+    ident: tuple[int, int],
+    curr: tuple[int, int] | None,
+    prev_pid_io: dict[tuple[int, int], tuple[int, int] | None],
+    next_pid_io: dict[tuple[int, int], tuple[int, int] | None],
+) -> tuple[int, int]:
+    """Interval read/write for one process sample.
+
+    A failed /proc read is stored as None, not (0, 0). The next successful read
+    then starts a baseline instead of counting the process lifetime as one
+    interval. A process seen for the first time with a good read still
+    contributes its lifetime counters.
+    """
+    if curr is None:
+        if ident in prev_pid_io:
+            next_pid_io[ident] = prev_pid_io[ident]
+        else:
+            next_pid_io[ident] = None
+        return (0, 0)
+    prev = prev_pid_io.get(ident, _IO_UNSEEN)
+    next_pid_io[ident] = curr
+    if prev is _IO_UNSEEN:
+        return io_delta_bytes(None, curr)
+    if prev is None:
+        return (0, 0)
+    return io_delta_bytes(prev, curr)
+
+
+def seed_ya_counters(processes: dict[int, dict], ya_pids: set[int]) -> tuple[dict[tuple[int, int], tuple[int, int]], dict[tuple[int, int], tuple[int, int] | None]]:
     cpu: dict[tuple[int, int], tuple[int, int]] = {}
-    io: dict[tuple[int, int], tuple[int, int]] = {}
+    io: dict[tuple[int, int], tuple[int, int] | None] = {}
     for pid in ya_pids:
         proc = processes.get(pid)
         if not proc:
@@ -148,8 +179,8 @@ def seed_ya_counters(processes: dict[int, dict], ya_pids: set[int]) -> tuple[dic
     return cpu, io
 
 
-def get_process_io(pid: int) -> tuple[int, int]:
-    """Get read_bytes, write_bytes from /proc/pid/io. Returns (0,0) if unreadable."""
+def get_process_io(pid: int) -> tuple[int, int] | None:
+    """read_bytes, write_bytes from /proc/pid/io. None if the file cannot be read."""
     try:
         io = (Path("/proc") / str(pid) / "io").read_text()
         r, w = 0, 0
@@ -160,7 +191,7 @@ def get_process_io(pid: int) -> tuple[int, int]:
                 w = int(line.split(":")[1].strip())
         return r, w
     except (OSError, ValueError):
-        return 0, 0
+        return None
 
 
 def _meminfo_kb() -> dict[str, int]:
@@ -269,7 +300,7 @@ def run_monitor(
             ya_read_delta = 0
             ya_write_delta = 0
             next_pid_cpu: dict[tuple[int, int], tuple[int, int]] = {}
-            next_pid_io: dict[tuple[int, int], tuple[int, int]] = {}
+            next_pid_io: dict[tuple[int, int], tuple[int, int] | None] = {}
 
             for p in pid_data:
                 pid = p["pid"]
@@ -277,10 +308,8 @@ def run_monitor(
                     continue
                 ram_ya_kb += p.get("rss_kb", 0)
                 ident = process_identity(p)
-                r, w = get_process_io(pid)
                 next_pid_cpu[ident] = (p["utime"], p["stime"])
-                next_pid_io[ident] = (r, w)
-                delta_r, delta_w = io_delta_bytes(prev_pid_io.get(ident), (r, w))
+                delta_r, delta_w = apply_io_sample(ident, get_process_io(pid), prev_pid_io, next_pid_io)
                 ya_read_delta += delta_r
                 ya_write_delta += delta_w
                 delta_total = cpu_delta_jiffies(prev_pid_cpu.get(ident), p["utime"], p["stime"])

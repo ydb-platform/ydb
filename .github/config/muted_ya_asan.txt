@@ -464,6 +464,7 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/services/datastreams/ut DataStreams.TestControlPlaneAndMeteringData
 ydb/services/datastreams/ut DataStreams.TestGetRecordsKafkaBatches
 ydb/services/datastreams/ut DataStreams.TestReservedResourcesMetering
+ydb/services/keyvalue/ut KeyValueGRPCService.S3ErrorInIssuesV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCreateAlterDropVolume
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV2

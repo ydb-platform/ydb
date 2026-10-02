@@ -1,4 +1,5 @@
 #include "ydb_common_ut.h"
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/services/keyvalue/grpc_service_v1.h>
 
@@ -37,9 +38,10 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false, bool enableRelativePaths = false) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
+            config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
             if (!enablePathAliasing) {
                 return config;
             }
@@ -106,8 +108,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false)
-                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false, bool enableRelativePaths = false)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent, enableRelativePaths), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
                     settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
@@ -200,36 +202,43 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(!children.contains("kfront"));
         }
 
-        Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
-            TFixture fixture;
+        Y_UNIT_TEST_TWIN(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce, enableRelativePaths) {
+            TFixture fixture(false, true, true, /*nestedAliasParent=*/enableRelativePaths, enableRelativePaths);
+            const TString database = enableRelativePaths ? "virtual" : "/alias";
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             // The first request for this tenant is deferred while its database info
             // is fetched, then re-enters ingress.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
-                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database + "/"));
             UNIT_ASSERT(!session.session_id().empty());
 
             Ydb::Table::KeepAliveRequest keepAlive;
             keepAlive.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::KeepAlive, keepAlive, "/alias"));
+            Success(Call(*stub, &TTable::KeepAlive, keepAlive, database));
 
             Ydb::Table::DeleteSessionRequest close;
             close.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
+            Success(Call(*stub, &TTable::DeleteSession, close, database));
         }
 
-        Y_UNIT_TEST(SimpleProxyInitializesDatabaseNormalization) {
-            TFixture fixture(true);
+        Y_UNIT_TEST_TWIN(SimpleProxyInitializesDatabaseNormalization, enableRelativePaths) {
+            TFixture fixture(true, true, true, /*nestedAliasParent=*/enableRelativePaths, enableRelativePaths);
+            const TString database = enableRelativePaths ? "virtual" : "/alias";
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             const auto session = Result<Ydb::Table::CreateSessionResult>(
-                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias"));
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database));
             UNIT_ASSERT(!session.session_id().empty());
+
+            Ydb::Table::ExecuteSchemeQueryRequest query;
+            query.set_session_id(session.session_id());
+            query.set_yql_text("CREATE TABLE `database_resolution` (Key Uint64, PRIMARY KEY (Key));");
+            Success(Call(*stub, &TTable::ExecuteSchemeQuery, query, database));
 
             Ydb::Table::DeleteSessionRequest close;
             close.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
+            Success(Call(*stub, &TTable::DeleteSession, close, database));
         }
 
         Y_UNIT_TEST(DiscoveryKeepsHeaderAndBodySeparate) {

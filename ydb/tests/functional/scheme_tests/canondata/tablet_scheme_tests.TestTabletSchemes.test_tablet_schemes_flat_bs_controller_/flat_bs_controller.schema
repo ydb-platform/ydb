@@ -599,6 +599,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "VDiskHeapAllocatorNumLeadingDisks",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
                 "ColumnType": "Uint64"
@@ -743,6 +748,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     3,

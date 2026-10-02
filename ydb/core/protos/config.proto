@@ -385,6 +385,10 @@ message TBlobStorageConfig {
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+
+    // How many leading VDisks (order number 0 .. N-1) may use the stripe heap. Unset means 0. A storage-pool value
+    // (TStoragePoolSettings) overrides this. Applied when a VDisk starts; running VDisks are not restarted.
+    optional uint32 VDiskHeapAllocatorNumLeadingDisks = 15;
 }
 
 message TSelfManagementConfig {

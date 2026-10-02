@@ -50,6 +50,8 @@ dstool
 │     └─ reconfigure                    Create virtual group backed by BlobDepot
 ├─ pool
 │  ├─ list                              List pools
+│  ├─ set                               Set storage pool settings that are not 
+│  │                                    part of the pool definition
 │  └─ create
 │     └─ virtual                        Create pool suitable for virtual groups
 ├─ box

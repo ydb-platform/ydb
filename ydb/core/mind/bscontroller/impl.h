@@ -1271,6 +1271,7 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+        TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1376,6 +1377,7 @@ public:
                     Table::DefaultGroupSizeInUnits,
                     Table::BridgeMode,
                     Table::DDisk,
+                    Table::VDiskHeapAllocatorNumLeadingDisks,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1405,6 +1407,7 @@ public:
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::BridgeMode,
                     &TStoragePoolInfo::DDisk,
+                    &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -2708,6 +2711,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
+    static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);

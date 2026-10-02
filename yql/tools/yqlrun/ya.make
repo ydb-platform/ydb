@@ -30,7 +30,7 @@ ELSE()
 
     INCLUDE(ya.make.inc)
 
-    YQL_LAST_ABI_VERSION()
+    YQL_CURRENT_ABI_VERSION()
 
     FILES(
         ui.sh

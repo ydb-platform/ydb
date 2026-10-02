@@ -20,6 +20,8 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+#include <ydb/library/yql/providers/ydb_remote/common/read_limits.h>
+#include <ydb/library/yql/providers/ydb_remote/provider/yql_ydb_remote_provider.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -35,6 +37,8 @@
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 #include <util/system/file.h>
+
+#include <mutex>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -131,6 +135,58 @@ namespace {
             d->Stop(true);
             delete d;
         });
+    }
+
+    std::shared_ptr<NYdb::TDriver> MakeNativeYdbDriver() {
+        NYdb::TDriverConfig config;
+        config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
+        config.SetMaxInboundMessageSize(NYql::NYdbRemote::MaxInboundMessageBytes);
+        return MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(config));
+    }
+
+    class TNativeYdbResources::TImpl {
+    public:
+        std::shared_ptr<NYdb::TDriver> GetDriver(bool useTls) {
+            std::lock_guard lock(Mutex);
+            return GetDriverLocked(useTls);
+        }
+
+        std::shared_ptr<NYql::IYdbRemoteMetadataClientCache> GetMetadataClientCache() {
+            std::lock_guard lock(Mutex);
+            if (!MetadataClientCache) {
+                MetadataClientCache = NYql::CreateYdbRemoteMetadataClientCache(
+                    *GetDriverLocked(false), *GetDriverLocked(true));
+            }
+            return MetadataClientCache;
+        }
+
+    private:
+        std::shared_ptr<NYdb::TDriver> GetDriverLocked(bool useTls) {
+            auto& driver = useTls ? TlsDriver : Driver;
+            if (!driver) {
+                driver = MakeNativeYdbDriver();
+            }
+            return driver;
+        }
+
+        std::mutex Mutex;
+        // Keep drivers alive until clients have been released.
+        std::shared_ptr<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::TDriver> TlsDriver;
+        std::shared_ptr<NYql::IYdbRemoteMetadataClientCache> MetadataClientCache;
+    };
+
+    TNativeYdbResources::TNativeYdbResources()
+        : Impl_(std::make_shared<TImpl>())
+    {
+    }
+
+    std::shared_ptr<NYdb::TDriver> TNativeYdbResources::GetDriver(bool useTls) {
+        return Impl_->GetDriver(useTls);
+    }
+
+    std::shared_ptr<NYql::IYdbRemoteMetadataClientCache> TNativeYdbResources::GetMetadataClientCache() {
+        return Impl_->GetMetadataClientCache();
     }
 
     std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
@@ -308,6 +364,7 @@ namespace {
 
         auto result = TKqpFederatedQuerySetup{
             Driver,
+            NativeYdbResources,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,

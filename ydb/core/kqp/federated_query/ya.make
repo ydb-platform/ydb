@@ -20,6 +20,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/solomon/gateway
+    ydb/library/yql/providers/ydb_remote/common
+    ydb/library/yql/providers/ydb_remote/provider
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/adapters/issue

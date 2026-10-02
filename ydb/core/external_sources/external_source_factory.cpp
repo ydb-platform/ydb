@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
@@ -136,7 +137,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<TString>& availableExternalDataSources) {
+                                                         const std::set<TString>& availableExternalDataSources,
+                                                         bool enableNativeYdbProvider) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -157,7 +159,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{enableNativeYdbProvider ? NYql::YdbRemoteProviderName : NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group", "read_timeout_ms"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

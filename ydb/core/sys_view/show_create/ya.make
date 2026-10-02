@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     create_external_table_formatter.cpp
@@ -21,8 +21,6 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/dump/util
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

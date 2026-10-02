@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/svnversion
@@ -17,8 +17,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/counters
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     file_cache.cpp

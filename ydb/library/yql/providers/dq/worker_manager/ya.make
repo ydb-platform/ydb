@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
@@ -14,8 +14,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/task_runner_actor
     ydb/library/yql/providers/dq/worker_manager/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     local_worker_manager.cpp

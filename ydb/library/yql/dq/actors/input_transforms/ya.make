@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_input_transform_lookup.cpp
@@ -11,7 +11,5 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime/streaming
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

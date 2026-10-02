@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scan.h
@@ -27,8 +27,6 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/wrappers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

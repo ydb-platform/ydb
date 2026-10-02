@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     actors_factory.cpp
@@ -39,8 +39,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

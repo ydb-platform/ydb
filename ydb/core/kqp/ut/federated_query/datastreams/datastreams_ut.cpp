@@ -323,36 +323,23 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadTopicFailedWithoutYdbInConfig, TStreamingTestFixture) {
-        // Negative test: reading topics should fail without "Ydb" in available_external_data_sources
+    Y_UNIT_TEST_F(CreateYdbExternalDataSourceFailedWithoutYdbInConfig, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("ObjectStorage");  // Only ObjectStorage, no Ydb
+        cfg.AddAvailableExternalDataSources("ObjectStorage");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
-        const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
-
-        CreateTopic(topicName);
-        CreatePqSource(sourceName);
-
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`{topic}` WITH (
-                STREAMING = "TRUE",
-                FORMAT = "json_each_row",
-                SCHEMA = (
-                    key String NOT NULL,
-                    value String NOT NULL
-                )
-            )
-            LIMIT 1;
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName
-        ), EExecStatus::Failed);
-
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::BAD_REQUEST, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "is not available");
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
+                    SOURCE_TYPE="Ydb",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {

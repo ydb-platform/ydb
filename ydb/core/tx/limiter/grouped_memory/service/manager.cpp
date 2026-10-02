@@ -154,7 +154,10 @@ void TManager::TryAllocateWaiting() {
     if (Config.IsUnrestrictedEnabled()) {
         while (ScheduleOneUnrestricted()) {
         }
-        ForceOneOnDeadlock();
+        // Keep forcing until some holder has all its requests served (it will release memory) or nothing is left to force.
+        // Each step takes one waiting request, so the loop is finite.
+        while (ForceOneOnDeadlock()) {
+        }
     }
 
     RefreshSignals();

@@ -29,6 +29,7 @@ private:
     // One admitted allocation. Scopes with no admission are served before scopes that already hold one.
     bool ScheduleOneUnrestricted();
     // Nothing fits the band and every holder waits for its own next request: grant one above the band.
+    // Called in a loop until some holder has all its requests served or nothing is left to force.
     bool ForceOneOnDeadlock();
     void RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress);
     void RefreshSignals() const {

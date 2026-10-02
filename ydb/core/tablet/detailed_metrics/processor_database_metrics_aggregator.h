@@ -39,9 +39,17 @@ namespace NKikimr {
      *       table=T / tablet_id=N / follower_id=F (F>0)    leader-only metrics absent
      *
      * Every TABLE partial and leaf feeds the public rollup, and leaves are published under tablet_id/follower_id.
+     *
+     * The aggregator keeps only the public metric values of every TABLE partial and leaf (see TPublicBucket),
+     * no low level counters: the low level counters reported by the nodes are converted into the public
+     * metric values of the descriptor of the tablet type (see TDetailedMetricsDescriptor) as they arrive.
+     *
+     * @param[in] targetCounterGroup The counter group for the public counters
+     * @param[in] databasePath The path of the database, the table paths of the reports are relative to it
+     * @param[in] executorCountersTemplate The Executor counters, whose layout the nodes report
+     *            (the application counters come from the tablet type), must not be null
      */
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
-        NMonitoring::TDynamicCounterPtr rawCounterGroup,
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
         THolder<TTabletCountersBase> executorCountersTemplate);

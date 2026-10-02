@@ -348,7 +348,6 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
         DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(
-            DetailedRawGroup,
             DetailedGroup,
             Database,
             THolder<TTabletCountersBase>(new NTabletFlatExecutor::TExecutorCounters));

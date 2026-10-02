@@ -592,6 +592,9 @@ public:
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finishing = false;
+    // under TNodeState::Mutex: the consumer has let the channel go before the confirmation of the finish, the
+    // descriptor stays with the session for the final update to be resent until the confirmation comes
+    bool Released = false;
 
     // Node level memory pressure on this (receiver) node, reported to the sender via TEvChannelUpdateV2.
     // Written under QueueMutex by RefreshMemoryPressure, read by TNodeState::SendUpdateProgress
@@ -1205,7 +1208,7 @@ class TFastDqInputChannel : public IDqInputChannel {
 public:
 
     TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer)
-        : Service(service), Buffer(buffer), ChannelQuotaManager(settings.ChannelQuotaManager) {
+        : Service(service), Buffer(buffer), ChannelQuotaManager(settings.ChannelQuotaManager), FinishOnPop(settings.FinishOnPop) {
         PushStats.ChannelId = settings.ChannelId;
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
@@ -1232,8 +1235,11 @@ public:
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
+    // A remote buffer is finished once the producer has confirmed the finish, a round trip after the finish is
+    // popped. An input which gets nothing after the finish does not wait for it: the descriptor stays with the session
+    // until the confirmation comes, see TNodeState::TerminateInputDescriptor
     bool IsFinished() const override {
-        return Buffer->IsFinished() && !PausedByCheckpoint;
+        return (FinishPopped || Buffer->IsFinished()) && !PausedByCheckpoint;
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -1312,6 +1318,8 @@ public:
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    const bool FinishOnPop;
+    bool FinishPopped = false;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
     TDqInputReadyHook ReadyHook;

@@ -1559,8 +1559,20 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             correctSeqNo = false;
         }
     }
+    auto confirmFinish = data.ConfirmFinish;
     if (correctSeqNo && descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
+    }
+    if (confirmFinish && descriptor->Finished.load()) {
+        // the consumer may have let the channel go before, see TerminateInputDescriptor; Finished is set before the
+        // lock, so whichever comes 2nd erases it
+        std::lock_guard lock(Mutex);
+        if (descriptor->Released) {
+            if (auto it = InputDescriptors.find(info); it != InputDescriptors.end() && it->second == descriptor) {
+                InputDescriptors.erase(it);
+                (*InputBufferCount)--;
+            }
+        }
     }
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
@@ -2282,6 +2294,12 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
     // Erased by FailInputs or by the ID ERASE/GEN path, and matched by identity as for outputs above; here
     // it is the peer resending the leading message of the channel which creates another under the Info.
     if (auto it = InputDescriptors.find(descriptor->Info); it != InputDescriptors.end() && it->second == descriptor) {
+        if (descriptor->Finishing.load() && !descriptor->Finished.load() && !descriptor->Aborted.load()) {
+            // Let go between the finish and its confirmation: the producer may not have the final update yet, and
+            // only a descriptor of the session gets it resent. Erased when the confirmation comes, see HandleChannelData
+            descriptor->Released = true;
+            return;
+        }
         InputDescriptors.erase(it);
         (*InputBufferCount)--;
     }
@@ -2783,6 +2801,9 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     } else if (popResult) {
         // a chunk without rows (the finish): false, and the buffer may have more
         ReadyHook.Mark();
+    }
+    if (popResult && chunk.Finished && FinishOnPop) {
+        FinishPopped = true;
     }
 
     return hasData;

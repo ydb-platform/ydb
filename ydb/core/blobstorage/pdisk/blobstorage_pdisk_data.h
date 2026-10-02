@@ -77,6 +77,7 @@ constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 #define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_VERSION_7 7
 #define PDISK_SYS_LOG_RECORD_VERSION_8 8
+#define PDISK_SYS_LOG_RECORD_VERSION_9 9
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
@@ -407,24 +408,18 @@ struct TNonceSet {
 };
 
 struct TSysLogRecord {
-    enum EFlags : ui32 {
-        FlagSlow = 1 << 0,
-    };
-
     // TODO: use atomics here
     ui64 Version;
     TNonceSet Nonces;
     TChunkIdx LogHeadChunkIdx;
-    // This field used to be Reserved1 and was always zero. Reusing it keeps
-    // the on-disk record layout compatible with all existing versions.
-    ui32 Flags;
+    ui32 Reserved1;
     ui64 LogHeadChunkPreviousNonce;
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_9)
         , LogHeadChunkIdx(0)
-        , Flags(0)
+        , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
     {
         for (size_t i = 0; i < 256; ++i) {
@@ -436,6 +431,33 @@ struct TSysLogRecord {
         return ToString(false);
     }
 
+    TString ToString(bool isMultiline) const {
+        TStringStream str;
+        const char *x = isMultiline ? "\n" : "";
+        str << "{TSysLogRecord" << x;
+        str << " Version# " << Version << x;
+        str << " NonceSet# " << Nonces.ToString(isMultiline) << x;
+        str << " LogHeadChunkIdx# " << LogHeadChunkIdx << x;
+        str << " LogHeadChunkPreviousNonce# " << LogHeadChunkPreviousNonce << x;
+        for (ui32 i = 0; i < 256; ++i) {
+            if (OwnerVDisks[i] != TVDiskID::InvalidId) {
+                str << " Owner[" << i << "]# " << OwnerVDisks[i].ToString() << x;
+            }
+        }
+        str << "}";
+        return str.Str();
+    }
+};
+
+// Appended after ownersSizeInUnitsInfo starting with SysLog record version 9.
+// Keep the legacy TSysLogRecord header layout unchanged.
+struct TSysLogDiskState {
+    enum EFlags : ui32 {
+        FlagSlow = 1 << 0,
+    };
+
+    ui32 Flags = 0;
+
     bool IsSlow() const {
         return Flags & FlagSlow;
     }
@@ -446,24 +468,6 @@ struct TSysLogRecord {
         } else {
             Flags &= ~FlagSlow;
         }
-    }
-
-    TString ToString(bool isMultiline) const {
-        TStringStream str;
-        const char *x = isMultiline ? "\n" : "";
-        str << "{TSysLogRecord" << x;
-        str << " Version# " << Version << x;
-        str << " NonceSet# " << Nonces.ToString(isMultiline) << x;
-        str << " LogHeadChunkIdx# " << LogHeadChunkIdx << x;
-        str << " Slow# " << IsSlow() << x;
-        str << " LogHeadChunkPreviousNonce# " << LogHeadChunkPreviousNonce << x;
-        for (ui32 i = 0; i < 256; ++i) {
-            if (OwnerVDisks[i] != TVDiskID::InvalidId) {
-                str << " Owner[" << i << "]# " << OwnerVDisks[i].ToString() << x;
-            }
-        }
-        str << "}";
-        return str.Str();
     }
 };
 
@@ -849,6 +853,7 @@ struct TDiskFormat {
         ui32 baseSysLogRecordSize = sizeof(TSysLogRecord)
                 + diskChunks * sizeof(TChunkInfo)
                 + sizeof(TSysLogFirstNoncesToKeep)
+                + sizeof(TSysLogDiskState)
                 + TChunkTrimInfo::SizeForChunkCount(diskChunks);
         ui32 sysLogFirstSectorPayload = sectorPayload - sizeof(TFirstLogPageHeader);
         ui32 sysLogExtraSectorPayload = sectorPayload - sizeof(TLogPageHeader);

@@ -215,7 +215,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                 </div>
             )___";
 
-            if (SysLogRecord.IsSlow()) {
+            if (SysLogDiskState.IsSlow()) {
                 str << "<button onclick='sendResetSlowRequest()' class='btn btn-danger' style='margin:5px'>";
                 str << "Reset slow latch";
                 str << "</button>";

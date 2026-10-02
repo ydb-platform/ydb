@@ -1842,12 +1842,12 @@ bool TPDisk::SetSlowDiskState(bool slow) {
     const auto expectedState = slow
         ? NKikimrBlobStorage::TPDiskState::Normal
         : NKikimrBlobStorage::TPDiskState::Slow;
-    if (currentState != expectedState || SysLogRecord.IsSlow() == slow || Cfg->ReadOnly || !SysLogger ||
+    if (currentState != expectedState || SysLogDiskState.IsSlow() == slow || Cfg->ReadOnly || !SysLogger ||
             InitPhase.load() != EInitPhase::Initialized) {
         return false;
     }
 
-    SysLogRecord.SetSlow(slow);
+    SysLogDiskState.SetSlow(slow);
     DeviceSlowdownDetector.Reset();
     *Mon.SlowPDisk = slow;
     *Mon.PDiskState = slow
@@ -1862,7 +1862,7 @@ bool TPDisk::SetSlowDiskState(bool slow) {
 }
 
 bool TPDisk::UpdateSlowDiskState(ui64 nowMs) {
-    if (SysLogRecord.IsSlow() || Cfg->ReadOnly || !SysLogger ||
+    if (SysLogDiskState.IsSlow() || Cfg->ReadOnly || !SysLogger ||
             InitPhase.load() != EInitPhase::Initialized) {
         return false;
     }

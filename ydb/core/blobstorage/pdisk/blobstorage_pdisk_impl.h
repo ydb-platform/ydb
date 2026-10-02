@@ -236,8 +236,9 @@ public:
     TVector<TOwner> QuarantineOwners;
 
 
-    TSysLogRecord SysLogRecord; // Current sys log record state, part 1 of 2
-    TSysLogFirstNoncesToKeep SysLogFirstNoncesToKeep; // Current sys log record state, part 2 of 2
+    TSysLogRecord SysLogRecord;
+    TSysLogFirstNoncesToKeep SysLogFirstNoncesToKeep;
+    TSysLogDiskState SysLogDiskState;
     ui64 SysLogLsn = 0;
     TNonceSet LoggedNonces; // Latest on-disk Nonce set
     ui64 CostLimitNs;

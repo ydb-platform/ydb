@@ -698,7 +698,7 @@ void TClientCommandTree::RenderCommandDescription(
     }
 }
 
-void TCommandWithPath::ParsePath(const TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional) {
+void TCommandWithPath::ParsePath(TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional) {
     if (config.ParseResult->GetFreeArgCount() <= argPos) {
         if (isPathOptional) {
             Path = ".";
@@ -710,14 +710,14 @@ void TCommandWithPath::ParsePath(const TClientCommand::TConfig& config, const si
     AdjustPath(config);
 }
 
-void TCommandWithPath::AdjustPath(const TClientCommand::TConfig& config) {
+void TCommandWithPath::AdjustPath(TClientCommand::TConfig& config) {
     if (!Path) {
         throw TMisuseException() << "Missing required argument <path>";
     }
     if (config.IsVerbose()) {
         Cerr << "Path before adjusting: \"" << Path << '"' << Endl;
     }
-    NConsoleClient::AdjustPath(Path, config);
+    AdjustPathToDatabase(Path, config);
     if (config.IsVerbose()) {
         Cerr << "Path after adjusting: \"" << Path << '"' << Endl;
     }

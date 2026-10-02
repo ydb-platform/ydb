@@ -28,6 +28,7 @@
 #include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/util/rope.h>
@@ -347,6 +348,8 @@ public:
     virtual void CountResourcePath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    // An operation-specific base must already be resolved; empty means the database.
+    TString GetDatabaseRelativePath(TStringBuf path, TStringBuf base = {}) const;
 };
 
 class IRequestCtxBase

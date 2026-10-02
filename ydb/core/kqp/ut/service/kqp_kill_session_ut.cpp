@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -148,6 +149,92 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         UNIT_ASSERT_C(secondResult.IsSuccess(), secondResult.GetIssues().ToString());
         auto repeated = kill(second.GetId());
         UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(MultipleKillStatements, perStatementExecution) {
+        auto settings = KillSessionSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(perStatementExecution);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto first = CreateSession(client);
+        auto second = CreateSession(client);
+
+        const TString query = KillSessionQuery(first.GetId()) + "\n" + KillSessionQuery(second.GetId());
+        auto result = client.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        for (const auto& sessionId : {first.GetId(), second.GetId()}) {
+            auto repeated = client.ExecuteQuery(KillSessionQuery(sessionId), TTxControl::NoTx(),
+                NoRetryExecuteQuerySettings()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(KillBetweenSelectStatements) {
+        auto settings = KillSessionSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto victim = CreateSession(client);
+        const TString query = "SELECT 1;\n" + KillSessionQuery(victim.GetId()) + "\nSELECT 2;";
+        auto result = client.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(1)));
+        auto repeated = client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(FailedKillStopsFollowingStatements, perStatementExecution) {
+        auto settings = KillSessionSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(perStatementExecution);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto first = CreateSession(client);
+        auto removed = CreateSession(client);
+        auto last = CreateSession(client);
+        auto killed = client.ExecuteQuery(KillSessionQuery(removed.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+
+        const TString query = KillSessionQuery(first.GetId()) + "\n" + KillSessionQuery(removed.GetId())
+            + "\n" + KillSessionQuery(last.GetId());
+        auto result = client.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        auto repeated = client.ExecuteQuery(KillSessionQuery(first.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+        AssertSessionAlive(last);
+    }
+
+    Y_UNIT_TEST_TWIN(MixedDataWithoutPerStatementExecutionDoesNotKill, astCache) {
+        auto settings = KillSessionSettings().SetWithSampleTables(true);
+        // Both flags are required to split the query into individual statements.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(astCache);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(!astCache);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto victim = CreateSession(client);
+        const auto kill = KillSessionQuery(victim.GetId());
+        const TString write = "UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (100505u, \"not-written\");";
+
+        for (const TString& query : {TString("SELECT 1;\n") + kill + "\nSELECT 2;",
+                kill + "\nSELECT 1;", write + "\n" + kill, kill + "\n" + write})
+        {
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "KILL SESSION cannot be combined with data queries");
+            AssertSessionAlive(victim);
+        }
+
+        auto stored = client.ExecuteQuery("SELECT Text FROM `/Root/EightShard` WHERE Key = 100505u;",
+            TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetResultSet(0).RowsCount(), 0);
     }
 
     Y_UNIT_TEST(ExplicitTransactionDoesNotKill) {
@@ -697,6 +784,115 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "KILL SESSION");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root@builtin");
         UNIT_ASSERT_VALUES_EQUAL(attempts.load(), 1);
+    }
+
+    Y_UNIT_TEST(KillWhileIndexCreationIsPending) {
+        TKikimrRunner kikimr(KillSessionSettings().SetUseRealThreads(false));
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto victim = kikimr.RunCall([&] { return CreateSession(client); });
+        auto created = kikimr.RunCall([&] {
+            return client.ExecuteQuery(
+                "CREATE TABLE `/Root/KillDdl` (Key Uint64, Value Utf8, PRIMARY KEY (Key));",
+                TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        THolder<IEventHandle> indexResponse;
+        auto indexObserver = runtime->AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateResponse>(
+            [&](NSchemeShard::TEvIndexBuilder::TEvCreateResponse::TPtr& ev) {
+                if (!indexResponse) {
+                    indexResponse.Reset(ev.Release());
+                }
+            });
+        auto ddlFuture = kikimr.RunInThreadPool([&] {
+            return victim.ExecuteQuery("ALTER TABLE `/Root/KillDdl` ADD INDEX ByValue GLOBAL ON (Value);",
+                TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        });
+        runtime->WaitFor("index creation response", [&] { return bool(indexResponse); }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            indexResponse->Get<NSchemeShard::TEvIndexBuilder::TEvCreateResponse>()->Record.GetStatus(),
+            Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_C(!ddlFuture.HasValue(), "DDL completed before KILL");
+
+        auto killed = kikimr.RunCall([&] {
+            return client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+                NoRetryExecuteQuerySettings()).GetValueSync();
+        });
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+        auto result = runtime->WaitFuture(ddlFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "KILL SESSION");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root@builtin");
+
+        // SchemeShard may continue an accepted DDL; a late reply must not revive the session.
+        indexObserver.Remove();
+        runtime->Send(indexResponse.Release());
+        auto repeated = kikimr.RunCall([&] {
+            return client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+                NoRetryExecuteQuerySettings()).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(KillIdleInteractiveTransactionWaitsForRollback, commit) {
+        auto settings = KillSessionSettings().SetWithSampleTables(true).SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableForceImmediateEffectsExecution(true);
+        TKikimrRunner kikimr(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto victim = kikimr.RunCall([&] { return CreateSession(client); });
+        auto started = kikimr.RunCall([&] { return victim.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync(); });
+        UNIT_ASSERT_C(started.IsSuccess(), started.GetIssues().ToString());
+        auto tx = started.GetTransaction();
+        auto written = kikimr.RunCall([&] {
+            return victim.ExecuteQuery(
+                "UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (100504u, \"uncommitted\");",
+                TTxControl::Tx(tx)).GetValueSync();
+        });
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+
+        // The query has finished, but the transaction and its writes are still open.
+        THolder<IEventHandle> rollback;
+        auto rollbackObserver = runtime->AddObserver<TEvKqpBuffer::TEvRollback>(
+            [&](TEvKqpBuffer::TEvRollback::TPtr& ev) {
+                if (!rollback) {
+                    rollback.Reset(ev.Release());
+                }
+            });
+        auto killFuture = kikimr.RunInThreadPool([&] {
+            return client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+                NoRetryExecuteQuerySettings()).GetValueSync();
+        });
+        runtime->WaitFor("idle transaction rollback", [&] { return bool(rollback); }, TDuration::Seconds(10));
+        UNIT_ASSERT_C(!killFuture.HasValue(), "KILL replied before transaction rollback");
+        auto finishTx = [&]() -> TStatus {
+            if constexpr (commit) {
+                return tx.Commit().GetValueSync();
+            } else {
+                return tx.Rollback().GetValueSync();
+            }
+        };
+        auto closing = kikimr.RunCall(finishTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(closing.GetStatus(), EStatus::CANCELLED, closing.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(closing.GetIssues().ToString(), "KILL SESSION");
+
+        rollbackObserver.Remove();
+        runtime->Send(rollback.Release());
+        auto killed = runtime->WaitFuture(killFuture);
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+        auto afterKill = kikimr.RunCall(finishTx);
+        UNIT_ASSERT_C(!afterKill.IsSuccess(), "Terminated session accepted a transaction operation");
+        auto stored = kikimr.RunCall([&] {
+            return client.ExecuteQuery("SELECT Text FROM `/Root/EightShard` WHERE Key = 100504u;",
+                TTxControl::NoTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetResultSet(0).RowsCount(), 0);
+        auto replacement = kikimr.RunCall([&] {
+            return client.ExecuteQuery("UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (100504u, \"after-kill\");",
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(replacement.IsSuccess(), replacement.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CompletedCommitIsNotReportedAsCancelled) {

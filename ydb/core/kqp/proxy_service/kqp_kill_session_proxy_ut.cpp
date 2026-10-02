@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <util/generic/scope.h>
 
@@ -65,6 +66,14 @@ public:
         const auto sender = Runtime->AllocateEdgeActor(nodeIndex);
         Runtime->Send(new IEventHandle(Proxy(nodeIndex), sender, new TEvKqp::TEvProxyPingRequest()), nodeIndex);
         Runtime->GrabEdgeEventRethrow<TEvKqp::TEvProxyPingResponse>(sender);
+    }
+
+    void ExpectSessionAlive(const TString& sessionId, ui32 nodeIndex) {
+        auto request = MakeHolder<TEvKqp::TEvPingSessionRequest>();
+        request->Record.MutableRequest()->SetSessionId(sessionId);
+        Runtime->Send(new IEventHandle(Proxy(nodeIndex), Sender, request.Release()));
+        auto response = Runtime->GrabEdgeEventRethrow<TEvKqp::TEvPingSessionResponse>(Sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
     }
 
     void ExpectClosingQueryCancelled(const TString& sessionId) {
@@ -225,6 +234,142 @@ Y_UNIT_TEST_SUITE(KqpKillSessionProxy) {
         fixture.ExpectKill(42, Ydb::StatusIds::SUCCESS);
         fixture.Kill(sessionId, 43, TDuration::Seconds(30), "root@builtin", true);
         fixture.ExpectKill(43, Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(RelayCompletionPreservesAttachedSessionSubscription) {
+        TKillSessionFixture fixture(2);
+        const auto attachedSession = fixture.CreateSession();
+        const auto remoteRpc = fixture.Runtime->AllocateEdgeActor(1);
+        auto attach = MakeHolder<TEvKqp::TEvPingSessionRequest>();
+        attach->Record.MutableRequest()->SetSessionId(attachedSession);
+        ActorIdToProto(remoteRpc, attach->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+        fixture.Runtime->Send(new IEventHandle(fixture.Proxy(), remoteRpc, attach.Release()), 1, true);
+        auto attached = fixture.Runtime->GrabEdgeEventRethrow<TEvKqp::TEvPingSessionResponse>(remoteRpc);
+        UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        const auto victim = fixture.CreateSession("owner@builtin", 1);
+        TActorId relay;
+        bool relayUnsubscribed = false;
+        bool proxyDisconnected = false;
+        fixture.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvKillSessionRequest::EventType
+                && ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId())
+            {
+                relay = ev->Sender;
+            } else if (ev->GetTypeRewrite() == TEvents::TEvUnsubscribe::EventType && ev->Sender == relay) {
+                relayUnsubscribed = true;
+            } else if (ev->GetTypeRewrite() == TEvInterconnect::TEvNodeDisconnected::EventType
+                && (ev->Recipient == fixture.Proxy()
+                    || ev->GetRecipientRewrite() == fixture.Runtime->GetLocalServiceId(fixture.Proxy()))
+                && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == fixture.Runtime->GetNodeId(1))
+            {
+                proxyDisconnected = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { fixture.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        fixture.Kill(victim, 42);
+        fixture.ExpectKill(42, Ydb::StatusIds::SUCCESS);
+        fixture.Runtime->WaitFor("relay unsubscribe", [&] { return relayUnsubscribed; }, TDuration::Seconds(5));
+        UNIT_ASSERT(relay != fixture.Runtime->GetLocalServiceId(fixture.Proxy()));
+
+        // A real disconnect must still reach the proxy subscribed by AttachSession.
+        fixture.Runtime->Send(new IEventHandle(fixture.Runtime->GetInterconnectProxy(0, 1), fixture.Sender,
+            new TEvInterconnect::TEvDisconnect()), 0, true);
+        fixture.Runtime->WaitFor("attached session disconnect", [&] { return proxyDisconnected; }, TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(RemoteDisconnectReturnsUnavailable) {
+        TKillSessionFixture fixture(2);
+        const auto sessionId = fixture.CreateSession("owner@builtin", 1);
+        THolder<IEventHandle> close;
+        auto closeObserver = fixture.Runtime->AddObserver<TEvKqp::TEvCloseSessionRequest>(
+            [&](TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+                if (ev->Get()->Record.GetRequest().GetSessionId() == sessionId) {
+                    close.Reset(ev.Release());
+                }
+            });
+        fixture.Kill(sessionId, 42);
+        fixture.Runtime->WaitFor("remote close", [&] { return bool(close); }, TDuration::Seconds(5));
+        fixture.Runtime->Send(new IEventHandle(fixture.Runtime->GetInterconnectProxy(0, 1), fixture.Sender,
+            new TEvInterconnect::TEvDisconnect()), 0, true);
+        const auto result = fixture.ExpectKill(42, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(result.ShortDebugString(), "Session owner node is unavailable");
+
+        closeObserver.Remove();
+        fixture.Runtime->Send(close.Release(), 1);
+        fixture.Barrier(1);
+    }
+
+    Y_UNIT_TEST(UndeliveredRemoteRequestReturnsUnavailable) {
+        TKillSessionFixture fixture(2);
+        const auto sessionId = fixture.CreateSession("owner@builtin", 1);
+        THolder<IEventHandle> forwarded;
+        auto requestObserver = fixture.Runtime->AddObserver<TEvKqp::TEvKillSessionRequest>(
+            [&](TEvKqp::TEvKillSessionRequest::TPtr& ev) {
+                if (ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId()) {
+                    forwarded.Reset(ev.Release());
+                }
+            });
+        fixture.Kill(sessionId, 42);
+        fixture.Runtime->WaitFor("forwarded KILL", [&] { return bool(forwarded); }, TDuration::Seconds(5));
+        fixture.Runtime->Send(new IEventHandle(forwarded->Sender, fixture.Proxy(1),
+            new TEvents::TEvUndelivered(TEvKqp::TEvKillSessionRequest::EventType,
+                TEvents::TEvUndelivered::ReasonActorUnknown)));
+        const auto result = fixture.ExpectKill(42, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(result.ShortDebugString(), "Session owner node is unavailable");
+        fixture.ExpectSessionAlive(sessionId, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(RemoteReplyRacesWithTimeout, replyFirst) {
+        TKillSessionFixture fixture(2);
+        const auto sessionId = fixture.CreateSession("owner@builtin", 1);
+        TActorId relay;
+        THolder<IEventHandle> reply;
+        THolder<IEventHandle> timeout;
+        TVector<TEvKqp::TEvKillSessionResponse::TPtr> callerResponses;
+        auto callerObserver = fixture.Runtime->AddObserver<TEvKqp::TEvKillSessionResponse>(
+            [&](TEvKqp::TEvKillSessionResponse::TPtr& ev) {
+                if (ev->Recipient == fixture.Sender) {
+                    callerResponses.emplace_back(ev.Release());
+                }
+            });
+        fixture.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvKillSessionRequest::EventType
+                && ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId())
+            {
+                relay = ev->Sender;
+            } else if (ev->GetRecipientRewrite() == relay) {
+                if (ev->GetTypeRewrite() == TEvKqp::TEvKillSessionResponse::EventType) {
+                    reply.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                    timeout.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { fixture.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        fixture.Kill(sessionId, 42, TDuration::Seconds(1));
+        fixture.Runtime->WaitFor("remote reply and timeout", [&] { return reply && timeout; }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get<TEvKqp::TEvKillSessionResponse>()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(callerResponses.empty());
+        fixture.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        // Queue delivery so the caller observer sees the response inside WaitFor.
+        fixture.Runtime->Send(replyFirst ? reply.Release() : timeout.Release(), 0, true);
+        fixture.Runtime->WaitFor("first caller response", [&] { return !callerResponses.empty(); }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(callerResponses.front()->Cookie, 42);
+        UNIT_ASSERT_VALUES_EQUAL(callerResponses.front()->Get()->Record.GetStatus(),
+            replyFirst ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::TIMEOUT);
+
+        fixture.Runtime->Send(replyFirst ? timeout.Release() : reply.Release(), 0, true);
+        fixture.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        fixture.Barrier();
+        UNIT_ASSERT_VALUES_EQUAL(callerResponses.size(), 1);
     }
 
     Y_UNIT_TEST_TWIN(NoDeadlineDoesNotScheduleTimeout, remote) {

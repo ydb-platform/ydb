@@ -4,6 +4,8 @@
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
 #include <ydb/core/audit/audit_log_service.h>
@@ -642,6 +644,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     Y_ABORT_UNLESS(systemConfig.ExecutorSize());
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
+
+    setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
+        .MemoryBytes = 8ull << 20,
+        .MaxLines = 4096,
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
+    }));
 
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);

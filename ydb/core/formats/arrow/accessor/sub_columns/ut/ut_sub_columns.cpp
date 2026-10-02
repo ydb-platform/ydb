@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 const ui32 recordIndex = positions[positionIndex];
                 UNIT_ASSERT_VALUES_EQUAL(iterator.GetCurrentRecordIndex(), recordIndex);
                 const auto value = iterator.GetValue().ToBinaryJson();
-                const auto dictionaryValue = dictionary->GetJsonValueView(recordIndex, EValueType::BinaryJson).ToBinaryJson();
+                const auto dictionaryValue = dictionary->GetJsonValueView(recordIndex, cstats.GetValueType(i)).ToBinaryJson();
                 UNIT_ASSERT_VALUES_EQUAL(TStringBuf(value.Data(), value.Size()), TStringBuf(dictionaryValue.Data(), dictionaryValue.Size()));
                 if (positionIndex + 1 < positions.size()) {
                     UNIT_ASSERT(iterator.Next());
@@ -257,14 +257,18 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         compositeRecords->AddField(compositeStats.GetField(0), compositeBuilder.Finish()).Validate();
         TColumnsData compositeColumns(compositeStats, compositeRecords);
         auto compositeIterator = compositeColumns.BuildIterator(0);
+        const std::vector<TStringBuf> expectedValues = {"first", "second", "first", "second"};
         ui32 recordsCount = 0;
         while (compositeIterator.IsValid()) {
+            UNIT_ASSERT_C(recordsCount < expectedValues.size(), recordsCount);
             UNIT_ASSERT(compositeIterator.HasValue());
-            UNIT_ASSERT(compositeIterator.GetValue().ToBinaryJson().Size());
+            const auto value = compositeIterator.GetValue().GetBinaryJsonBlobOptional();
+            UNIT_ASSERT(value);
+            UNIT_ASSERT_VALUES_EQUAL(*value, expectedValues[recordsCount]);
             ++recordsCount;
             compositeIterator.Next();
         }
-        UNIT_ASSERT_VALUES_EQUAL(recordsCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(recordsCount, expectedValues.size());
         UNIT_ASSERT_VALUES_EQUAL(*localDataCalls, 0);
     }
 

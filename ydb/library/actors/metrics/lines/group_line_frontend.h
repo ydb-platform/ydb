@@ -34,14 +34,11 @@ namespace NActors {
         using TField = std::tuple_element_t<I, TFields>;
 
         template<size_t... I>
-        static auto ValueType(std::index_sequence<I...>)
-            -> std::tuple<typename TField<I>::TValueType...>;
-
-        template<size_t... I>
         static constexpr auto FieldMetadata(std::index_sequence<I...>) {
             static_assert((std::is_trivially_copyable_v<typename TField<I>::TValueType> && ...));
             static_assert(((sizeof(typename TField<I>::TValueType) <= sizeof(ui64)) && ...));
             static_assert(((!TField<I>::Name.empty()) && ...));
+            static_assert((HasField<TField<I>>(Indices) && ...), "Field descriptors must be unique");
             return std::array<TLineFieldMeta, FieldCount>{{
                 {TField<I>::Name, TField<I>::Labels}...
             }};
@@ -50,10 +47,72 @@ namespace NActors {
         static constexpr auto Indices = std::make_index_sequence<FieldCount>{};
 
     public:
-        using TValueType = decltype(ValueType(Indices));
+        template<class TFieldDescriptor>
+        struct TFieldValue {
+            typename TFieldDescriptor::TValueType Value;
+
+            bool operator==(const TFieldValue&) const = default;
+        };
+
+    private:
+        template<class T, class... TArgs>
+        static constexpr size_t TypeCount = (size_t(std::is_same_v<T, TArgs>) + ... + 0);
+
+        template<class TFieldDescriptor, size_t... I>
+        static constexpr bool HasField(std::index_sequence<I...>) {
+            return TypeCount<TFieldDescriptor, TField<I>...> == 1;
+        }
+
+        template<class... TArgs, size_t... I>
+        static constexpr bool CompleteValues(std::index_sequence<I...>) {
+            return sizeof...(TArgs) == FieldCount
+                && ((TypeCount<TFieldValue<TField<I>>, TArgs...> == 1) && ...);
+        }
+
+        template<size_t... I>
+        static auto StorageType(std::index_sequence<I...>)
+            -> std::tuple<TFieldValue<TField<I>>...>;
+
+    public:
+        // Bind each value to its field; argument order does not affect storage.
+        template<class TFieldDescriptor>
+            requires (HasField<TFieldDescriptor>(Indices))
+        static constexpr TFieldValue<TFieldDescriptor> Value(const typename TFieldDescriptor::TValueType& value) noexcept {
+            return {value};
+        }
+
+        class TValueType {
+            using TStorage = decltype(StorageType(Indices));
+
+            template<class... TArgs, size_t... I>
+            static constexpr TStorage MakeStorage(std::index_sequence<I...>, const TArgs&... args) noexcept {
+                const auto named = std::tuple{args...};
+                return TStorage{std::get<TFieldValue<TField<I>>>(named)...};
+            }
+
+        public:
+            // Missing, duplicate, foreign and positional values are rejected.
+            template<class... TArgs>
+                requires (CompleteValues<TArgs...>(Indices))
+            constexpr TValueType(const TArgs&... args) noexcept
+                : Values(MakeStorage(Indices, args...))
+            {}
+
+            template<class TFieldDescriptor>
+                requires (HasField<TFieldDescriptor>(Indices))
+            constexpr const typename TFieldDescriptor::TValueType& Get() const noexcept {
+                return std::get<TFieldValue<TFieldDescriptor>>(Values).Value;
+            }
+
+            bool operator==(const TValueType&) const = default;
+
+        private:
+            TStorage Values;
+        };
+
         inline static constexpr auto Fields = FieldMetadata(Indices);
 
-        // These readers deduce the complete tuple and reject a different schema.
+        // Readers return named values and reject a different schema.
         static TDeque<TGenericRecordView<TValueType>> ReadRecords(
                 const TLineSnapshot& snapshot,
                 TInstant beginTs = TInstant::Zero(), TInstant endTs = TInstant::Max()) {
@@ -84,7 +143,7 @@ namespace NActors {
 
         template<size_t... I>
         static TValueType DecodeValue(const std::array<ui64, FieldCount>& values, std::index_sequence<I...>) noexcept {
-            return TValueType{NInMemoryMetricsPrivate::DecodeLineValue<typename TField<I>::TValueType>(values[I])...};
+            return TValueType{Value<TField<I>>(NInMemoryMetricsPrivate::DecodeLineValue<typename TField<I>::TValueType>(values[I]))...};
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -146,7 +205,7 @@ namespace NActors {
 
         template<size_t... I>
         static auto EncodeValue(const TValueType& value, std::index_sequence<I...>) noexcept {
-            return std::array<ui64, FieldCount>{NInMemoryMetricsPrivate::EncodeLineValue(std::get<I>(value))...};
+            return std::array<ui64, FieldCount>{NInMemoryMetricsPrivate::EncodeLineValue(value.template Get<TField<I>>())...};
         }
 
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;

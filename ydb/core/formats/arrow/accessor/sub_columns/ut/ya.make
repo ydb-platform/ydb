@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/formats/arrow/accessor/sub_columns)
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/formats/arrow/accessor/composite
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/accessor/sub_columns/ut_common
     yql/essentials/public/udf/service/stub

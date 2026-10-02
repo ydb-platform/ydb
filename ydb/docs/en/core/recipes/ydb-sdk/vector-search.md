@@ -368,12 +368,97 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
             return result + "\x01";
         }
 
+<<<<<<< HEAD
         void InsertItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
             const std::string& tableName,
             const std::vector<TItem>& items)
         {
             std::string query = std::format(R"(
+=======
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        }));
+
+        std::cout << items.size() << " items inserted" << std::endl;
+    }
+    ```
+
+  {% endlist %}
+- Go
+
+  Use `sugar.Embedding` from Go SDK v3.153.0 or later to serialize the vector. Then execute a parameterized query:
+
+
+  ```go
+  import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
+
+  func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
+      query := fmt.Sprintf(`
+      DECLARE $items AS List<Struct<
+          id: Utf8,
+          document: Utf8,
+          embedding: String
+      >>;
+
+      UPSERT INTO %s
+      (id, document, embedding)
+      SELECT id, document, embedding
+      FROM AS_TABLE($items);
+      `, "`"+tableName+"`")
+
+      rows := make([]types.Value, 0, len(items))
+      for _, item := range items {
+      rows = append(rows, types.StructValue(
+          types.StructFieldValue("id", types.UTF8Value(item.ID)),
+          types.StructFieldValue("document", types.UTF8Value(item.Document)),
+          types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
+      ))
+      }
+
+      return db.Query().Exec(ctx, query,
+      query.WithParameters(
+          ydb.ParamsBuilder().Param("$items").BeginList().AddItems(rows...).EndList().Build(),
+      ),
+      )
+  }
+  ```
+
+- Java
+
+  {% list tabs %}
+
+  - Recommended approach
+
+    ```java
+    import java.nio.ByteBuffer;
+    import java.nio.ByteOrder;
+    import java.util.ArrayList;
+    import java.util.List;
+
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
+
+    byte[] convertVectorToBytes(float[] vector) {
+        ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
+        for (float v : vector) {
+            bb.putFloat(v);
+        }
+        bb.put((byte) 0x01);
+        return bb.array();
+    }
+
+    void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+        String query = String.format("""
+>>>>>>> 021c647f4c0 (docs: use sugar.Embedding in Go vector search recipes (#54510))
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
@@ -1128,6 +1213,73 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     }
     ```
 
+<<<<<<< HEAD
+=======
+  {% endlist %}
+- Go
+
+
+  ```go
+  type ResultItem struct {
+      ID       string
+      Document string
+      Score    float32
+  }
+
+  func searchItems(
+      ctx context.Context,
+      db *ydb.Driver,
+      tableName string,
+      embedding []float32,
+      strategy string,
+      limit int,
+      indexName string,
+  ) ([]ResultItem, error) {
+      viewIndex := ""
+      if indexName != "" {
+          viewIndex = "VIEW " + indexName
+      }
+      sortOrder := "DESC"
+      if !strings.HasSuffix(strategy, "Similarity") {
+          sortOrder = "ASC"
+      }
+      q := fmt.Sprintf(`
+          DECLARE $embedding AS String;
+          SELECT id, document, Knn::%s(embedding, $embedding) AS score
+          FROM %s %s
+          ORDER BY score %s
+          LIMIT %d;
+          `, strategy, tableName, viewIndex, sortOrder, limit)
+
+      row, err := db.Query().Query(ctx, q,
+      query.WithParameters(
+          ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
+      ),
+      )
+      if err != nil {
+          return nil, err
+      }
+      defer row.Close(ctx)
+
+      var items []ResultItem
+      for rs, err := row.NextResultSet(ctx); err == nil; rs, err = row.NextResultSet(ctx) {
+          for r, err := rs.NextRow(ctx); err == nil; r, err = rs.NextRow(ctx) {
+              var item ResultItem
+              if err := r.ScanNamed(
+                  query.Named("id", &item.ID),
+                  query.Named("document", &item.Document),
+                  query.Named("score", &item.Score),
+              ); err != nil {
+                  return nil, err
+              }
+              items = append(items, item)
+          }
+      }
+      return items, nil
+  }
+  ```
+
+>>>>>>> 021c647f4c0 (docs: use sugar.Embedding in Go vector search recipes (#54510))
 - Java
 
     ```java

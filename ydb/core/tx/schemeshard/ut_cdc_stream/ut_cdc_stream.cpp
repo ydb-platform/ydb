@@ -731,11 +731,19 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(smallParams.MinPartitionCount, 5);
         UNIT_ASSERT_VALUES_EQUAL(smallParams.MaxPartitionCount, maxShardsInPath);
 
+        // Above the formula minimum, the request itself is the strategy minimum.
+        auto requested = ReplicationStream(true);
+        requested.SetTopicPartitions(10'000);
+        const auto requestedParams = NCdc::MakeCdcPqPartParams(requested, 50'000, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.TotalGroupCount, 10'000);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.MinPartitionCount, 10'000);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.MaxPartitionCount, maxShardsInPath);
+
         auto aboveLimit = ReplicationStream(true);
         aboveLimit.SetTopicPartitions(100'000);
         const auto capped = NCdc::MakeCdcPqPartParams(aboveLimit, 50'000, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(capped.TotalGroupCount, maxShardsInPath);
-        UNIT_ASSERT_VALUES_EQUAL(capped.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(capped.MinPartitionCount, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(capped.MaxPartitionCount, maxShardsInPath);
     }
 

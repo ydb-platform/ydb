@@ -696,14 +696,13 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
 
     ui64 total = params.TotalGroupCount;
     if (op.HasTopicPartitions()) {
-        // An explicit topic size is kept. Only the path shard ceiling applies,
-        // and the strategy minimum must not grow the topic back up.
+        // TopicPartitions is min_active_partitions: the initial count and the
+        // strategy minimum. Only the path shard ceiling applies, so a smaller
+        // request is not raised to the formula minimum.
         if (total > maxParts) {
             total = maxParts;
         }
-        if (minParts > total) {
-            minParts = total;
-        }
+        minParts = total;
     } else if (total < minParts) {
         total = minParts;
     } else if (total > maxParts) {

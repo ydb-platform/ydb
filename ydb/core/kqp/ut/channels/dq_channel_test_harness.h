@@ -1,7 +1,8 @@
 #pragma once
 
 // Shared harness of the DQ Channels 2.0 tests: producer / consumer worker actors driving IChannelBuffer
-// directly, a two node TKikimrRunner and direct access to the node sessions of both channel services.
+// directly, a two node TKikimrRunner whose nodes talk over the interconnect mock of the test runtime, and
+// direct access to the node sessions of both channel services.
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -666,7 +667,9 @@ struct TLoadTest {
     virtual void Init() {
         Runner = std::make_unique<TKikimrRunner>(settings);
         Runtime = Runner->GetTestServer().GetRuntime();
-        Runtime->SetUseRealInterconnect();
+        // TKikimrRunner has initialized the runtime, which is when the interconnect is chosen: the nodes talk over
+        // the interconnect mock, a SetUseRealInterconnect() from here on would change nothing, see
+        // https://github.com/ydb-platform/ydb/issues/54892
 
         // the real bound of every GrabEdgeEvent: its own timeout is in simulated time
         Runtime->SetDispatchTimeout(WaitTimeout);

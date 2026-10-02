@@ -162,7 +162,7 @@ void TCommandImportBase::ExtractParams(TConfig& config) {
             if (CommonDestinationPath && item.Destination[0] != '/') {
                 item.Destination = CommonDestinationPath + "/" + item.Destination;
             }
-            NConsoleClient::AdjustPath(item.Destination, config);
+            AdjustPathToDatabase(item.Destination, config);
         }
     }
 }

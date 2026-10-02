@@ -9,7 +9,7 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 // Canonical internal names, may be compared for == without further normalization.
-// May be empty - that stands for full column requests.
+// Default construction stands for a full column request; Parse("") selects an empty-name subcolumn.
 // An invalid non-parseable input will create a canonical name that is invalid JsonPath - see `Parse` comment.
 class TCanonicalSubColumnName {
 private:

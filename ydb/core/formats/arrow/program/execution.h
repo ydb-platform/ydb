@@ -138,14 +138,16 @@ public:
     class TFetchHeaderContext {
     private:
         YDB_READONLY(ui32, ColumnId, 0);
-        YDB_READONLY_DEF(THashSet<TString>, SubColumnNames);
+        YDB_READONLY_DEF(THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName>, SubColumnNames);
 
     public:
         NJson::TJsonValue DebugJson() const {
             NJson::TJsonValue result = NJson::JSON_MAP;
             result.InsertValue("cid", ColumnId);
             if (SubColumnNames.size()) {
-                result.InsertValue("sc", JoinSeq(",", SubColumnNames));
+                result.InsertValue("sc", JoinSeq(",", SubColumnNames | std::views::transform([](const auto& name) -> const TString& {
+                    return name.GetValue();
+                })));
             }
             return result;
         }
@@ -154,14 +156,15 @@ public:
             return 1;
         }
 
-        TFetchHeaderContext(const ui32 columnId, const THashSet<TString>& subColumnNames)
+        TFetchHeaderContext(const ui32 columnId, const THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName>& subColumnNames)
             : ColumnId(columnId)
             , SubColumnNames(subColumnNames) {
         }
 
-        void AddSubColumn(const TString& subColumnName) {
+        void AddSubColumn(const NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) {
             AFL_VERIFY(SubColumnNames.emplace(subColumnName).second);
         }
+
         void MergeFrom(const TFetchHeaderContext& ctx) {
             AFL_VERIFY(ColumnId == ctx.GetColumnId());
             SubColumnNames.insert(ctx.SubColumnNames.begin(), ctx.SubColumnNames.end());
@@ -281,10 +284,10 @@ public:
     class TCheckHeaderContext {
     private:
         YDB_READONLY(ui32, ColumnId, 0);
-        YDB_READONLY_DEF(TString, SubColumnName);
+        YDB_READONLY_DEF(NAccessor::NSubColumns::TCanonicalSubColumnName, SubColumnName);
 
     public:
-        TCheckHeaderContext(const ui32 columnId, const TString& subColumnName)
+        TCheckHeaderContext(const ui32 columnId, const NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName)
             : ColumnId(columnId)
             , SubColumnName(subColumnName) {
         }

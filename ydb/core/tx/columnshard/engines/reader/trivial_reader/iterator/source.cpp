@@ -395,10 +395,10 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
         bool isAllowed = false;
         if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
             const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(arrData.get());
-            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName());
+            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName().GetValue());
         } else if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
             const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsArray*>(arrData.get());
-            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName());
+            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName().GetValue());
         } else {
             AFL_VERIFY(false);
         }

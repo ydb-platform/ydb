@@ -670,13 +670,13 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     RemoveEdge(condNode, dest, destResourceId);
 
     const ui32 resourceIdxFetch = BuildNextResourceId();
-    IDataSource::TFetchHeaderContext headerContext(dataAddr->GetColumnId(), { dataAddr->GetSubColumnName().GetValue() });
+    IDataSource::TFetchHeaderContext headerContext(dataAddr->GetColumnId(), { dataAddr->GetSubColumnName() });
     auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, headerContext);
     auto indexFetchNode = AddNode(indexFetchProc);
     RegisterProducer(resourceIdxFetch, indexFetchNode.get());
 
     const ui32 resourceIdIndexToAnd = BuildNextResourceId();
-    IDataSource::TCheckHeaderContext checkHeaderContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName().GetValue());
+    IDataSource::TCheckHeaderContext checkHeaderContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName());
     auto indexCheckProc = std::make_shared<THeaderCheckerProcessor>(resourceIdxFetch, checkHeaderContext, resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);
     RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());

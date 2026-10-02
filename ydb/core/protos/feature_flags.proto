@@ -432,5 +432,8 @@ message TFeatureFlags {
     optional bool EnableAsyncIndexReplication = 351 [default = false];
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
     optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
-    optional bool EnableStreamingQueryTopicAutopartitioning = 354 [default = true];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    optional bool EnableRelativePaths = 354 [default = false];
+    optional bool EnableStreamingQueryTopicAutopartitioning = 355 [default = true];
 }

@@ -1586,6 +1586,11 @@
                 "ColumnId": 34,
                 "ColumnName": "TablesMetricsLevel",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "StorageSpaceExhausted",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1625,7 +1630,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,

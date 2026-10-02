@@ -756,6 +756,20 @@
             "uri": "https://{canondata_backend}/1773845/5e187b5c8712eed0b26575ad1c84f3158af43d1d/resource.tar.gz#test.test_pg-pg_array_cast-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-pg_array_cast_empty-default.txt-Debug]": [
+        {
+            "checksum": "50a2439930b449f1c52695e14f274e20",
+            "size": 522,
+            "uri": "https://{canondata_backend}/1923547/6267f315fa5f3c0459444dd3d4cffe595c99d7aa/resource.tar.gz#test.test_pg-pg_array_cast_empty-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-pg_array_cast_empty-default.txt-Results]": [
+        {
+            "checksum": "6e502bd73a45c6813b62cf05cfd3dba9",
+            "size": 927,
+            "uri": "https://{canondata_backend}/1923547/6267f315fa5f3c0459444dd3d4cffe595c99d7aa/resource.tar.gz#test.test_pg-pg_array_cast_empty-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-pg_corr_offset-default.txt-Debug]": [
         {
             "checksum": "e7a22ee3048897175cef2206ade58fd2",
@@ -1272,6 +1286,20 @@
             "checksum": "8039a72dd2626122044ace53bdd43184",
             "size": 10547,
             "uri": "https://{canondata_backend}/1920236/aa86f936f2ec6b1048d127933f80b906a8e17107/resource.tar.gz#test.test_select_yql-without-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-window_fn_rank_nullable_disabled-default.txt-Debug]": [
+        {
+            "checksum": "a42e815dfe3ec87270ef8fa7c02de513",
+            "size": 2039,
+            "uri": "https://{canondata_backend}/1899731/f97798a335e9eac628a8bf1a6782abed548b3606/resource.tar.gz#test.test_select_yql-window_fn_rank_nullable_disabled-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_fn_rank_nullable_disabled-default.txt-Results]": [
+        {
+            "checksum": "55a2e6620db63a6f69cbaed8413aef80",
+            "size": 4939,
+            "uri": "https://{canondata_backend}/1899731/f97798a335e9eac628a8bf1a6782abed548b3606/resource.tar.gz#test.test_select_yql-window_fn_rank_nullable_disabled-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql_tpch-q15-default.txt-Debug]": [

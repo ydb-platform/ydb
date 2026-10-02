@@ -3911,7 +3911,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const ui64 step = event.GetStep();
     // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
     // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
-    // поднял бы этот пол
+    // поднял бы эту нижнюю границу
     TMaybe<ui64> lastKnownTxId;
 
     TVector<ui64> txIds;

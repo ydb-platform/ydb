@@ -189,6 +189,10 @@
         "type": "Bool?"
       },
       {
+        "name": "SpaceColor",
+        "type": "Utf8?"
+      },
+      {
         "name": "GroupId",
         "type": "Uint32?"
       },
@@ -434,6 +438,18 @@
       {
         "name": "DefaultGroupSizeInUnits",
         "type": "Uint32?"
+      },
+      {
+        "name": "BestSpaceColor",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WorstSpaceColor",
+        "type": "Utf8?"
+      },
+      {
+        "name": "SpaceExhausted",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

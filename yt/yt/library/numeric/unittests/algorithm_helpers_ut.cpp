@@ -13,7 +13,6 @@ namespace {
 TEST(TAlgorithmHelpersTest, LowerUpperBoundOracle)
 {
     for (int size = 0; size <= 200; ++size) {
-        // Sorted vector with duplicates: each value repeated, so equal-range probes are exercised.
         std::vector<int> data;
         data.reserve(size);
         for (int i = 0; i < size; ++i) {
@@ -24,13 +23,13 @@ TEST(TAlgorithmHelpersTest, LowerUpperBoundOracle)
             auto expectedLower = std::lower_bound(data.begin(), data.end(), value);
             auto expectedUpper = std::upper_bound(data.begin(), data.end(), value);
 
-            EXPECT_EQ(NYT::LowerBound(data.begin(), data.end(), value), expectedLower)
+            EXPECT_EQ(LowerBound(data.begin(), data.end(), value), expectedLower)
                 << "size=" << size << " value=" << value;
-            EXPECT_EQ(NYT::UpperBound(data.begin(), data.end(), value), expectedUpper)
+            EXPECT_EQ(UpperBound(data.begin(), data.end(), value), expectedUpper)
                 << "size=" << size << " value=" << value;
-            EXPECT_EQ(NYT::ExpLowerBound(data.begin(), data.end(), value), expectedLower)
+            EXPECT_EQ(ExpLowerBound(data.begin(), data.end(), value), expectedLower)
                 << "size=" << size << " value=" << value;
-            EXPECT_EQ(NYT::ExpUpperBound(data.begin(), data.end(), value), expectedUpper)
+            EXPECT_EQ(ExpUpperBound(data.begin(), data.end(), value), expectedUpper)
                 << "size=" << size << " value=" << value;
         }
     }

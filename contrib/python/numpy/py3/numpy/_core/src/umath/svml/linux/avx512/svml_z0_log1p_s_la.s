@@ -4,6 +4,7 @@
 *******************************************/
 
 
+	.file   "svml_z0_log1p_s_la.s"
 	.text
 .L_2__routine_start___svml_log1pf16_z0_0:
 

@@ -277,4 +277,8 @@ class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgrade
                 [f'{{"error_count":1,"host":"host-{i}",' f'"ts":"{window_year}-01-01T00:00:00Z"}}' + suffix],
             )
             self.do_write_read(input_data, acceptor)
-            time.sleep(0.5)
+            wait_completed_checkpoints(
+                self.cluster,
+                f"/Root/{self.query_name}",
+                timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            )

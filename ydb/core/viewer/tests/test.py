@@ -2335,6 +2335,31 @@ class TestViewer(object):
             time.sleep(1)
         return result
 
+    # Strict database users can still get storage statistics for a table inside dedicated or serverless databases.
+    @classmethod
+    def test_storage_stats_path_for_database_user(cls):
+        headers = cls.make_cookie_headers(cls.database_session_id)
+        for database in (cls.dedicated_db, cls.serverless_db):
+            path = database + '/table1'
+            for use_hive_tablets in (0, 1):
+                params = {
+                    'database': database,
+                    'path': path,
+                    'group_by': 'path',
+                    'use_hive_tablets': use_hive_tablets,
+                    'tablets': 'true',
+                }
+                expected = cls.get_viewer('/viewer/storage_stats', params)
+                actual = cls.get_viewer('/viewer/storage_stats', params, headers=headers)
+                assert 'status_code' not in expected, expected
+                assert 'status_code' not in actual, actual
+                assert len(actual['Paths']) == 1, actual
+                assert actual['Paths'][0]['FullPath'] == path, actual
+                expected_ids = {tablet['TabletId'] for tablet in expected['Paths'][0]['Tablets']}
+                actual_ids = {tablet['TabletId'] for tablet in actual['Paths'][0]['Tablets']}
+                assert expected_ids, expected
+                assert actual_ids == expected_ids, (actual, expected)
+
     @classmethod
     def test_viewer_peers(cls):
         result = cls.get_viewer_normalized("/viewer/peers")

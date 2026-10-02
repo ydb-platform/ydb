@@ -188,11 +188,24 @@ public:
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             CollectStoragePoolsAllowed(DatabaseNavigateResponse->GetRef());
             TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
-            if (entry.Self && entry.DomainInfo) {
+            if (entry.Status == TNavigate::EStatus::Ok && entry.Self && entry.DomainInfo) {
                 const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
                 const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
                 SubDomainKey = TSubDomainKey(ownerId, localPathId);
             }
+        }
+        // Database-wide tablet discovery requires a reliable domain filter for strict database users.
+        if (Paths.empty() && GroupBy == EGroupBy::TabletType
+            && (!SubDomainKey.GetSchemeShard() || !SubDomainKey.GetPathId())
+            && IsStrictDatabaseOnlyRequest()
+        ) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: the database tablet scope is unknown",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database});
+            return ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "Database tablet scope is unavailable, request cannot be validated"),
+                "Access denied");
         }
         if (StoragePoolNames.empty()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No storage pools found"));

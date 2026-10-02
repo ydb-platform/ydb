@@ -20,6 +20,7 @@ SRCS(
     viewer_ut.cpp
     viewer_subscriptions_ut.cpp
     topic_data_ut.cpp
+    ut/storage_stats_ut.cpp
     ut/ut_utils.cpp
 )
 

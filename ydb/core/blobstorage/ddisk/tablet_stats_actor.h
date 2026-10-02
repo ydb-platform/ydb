@@ -35,13 +35,12 @@ struct TEvTabletStatsBatch : NActors::TEventLocal<TEvTabletStatsBatch, TEv::EvTa
     std::vector<TTabletStatsSample> Samples;
     TInstant SampledAt;
     std::optional<TMonotonic> NextDeadline;
-    bool Available = true;
 };
 
 struct TEvCollectTabletStats : NActors::TEventLocal<TEvCollectTabletStats, TEv::EvCollectTabletStats> {};
 struct TEvTabletStatsChanged : NActors::TEventLocal<TEvTabletStatsChanged, TEv::EvTabletStatsChanged> {};
 
-// Send to DDisk or directly to its statistics actor. Results are bounded and
+// Send to DDisk. Results are bounded and
 // ordered by ID. Samples are asynchronous: SampledAt exposes backlog freshness.
 struct TEvGetTabletStats : NActors::TEventLocal<TEvGetTabletStats, TEv::EvGetTabletStats> {
     std::optional<ui64> TabletId;

@@ -21,16 +21,14 @@ void TDDiskActor::CountTabletChunks(ui64 tabletId, i64 delta) {
 
 void TDDiskActor::Handle(TEvCollectTabletStats::TPtr ev) {
     Y_ABORT_UNLESS(ev->Sender == TabletStatsActor);
-    auto batch = std::make_unique<TEvTabletStatsBatch>();
-    batch->Available = !Stopping;
-    if (!Stopping) {
-        batch->Samples = TabletStats.Collect(TActivationContext::Monotonic());
-        batch->SampledAt = TActivationContext::Now();
-        batch->NextDeadline = TabletStats.NextDeadline();
-        // Clear before replying: a later mutation emits a wakeup even if this
-        // final batch is still being delivered or processed by the collector.
-        TabletStatsActive = batch->NextDeadline.has_value();
+    if (Stopping) {
+        return;
     }
+    auto batch = std::make_unique<TEvTabletStatsBatch>();
+    batch->Samples = TabletStats.Collect(TActivationContext::Monotonic());
+    batch->SampledAt = TActivationContext::Now();
+    batch->NextDeadline = TabletStats.NextDeadline();
+    TabletStatsActive = batch->NextDeadline.has_value();
     Send(TabletStatsActor, batch.release());
 }
 

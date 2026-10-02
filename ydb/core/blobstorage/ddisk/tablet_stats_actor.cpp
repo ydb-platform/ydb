@@ -13,7 +13,6 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     std::map<ui64, TTabletStats> Tablets;
     bool RequestInFlight = false;
     bool TimerScheduled = false;
-    bool Available = true;
 
     void RequestBatch() {
         RequestInFlight = true;
@@ -21,7 +20,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     }
 
     void Handle(TEvTabletStatsChanged::TPtr ev) {
-        Y_ABORT_UNLESS(ev->Sender == Owner && Available);
+        Y_ABORT_UNLESS(ev->Sender == Owner);
         if (!RequestInFlight && !TimerScheduled) {
             RequestBatch();
         }
@@ -35,10 +34,6 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     void Handle(TEvTabletStatsBatch::TPtr ev) {
         Y_ABORT_UNLESS(ev->Sender == Owner && RequestInFlight);
         RequestInFlight = false;
-        Available = ev->Get()->Available;
-        if (!Available) {
-            return;
-        }
         Y_ABORT_UNLESS(ev->Get()->Samples.size() <= TTabletStatsTracker::MaxBatch);
         for (const auto& sample : ev->Get()->Samples) {
             if (sample.Retired) {
@@ -65,11 +60,6 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     void Handle(TEvGetTabletStats::TPtr ev) {
         const auto& query = *ev->Get();
         auto result = std::make_unique<TEvTabletStats>();
-        result->Available = Available;
-        if (!Available) {
-            Send(ev->Sender, result.release(), 0, ev->Cookie);
-            return;
-        }
         if (query.TabletId) {
             if (auto it = Tablets.find(*query.TabletId); it != Tablets.end()) {
                 result->Tablets.push_back(it->second);

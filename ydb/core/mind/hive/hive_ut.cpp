@@ -918,13 +918,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return request.Record;
     }
 
-    Y_UNIT_TEST(TestBulkCreateLostReplyAndHiveReboot) {
+    void CheckBulkCreateLostReplyAndHiveReboot(bool ignoreBalancer) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hive = MakeDefaultHiveID();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
         MakeSureTabletIsUp(runtime, hive, 0);
         auto record = MakeBulkCreate(1000, 4);
+        if (ignoreBalancer) {
+            record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+        }
         auto* followers = record.AddFollowerGroups();
         followers->SetFollowerCount(1);
         followers->SetLocalNodeOnly(true);
@@ -946,11 +949,22 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         replies.Stop().clear(); // lose the reply after commit
 
         RebootTablet(runtime, hive, runtime.AllocateEdgeActor());
+        // Check the loaded policy before any create retry can change the tablet.
+        const auto infoSender = runtime.AllocateEdgeActor();
+        for (const auto& result : committed.GetResults()) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+            runtime.SendToPipe(hive, infoSender, new TEvHive::TEvRequestHiveInfo(result.GetTabletID(), false),
+                0, GetPipeConfigWithRetries());
+            const auto info = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(infoSender)->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(info.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetTablets(0).GetTabletID(), result.GetTabletID());
+            UNIT_ASSERT_VALUES_EQUAL(info.GetTablets(0).GetBalancerPolicy(), record.GetBalancerPolicy());
+        }
         const auto retry = SendBulkCreate(runtime, record);
         UNIT_ASSERT(retry.GetIsBatch());
         UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 4);
         THashSet<ui64> ids;
-        for (int i = 0; i < retry.ResultsSize(); ++i) {
+        for (size_t i = 0; i < retry.ResultsSize(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetStatus(), NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetOwnerIdx(), 1000 + i);
             UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetTabletID(), committed.GetResults(i).GetTabletID());
@@ -964,6 +978,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(sparse.ResultsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sparse.GetResults(0).GetTabletID(), committed.GetResults(3).GetTabletID());
         UNIT_ASSERT_VALUES_EQUAL(sparse.GetResults(1).GetTabletID(), committed.GetResults(1).GetTabletID());
+    }
+
+    Y_UNIT_TEST(TestBulkCreateLostReplyAndHiveReboot) {
+        CheckBulkCreateLostReplyAndHiveReboot(false);
+    }
+
+    Y_UNIT_TEST(TestBulkCreateLostReplyAndHiveRebootWithIgnoredBalancer) {
+        CheckBulkCreateLostReplyAndHiveReboot(true);
     }
 
     Y_UNIT_TEST(TestBulkCreatePartialConflictDoesNotUpdateTablet) {

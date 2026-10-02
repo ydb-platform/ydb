@@ -493,6 +493,7 @@ public:
                     tablet.Category->Tablets.insert(&tablet);
                 }
                 tablet.BootMode = tabletRowset.GetValue<Schema::Tablet::BootMode>();
+                tablet.BalancerPolicy = tabletRowset.GetValueOrDefault<Schema::Tablet::BalancerPolicy>();
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {

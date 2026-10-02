@@ -30,7 +30,7 @@ void CheckRequests(const TVector<NKikimrHive::TEvCreateTablet>& requests, bool b
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
-    Y_UNIT_TEST_TWIN(CreateAndBackupCopy, bulk) {
+    Y_UNIT_TEST_FLAG(CreateAndBackupCopy, bulk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(bulk);
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Backup"), {NLs::PathExist, NLs::IsTable});
     }
 
-    Y_UNIT_TEST_TWIN(SparseRetryOnlyForFailedItems, legacyRetry) {
+    Y_UNIT_TEST_FLAG(SparseRetryOnlyForFailedItems, legacyRetry) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         env.TestWaitNotification(runtime, 100);
         UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 4);
-        for (int i = 0; i < committed.ResultsSize(); ++i) {
+        for (size_t i = 0; i < committed.ResultsSize(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetOwnerIdx(), committed.GetResults(i).GetOwnerIdx());
             UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetTabletID(), committed.GetResults(i).GetTabletID());
         }

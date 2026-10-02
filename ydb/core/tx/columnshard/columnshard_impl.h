@@ -568,6 +568,8 @@ private:
 
     // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
     std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
+    // The move's own count: it gates SetupMoveDataMetadata without queueing behind tiering's requests.
+    std::shared_ptr<TAtomicCounter> MoveDataMetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
@@ -632,10 +634,10 @@ private:
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
-    // Re-arms only the move's accessor requests, ungated: they must not queue behind tiering's.
+    // Re-arms only the move's accessor requests, gated by their own in-flight count so they never queue behind tiering's.
     void SetupMoveDataMetadata();
-    void StartMetadataRequests(
-        std::vector<NOlap::TCSMetadataRequest>&& requests, const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext);
+    void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight);
     bool SetupTtl();
     void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);

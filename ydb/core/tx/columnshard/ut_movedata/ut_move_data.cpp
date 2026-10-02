@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
                 actualizer->AddToInitialAndPendingForTest(portionId);
             }
-            return actualizer->BuildMoveDataMetadataRequests(knownPortions, {}, actualizer, TInstant::Seconds(1000));
+            return actualizer->BuildMoveDataMetadataRequests(knownPortions, {}, actualizer);
         };
 
         auto batchSizes = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
@@ -417,68 +417,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             UNIT_ASSERT_VALUES_EQUAL(ids.size(), PortionsCount - 1);
             UNIT_ASSERT_C(!ids.contains(PortionsCount), "a portion the engine no longer knows must not be requested");
         }
-    }
-
-    // Every background pass and every reply rebuilds the requests, so a pending portion must be asked for once until answered.
-    Y_UNIT_TEST(PendingPortionIsRequestedOnceUntilAnswered) {
-        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
-        for (ui64 portionId = 1; portionId <= 3; ++portionId) {
-            portions.emplace(portionId, MakeDefaultTierPortion(portionId));
-        }
-        // A zero soft limit makes every portion its own request.
-        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(0);
-        auto actualizer = std::make_shared<TMoveDataActualizerTestable>(THashSet<ui32>{ 100 }, schema.Index);
-        for (ui64 portionId = 1; portionId <= 3; ++portionId) {
-            actualizer->AddToInitialAndPendingForTest(portionId);
-        }
-        auto requested = [&](const TInstant now) {
-            TVector<ui64> result;
-            for (auto&& request : actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, now)) {
-                for (auto&& portionId : request.GetRequest()->GetPortionIds()) {
-                    result.emplace_back(portionId);
-                }
-            }
-            Sort(result);
-            return result;
-        };
-
-        const TInstant start = TInstant::Seconds(1000);
-        UNIT_ASSERT_VALUES_EQUAL(requested(start), (TVector<ui64>{ 1, 2, 3 }));
-        UNIT_ASSERT_VALUES_EQUAL_C(requested(start + TDuration::Seconds(1)), TVector<ui64>(), "outstanding requests must not be repeated");
-
-        // An answer that could not resolve portion 1 leaves it pending, so it is asked for again.
-        actualizer->OnMetadataRequestAnswered({ 1 }, start);
-        UNIT_ASSERT_VALUES_EQUAL(requested(start + TDuration::Seconds(2)), (TVector<ui64>{ 1 }));
-
-        // Requests that never got an answer are repeated after the expiry; the fresh request for portion 1 is not.
-        const TInstant pastExpiry = start + NOlap::NActualizer::TMoveDataActualizer::MetadataRequestExpiry + TDuration::Seconds(1);
-        UNIT_ASSERT_VALUES_EQUAL(requested(pastExpiry), (TVector<ui64>{ 2, 3 }));
-    }
-
-    // Request A expires and B replaces it: a late answer to A must leave B outstanding.
-    Y_UNIT_TEST(LateAnswerToExpiredRequestKeepsItsSuccessor) {
-        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1, MakeDefaultTierPortion(1) } };
-        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(0);
-        auto actualizer = std::make_shared<TMoveDataActualizerTestable>(THashSet<ui32>{ 100 }, schema.Index);
-        actualizer->AddToInitialAndPendingForTest(1);
-        auto requestCount = [&](const TInstant now) {
-            return actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, now).size();
-        };
-
-        const TInstant first = TInstant::Seconds(1000);
-        const TInstant second = first + NOlap::NActualizer::TMoveDataActualizer::MetadataRequestExpiry + TDuration::Seconds(1);
-        UNIT_ASSERT_VALUES_EQUAL(requestCount(first), 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(requestCount(second), 1, "the unanswered first request must expire");
-
-        actualizer->OnMetadataRequestAnswered({ 1 }, first);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            requestCount(second + TDuration::Seconds(1)), 0, "a late answer to the expired request cleared its successor");
-
-        actualizer->OnMetadataRequestAnswered({ 1 }, second);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            requestCount(second + TDuration::Seconds(2)), 1, "the answered portion is still pending, so it is asked for again");
     }
 
     // Tiered portions are admitted iff at least one entity resolves to DefaultStorageId.

@@ -155,8 +155,8 @@ public:
         return GranulesStorage->CollectMetadataRequests();
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const TInstant now) const {
-        return GranulesStorage->CollectMoveDataMetadataRequests(now);
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() const {
+        return GranulesStorage->CollectMoveDataMetadataRequests();
     }
 
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;

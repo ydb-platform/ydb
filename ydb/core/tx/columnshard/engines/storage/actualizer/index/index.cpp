@@ -98,12 +98,12 @@ std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataReque
     return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
-std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const TInstant now) {
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
     if (!MoveDataActualizer) {
         return {};
     }
-    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, uncommitted, MoveDataActualizer, now);
+    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, uncommitted, MoveDataActualizer);
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

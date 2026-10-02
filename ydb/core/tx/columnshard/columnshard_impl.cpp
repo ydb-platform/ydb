@@ -891,16 +891,16 @@ public:
     }
 };
 
-void TColumnShard::StartMetadataRequests(
-    std::vector<NOlap::TCSMetadataRequest>&& requests, const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext) {
+void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
+    const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight) {
     for (auto&& i : requests) {
         const ui64 accessorsMemory =
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
-            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), taskContext,
-                std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation(), MetadataRequestsInFlight),
-                DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), taskContext,
+                                        std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
+                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation(), inFlight),
+                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
     }
 }
 
@@ -908,15 +908,15 @@ void TColumnShard::SetupMetadata() {
     if (MetadataRequestsInFlight->Val()) {
         return;
     }
-    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription);
+    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight);
 }
 
 void TColumnShard::SetupMoveDataMetadata() {
-    if (!MoveDataState.Active || !HasIndex()) {
+    if (!MoveDataState.Active || !HasIndex() || MoveDataMetadataRequestsInFlight->Val()) {
         return;
     }
     StartMetadataRequests(
-        GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(NActors::TActivationContext::Now()), MoveDataTaskSubscription);
+        GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MoveDataTaskSubscription, MoveDataMetadataRequestsInFlight);
 }
 
 bool TColumnShard::SetupTtl() {

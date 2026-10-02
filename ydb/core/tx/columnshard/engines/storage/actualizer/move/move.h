@@ -32,8 +32,6 @@ private:
     THashSet<ui64> InFlightPortionIds;
     // Seeded portions that left the index; the gate waits until cleanup erases them from the granule.
     THashSet<ui64> RetiredPortionIds;
-    // Pending portions with an unanswered accessor request; the expiry re-asks for a request that got lost.
-    THashMap<ui64, TInstant> RequestedAt;
     // Uncommitted at the session start: a commit hands them to the normal path, an abort drops them.
     THashSet<ui64> UncommittedPortionIds;
     // Uncommitted portions with blobs in TargetGroups, held until the write commits or aborts.
@@ -55,9 +53,6 @@ public:
     static bool HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups);
 
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
-
-    // Called for every reply, errors included; clears only portions still tracked under that request, not its successor.
-    void OnMetadataRequestAnswered(const std::vector<ui64>& portionIds, const TInstant requestedAt);
 
 protected:
     // Protected test helpers: unit tests subclass to reach them, production code cannot.
@@ -84,15 +79,13 @@ protected:
     }
 
 public:
+    // Asks for every pending portion: the caller runs it only while no move request is in flight.
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
-        const TInstant now);
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self);
 
     // Retired is counted against the granule's maps: a retired id still present there awaits cleanup.
     TMoveDataQueueSizes GetMoveDataQueueSizes(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const;
-
-    static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
     // Once, right after construction: a new target set gets a new actualizer.
     void Seed(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);

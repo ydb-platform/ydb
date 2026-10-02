@@ -26,10 +26,10 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         return false;
     }
 
-    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(CreationState.load()) << Endl;
+    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(State.load()) << Endl;
 
-    if (CreationState.load() == TCreationState::Unknown) {
-        CreationState.store(TCreationState::Creating);
+    if (State.load() == TState::Created) {
+        State.store(TState::Creating);
 
         if (FlushInterval) {
             NActors::TActivationContext::Register(
@@ -88,7 +88,7 @@ void TBaseEventLogWriter::Flush() {
     if (CurrentBatchSize == 0) {
         return;
     }
-    if (CreationState.load() != TCreationState::Exists) {
+    if (State.load() != TState::Working) {
         Cerr << "DEBUG: TBaseEventLogWriter::Flush delay" <<  Endl;
         return;
     }

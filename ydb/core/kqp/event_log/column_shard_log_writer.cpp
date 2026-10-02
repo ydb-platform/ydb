@@ -173,7 +173,7 @@ std::optional<TVector<TString>> TColumnShardLogWriter::GetTableColumnNames() con
 }
 
 bool TColumnShardLogWriter::CheckStorageExists() {
-    if (CreationState.load() == TCreationState::Exists) {
+    if (State.load() == TState::Working) {
         return true;
     }
 
@@ -188,64 +188,95 @@ bool TColumnShardLogWriter::CheckStorageExists() {
     }
     Cerr << Endl;
 
-    CreationState.store(TCreationState::Exists);
+    State.store(TState::Working);
     return true;
 }
 
-bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query) {
+void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query, std::function<void()> handle) {
     Ydb::Table::ExecuteSchemeQueryRequest request;
     request.set_session_id(sessionId);
     request.set_yql_text(query);
 
+    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
         std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
-    const auto response = future.GetValueSync();
-    return response.operation().status() == Ydb::StatusIds::SUCCESS;
+    future.Subscribe([pThis, query, handle](const NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> f) {
+        const auto response = f.GetValueSync();
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            Cerr << "DEBUG: FAILED to execute query " << query << Endl;
+            pThis->State.store(TState::CreateError);
+            return;
+        }
+        Cerr << "DEBUG: SUCCESS to execute query " << query << Endl;
+        handle();
+    });
 }
 
-void TColumnShardLogWriter::CreateStorage() {
-    Cerr << "DEBUG: CreateStorage" <<  Endl;
-
+void TColumnShardLogWriter::CreateSession() {
+    Cerr << "DEBUG: CreateSession" << Endl;
     Ydb::Table::CreateSessionRequest request;
+
+    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
         std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
-    const auto response = future.GetValueSync();
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "FAILED to create session" << Endl;
-    }
+    future.Subscribe([pThis](const NThreading::TFuture<Ydb::Table::CreateSessionResponse> f) {
 
-    Ydb::Table::CreateSessionResult result;
-    if (!response.operation().result().UnpackTo(&result)) {
-        Cerr << "FAILED to create session" << Endl;
-    }
-    const TString sessionId = result.session_id();
-    if (sessionId.empty()) {
-        Cerr << "FAILED to create session" << Endl;
-        return ;
-    }
+        Cerr << "DEBUG: Enter response handler" << Endl;
+
+        const auto response = f.GetValueSync();
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            Cerr << "DEBUG: FAILED to create session" << Endl;
+            pThis->State.store(TState::CreateError);
+            return;
+        }
+
+        Ydb::Table::CreateSessionResult result;
+        if (!response.operation().result().UnpackTo(&result)) {
+            Cerr << "DEBUG: FAILED to create session" << Endl;
+            pThis->State.store(TState::CreateError);
+            return;
+        }
+        const TString sessionId = result.session_id();
+        if (sessionId.empty()) {
+            Cerr << "FAILED to create session" << Endl;
+            pThis->State.store(TState::CreateError);
+            return;
+        }
+        Cerr << "DEBUG: Subscribe sessionId=" << sessionId << Endl;
+        pThis->CreateStorage(sessionId);
+    });
+}
+
+void TColumnShardLogWriter::CreateStorage(const TString& sessionId) {
+    Cerr << "DEBUG: CreateStorage" <<  Endl;
 
     const auto storeQuery = GetCreateStoreQuery();
     Cerr << "DEBUG: QUERY: " << storeQuery << Endl;
-    if (!ExecuteSchemeQuery(sessionId, storeQuery)) {
-        Cerr << "FAILED to create table store" << Endl;
-        return;
-    }
+    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    ExecuteSchemeQuery(sessionId, storeQuery,
+        [pThis, sessionId]() {
+            pThis->CreateTable(sessionId);
+        });
+}
+
+void TColumnShardLogWriter::CreateTable(const TString& sessionId) {
 
     const auto tableQuery = GetCreateTableQuery();
     Cerr << "DEBUG: QUERY: " << tableQuery << Endl;
-    if (!ExecuteSchemeQuery(sessionId, tableQuery)) {
-        Cerr << "FAILED to create table" << Endl;
-    }
-
-    Cerr << "DEBUG: Set CreationState = TCreationState::Exists" <<  Endl;
-    CreationState.store(TCreationState::Exists);
-    //@ todo force call Flush immediatelly?
+    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    ExecuteSchemeQuery(sessionId, tableQuery,
+        [pThis, sessionId]() {
+            Cerr << "DEBUG: Set CreationState = TState::Exists" <<  Endl;
+            pThis->State.store(TState::Working);
+            // @todo sync call Flush
+            pThis->Flush();
+        });
 }
 
 void TColumnShardLogWriter::CreateOrUpdateStorage() {
     Cerr << "DEBUG: CreateOrUpdateStorage" <<  Endl;
     if (!CheckStorageExists()) {
-        CreateStorage();
+        CreateSession();
     }
 }
 

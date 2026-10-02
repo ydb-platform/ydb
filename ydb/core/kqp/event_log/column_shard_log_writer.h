@@ -47,9 +47,13 @@ protected:
     TString GetStorePath() const;
     TString GetTablePath() const;
     std::optional<TVector<TString>> GetTableColumnNames() const;
-    void CreateStorage();
-    bool ExecuteSchemeQuery(const TString& sessionId, const TString& query);
+
+    void CreateSession();
+    void CreateStorage(const TString& sessionId);
+    void CreateTable(const TString& sessionId);
+    void ExecuteSchemeQuery(const TString& sessionId, const TString& query, std::function<void()> handle);
     bool CheckStorageExists();
+
     void CreateOrUpdateStorage() override;
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 

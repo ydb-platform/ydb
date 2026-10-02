@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogMessageNodeIdColumn>()
         }, 100 /* Disable autoflush by size */);
 
-        // Write data
+        // Write single message to create table
         env.WriteLog([&](){
             NActors::NStructuredLog::TLogMessage message;
             message.Component = TEnvironment::Component;
@@ -444,7 +444,26 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             // First chunk
             message.NodeId = 1;
             env.Writer->Write(message);
+            env.Writer->Flush();
+        });
+        // Wait flush complete
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 0;
+            }));
+        // Check content
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"}});
+
+        // Write data
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+
+            // First chunk
             message.NodeId = 2;
+            env.Writer->Write(message);
+            message.NodeId = 3;
             env.Writer->Write(message);
         });
 
@@ -453,8 +472,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             WaitCondition([&](){
                 return env.Writer->GetCurrentBatchSize() == 2;
             }));
-        env.Writer->CheckWrittenLogContent({});
-
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"}});
 
         // Flush
         env.WriteLog([&](){
@@ -468,7 +487,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             }));
         env.Writer->CheckWrittenLogContent({
             {"1u", "1u"},
-            {"2u", "2u"}});
+            {"2u", "2u"},
+            {"3u", "3u"}});
     }
 
     Y_UNIT_TEST(AutoFlushBySize) {
@@ -476,9 +496,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
             std::make_shared<TDBLogMessageNodeIdColumn>()
-        }, 2 /* Disable autoflush by size */);
+        }, 2);
 
-        // Write data
+        // Write single message to create table
         env.WriteLog([&](){
             NActors::NStructuredLog::TLogMessage message;
             message.Component = TEnvironment::Component;
@@ -486,42 +506,62 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             // First chunk
             message.NodeId = 1;
             env.Writer->Write(message);
+            env.Writer->Flush();
+        });
+        // Wait flush complete
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 0;
+            }));
+        // Check content
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"}});
+
+        // Write data (3 messages)
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+
+            // First chunk
             message.NodeId = 2;
             env.Writer->Write(message);
             message.NodeId = 3;
             env.Writer->Write(message);
+            message.NodeId = 4;
+            env.Writer->Write(message);
         });
 
-        // Check
+        // Check (saved 2 messages only)
         UNIT_ASSERT(
             WaitCondition([&](){
                 return env.Writer->GetCurrentBatchSize() == 1;
             }));
         env.Writer->CheckWrittenLogContent({
             {"1u", "1u"},
-            {"2u", "2u"}});
+            {"2u", "2u"},
+            {"3u", "3u"}});
 
         // Write data
         env.WriteLog([&](){
             NActors::NStructuredLog::TLogMessage message;
             message.Component = TEnvironment::Component;
 
-            // First chunk
-            message.NodeId = 4;
-            env.Writer->Write(message);
             message.NodeId = 5;
+            env.Writer->Write(message);
+            message.NodeId = 6;
         });
 
-        // Check
+        // Check flushed
         UNIT_ASSERT(
             WaitCondition([&](){
-                return env.Writer->GetCurrentBatchSize() == 0;
+                return env.Writer->GetCurrentBatchSize() == 1;
             }));
         env.Writer->CheckWrittenLogContent({
             {"1u", "1u"},
             {"2u", "2u"},
             {"3u", "3u"},
-            {"4u", "4u"}});
+            {"4u", "4u"},
+            {"5u", "5u"}});
     }
 
     /* Y_UNIT_TEST(AutoFlush) {

@@ -36,7 +36,7 @@ public:
     }
 
     virtual bool IsAlive() const {
-        return CreationState.load() != TCreationState::Stop;
+        return State.load() != TState::Stop;
     };
 
 protected:
@@ -51,13 +51,14 @@ protected:
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 
-    enum class TCreationState {
-        Unknown = 1,
+    enum class TState {
+        Created = 1,
         Creating = 2,
-        Exists = 3,
-        Stop = 3,
+        CreateError = 3,
+        Working = 4,
+        Stop = 5,
     };
-    std::atomic<TCreationState> CreationState {TCreationState::Unknown};
+    std::atomic<TState> State {TState::Created};
     unsigned CurrentBatchSize {0};
 };
 

@@ -828,12 +828,19 @@ message TCompositeConveyorConfig {
     }
 
     message TWorkersPool {
+        enum ESchedulingMode {
+            NonSchedulable = 0;
+            Schedulable = 1;
+            All = 2;
+        }
+
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
         repeated THeavyLimit HeavyLimits = 6;
+        optional ESchedulingMode SchedulingMode = 7 [default = NonSchedulable];
     }
 
     optional bool Enabled = 1 [default = true];

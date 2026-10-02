@@ -1,18 +1,23 @@
 #pragma once
-#include "common.h"
+#include <ydb/core/tx/conveyor_composite/common/category.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/tx/conveyor/usage/config.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <array>
 #include <cmath>
+#include <optional>
+#include <vector>
 #include <util/datetime/base.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
+
+using TProtoWorkerPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
 
 class TWorkerPoolCategoryUsage {
 private:
@@ -63,7 +68,7 @@ public:
 
     double GetCPUUsageDouble(const ui64 totalThreadsCount) const;
 
-    TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
+    TConclusionStatus DeserializeFromProto(const TProtoWorkerPool& poolInfo);
 };
 
 class THeavyLimit {
@@ -81,6 +86,7 @@ public:
 class TWorkersPool {
 private:
     TString PoolName;
+    YDB_READONLY(TProtoWorkerPool::ESchedulingMode, SchedulingMode, TProtoWorkerPool::NonSchedulable);
     YDB_READONLY(ui64, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
@@ -107,15 +113,20 @@ public:
 
     TString DebugString() const;
 
-    TWorkersPool(const ui32 wpId)
+    explicit TWorkersPool(const ui32 wpId)
         : WorkersPoolId(wpId) {
-        PoolName = "WP::DEFAULT";
     }
 
     TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto);
+    TWorkersPool(const ui32 wpId, TString poolName,
+        TProtoWorkerPool::ESchedulingMode schedulingMode,
+        TThreadsCountInfo workersCountInfo, std::vector<THeavyLimit> heavyLimits);
+
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const TProtoWorkerPool& proto);
 };
+
+const std::array<TWorkersPool, 2>& GetDefaultWorkersPoolTemplates();
 
 class TCategory {
 private:

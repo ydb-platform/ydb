@@ -22,6 +22,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catal
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 def _as_text(value: Any) -> str:
     if value is None:
         return ""

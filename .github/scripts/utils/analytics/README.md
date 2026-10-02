@@ -11,6 +11,7 @@
 | Скопировать буфер в другой проект | [`collector/`](collector/README.md) |
 | Добавить измерение / фазу / колонку в YDB CI | [`github_actions/`](github_actions/README.md#добавить-измерение) |
 | Что уже лежит в таблице | [`github_actions/`](github_actions/README.md#что-уже-пишется) |
+| Дашборд DataLens (чарты, SQL, публикация) | [`datalens/`](datalens/README.md) |
 
 ## Как это работает
 

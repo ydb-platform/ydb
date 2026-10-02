@@ -1,0 +1,12 @@
+{
+  "type": "advanced-chart_node",
+  "annotation": {
+    "description": "Step duration. Title shows the current step, workflow, branch and build."
+  },
+  "meta": {},
+  "data": {
+    "meta": "{\n    \"links\": {\n        \"dataset\": \"z11tcvkyw21gi\"\n    }\n}\n",
+    "params": "module.exports = {\n    step: ['checkout'],\n    metric: ['checkout'],\n    wf: [''],\n    workflow: [''],\n    branch: ['main'],\n    tl_branch: ['main'],\n    tl_preset: [''],\n    kind: [''],\n    interval: [''],\n    tl_from: [''],\n    tl_to: [''],\n    p_q: ['90'],\n    p90_step: ['hour'],\n    tl_view: ['all'],\n    selected_id: [''],\n    gantt_run: [''],\n};\n",
+    "controls": "module.exports = {\n    controls: [],\n};\n"
+  }
+}

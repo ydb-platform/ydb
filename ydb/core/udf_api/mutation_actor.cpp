@@ -22,6 +22,8 @@
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr::NUdfApi {
 
 using namespace NActors;
@@ -130,9 +132,10 @@ private:
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
         if (Step_ == EStep::CleanupChunks) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: best-effort chunk cleanup of '" << Name_ << "' uid=" << CleanupUid_
-                << " skipped: " << ev->Get()->GetErrorMessage();
+            YDB_LOG_WARN("UdfService: best-effort chunk cleanup",
+                {"name", Name_},
+                {"uid", CleanupUid_},
+                {"skipped", ev->Get()->GetErrorMessage()});
             Finish();
             return;
         }
@@ -307,16 +310,20 @@ private:
         result.set_size(Body_.size());
         result.set_replaced_existing(ReplacedExisting_);
 
-        ALS_INFO(NKikimrServices::GRPC_SERVER)
-            << "UdfService: uploaded module name=" << Name_ << " uid=" << Uid_
-            << " size=" << Body_.size() << " chunks=" << Chunks_.size();
+        YDB_LOG_INFO("UdfService: uploaded module",
+            {"name", Name_},
+            {"uid", Uid_},
+            {"size", Body_.size()},
+            {"chunks", Chunks_.size()});
 
         Send(ReplyTo_, new TEvUploadModuleResult(std::move(result)));
         PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& error) {
-        ALS_WARN(NKikimrServices::GRPC_SERVER) << "UdfService: upload of '" << Name_ << "' failed: " << error;
+        YDB_LOG_WARN("UdfService: upload with error",
+            {"name", Name_},
+            {"error", error});
         Send(ReplyTo_, new TEvUploadModuleResult(status, error));
         PassAway();
     }
@@ -492,9 +499,10 @@ private:
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
         if (Step_ == EStep::DeleteArtifacts) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: best-effort artifact cleanup of '" << Name_ << "' skipped "
-                << ArtifactQueries_[NextArtifactQueryIndex_].TablePath << ": " << ev->Get()->GetErrorMessage();
+            YDB_LOG_WARN("UdfService: best-effort artifact cleanup",
+                {"name", Name_},
+                {"tblePath", ArtifactQueries_[NextArtifactQueryIndex_].TablePath},
+                {"errorMessage", ev->Get()->GetErrorMessage()});
             ++NextArtifactQueryIndex_;
             DeleteNextArtifacts();
             return;
@@ -509,8 +517,8 @@ private:
         }
         TVector<TString> cpuSpecs;
         if (!ParseArtifactDirListing(*ev->Get()->Request, cpuSpecs)) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: artifacts directory of '" << Name_ << "' not listed, leaving artifacts behind";
+            YDB_LOG_WARN("UdfService: artifacts directory of not listed, leaving artifacts behind",
+                {"name", Name_});
             ReplySuccess();
             return;
         }
@@ -540,14 +548,17 @@ private:
     }
 
     void ReplySuccess() {
-        ALS_INFO(NKikimrServices::GRPC_SERVER)
-            << "UdfService: deleted module name=" << Name_ << " uid=" << Uid_;
+        YDB_LOG_INFO("UdfService: deleted module",
+            {"name", Name_},
+            {"uid", Uid_});
         Send(ReplyTo_, new TEvDeleteModuleResult(Ydb::Udf::DeleteModuleResult()));
         PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& error) {
-        ALS_WARN(NKikimrServices::GRPC_SERVER) << "UdfService: delete of '" << Name_ << "' failed: " << error;
+        YDB_LOG_WARN("UdfService: delete of",
+            {"name", Name_},
+            {"failed", error});
         Send(ReplyTo_, new TEvDeleteModuleResult(status, error));
         PassAway();
     }

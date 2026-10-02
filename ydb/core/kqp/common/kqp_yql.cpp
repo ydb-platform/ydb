@@ -80,6 +80,8 @@ static EPhysicalTxType GetPhysicalTxType(const TStringBuf& value) {
         return EPhysicalTxType::Scan;
     } else if (value == "generic") {
         return EPhysicalTxType::Generic;
+    } else if (value == "unsafe_truncate") {
+        return EPhysicalTxType::UnsafeTruncate;
     } else {
         YQL_ENSURE(false, "Unknown physical tx type: " << value);
     }
@@ -97,6 +99,8 @@ static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
             return "scan";
         case EPhysicalTxType::Generic:
             return "generic";
+        case EPhysicalTxType::UnsafeTruncate:
+            return "unsafe_truncate";
     }
 
     YQL_ENSURE(false, "Unexpected physical tx type: " << type);
@@ -112,6 +116,8 @@ TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
             settings.Type = GetPhysicalTxType(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == WithEffectsSettingName) {
             settings.WithEffects = true;
+        } else if (name == UnsafeTruncatePathSettingName) {
+            settings.UnsafeTruncatePath = TString(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -126,6 +132,13 @@ NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TP
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(TypeSettingName)
             .Value<TCoAtom>().Build(PhysicalTxTypeToString(*Type))
+            .Done());
+    }
+
+    if (!UnsafeTruncatePath.empty()) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(UnsafeTruncatePathSettingName)
+            .Value<TCoAtom>().Build(UnsafeTruncatePath)
             .Done());
     }
 

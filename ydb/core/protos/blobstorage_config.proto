@@ -535,6 +535,11 @@ message TUpdateSettings {
     repeated bool UseSelfHealLocalPolicy = 13;
     repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
     repeated uint64 BlobCheckerPeriodicitySeconds = 15;
+    // writes to a database get blocked when every group of any of its storage pools reaches DatabaseSpaceBlockColor
+    // (GREEN disables this); they get unblocked when some group becomes better than DatabaseSpaceUnblockColor
+    // (GREEN means the same as DatabaseSpaceBlockColor)
+    repeated NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceBlockColor = 16;
+    repeated NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 17;
 }
 
 message TBscConfig {
@@ -556,6 +561,8 @@ message TBscConfig {
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
     optional TSelfHealSettings SelfHealSettings = 16;
     optional uint64 BlobCheckerPeriodicitySeconds = 17;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceBlockColor = 18;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 19;
 }
 
 message TBoxStoragePoolId {

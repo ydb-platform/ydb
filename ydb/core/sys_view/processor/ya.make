@@ -16,6 +16,7 @@ SRCS(
     tx_interval_summary.cpp
     tx_interval_metrics.cpp
     tx_top_partitions.cpp
+    tx_cleanup_hour_metrics.cpp
 )
 
 PEERDIR(
@@ -33,3 +34,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

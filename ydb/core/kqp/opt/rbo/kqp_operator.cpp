@@ -1558,6 +1558,9 @@ TString TOpTableEffect::GetExplainName() const {
         case EEffectType::UpdateRows:
         case EEffectType::UpdateRowsIndex:
             return "UpdateRows";
+        case EEffectType::UpsertRows:
+        case EEffectType::UpsertRowsIndex:
+            return "UpsertRows";
         case EEffectType::DeleteRows:
         case EEffectType::DeleteRowsIndex:
             return "DeleteRows";

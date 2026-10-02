@@ -1167,7 +1167,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
-        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
+        // Keep checkpoint timing independent of query setup and message delivery.
+        const auto unblockCheckpoints = BlockCheckpointCreation();
+        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(1);
         const auto queryName = TStringBuilder() << Name_ << "StreamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
@@ -1262,7 +1264,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Checkpoint will be injected into source stage and must pass all stages
 
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // No checkpoints due to checkpointing interval
+        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // Checkpoint creation is still blocked
 
         const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
@@ -1288,7 +1290,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         UNIT_ASSERT_C(counters, "Counters not found for PQ sink");
         UNIT_ASSERT_VALUES_EQUAL(counters(), 0);
 
-        WaitFor(CHECKPOINT_INTERVAL, "checkpoint propagation", [&](TString& error) {
+        unblockCheckpoints();
+        WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint propagation", [&](TString& error) {
             if (GetLastCheckpointSeqNo(checkpointId) == seqNo) {
                 error = "new checkpoint still is not created";
                 return false;
@@ -5474,11 +5477,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 queriesCount = 1000;
         constexpr ui64 inflightLimit = 250;
 
-        std::vector<TAsyncExecuteQueryResult> results;
+        std::vector<TAsyncStatus> results;
         std::vector<NThreading::TFuture<void>> futures;
         for (ui64 i = 0; i < queriesCount; ++i) {
-            results.emplace_back(GetQueryClient()->ExecuteQuery(fmt::format(R"(
-                CREATE STREAMING QUERY `query_{i}` WITH (RUN = FALSE) AS
+            // The SDK may replay a batch after a committed scheme transaction loses its reply.
+            const auto query = fmt::format(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
                 DO BEGIN
                     INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
                 END DO;
@@ -5490,7 +5494,28 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 "source"_a = pqSourceName,
                 "output_topic"_a = outputTopicName,
                 "input_topic"_a = inputTopicName
-            ), TTxControl::NoTx()));
+            );
+            results.emplace_back(GetQueryClient()->RetryQuery([query](TQueryClient& client) {
+                return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(0)))
+                    .Apply([](const TAsyncExecuteQueryResult& future) -> TStatus {
+                        const auto& result = future.GetValue();
+                        const TString issues(result.GetIssues().ToOneLineString());
+                        if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
+                            if (issues.Contains("Streaming query already under operation")
+                                || issues.Contains("path version mistmach")
+                                || issues.Contains("path exists but creating right now")
+                                || issues.Contains("path is under operation")
+                                || issues.Contains("path is being deleted right now")) {
+                                return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
+                            }
+                        } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
+                            if (issues.Contains("already exists")) {
+                                return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
+                            }
+                        }
+                        return result;
+                    });
+            }, TRetryOperationSettings().Idempotent(true).MaxRetries(100).MaxTimeout(TDuration::Minutes(2))));
 
             futures.emplace_back(results.back().IgnoreResult());
 
@@ -6203,10 +6228,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
-    Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(StreamingQueryPlanningFailure, DisableCheckpoints, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
         appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
+        appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMinSize(0);
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -6224,6 +6250,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1000";
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 1000 }}
                 ] @@;
@@ -6235,8 +6262,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            "output_topic"_a = outputTopicName,
+            "disable_checkpoints"_a = DisableCheckpoints ? "TRUE" : "FALSE"
+        ), DisableCheckpoints ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED,
+            DisableCheckpoints ? "" : "Not enough resources to execute query");
+
+        if (!DisableCheckpoints) {
+            const auto& result = ExecQuery("SELECT Status, RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 3, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+                UNIT_ASSERT(!resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            });
+            return;
+        }
 
         WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
@@ -6310,7 +6350,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Trigger another batch so the write actor tries to write to the now-deleted table.
         WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
 
-        WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
+        // Shard-write retries followed by table-resolution retries can exceed a minute.
+        WaitFor(TDuration::Minutes(2), "Wait for execution restart after table drop", [&](TString& error) {
             const auto& result = ExecQuery(
                 R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"
             );

@@ -239,6 +239,12 @@ public:
         }
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
+        if (FederatedQuerySetup) {
+            FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
+                TString(NYql::PqProviderName),
+                CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+        }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
@@ -2145,7 +2151,7 @@ private:
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"),
-            {{TString(NYql::PqProviderName), CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)}}
+            FederatedQuerySetup->CheckpointProviderIntegrations
         );
 
         CheckpointStorageService = TActivationContext::Register(service.release());

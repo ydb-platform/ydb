@@ -357,6 +357,7 @@ struct Schema : NIceDb::Schema {
         struct BridgeSyncFirstErrorTimestamp : Column<27, NScheme::NTypeIds::Uint64> {};
         struct BridgeSyncErrorCount          : Column<28, NScheme::NTypeIds::Uint32> {};
         struct BridgeSyncRunning             : Column<29, NScheme::NTypeIds::Bool> {};
+        struct SpaceColor                    : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -386,7 +387,8 @@ struct Schema : NIceDb::Schema {
             BridgeSyncLastErrorTimestamp,
             BridgeSyncFirstErrorTimestamp,
             BridgeSyncErrorCount,
-            BridgeSyncRunning>;
+            BridgeSyncRunning,
+            SpaceColor>;
     };
 
     struct StoragePools : Table<7> {
@@ -402,6 +404,9 @@ struct Schema : NIceDb::Schema {
         struct SchemeshardId           : Column<10, NScheme::NTypeIds::Uint64> {};
         struct PathId                  : Column<11, NScheme::NTypeIds::Uint64> {};
         struct DefaultGroupSizeInUnits : Column<12, NScheme::NTypeIds::Uint32> {};
+        struct BestSpaceColor          : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct WorstSpaceColor         : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct SpaceExhausted          : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
         using TColumns = TableColumns<
@@ -416,7 +421,10 @@ struct Schema : NIceDb::Schema {
             EncryptionMode,
             SchemeshardId,
             PathId,
-            DefaultGroupSizeInUnits>;
+            DefaultGroupSizeInUnits,
+            BestSpaceColor,
+            WorstSpaceColor,
+            SpaceExhausted>;
     };
 
     struct Tablets : Table<8> {

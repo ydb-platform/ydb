@@ -304,6 +304,7 @@ message TGroupInfo {
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
     optional bool DDisk = 30; // is this a Direct Block Group?
+    optional string SpaceColor = 31; // space color of the group (the worst one among its VDisks)
 }
 
 message TGroupEntry {
@@ -343,6 +344,9 @@ message TStoragePoolInfo {
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
     optional uint32 DefaultGroupSizeInUnits = 15;
+    optional string BestSpaceColor = 16; // the best space color among groups of the pool
+    optional string WorstSpaceColor = 17; // the worst space color among groups of the pool
+    optional bool SpaceExhausted = 18; // the pool blocks writes to its database (see DatabaseSpaceBlockColor)
     // metrics ?
 }
 
@@ -465,6 +469,8 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
 }
 
 // sysview processor tablet -> node
@@ -547,12 +553,20 @@ message TEvGetQueryStatsResponse {
 
 // generic set of counters with stable enumeration order in each category
 // simple values are absolute
-// cumulative and histogram values may be absolute or diffs depending on the context
+// cumulative and histogram values may be absolute or diffs depending on the context,
+// except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
         optional uint64 BucketsCount = 2; // total number of buckets in diff mode
+        // Set for a non-derivative histogram (an Integral percentile counter or a HIST(x)
+        // aggregate, published as monlib HIST): bucket counts go up and down, so Buckets hold
+        // the full current value of every non-empty bucket rather than a delta, and the receiver
+        // replaces its copy instead of adding. Set by the detailed metrics channel only.
+        // Unset: Buckets are a delta to add (derivative histograms, monlib HIST_RATE, and every
+        // histogram of the regular tablet counters channel)
+        optional bool NonDerivative = 3;
     }
 
     repeated uint64 Simple = 1;

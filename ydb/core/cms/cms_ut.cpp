@@ -695,6 +695,123 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
+    Y_UNIT_TEST(DDiskTabletDiskUsageSortAndPage)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+        THashMap<ui32, ui32> pdiskIds;
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            const auto& config = TFakeNodeWhiteboardService::Config.GetResponse().GetStatus(0).GetBaseConfig();
+            for (const auto& pdisk : config.GetPDisk()) {
+                pdiskIds.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+            for (ui32 i = 0; i < 8; ++i) {
+                const auto nodeId = env.GetNodeId(i);
+                auto& node = TFakeNodeWhiteboardService::Info.at(nodeId);
+                node.PDiskStateInfo.at(pdiskIds.at(nodeId)).SetState(i == 3
+                    ? NKikimrBlobStorage::TPDiskState::DeviceIoError : NKikimrBlobStorage::TPDiskState::Normal);
+                auto& sample = node.DDiskStateInfo.emplace_back();
+                sample.SetPDiskId(pdiskIds.at(nodeId));
+                sample.SetDDiskSlotId(1);
+                if (i < 4) {
+                    sample.SetDDiskOccupancy(i == 0 ? 1.2 : 0.4);
+                    sample.SetPersistentBufferOccupancy(0.2);
+                } else if (i == 4) {
+                    sample.SetDDiskOccupancy(std::numeric_limits<double>::quiet_NaN());
+                    sample.SetPersistentBufferOccupancy(std::numeric_limits<double>::infinity());
+                } else if (i == 5) {
+                    sample.SetDDiskOccupancy(-0.1);
+                    sample.SetPersistentBufferOccupancy(-0.1);
+                } else if (i == 6) {
+                    sample.SetPersistentBufferOccupancy(1.1);
+                }
+            }
+        }
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
+                const ui64 tabletId = record.GetTabletId();
+                if (tabletId >= 3201 && tabletId <= 3203) {
+                    record.ClearGroups();
+                    auto* group = record.AddGroups();
+                    group->SetDirectBlockGroupId(1);
+                    for (ui32 i : tabletId == 3201 ? TVector<ui32>{0, 1}
+                            : tabletId == 3202 ? TVector<ui32>{1} : TVector<ui32>{1, 4}) {
+                        auto* id = group->AddDDiskId();
+                        id->SetNodeId(env.GetNodeId(i));
+                        id->SetPDiskId(pdiskIds.at(env.GetNodeId(i)));
+                        id->SetDDiskSlotId(1);
+                    }
+                }
+            }
+            return prev(ev);
+        });
+        for (ui64 tabletId = 3201; tabletId <= 3203; ++tabletId) {
+            UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+            env.WaitForDDiskInfo(tabletId, 1);
+        }
+        NKikimrCms::TDDiskTabletListRequest request;
+        request.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DISK_USAGE);
+        for (bool descending : {false, true}) {
+            request.SetSortDescending(descending);
+            request.SetOffset(0);
+            request.SetLimit(0);
+            const auto response = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetTabletId(), descending ? 3201 : 3202);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetDiskUsage(), descending ? 1.2 : 0.4);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(2).GetTabletId(), 3203);
+            UNIT_ASSERT(!response.GetTablets(2).HasDiskUsage());
+            request.SetOffset(1);
+            request.SetLimit(1);
+            const auto page = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(page.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTablets(0).SerializeAsString(), response.GetTablets(1).SerializeAsString());
+        }
+        request.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DISK_USAGE);
+        request.SetOffset(0);
+        request.SetLimit(1);
+        const auto grouped = env.RequestDDiskTabletList(request);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetTotalCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GroupsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(0).GetName(), "100");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(1).GetName(), "40");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(2).GetName(), "unknown");
+        for (const auto& group : grouped.GetGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.GetCount(), 1);
+        }
+        request.SetFilterGroup("40");
+        const auto filtered = env.RequestDDiskTabletList(request);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetTotalCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetTablets(0).GetTabletId(), 3202);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GroupsSize(), 3);
+        request.SetFilterGroup("unknown");
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskTabletList(request).GetTablets(0).GetTabletId(), 3203);
+        request.ClearFilterGroup();
+        request.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DEGRADE);
+        const auto healthy = env.RequestDDiskTabletList(request);
+        UNIT_ASSERT_VALUES_EQUAL(healthy.GroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(healthy.GetGroups(0).GetName(), "0");
+        UNIT_ASSERT_VALUES_EQUAL(healthy.GetGroups(0).GetCount(), 3);
+        request.ClearGroupBy();
+
+        // Losing a monitoring sample must not leave the previous usage visible.
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(env.GetNodeId(1)).DDiskStateInfo.clear();
+        }
+        request.SetOffset(0);
+        request.SetLimit(0);
+        const auto missing = env.RequestDDiskTabletList(request);
+        for (const auto& tablet : missing.GetTablets()) {
+            UNIT_ASSERT(!tablet.HasDiskUsage());
+        }
+    }
+
     Y_UNIT_TEST(DDiskOccupancyCollectionAndValidation)
     {
         TCmsTestEnv env(8);
@@ -870,6 +987,26 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 const auto prevKey = std::make_tuple(prev.GetNodeId(), prev.GetPDiskId(), prev.GetDDiskSlotId());
                 const auto curKey = std::make_tuple(cur.GetNodeId(), cur.GetPDiskId(), cur.GetDDiskSlotId());
                 UNIT_ASSERT(prevKey < curKey);
+            }
+        }
+
+        // Counts match the distinct legacy lists; compact responses omit those lists.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(0);
+            request.SetIncludeTabletIds(false);
+            const auto compact = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(compact.GetTotalCount(), full.GetTotalCount());
+            UNIT_ASSERT_VALUES_EQUAL(compact.DisksSize(), full.DisksSize());
+            for (size_t i = 0; i < full.DisksSize(); ++i) {
+                const auto& legacy = full.GetDisks(i);
+                const auto& disk = compact.GetDisks(i);
+                UNIT_ASSERT_VALUES_EQUAL(legacy.GetDDiskTabletCount(), legacy.DDiskTabletIdsSize());
+                UNIT_ASSERT_VALUES_EQUAL(legacy.GetPersistentBufferTabletCount(), legacy.PersistentBufferTabletIdsSize());
+                UNIT_ASSERT_VALUES_EQUAL(disk.GetDDiskTabletCount(), legacy.GetDDiskTabletCount());
+                UNIT_ASSERT_VALUES_EQUAL(disk.GetPersistentBufferTabletCount(), legacy.GetPersistentBufferTabletCount());
+                UNIT_ASSERT_VALUES_EQUAL(disk.DDiskTabletIdsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(disk.PersistentBufferTabletIdsSize(), 0);
             }
         }
 

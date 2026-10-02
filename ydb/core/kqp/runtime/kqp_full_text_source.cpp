@@ -153,6 +153,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
+    TMaybe<ui64> LockTxId;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -219,6 +220,12 @@ public:
         UseArrowFormat = useArrowFormat;
     }
 
+    // Reading under the transaction lock makes uncommitted writes of the same transaction
+    // visible, which is required for read-your-own-write inside an interactive transaction.
+    void SetLockTxId(TMaybe<ui64> lockTxId) {
+        LockTxId = lockTxId;
+    }
+
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
         return KeyColumnTypes;
     }
@@ -275,6 +282,10 @@ public:
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetStep(Snapshot.Step);
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
+        }
+
+        if (LockTxId) {
+            record.SetLockTxId(*LockTxId);
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
@@ -2907,6 +2918,25 @@ public:
             Snapshot = IKqpGateway::TKqpSnapshot(
                 Settings->GetSnapshot().GetStep(),
                 Settings->GetSnapshot().GetTxId());
+        }
+
+        if (Settings->HasLockTxId()) {
+            const TMaybe<ui64> lockTxId = Settings->GetLockTxId();
+            if (MainTableReader) {
+                MainTableReader->SetLockTxId(lockTxId);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetLockTxId(lockTxId);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetLockTxId(lockTxId);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetLockTxId(lockTxId);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetLockTxId(lockTxId);
+            }
         }
     }
 

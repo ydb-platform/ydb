@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
     ydb/library/actors/testlib
+    ydb/library/testlib/pq_helpers
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

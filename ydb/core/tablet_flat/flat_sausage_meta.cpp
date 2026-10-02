@@ -29,6 +29,10 @@ TMeta::TMeta(TSharedData raw, ui32 group)
         for (auto &one: blobs)
             Steps.push_back(offset += one.BlobSize());
     }
+
+    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip);
+       Total = MetaPages + SkippedPages gives the correct full page count. */
+    SkippedPages_ = (Extra[0].Type == ui32(NTable::NPage::EPage::Skip) ? Extra[0].Crc32 : 0);
 }
 
 TMeta::~TMeta()
@@ -76,6 +80,37 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
 
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Page;
     return Index[pageId].Page - begin;
+}
+
+NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
+{
+    Y_ENSURE(pageId < Header->Pages);
+    Y_ENSURE(Extra[pageId].Type != ui32(NTable::NPage::EPage::Skip),
+        "Cannot get location for skip page entry by pageId");
+
+    const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
+    const ui64 size = Index[pageId].Page - offset;
+
+    return NTable::NPage::TPageLocation::FromByteOffset(offset, size, static_cast<NTable::NPage::EPage>(Extra[pageId].Type), Extra[pageId].Crc32);
+}
+
+TBorder TMeta::Bounds(const NTable::NPage::TPageLocation& location) const
+{
+    Y_ENSURE(!location.Offset.IsMax());
+    if (!location.Offset.IsByteOffset()) {
+        // Page-index path (blob forward cache, outer collections):
+        //   resolve byte offset from Index, validate size against metadata.
+        const auto pageId = location.Offset.AsPageIndex();
+        Y_ENSURE(pageId < Header->Pages,
+            "Requested page " << pageId << " out of " << Header->Pages << " total pages");
+        const ui64 offset = pageId ? Index[pageId - 1].Page : 0;
+        const ui64 size = Index[pageId].Page - offset;
+        Y_DEBUG_ABORT_UNLESS(location.Size == size,
+            "Size mismatch at page %" PRIu32 ": location claims %" PRIu64 " but meta has %" PRIu64,
+            pageId, location.Size, size);
+        return TAlign(Steps).Lookup(offset, size);
+    }
+    return TAlign(Steps).Lookup(location.GetByteOffset(), location.Size);
 }
 
 TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const

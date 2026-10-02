@@ -134,6 +134,8 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -141,7 +143,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor>;
     };
 
     struct VSlot : Table<5> {
@@ -496,6 +498,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
     };
 
+    // storage pools currently blocking writes to their databases (the hysteresis latch that can't be derived from
+    // group colors); the row is deleted along with the storage pool
+    struct DatabaseSpaceExhaustedPool : Table<135> {
+        struct BoxId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct StoragePoolId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
+
+        using TKey = TableKey<BoxId, StoragePoolId>;
+        using TColumns = TableColumns<BoxId, StoragePoolId>;
+    };
+
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -522,7 +535,8 @@ struct Schema : NIceDb::Schema {
         BlobDepotDeleteQueue,
         BridgeSyncState,
         DirectBlockGroupTabletState,
-        DirectBlockGroupClaims
+        DirectBlockGroupClaims,
+        DatabaseSpaceExhaustedPool
     >;
 
     using TSettings = SchemaSettings<

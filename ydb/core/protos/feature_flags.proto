@@ -431,6 +431,10 @@ message TFeatureFlags {
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
     optional bool EnableAsyncIndexReplication = 351 [default = false];
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
+    optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    optional bool EnableRelativePaths = 354 [default = false];
     // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
-    optional bool EnableSavepoints = 353 [default = false];
+    optional bool EnableSavepoints = 355 [default = false];
 }

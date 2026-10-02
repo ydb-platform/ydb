@@ -1321,6 +1321,38 @@ struct TMultiTablePartitions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Byte range of a file, offsets are uncompressed bytes.
+struct TFileReadRange
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TFileReadRange;
+    /// @endcond
+
+    FLUENT_FIELD_DEFAULT(i64, Begin, 0);
+
+    /// If missing, the range extends to the end of file.
+    FLUENT_FIELD_OPTION(i64, End);
+};
+
+/// Description of a file partition.
+struct TFilePartition
+{
+    /// Partition cookie that can be passed to @ref NYT::IClientBase::CreateFilePartitionReader
+    TString Cookie;
+
+    /// Partition length in bytes.
+    i64 Length = 0;
+};
+
+/// File partitions from GetFilePartitions command.
+struct TFilePartitions
+{
+    /// Partitions are listed in the order of the requested ranges, one per range.
+    TVector<TFilePartition> Partitions;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 ///
 /// @brief Contains information about tablet
 ///

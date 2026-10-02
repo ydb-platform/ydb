@@ -321,8 +321,6 @@ namespace NMonitoring {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
                 Buf_.BeginObject();
-
-                EmptyLabels_ = true;
             }
 
             void OnLabelsEnd() override {
@@ -334,7 +332,6 @@ namespace NMonitoring {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
 
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
                 Buf_.EndObject();
                 if (State_ == TEncoderState::EState::METRIC) {
                     WriteName();
@@ -347,8 +344,6 @@ namespace NMonitoring {
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
-
-                EmptyLabels_ = false;
             }
 
             void OnDouble(TInstant time, double value) override {
@@ -425,7 +420,6 @@ namespace NMonitoring {
             TEncoderState State_;
             TTypedPoint LastPoint_;
             bool TimeSeries_ = false;
-            bool EmptyLabels_ = false;
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -441,26 +435,6 @@ namespace NMonitoring {
 
             ~TBufferedJsonEncoder() override {
                 Close();
-            }
-
-            void OnLabelsBegin() override {
-                TBufferedEncoderBase::OnLabelsBegin();
-                EmptyLabels_ = true;
-            }
-
-            void OnLabel(TStringBuf name, TStringBuf value) override {
-                TBufferedEncoderBase::OnLabel(name, value);
-                EmptyLabels_ = false;
-            }
-
-            void OnLabel(ui32 name, ui32 value) override {
-                TBufferedEncoderBase::OnLabel(name, value);
-                EmptyLabels_ = false;
-            }
-
-            void OnLabelsEnd() override {
-                TBufferedEncoderBase::OnLabelsEnd();
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
             }
 
             void Close() final {
@@ -555,7 +529,6 @@ namespace NMonitoring {
 
         private:
             bool Closed_{false};
-            bool EmptyLabels_ = false;
         };
     }
 

@@ -755,6 +755,7 @@ Y_UNIT_TEST_SUITE(TestAliases) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 Y_UNIT_TEST_SUITE(TestActorLiveness) {
     struct TTargetActor : TActorBootstrapped<TTargetActor> {
@@ -927,6 +928,8 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
 }
 
 >>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
+=======
+>>>>>>> a31a1043a9f (Revert "Add actor liveness system messages (#47647)")
 Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
     using namespace NThreading;
 

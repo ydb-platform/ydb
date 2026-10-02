@@ -218,6 +218,25 @@ class TestTruncateColumnTableStress(object):
         try:
             errors = []
             stop_flag = threading.Event()
+            successful_truncates = 0
+            successful_writes = [0] * len(tables)
+            successful_reads = [0, 0]
+
+            transient_errors = (
+                ydb.issues.Aborted,
+                ydb.issues.PreconditionFailed,
+                ydb.issues.Overloaded,
+                ydb.issues.Unavailable,
+                ydb.issues.Timeout,
+                ydb.issues.Undetermined,
+            )
+
+            def record_operation_error(operation, error):
+                if isinstance(error, transient_errors):
+                    logger.debug("S1: transient %s error: %s", operation, error)
+                else:
+                    errors.append(f"{operation}: {error!r}")
+                    stop_flag.set()
 
             def do_write(table_path, writer_id):
                 try:
@@ -228,9 +247,9 @@ class TestTruncateColumnTableStress(object):
                             try:
                                 start_id = writer_id * 100000 + batch_id * BATCH_SIZE
                                 self.insert_batch(client, table_path, start_id, BATCH_SIZE)
+                                successful_writes[writer_id] += 1
                             except Exception as e:
-                                # Transient errors during TRUNCATE are expected
-                                logger.debug("S1: INSERT failed (expected): %s", str(e))
+                                record_operation_error("INSERT", e)
                             batch_id += 1
                             time.sleep(0.03)
                     finally:
@@ -239,6 +258,7 @@ class TestTruncateColumnTableStress(object):
                     errors.append(e)
 
             def do_truncate():
+                nonlocal successful_truncates
                 try:
                     client = self.create_client()
                     try:
@@ -246,23 +266,26 @@ class TestTruncateColumnTableStress(object):
                             tbl = random.choice(tables)
                             try:
                                 client.query(f"TRUNCATE TABLE `{tbl}`")
+                                successful_truncates += 1
                             except Exception as e:
-                                logger.debug("S1: TRUNCATE failed (expected): %s", str(e))
+                                record_operation_error("TRUNCATE", e)
                             time.sleep(random.uniform(0.5, 2.0))
                     finally:
                         self.safe_stop(client)
                 except Exception as e:
                     errors.append(e)
 
-            def do_read(table_path):
+            def do_read(table_path, reader_id):
                 try:
                     client = self.create_client()
                     try:
                         while not stop_flag.is_set():
                             try:
-                                client.query(f"SELECT COUNT(*) AS cnt FROM `{table_path}`")
+                                result = client.query(f"SELECT COUNT(*) AS cnt FROM `{table_path}`")
+                                assert result[0].rows[0]["cnt"] >= 0
+                                successful_reads[reader_id] += 1
                             except Exception as e:
-                                logger.debug("S1: SELECT failed (expected): %s", str(e))
+                                record_operation_error("SELECT", e)
                             time.sleep(0.05)
                     finally:
                         self.safe_stop(client)
@@ -281,7 +304,7 @@ class TestTruncateColumnTableStress(object):
             trunc_thread.start()
             # 2 readers
             for i in range(2):
-                t = threading.Thread(target=do_read, args=(tables[i % len(tables)],))
+                t = threading.Thread(target=do_read, args=(tables[i % len(tables)], i))
                 threads.append(t)
                 t.start()
 
@@ -291,7 +314,11 @@ class TestTruncateColumnTableStress(object):
             for t in threads:
                 t.join(timeout=30)
 
+            assert not any(t.is_alive() for t in threads), "Stress workers did not stop"
             assert len(errors) == 0, f"Stress errors: {errors}"
+            assert successful_truncates > 0, "No TRUNCATE succeeded during the stress run"
+            assert all(successful_writes), f"Some writers never succeeded: {successful_writes}"
+            assert all(successful_reads), f"Some readers never succeeded: {successful_reads}"
             logger.info("S1: chaotic workload completed without unexpected errors")
 
             # All tables should be usable

@@ -41,6 +41,14 @@ class WorkloadRunner:
             time.sleep(10)
         stop.set()
         print("Waiting for stop...")
+        failures = []
         for w in workloads:
-            w.join()
+            try:
+                w.join()
+            except RuntimeError as error:
+                failures.append(error)
         print("Waiting for stop... stopped")
+        if failures:
+            raise RuntimeError("OLAP TRUNCATE workload failed") from failures[0]
+        if workloads[0].truncates == 0 or workloads[1].truncates == 0:
+            raise RuntimeError("OLAP TRUNCATE workload completed without a successful truncate")

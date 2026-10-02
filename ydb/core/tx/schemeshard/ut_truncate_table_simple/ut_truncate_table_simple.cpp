@@ -387,6 +387,53 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance);
     }
 
+    Y_UNIT_TEST(TruncateColumnTableFeatureDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateTestTable(runtime, ++txId, "/MyRoot", true);
+        env.TestWaitNotification(runtime, txId);
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", true);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", true, env.GetCoordinatorStep()), 5);
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(false);
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
+            {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", true, env.GetCoordinatorStep()), 5);
+    }
+
+    Y_UNIT_TEST(TruncateThenCopyColumnTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        CreateTestTable(runtime, ++txId, "/MyRoot", true);
+        env.TestWaitNotification(runtime, txId);
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", true);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", true, env.GetCoordinatorStep()), 5);
+
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
+        env.TestWaitNotification(runtime, txId);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", true, env.GetCoordinatorStep());
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableCopy"
+            CopyFromTable: "/MyRoot/TestTable"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTableCopy", true, env.GetCoordinatorStep());
+
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", true);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", true, env.GetCoordinatorStep()), 5);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTableCopy", true, env.GetCoordinatorStep());
+    }
+
     Y_UNIT_TEST(TruncateReadOnlyTableFails) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

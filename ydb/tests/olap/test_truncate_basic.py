@@ -4,8 +4,11 @@ Basic scenario tests for TRUNCATE TABLE on column tables.
 
 Covers test plan sections:
   2.1 (P1-P6): Basic scenarios
-  2.2 (P7-P11): Repeated and sequential operations
-  2.3 (P12-P17): Restarts and resilience
+  2.2 (P7-P10): Repeated and sequential operations
+  2.3 (P12-P14, P16-P17): Restarts and resilience
+
+P11 (TRUNCATE followed by a backup copy) is covered by the SchemeShard and
+ColumnShard C++ unit tests, which can create read-only backup copies.
 """
 import logging
 import os
@@ -416,56 +419,6 @@ class TestTruncateColumnTableBasic(object):
         finally:
             self.drop_table(table_path)
 
-    # P11: TRUNCATE → COPY TABLE (backup)
-    # Column table COPY is only supported for backups (read-only copies).
-    # This test verifies that after TRUNCATE, a backup copy of the empty table
-    # can be created and is read-only.
-    def test_p11_truncate_then_copy(self):
-        table_path = self.create_column_table("p11_trunc_copy")
-        copy_path = self.get_table_path("p11_copy")
-        try:
-            self.insert_rows(table_path, 50)
-            assert self.get_count(table_path) == 50
-
-            self.truncate_table(table_path)
-            assert self.get_count(table_path) == 0
-
-            # Copy the truncated (empty) table via Table API.
-            # Column table copies are read-only (backup) — this requires
-            # EnableColumnTablesBackup feature flag. Without it, the copy is
-            # rejected with PreconditionFailed, which is the expected behavior
-            # for non-backup column table copies.
-            session = self.ydb_client.driver.table_client.session().create()
-            copy_succeeded = False
-            try:
-                session.copy_table(table_path, copy_path)
-                copy_succeeded = True
-            except ydb.issues.PreconditionFailed as e:
-                # Expected: "Read-Only Copy Column Table is supported for backup only."
-                logger.info("Copy table rejected (expected without backup flag): %s", str(e))
-            except Exception as e:
-                logger.info("Copy table failed: %s", str(e))
-
-            if copy_succeeded:
-                # Copy should be empty (source was truncated)
-                assert self.get_count(copy_path) == 0
-
-                # Original table should still be usable
-                self.insert_rows(table_path, 10)
-                assert self.get_count(table_path) == 10
-                # Copy should be unaffected by insert into original
-                assert self.get_count(copy_path) == 0
-            else:
-                # Copy was rejected — verify the original table still works after TRUNCATE
-                self.insert_rows(table_path, 10)
-                assert self.get_count(table_path) == 10
-        finally:
-            self.drop_table(table_path)
-            try:
-                self.drop_table(copy_path)
-            except Exception:
-                pass
-
     # --- Restart/resilience helpers (section 2.3) ---
 
     def list_shards(self, table_path):
@@ -578,28 +531,19 @@ class TestTruncateColumnTableBasic(object):
         finally:
             self.drop_table(table_path)
 
-    # P15: TRUNCATE → restart during propose (in-flight tx)
-    # Restart the ColumnShard while a TRUNCATE transaction is in-flight.
-    # The DoOnTabletInit should re-queue TWaitTxs and the TRUNCATE should complete.
-    def test_p15_restart_during_truncate(self):
+    # Restart the ColumnShard before TRUNCATE. In-flight restarts are covered by
+    # the SchemeShard reboot tests, which can pause the transaction at each step.
+    def test_truncate_after_shard_restart(self):
         table_path = self.create_column_table("p15_restart_inflight")
         try:
             self.insert_rows(table_path, 100)
             assert self.get_count(table_path) == 100
 
-            # Kill the ColumnShard tablets immediately after issuing TRUNCATE.
-            # The tablet restart should cause the in-flight tx to be re-queued.
-            # We use a short delay to simulate "in-flight" state.
             shards = self.list_shards(table_path)
-
-            # Issue TRUNCATE — it should complete even if we restart the shard
-            # shortly after. We restart the shards first, then truncate, to
-            # test that the system handles the restart gracefully.
             for shard in shards:
                 self.kill_tablet(shard)
             time.sleep(2)
 
-            # TRUNCATE after the restart — should succeed
             self.truncate_table(table_path)
             assert self.get_count(table_path) == 0
 

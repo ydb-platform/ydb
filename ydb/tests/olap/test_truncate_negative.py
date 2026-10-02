@@ -2,15 +2,12 @@
 """
 Negative scenario tests for TRUNCATE TABLE on column tables.
 
-Covers test plan section 3 (N1-N23):
-  3.1 SchemeShard-level rejections (N1-N12)
-  3.2 ColumnShard-level rejections (N13-N16)
-  3.3 Snapshot behavior (N17-N19)
-  3.4 Edge cases (N20-N23)
+Covers executable scenarios from test plan section 3, including SchemeShard
+rejections, snapshot behavior, and edge cases.
 
-Cases that require internal state manipulation (N8, N9, N11, N12, N13-N16, N20-N22)
-are documented as skipped — they are better covered by C++ unit tests where the
-internal state can be controlled directly.
+The feature-flag and read-only backup cases are covered by SchemeShard C++
+unit tests, which can control runtime flags and create IsBackup tables.
+Cases that require internal state manipulation are covered by C++ unit tests.
 """
 import logging
 import os
@@ -118,6 +115,11 @@ class TestTruncateColumnTableNegative(object):
                 str_val Utf8,
                 PRIMARY KEY(id),
             )
+            PARTITION BY HASH (id)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
             """
         )
         return table_path, store_path
@@ -168,21 +170,6 @@ class TestTruncateColumnTableNegative(object):
             endpoint=self.ydb_client.endpoint,
         )
 
-    # N1: Feature flag EnableTruncateColumnTable = false → StatusPreconditionFailed
-    # NOTE: This requires a separate cluster with the flag disabled. Since the
-    # main cluster has the flag enabled, this test is marked skip with a note
-    # that it is covered by C++ unit tests (kqp_scheme_ut) where the flag can
-    # be toggled per-test.
-    @pytest.mark.skip(reason="Requires separate cluster config with EnableTruncateColumnTable=false; covered by C++ UT")
-    def test_n1_feature_flag_disabled(self):
-        pass
-
-    # N2: GenerateInternalPathId = false → StatusPreconditionFailed
-    # NOTE: Same as N1 — requires a separate cluster with the flag disabled.
-    @pytest.mark.skip(reason="Requires separate cluster config with GenerateInternalPathId=false; covered by C++ UT")
-    def test_n2_generate_internal_path_id_disabled(self):
-        pass
-
     # N3: Table does not exist → StatusPathDoesNotExist
     def test_n3_truncate_nonexistent_table(self):
         table_path = self.get_table_path("n3_nonexistent")
@@ -190,25 +177,16 @@ class TestTruncateColumnTableNegative(object):
             self.truncate_table(table_path)
         logger.info("N3: TRUNCATE non-existent table raised: %s", str(exc_info.value))
 
-    # N4: Table in column store (not standalone)
-    # The test plan expected StatusPreconditionFailed ("not supported for
-    # column tables in a column store"), but in practice TRUNCATE is supported
-    # for tables inside a column store (TABLESTORE). This test verifies that
-    # TRUNCATE works correctly on such a table.
+    # N4: A column table in a store is not supported by TRUNCATE.
     def test_n4_truncate_column_store_table(self):
         table_path, store_path = self.create_column_store_table("n4_in_store")
         try:
             self.insert_rows(table_path, 10)
             assert self.get_count(table_path) == 10
 
-            # TRUNCATE on a table inside a column store succeeds.
-            self.truncate_table(table_path)
-            assert self.get_count(table_path) == 0
-            logger.info("N4: TRUNCATE on column-store table succeeded (count=0)")
-
-            # Verify the table is still usable after TRUNCATE.
-            self.insert_rows(table_path, 5)
-            assert self.get_count(table_path) == 5
+            with pytest.raises(ydb.issues.PreconditionFailed, match="not supported for column tables in a column store"):
+                self.truncate_table(table_path)
+            assert self.get_count(table_path) == 10
         finally:
             try:
                 self.drop_table(table_path)
@@ -216,41 +194,6 @@ class TestTruncateColumnTableNegative(object):
                 pass
             try:
                 self.drop_store(store_path)
-            except Exception:
-                pass
-
-    # N5: Read-only backup table → StatusSchemeError
-    # A column table copy created via COPY TABLE is read-only (backup).
-    # TRUNCATE on a read-only table should be rejected.
-    def test_n5_truncate_readonly_backup_table(self):
-        table_path = self.create_column_table("n5_source")
-        copy_path = self.get_table_path("n5_backup_copy")
-        try:
-            self.insert_rows(table_path, 20)
-            assert self.get_count(table_path) == 20
-
-            # Create a backup copy (read-only) via Table API.
-            session = self.ydb_client.driver.table_client.session().create()
-            try:
-                session.copy_table(table_path, copy_path)
-                logger.info("N5: backup copy created at %s", copy_path)
-            except ydb.issues.PreconditionFailed as e:
-                # If copy is rejected (e.g. backup flag not honored), skip the
-                # TRUNCATE assertion — the read-only path is not reachable.
-                logger.info("N5: copy_table rejected: %s — skipping TRUNCATE assertion", str(e))
-                return
-
-            # TRUNCATE on the read-only backup copy should fail.
-            with pytest.raises(Exception) as exc_info:
-                self.truncate_table(copy_path)
-            logger.info("N5: TRUNCATE read-only backup raised: %s", str(exc_info.value))
-        finally:
-            try:
-                self.drop_table(copy_path)
-            except Exception:
-                pass
-            try:
-                self.drop_table(table_path)
             except Exception:
                 pass
 
@@ -390,8 +333,8 @@ class TestTruncateColumnTableNegative(object):
         pass
 
     # N14: Propose on read-only table (backup) → SCHEMA_ERROR
-    # NOTE: ColumnShard-level; covered by N5 at the SchemeShard level.
-    @pytest.mark.skip(reason="ColumnShard-level; covered by N5 at SchemeShard level and C++ UT")
+    # NOTE: Covered by SchemeShard and ColumnShard C++ unit tests.
+    @pytest.mark.skip(reason="ColumnShard-level; covered by SchemeShard and ColumnShard C++ UT")
     def test_n14_propose_readonly(self):
         pass
 
@@ -401,16 +344,11 @@ class TestTruncateColumnTableNegative(object):
     def test_n15_propose_unknown_path(self):
         pass
 
-    # N16: AFL_VERIFY(GenerateInternalPathId) on ColumnShard → Abort
-    # NOTE: This is a regression guard; only triggers if SS did not reject.
-    # Covered by C++ UT with AFL instrumentation.
-    @pytest.mark.skip(reason="Requires AFL instrumentation; covered by C++ UT")
-    def test_n16_afl_verify_internal_path_id(self):
-        pass
-
     # N17: New scan after TRUNCATE with snapshot BEFORE truncate → silent empty
     def test_n17_scan_with_old_snapshot(self):
-        table_path = self.create_column_table("n17_old_snapshot")
+        table_path = self.create_column_table(
+            "n17_old_snapshot", extra_with="AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4"
+        )
         try:
             self.insert_rows(table_path, 30)
             assert self.get_count(table_path) == 30
@@ -438,72 +376,14 @@ class TestTruncateColumnTableNegative(object):
                             trunc_client.stop()
                         assert self.get_count(table_path) == 0
 
-                        # Read using the old snapshot — should see old data (30
-                        # rows) or silent empty depending on isolation. The test
-                        # plan says "silent empty" is the accepted compromise for
-                        # a new scan with an old snapshot. In practice, with
-                        # column tables the InternalPathId substitution may
-                        # cause some shards to resolve to the new (empty) path
-                        # while others still see old data, yielding an
-                        # inconsistent count. We only assert the query succeeds
-                        # without error (silent empty / partial read is OK).
+                        # Depending on Query API isolation, an old transaction
+                        # may see its original snapshot or the new empty table.
+                        # A partial count is never a valid outcome.
                         it = tx.execute(f"SELECT COUNT(*) AS cnt FROM `{table_path}`")
                         res = list(it)[0].rows[0]
                         count = res["cnt"]
                         logger.info("N17: count with old snapshot after TRUNCATE = %s", count)
-                        assert count >= 0, f"Negative count: {count}"
-                    finally:
-                        try:
-                            tx.rollback()
-                        except Exception:
-                            pass
-            finally:
-                pool.stop()
-        finally:
-            try:
-                self.drop_table(table_path)
-            except Exception:
-                pass
-
-    # N18: Scan started BEFORE truncate (already resolved old InternalPathId)
-    # continues reading old data until background GC.
-    def test_n18_scan_started_before_truncate(self):
-        table_path = self.create_column_table("n18_scan_before")
-        try:
-            self.insert_rows(table_path, 40)
-            assert self.get_count(table_path) == 40
-
-            # Open a read transaction before TRUNCATE and read once to
-            # resolve the path. Use the Query API (column tables require
-            # QueryService) with an explicit session checkout + begin().
-            driver = self.ydb_client.driver
-            pool = ydb.QuerySessionPool(driver)
-            try:
-                with pool.checkout() as session:
-                    tx = session.transaction().begin()
-                    try:
-                        it = tx.execute(f"SELECT COUNT(*) AS cnt FROM `{table_path}`")
-                        res = list(it)[0].rows[0]
-                        assert res["cnt"] == 40
-
-                        # TRUNCATE via a separate client (DDL, outside tx).
-                        trunc_client = self.create_client()
-                        try:
-                            trunc_client.query(f"TRUNCATE TABLE `{table_path}`")
-                        finally:
-                            trunc_client.stop()
-                        assert self.get_count(table_path) == 0
-
-                        # Continue reading in the same transaction — should see
-                        # old data (40) or silent empty. As with N17, the
-                        # InternalPathId substitution may cause an inconsistent
-                        # count across shards. We only assert the query succeeds
-                        # without error.
-                        it = tx.execute(f"SELECT COUNT(*) AS cnt FROM `{table_path}`")
-                        res = list(it)[0].rows[0]
-                        count = res["cnt"]
-                        logger.info("N18: count in same tx after TRUNCATE = %s", count)
-                        assert count >= 0, f"Negative count: {count}"
+                        assert count in (0, 30), f"Partial count after TRUNCATE: {count}"
                     finally:
                         try:
                             tx.rollback()

@@ -1,6 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
@@ -9,46 +12,28 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TruncateTable) {
-    Y_UNIT_TEST(TruncateTableWithConcurrentDrop) {
+    Y_UNIT_TEST_TWIN(TruncateTableWithConcurrentDrop, IsColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTable"
-            Columns { Name: "id" Type: "Uint64" }
-            Columns { Name: "text" Type: "String" }
-            Columns { Name: "data" Type: "String" }
-            KeyColumnNames: [ "id" ]
-        )");
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        CreateTestTable(runtime, ++txId, "/MyRoot", IsColumnTable);
         env.TestWaitNotification(runtime, txId);
 
-        TVector<TCell> cells = {
-            TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
-            TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
-            TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
-            TCell::Make((ui64)4), TCell(TStringBuf("row four")), TCell(TStringBuf("data four")),
-            TCell::Make((ui64)5), TCell(TStringBuf("row five")), TCell(TStringBuf("data five")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(cells, 5, 3), true);
-
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 5);
-        }
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         bool firstProposeTransactionResultHandled = false;
         const ui64 truncateTxId = ++txId;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+            if (ev->GetTypeRewrite() == (IsColumnTable ? TEvColumnShard::TEvProposeTransactionResult::EventType : TEvDataShard::TEvProposeTransactionResult::EventType)) {
                 if (!firstProposeTransactionResultHandled) {
                     firstProposeTransactionResultHandled = true;
 
-                    TestDropTable(runtime, ++txId, "/MyRoot", "TestTable",
-                                                {NKikimrScheme::StatusMultipleModifications});
+                    DropTestTable(runtime, txId, "/MyRoot", "TestTable", IsColumnTable,
+                        {NKikimrScheme::StatusMultipleModifications});
                     env.TestWaitNotification(runtime, txId);
                 }
             }
@@ -62,47 +47,26 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
 
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-        }
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
     }
 
-    Y_UNIT_TEST(TruncateTableWithConcurrentTruncate) {
+    Y_UNIT_TEST_TWIN(TruncateTableWithConcurrentTruncate, IsColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTable"
-            Columns { Name: "id" Type: "Uint64" }
-            Columns { Name: "text" Type: "String" }
-            Columns { Name: "data" Type: "String" }
-            KeyColumnNames: [ "id" ]
-        )");
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        CreateTestTable(runtime, ++txId, "/MyRoot", IsColumnTable);
         env.TestWaitNotification(runtime, txId);
 
-        TVector<TCell> cells = {
-            TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
-            TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
-            TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
-            TCell::Make((ui64)4), TCell(TStringBuf("row four")), TCell(TStringBuf("data four")),
-            TCell::Make((ui64)5), TCell(TStringBuf("row five")), TCell(TStringBuf("data five")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(cells, 5, 3), true);
-
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 5);
-        }
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         bool firstProposeTransactionResultHandled = false;
         const ui64 truncateTxId = ++txId;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+            if (ev->GetTypeRewrite() == (IsColumnTable ? TEvColumnShard::TEvProposeTransactionResult::EventType : TEvDataShard::TEvProposeTransactionResult::EventType)) {
                 if (!firstProposeTransactionResultHandled) {
                     firstProposeTransactionResultHandled = true;
 
@@ -121,83 +85,50 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
 
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-        }
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
     }
 
-    Y_UNIT_TEST(TruncateTableSequentialOperations) {
+    Y_UNIT_TEST_TWIN(TruncateTableSequentialOperations, IsColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        if constexpr (!IsColumnTable) {
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        }
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTable"
-            Columns { Name: "id" Type: "Uint64" }
-            Columns { Name: "text" Type: "String" }
-            Columns { Name: "data" Type: "String" }
-            KeyColumnNames: [ "id" ]
-        )");
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        CreateTestTable(runtime, ++txId, "/MyRoot", IsColumnTable);
         env.TestWaitNotification(runtime, txId);
 
-        TVector<TCell> cells1 = {
-            TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
-            TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
-            TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(cells1, 3, 3), true);
-
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 3);
-        }
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
         env.TestWaitNotification(runtime, txId);
 
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-        }
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
 
-        TVector<TCell> cells2 = {
-            TCell::Make((ui64)10), TCell(TStringBuf("row ten")), TCell(TStringBuf("data ten")),
-            TCell::Make((ui64)20), TCell(TStringBuf("row twenty")), TCell(TStringBuf("data twenty")),
-            TCell::Make((ui64)30), TCell(TStringBuf("row thirty")), TCell(TStringBuf("data thirty")),
-            TCell::Make((ui64)40), TCell(TStringBuf("row forty")), TCell(TStringBuf("data forty")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(cells2, 4, 3), true);
-
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 4);
-        }
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
         env.TestWaitNotification(runtime, txId);
 
-        {
-            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-        }
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
     }
 
-    Y_UNIT_TEST(TruncateNonExistentTable) {
+    Y_UNIT_TEST_TWIN(TruncateNonExistentTable, IsColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestTruncateTable(runtime, ++txId, "/MyRoot", "NonExistentTable",
-                         {NKikimrScheme::StatusPathDoesNotExist});
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        TestTruncateTable(runtime, ++txId, "/MyRoot",
+            IsColumnTable ? "NonExistentColumnTable" : "NonExistentTable",
+            {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -266,29 +197,24 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TestIndex/indexImplTable"),
             {NLs::PathExist});
 
-        TVector<TCell> cells = {
-            TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
-            TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
-            TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(cells, 3, 3), true);
+        WriteTableData(runtime, txId, "/MyRoot/TestTable", false);
 
         TVector<TCell> indexCells = {
             TCell(TStringBuf("row one")), TCell::Make((ui64)1),
             TCell(TStringBuf("row two")), TCell::Make((ui64)2),
             TCell(TStringBuf("row three")), TCell::Make((ui64)3),
+            TCell(TStringBuf("row four")), TCell::Make((ui64)4),
+            TCell(TStringBuf("row five")), TCell::Make((ui64)5),
         };
         WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TestIndex/indexImplTable",
             0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2}, TSerializedCellMatrix(indexCells, 3, 2), true);
+            {1, 2}, TSerializedCellMatrix(indexCells, 5, 2), true);
 
         {
             auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 3);
+            UNIT_ASSERT_VALUES_EQUAL(rows, 5);
             auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 5);
         }
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
@@ -297,9 +223,9 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         {
             auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(rows, 3);
+            UNIT_ASSERT_VALUES_EQUAL(rows, 5);
             auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 5);
         }
 
         TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
@@ -460,5 +386,29 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     Y_UNIT_TEST(TruncateTableWithFulltextCompactRelevanceIndex) {
         TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance);
     }
-}
 
+    Y_UNIT_TEST(TruncateReadOnlyTableFails) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        CreateTestTable(runtime, ++txId, "/MyRoot", true);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableCopy"
+            CopyFromTable: "/MyRoot/TestTable"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTableCopy",
+            {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table"}});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTableCopy"), {NLs::PathExist});
+    }
+
+}

@@ -684,28 +684,28 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     // No tablets: the changefeed topic shape is decided before hive creates anything.
     Y_UNIT_TEST(ReplicationTopicFor50000Shards) {
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000);
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, maxShardsInPath);
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
-        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 20'000);
-        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
-        UNIT_ASSERT(params.MinPartitionCount <= 10'000);
-        UNIT_ASSERT(params.MaxPartitionCount <= 20'000);
     }
 
-    Y_UNIT_TEST(ReplicationTopicMinPartitionCountIsCapped) {
-        // 200000 / 16 = 12500, which is above the 10000 ceiling.
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000);
+    Y_UNIT_TEST(ReplicationTopicMinIsQuarterOfMax) {
+        // 200000 / 16 = 12500, above MaxShardsInPath / 4.
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000, maxShardsInPath);
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
-        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 10'000);
-        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 20'000);
-        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 20'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, maxShardsInPath / 4);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
     Y_UNIT_TEST(ReplicationTopicForSmallTable) {
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8, TSchemeLimits{}.MaxShardsInPath);
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 128);
@@ -713,8 +713,17 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
+    Y_UNIT_TEST(ReplicationTopicMaxPartitionCountFollowsPathLimit) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, 1'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1'000 / 4);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 1'000);
+    }
+
     Y_UNIT_TEST(ReplicationTopicWithoutAutopartitioning) {
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000);
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000, maxShardsInPath);
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);

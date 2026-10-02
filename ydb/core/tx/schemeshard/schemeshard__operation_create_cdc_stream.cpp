@@ -677,11 +677,11 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
 
 } // anonymous
 
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount) {
-    // Replication topics are hash-partitioned. Cap the split range so a table
-    // with tens of thousands of shards still gets a creatable topic.
-    constexpr ui32 MinPartitionCountLimit = 10'000;
-    constexpr ui32 MaxPartitionCountLimit = 20'000;
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
+    // Autopartitioned replication topics are hash-partitioned. Cap that split
+    // range by the path shard limit so a large table still gets a creatable topic.
+    const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
+    const ui64 minPartitionCountLimit = maxPartitionCountLimit / 4;
 
     TCdcPqPartParams params;
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
@@ -691,10 +691,10 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
         return params;
     }
 
-    const ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), MinPartitionCountLimit);
-    ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), MaxPartitionCountLimit);
+    ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), minPartitionCountLimit);
+    ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), maxPartitionCountLimit);
     if (minParts > maxParts) {
-        maxParts = minParts;
+        minParts = maxParts;
     }
 
     ui64 total = params.TotalGroupCount;
@@ -724,7 +724,8 @@ void DoCreatePqPart(
     auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
 
-    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size());
+    const ui64 maxShardsInPath = streamPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");

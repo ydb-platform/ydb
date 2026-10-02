@@ -49,8 +49,8 @@ struct TCdcPqPartParams {
 };
 
 // Decides the changefeed topic shape from the source table size.
-// Replication autopartitioning caps min and max partition counts.
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount);
+// Replication autopartitioning caps max at maxShardsInPath and min at that limit / 4.
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath);
 
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,

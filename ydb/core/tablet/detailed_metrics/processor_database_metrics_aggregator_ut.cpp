@@ -194,6 +194,112 @@ namespace {
         TTables Tables;
     };
 
+    /**
+     * The legacy low level counters of one DataShard bucket, as the nodes reported them before
+     * they reported the public metric values (see TDbTabletCounters): the full counter layout
+     * of DataShard, sums over the tablets of the bucket, sparse cumulative deltas, and
+     * HIST(ConsumedCPU) marked NonDerivative with its full current value. Every counter is zero
+     * and every histogram is empty, until set otherwise.
+     */
+    class TLegacyValues {
+    public:
+        TLegacyValues() {
+            Counters.SetType(TABLET_TYPE);
+            const TExecutorCounters executor;
+            const auto app = CreateAppCountersByTabletType(TABLET_TYPE);
+            InitLayout(*Counters.MutableExecutorCounters(), executor);
+            InitLayout(*Counters.MutableAppCounters(), *app);
+            GetCpuHistogram().SetNonDerivative(true);
+        }
+
+        TLegacyValues& Simple(ui32 counter, ui64 value) {
+            Counters.MutableExecutorCounters()->SetSimple(counter, value);
+            return *this;
+        }
+
+        TLegacyValues& Cumulative(ui32 counter, ui64 delta) {
+            Counters.MutableExecutorCounters()->AddCumulative(counter);
+            Counters.MutableExecutorCounters()->AddCumulative(delta);
+            return *this;
+        }
+
+        TLegacyValues& AppCumulative(ui32 counter, ui64 delta) {
+            Counters.MutableAppCounters()->AddCumulative(counter);
+            Counters.MutableAppCounters()->AddCumulative(delta);
+            return *this;
+        }
+
+        // A bucket of HIST(ConsumedCPU), which is the same bucket of the public used_core_percents
+        TLegacyValues& CpuBucket(ui64 bucket, ui64 count) {
+            GetCpuHistogram().AddBuckets(bucket);
+            GetCpuHistogram().AddBuckets(count);
+            return *this;
+        }
+
+        const NKikimrSysView::TDbTabletCounters& Get() const {
+            return Counters;
+        }
+
+    private:
+        static void InitLayout(NKikimrSysView::TDbCounters& counters, const TTabletCountersBase& layout) {
+            counters.MutableSimple()->Resize(layout.Simple().Size(), 0);
+            counters.SetCumulativeCount(layout.Cumulative().Size());
+            for (ui32 i = 0; i < layout.Percentile().Size(); ++i) {
+                counters.AddHistogram()->SetBucketsCount(layout.Percentile()[i].GetRangeCount());
+            }
+        }
+
+        NKikimrSysView::TDbCounters::THistogram& GetCpuHistogram() {
+            return *Counters.MutableExecutorCounters()->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+        }
+
+        NKikimrSysView::TDbTabletCounters Counters;
+    };
+
+    /**
+     * A report of a node on the detailed wire, which carries the legacy low level counters
+     * of its buckets (the table entries have no TabletType), built by hand.
+     */
+    class TLegacyReport {
+    public:
+        // Add a TABLE level entry with the low level counters of the TABLE partial of the node
+        TLegacyReport& Table(const TLegacyValues& values, const TString& path = TABLE_PATH) {
+            auto* entry = Tables.Add();
+            entry->SetTablePath(path);
+            entry->SetLevel(TDetailedMetricsSettings::MetricsLevelTable);
+            *entry->MutableTableCounters() = values.Get();
+            return *this;
+        }
+
+        // Add a leaf with its low level counters to the PARTITION level entry of the table
+        TLegacyReport& Leaf(ui64 tabletId, ui32 followerId, const TLegacyValues& values, const TString& path = TABLE_PATH) {
+            auto* leaf = GetOrAddPartitionEntry(path)->AddLeaves();
+            leaf->SetTabletId(tabletId);
+            leaf->SetFollowerId(followerId);
+            *leaf->MutableCounters() = values.Get();
+            return *this;
+        }
+
+        const TTables& Get() const {
+            return Tables;
+        }
+
+    private:
+        NKikimrSysView::TDetailedTableCounters* GetOrAddPartitionEntry(const TString& path) {
+            for (auto& entry : Tables) {
+                if (entry.GetTablePath() == path && entry.GetLevel() == TDetailedMetricsSettings::MetricsLevelPartition) {
+                    return &entry;
+                }
+            }
+            auto* entry = Tables.Add();
+            entry->SetTablePath(path);
+            entry->SetLevel(TDetailedMetricsSettings::MetricsLevelPartition);
+            return entry;
+        }
+
+        TTables Tables;
+    };
+
     struct TProcessorFixture {
         NMonitoring::TDynamicCounterPtr PublicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProcessorDatabaseMetricsAggregatorPtr Processor = CreateProcessorDatabaseMetricsAggregator(
@@ -210,6 +316,12 @@ namespace {
 
         // Apply the hand-built reports of both roles of the node, the same way as ApplyNode()
         void ApplyPublicNode(ui32 nodeId, const TPublicReport& leaders, const TPublicReport& followers = TPublicReport()) {
+            Processor->ApplyFromNode(nodeId, false, leaders.Get());
+            Processor->ApplyFromNode(nodeId, true, followers.Get());
+        }
+
+        // Apply the hand-built legacy reports of both roles of the node, the same way as ApplyNode()
+        void ApplyLegacyNode(ui32 nodeId, const TLegacyReport& leaders, const TLegacyReport& followers = TLegacyReport()) {
             Processor->ApplyFromNode(nodeId, false, leaders.Get());
             Processor->ApplyFromNode(nodeId, true, followers.Get());
         }
@@ -723,7 +835,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
         node1.Leaders->Pack(tables);
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
-        auto* histogram = tables.Mutable(0)->MutableTableCounters()->MutableExecutorCounters()->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+        auto* histogram = tables.Mutable(0)->MutableTableMetrics()->MutableHistogram(PUBLIC_USED_CORE_PERCENTS);
         const auto knownBucketCount = histogram->GetBucketsCount();
         histogram->SetBucketsCount(knownBucketCount + 1);
         histogram->AddBuckets(knownBucketCount);
@@ -1415,10 +1527,10 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
             node1.Leaders->Pack(tables);
             UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
-            auto* counters = tableLevel
-                                 ? tables.Mutable(0)->MutableTableCounters()
-                                 : tables.Mutable(0)->MutableLeaves(0)->MutableCounters();
-            auto* histogram = counters->MutableExecutorCounters()->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+            auto* values = tableLevel
+                               ? tables.Mutable(0)->MutableTableMetrics()
+                               : tables.Mutable(0)->MutableLeaves(0)->MutableMetrics();
+            auto* histogram = values->MutableHistogram(PUBLIC_USED_CORE_PERCENTS);
             UNIT_ASSERT(histogram->GetNonDerivative());
             histogram->ClearNonDerivative();
 
@@ -1745,16 +1857,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
     }
 
     Y_UNIT_TEST(EntriesWithAndWithoutTabletTypeMixInOneReport) {
-        TSimulatedNode node;
         TProcessorFixture fixture;
-        TFakeTablet legacyTablet(1000, 0);
-        legacyTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-            .Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
 
         // The node reports the legacy low level counters of one table (no tablet type),
         // the same report carries the public values of another table
-        TTables tables;
-        node.Leaders->Pack(tables);
+        TTables tables = TLegacyReport().Table(TLegacyValues()
+            .Simple(DB_UNIQUE_ROWS_TOTAL, 10).Cumulative(CONSUMED_CPU, 5).CpuBucket(0, 1)).Get();
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
         UNIT_ASSERT(!tables.Get(0).HasTabletType());
         tables.MergeFrom(TPublicReport().Leaf(2000, 0, TPublicValues()
@@ -1825,16 +1933,19 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
     }
 
     Y_UNIT_TEST(PublicAndLegacyPayloadsPublishTheSameSeries) {
-        // The same scenario, reported once as the legacy low level counters (packed by the node)
-        // and once as the public metric values (built by hand), publishes the same series
+        // The same scenario, reported as the public metric values packed by the node, as
+        // the public metric values built by hand and as the legacy low level counters built
+        // by hand, publishes the same series
         TSimulatedNode node1, node2;
-        TProcessorFixture legacy, published;
+        TProcessorFixture packed, legacy, published;
         TFakeTablet leader(1000, 0), follower(1000, 1), first(2000, 0), second(2001, 0);
 
         const auto assertSameSeries = [&]() {
+            packed.Processor->RecalculateAllCounters();
             legacy.Processor->RecalculateAllCounters();
             published.Processor->RecalculateAllCounters();
             UNIT_ASSERT_VALUES_EQUAL(published.DumpPublicSeries(), legacy.DumpPublicSeries());
+            UNIT_ASSERT_VALUES_EQUAL(published.DumpPublicSeries(), packed.DumpPublicSeries());
         };
 
         // The first report of every tablet: the rate is zero, every tablet is in the bucket 0
@@ -1851,8 +1962,22 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW, OTHER_TABLE_PATH);
         second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5).AddCumulative(CONSUMED_CPU, 1000)
             .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW, OTHER_TABLE_PATH);
-        legacy.ApplyNode(1, node1);
-        legacy.ApplyNode(2, node2);
+        packed.ApplyNode(1, node1);
+        packed.ApplyNode(2, node2);
+
+        legacy.ApplyLegacyNode(1,
+            TLegacyReport().Leaf(1000, 0, TLegacyValues()
+                .Simple(DB_UNIQUE_ROWS_TOTAL, 10).Cumulative(CONSUMED_CPU, 50000)
+                .AppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 4)
+                .AppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 6)
+                .CpuBucket(0, 1)),
+            TLegacyReport().Leaf(1000, 1, TLegacyValues()
+                .Cumulative(CONSUMED_CPU, 20000)
+                .AppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 999)
+                .AppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 11)
+                .CpuBucket(0, 1)));
+        legacy.ApplyLegacyNode(2, TLegacyReport().Table(TLegacyValues()
+            .Simple(DB_UNIQUE_ROWS_TOTAL, 25).Cumulative(CONSUMED_CPU, 71000).CpuBucket(0, 2), OTHER_TABLE_PATH));
 
         published.ApplyPublicNode(1,
             TPublicReport().Leaf(1000, 0, TPublicValues()
@@ -1879,8 +2004,16 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         first.AddCumulative(CONSUMED_CPU, 70000)
             .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(1), OTHER_TABLE_PATH);
         second.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(1), OTHER_TABLE_PATH);
-        legacy.ApplyNode(1, node1);
-        legacy.ApplyNode(2, node2);
+        packed.ApplyNode(1, node1);
+        packed.ApplyNode(2, node2);
+
+        legacy.ApplyLegacyNode(1,
+            TLegacyReport().Leaf(1000, 0, TLegacyValues()
+                .Simple(DB_UNIQUE_ROWS_TOTAL, 12).Cumulative(CONSUMED_CPU, 50000).CpuBucket(1, 1)),
+            TLegacyReport().Leaf(1000, 1, TLegacyValues()
+                .Cumulative(CONSUMED_CPU, 150000)));
+        legacy.ApplyLegacyNode(2, TLegacyReport().Table(TLegacyValues()
+            .Simple(DB_UNIQUE_ROWS_TOTAL, 25).Cumulative(CONSUMED_CPU, 70000).CpuBucket(0, 1).CpuBucket(1, 1), OTHER_TABLE_PATH));
 
         published.ApplyPublicNode(1,
             TPublicReport().Leaf(1000, 0, TPublicValues()
@@ -1893,9 +2026,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         // Node 2 is gone. Node 1 repeats its leader leaf (gauges and the full level, no deltas),
         // and no longer reports the retired follower leaf
+        packed.Processor->DropNode(2);
         legacy.Processor->DropNode(2);
         published.Processor->DropNode(2);
-        legacy.ApplyNode(1, node1);
+        packed.ApplyNode(1, node1);
+        legacy.ApplyLegacyNode(1, TLegacyReport().Leaf(1000, 0, TLegacyValues()
+            .Simple(DB_UNIQUE_ROWS_TOTAL, 12).CpuBucket(1, 1)));
         published.ApplyPublicNode(1, TPublicReport().Leaf(1000, 0, TPublicValues()
             .Gauge(PUBLIC_ROW_COUNT, 12).Bucket(1, 1)));
         assertSameSeries();

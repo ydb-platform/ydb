@@ -20,9 +20,9 @@ struct TDatabaseStorageStats {
             const NKikimrWhiteboard::TVDiskStateInfo& vdisk,
             const NKikimrWhiteboard::TPDiskStateInfo& pdisk,
             ui32 groupSizeInUnits) {
-        ui64 slotSize = pdisk.GetExpectedSlotSize();
+        ui64 slotSize = pdisk.GetEnforcedDynamicSlotSize();
         if (!slotSize) {
-            slotSize = pdisk.GetEnforcedDynamicSlotSize();
+            slotSize = pdisk.GetExpectedSlotSize();
         }
         if (!slotSize) {
             const ui32 slotCount = pdisk.GetExpectedSlotCount();
@@ -38,7 +38,15 @@ struct TDatabaseStorageStats {
             groupSizeInUnits,
             pdisk.GetSlotSizeInUnits(),
             pdisk.GetExpectedSlotSize());
-        Total += slotSize * quotaMultiplier;
+        slotSize *= quotaMultiplier;
+        if (pdisk.GetExpectedSlotSize()) {
+            if (pdisk.HasUserChunkPoolSize()) {
+                slotSize = Min(slotSize, pdisk.GetUserChunkPoolSize());
+            } else if (pdisk.HasTotalSize()) {
+                slotSize = Min(slotSize, pdisk.GetTotalSize());
+            }
+        }
+        Total += slotSize;
     }
 };
 

@@ -2265,23 +2265,39 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
     }
 
-    Y_UNIT_TEST(GroupUsagePrefersExpectedSlotSizeOverDynamicSlotSize) {
+    Y_UNIT_TEST(GroupUsagePrefersRoundedDynamicSlotSize) {
         NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
-        pdiskMetrics.SetEnforcedDynamicSlotSize(1000);
-        pdiskMetrics.SetSlotSizeInUnits(1);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetSlotSizeInUnits(2);
+        pdiskMetrics.SetTotalSize(180);
 
         NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
         vdiskMetrics.SetAllocatedSize(25);
-
         NKikimrSysView::TGroupInfo info;
-        CalculateGroupUsageStats(
-            &info,
-            {{&pdiskMetrics, &vdiskMetrics, 10, 100}},
-            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
-            2);
+        auto check = [&](ui64 expectedAvailable) {
+            CalculateGroupUsageStats(&info, {{&pdiskMetrics, &vdiskMetrics, 10, 100}},
+                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), 2);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailable);
+        };
+        check(155); // Old PDisks lack the user chunk pool metric; cap by TotalSize.
+        pdiskMetrics.SetTotalSize(1000);
+        check(167);
+        pdiskMetrics.ClearEnforcedDynamicSlotSize();
+        check(175);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetUserChunkPoolSize(150);
+        check(125);
+        pdiskMetrics.SetUserChunkPoolSize(0);
+        check(0);
 
-        UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
-        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 175);
+        // An empty pool must remain the minimum even when another disk has capacity.
+        NKikimrBlobStorage::TPDiskMetrics otherPDisk = pdiskMetrics;
+        otherPDisk.SetUserChunkPoolSize(1000);
+        CalculateGroupUsageStats(&info,
+            {{&pdiskMetrics, &vdiskMetrics, 10, 100}, {&otherPDisk, &vdiskMetrics, 10, 100}},
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), 2);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 0);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultExpectedSlotCount) {

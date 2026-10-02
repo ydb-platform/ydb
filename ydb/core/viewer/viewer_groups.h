@@ -213,6 +213,7 @@ public:
         ui32 SlotCount = 0;
         ui32 SlotSizeInUnits = 0;
         ui64 ExpectedSlotSize = 0;
+        std::optional<ui64> UserChunkPoolSize;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -238,10 +239,10 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (ExpectedSlotSize) {
-                return ExpectedSlotSize;
-            } else if (EnforcedDynamicSlotSize) {
+            if (EnforcedDynamicSlotSize) {
                 return EnforcedDynamicSlotSize;
+            } else if (ExpectedSlotSize) {
+                return ExpectedSlotSize;
             } else if (SlotCount) {
                 return TotalSize / SlotCount;
             } else {
@@ -509,14 +510,18 @@ public:
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
                     ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerQuotaMultiplier(GroupSizeInUnits);
-                    // when a vdisk overgrows its nominal slot, keep its real AvailableSize
-                    if (slotSize > vdisk.AllocatedSize) {
-                        ui64 slotAvailable = slotSize - vdisk.AllocatedSize;
+                    if (itPDisk->second.ExpectedSlotSize) {
+                        slotSize = Min(slotSize, itPDisk->second.UserChunkPoolSize.value_or(itPDisk->second.TotalSize));
+                    }
+                    // Legacy nominal slots may be exceeded; fixed quotas remain hard limits.
+                    if (itPDisk->second.ExpectedSlotSize || slotSize > vdisk.AllocatedSize) {
+                        ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
                         if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
                             vdisk.AvailableSize = slotAvailable;
                         }
                     }
-                    limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
+                    limit += slotSize || (itPDisk->second.ExpectedSlotSize && itPDisk->second.UserChunkPoolSize)
+                        ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
                     available += vdisk.AvailableSize;
                 }
                 allocated += vdisk.AllocatedSize;
@@ -1744,6 +1749,9 @@ public:
                     pDisk.SlotCount = info.GetExpectedSlotCount();
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
+                    if (info.HasUserChunkPoolSize()) {
+                        pDisk.UserChunkPoolSize = info.GetUserChunkPoolSize();
+                    }
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -2128,6 +2136,9 @@ public:
                     }
                     if (info.GetExpectedSlotSize()) {
                         pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
+                    }
+                    if (info.HasUserChunkPoolSize()) {
+                        pDisk.UserChunkPoolSize = info.GetUserChunkPoolSize();
                     }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();

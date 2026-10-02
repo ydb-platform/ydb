@@ -234,7 +234,8 @@ message PDisk {
     // Number of allocation units represented by one base slot. A VDisk may
     // occupy multiple base slots.
     uint32 slot_size_in_units = 18;
-    // If nonzero, every slot on the disk is guaranteed this many bytes.
+    // Per-unit quota in bytes. With expected_slot_size, scale by the group's
+    // size_in_units and cap by user_chunk_pool_size; otherwise scale by slot weight.
     uint64 enforced_dynamic_slot_size = 19;
 
     // Space in bytes as reported by the disk; 0 when metrics have not been reported yet.
@@ -245,6 +246,10 @@ message PDisk {
     uint64 max_read_throughput_bytes_per_second = 22;
     uint64 max_write_throughput_bytes_per_second = 23;
     uint32 max_iops = 24;
+    // Fixed quota per allocation unit in bytes; zero selects slot-weight-based quotas.
+    uint64 expected_slot_size = 25;
+    // Physical upper bound for one VDisk's quota, in bytes; unset on older servers.
+    optional uint64 user_chunk_pool_size = 26;
 }
 
 // A former replica of a VDisk that keeps serving reads until the new replica

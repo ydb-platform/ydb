@@ -1890,7 +1890,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (ExpectedSlotSize) {
-            *Mon.SlotSizeBytes = ExpectedSlotSize;
+            *Mon.SlotSizeBytes = GetExpectedOwnerSizeInChunks() * Format.ChunkSize;
         } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
@@ -1945,6 +1945,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetTotalSize(Format.DiskSize);
         pDiskMetrics.SetAvailableSize(availableSize);
         pDiskMetrics.SetUserChunkPoolSize(ui64(Keeper.GetUserChunkPoolSize()) * Format.ChunkSize);
+        pdiskState.SetUserChunkPoolSize(pDiskMetrics.GetUserChunkPoolSize());
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
         //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));

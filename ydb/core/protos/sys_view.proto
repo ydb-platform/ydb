@@ -195,6 +195,7 @@ message TPDiskInfo {
     reserved 21;
     optional string MaintenanceStatus = 22;
     optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
+    optional uint64 UserChunkPoolSize = 24; // physical upper bound for one owner's quota, in bytes
     // metrics ?
     // physical location ?
     // config ?

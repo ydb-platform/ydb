@@ -223,6 +223,9 @@ private:
                             if (pdisk.HasEnforcedDynamicSlotSize()) {
                                 pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                             }
+                            if (pdisk.HasUserChunkPoolSize()) {
+                                pm.SetUserChunkPoolSize(pdisk.GetUserChunkPoolSize());
+                            }
                             if (pdisk.HasSlotSizeInUnits()) {
                                 pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
                             }

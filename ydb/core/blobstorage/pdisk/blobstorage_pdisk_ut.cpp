@@ -3992,7 +3992,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         });
         UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), formulaSlotSizeBytes);
 
-        const ui64 expectedSlotSize = 3ull * testCtx.GetPDiskConfig()->ChunkSize + 1;
+        const ui32 chunkSize = GetFormatChunkSizes(testCtx).first;
+        const ui64 expectedSlotSize = 3ull * chunkSize + 1;
         UNIT_ASSERT_VALUES_UNEQUAL(expectedSlotSize, formulaSlotSizeBytes);
 
         testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
@@ -4001,7 +4002,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.Send(new TEvents::TEvWakeup());
         waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
 
-        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), expectedSlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), 3ull * chunkSize);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

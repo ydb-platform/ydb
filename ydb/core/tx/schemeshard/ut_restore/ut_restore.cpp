@@ -925,16 +925,27 @@ value {
         const ui64 contentLength = data.Data.size();
         UNIT_ASSERT_GT(contentLength, 64_KB);
 
-        ui32 uploadsBeforeFailure = 0;
+        // in the upload mode the failure waits for a non-empty upload done at a
+        // processed position of 0, which is rows written inside the frame
+        bool uploadInFlight = false;
+        bool uploadedInsideFrame = false;
         bool failed = false;
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvS3UploadRowsRequest:
-                if (!failed) {
-                    ++uploadsBeforeFailure;
-                }
+                uploadInFlight = ev->Get<TEvDataShard::TEvS3UploadRowsRequest>()->Record.RowsSize() > 0;
                 break;
+            case TEvDataShard::EvS3UploadRowsResponse: {
+                const auto* response = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>();
+                if (!failed && uploadInFlight && response->Record.GetStatus() == NKikimrTxDataShard::TError::OK
+                    && response->Info.ProcessedBytes == 0)
+                {
+                    uploadedInsideFrame = true;
+                }
+                uploadInFlight = false;
+                break;
+            }
             case TEvDataShard::EvSchemaChanged: {
                 const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
                 if (record.HasOpResult()) {
@@ -948,7 +959,7 @@ value {
                     break;
                 }
                 const auto interval = response->GetReadInterval();
-                if (interval.first < contentLength * 3 / 4) {
+                if (interval.first < contentLength * 3 / 4 || (!EnableDataShardDirectPartImport && !uploadedInsideFrame)) {
                     break; // not yet past the first block of the frame
                 }
                 // fails once, inside the frame; the retry is a wakeup the downloader
@@ -975,9 +986,10 @@ value {
 
         UNIT_ASSERT_C(failed, "no GetObject inside the frame");
         if (!EnableDataShardDirectPartImport) {
-            UNIT_ASSERT_C(uploadsBeforeFailure > 0, "no rows were written before the failure");
+            UNIT_ASSERT_C(uploadedInsideFrame, "no rows were written inside the frame before the failure");
         }
         UNIT_ASSERT_C(result, "no result of the restore");
+        UNIT_ASSERT_C(result->GetSuccess(), result->GetExplain());
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
         UNIT_ASSERT_VALUES_EQUAL(result->GetBytesProcessed(), largeValue.size() + 6);
 

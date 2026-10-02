@@ -110,7 +110,11 @@ struct TMetadataInfoHolder {
     {
         for (auto& [name, ptr] : TableMetadata) {
             for (auto implTable : ptr->ImplTables) {
-                YQL_ENSURE(implTable);
+                // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+                // tables, so their ImplTables slot is null (see TKikimrTableMetadata ctor).
+                if (!implTable) {
+                    continue;
+                }
                 do {
                     auto nextImplTable = implTable->Next;
                     Indexes.emplace(implTable->Name, std::move(implTable));

@@ -3447,10 +3447,12 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
             runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
 
-            // several row groups, so that a reboot lands between them
+            // several row groups, so that a reboot lands between them; the values are
+            // small because every reboot pass downloads the whole file again in
+            // ReadBatchSize (128 byte) pieces, and every piece costs an S3 round trip
             TVector<std::pair<TString, TMaybe<TString>>> rows;
             for (ui32 i = 0; i < 6; ++i) {
-                rows.emplace_back(TStringBuilder() << "k" << i, TString(24_KB, static_cast<char>('a' + i)));
+                rows.emplace_back(TStringBuilder() << "k" << i, TString(64, static_cast<char>('a' + i)));
             }
             const auto data = GenerateParquetTestData(rows, /*rowGroupSize=*/2);
 

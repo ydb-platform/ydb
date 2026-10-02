@@ -2803,7 +2803,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetRejectsAMalformedFooter) {
         // The tail of the file is checked before the footer is fetched, and
-        // the footer is parsed under limits before Arrow sees it: a crafted
+        // the footer is walked under limits before Arrow parses it: a crafted
         // file ends in an error, with nothing but the tail downloaded.
         const TString source = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4);
         size_t footerStart = 0;
@@ -2906,6 +2906,87 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet footer takes about ");
             UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
                 " bytes in memory, the limit is 524288 bytes (RestoreReadBufferSizeLimit)");
+            UNIT_ASSERT(outcome.Rows.empty());
+            UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+        }
+
+        { // ParquetChecksTheFooterBeforeParsingIt
+            // Thrift resizes a list to its declared length before it reads an
+            // entry, and a column chunk is 3 bytes in the file but hundreds in
+            // memory, so the footer is walked once before it is parsed: a list
+            // is checked against the bytes that follow it, and what the footer
+            // would take is added up as the walk goes. Here the two column
+            // chunks of the one row group are declared to be many more.
+            static constexpr ui64 BufferLimit = 1_MB;
+            // Field 4 of the file's metadata, the row groups, is 0x19 (field
+            // delta 1, a list) 0x1C (one entry, a struct); field 1 of the row
+            // group, its column chunks, is 0x19 0x2C (two structs). A longer
+            // list is 0xFC and its length as a varint.
+            const auto declaring = [](const TString& file, const std::function<ui32(size_t)>& chunks) {
+                size_t footerStart = 0;
+                ReadFooter(file, &footerStart);
+                const TStringBuf body = TStringBuf(file).SubStr(0, footerStart);
+                TString footer = file.substr(footerStart, file.size() - 8 - footerStart);
+                const size_t header = footer.find("\x19\x1C\x19\x2C");
+                UNIT_ASSERT(header != TString::npos);
+                footer.replace(header + 3, 1, TStringBuilder() << '\xFC' << Varint(chunks(footer.size())));
+                return WithFooterBytes(body, footer);
+            };
+            const auto import = [](const TString& file, TStringBuf expected, ui64 requestedAtMost, TStringBuf what) {
+                const TEngineFixture fixture;
+                const auto outcome = ImportKeyValueParquet(fixture, file, BufferLimit);
+                UNIT_ASSERT_C(outcome.Error, what << " was taken");
+                UNIT_ASSERT_STRING_CONTAINS_C(*outcome.Error, expected, what);
+                UNIT_ASSERT_C(outcome.Rows.empty(), what);
+                UNIT_ASSERT_LE_C(outcome.RequestedBytes, requestedAtMost, what);
+            };
+            const TString source = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4);
+
+            // more chunks than the footer has bytes: refused by thrift's limit
+            // on a list, which is the footer's length here
+            import(declaring(source, [](size_t) { return 1000000u; }),
+                "failed to parse the parquet footer", 64_KB,
+                "a footer declaring a million column chunks");
+
+            // as many chunks as the footer has bytes: within thrift's limit,
+            // but more than the bytes that follow the list hold
+            import(declaring(source, [](size_t footerBytes) { return static_cast<ui32>(footerBytes); }),
+                "Parquet footer declares a list of ", 64_KB,
+                "a footer declaring more column chunks than its bytes hold");
+
+            // chunks that would take the buffer once parsed, in a footer padded
+            // after the row groups so that their count is within its bytes
+            const TString padded = PatchFooter(source, [](parquet::format::FileMetaData& metadata) {
+                parquet::format::KeyValue padding;
+                padding.__set_key("padding");
+                padding.__set_value(std::string(100_KB, 'p'));
+                metadata.key_value_metadata.push_back(std::move(padding));
+                metadata.__isset.key_value_metadata = true;
+            });
+            import(declaring(padded, [](size_t) { return 50000u; }),
+                "Parquet footer takes about ", 256_KB,
+                "a footer declaring column chunks that take the buffer");
+        }
+
+        { // ParquetCountsTheListsInsideAChunk
+            // The lists inside a column chunk are parsed into memory too: here
+            // the path of each chunk has twenty thousand parts, in a footer of
+            // 40 KB, against a buffer of 512 KB.
+            static constexpr ui64 BufferLimit = 512_KB;
+            const TString source = PatchFooter(
+                BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
+                [](parquet::format::FileMetaData& metadata) {
+                    for (auto& column : metadata.row_groups[0].columns) {
+                        column.meta_data.path_in_schema.assign(20000, std::string());
+                    }
+                });
+            UNIT_ASSERT_LT(source.size(), 64_KB);
+
+            const TEngineFixture fixture;
+            const auto outcome = ImportKeyValueParquet(fixture, source, BufferLimit);
+
+            UNIT_ASSERT_C(outcome.Error, "a footer with huge lists inside its chunks was taken");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet footer takes about ");
             UNIT_ASSERT(outcome.Rows.empty());
             UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
         }

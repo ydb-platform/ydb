@@ -1,6 +1,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "import_data_parser.h"
+#include "import_parquet_s3_file.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
@@ -222,15 +223,302 @@ private:
     TVector<TColumn> Columns;
 };
 
+// The footer is checked before Arrow parses it. Thrift reads a footer into
+// structures many times the size of their bytes, a column chunk of 3 bytes
+// into 560, and it resizes a list to its declared length before it reads one
+// entry, so a crafted footer of a few MB takes GBs while it is parsed. And
 // Arrow builds the tree of the schema by recursion, one level per nested
-// group and with no limit, so a footer with a deep enough chain of groups
-// overflows the stack. The depth is checked here first, on the flat list the
-// footer holds, which thrift reads without recursion. The list is in
-// preorder: an element with children is followed by them. A backup has one
-// level, and the import takes only top-level columns.
+// group and with no limit, so a deep enough chain of groups overflows the
+// stack. So the footer is first walked once without building it: the schema
+// elements, the row groups and the column chunks are counted; every list is
+// checked against the bytes that follow it, since an entry takes a byte at
+// least; what the parsed footer takes in memory is added up as the walk goes
+// and checked against the limit; and the depth of the schema is checked on
+// the flat list the footer holds, which is in preorder, an element with
+// children followed by them. The walk allocates nothing but one buffer for
+// the strings it passes. A backup has one level of schema, and the import
+// takes only top-level columns.
 constexpr size_t MaxSchemaNesting = 32;
 
-std::expected<void, TString> CheckSchemaNesting(arrow::io::RandomAccessFile& source) {
+namespace NThrift = apache::thrift::protocol;
+
+class TFooterWalker {
+    using TTransport = apache::thrift::transport::TMemoryBuffer;
+    using TReader = NThrift::TCompactProtocolT<TTransport>;
+
+    // Field ids, see parquet.thrift
+    static constexpr int16_t FileMetaDataSchema = 2;
+    static constexpr int16_t FileMetaDataRowGroups = 4;
+    static constexpr int16_t RowGroupColumns = 1;
+    static constexpr int16_t SchemaElementNumChildren = 5;
+
+    // What an entry of any other list takes once parsed: a key-value pair, a
+    // string of a path, an encoding, the statistics of a page's encoding, a
+    // sorting column.
+    static constexpr ui64 BytesPerOtherEntry = 64;
+    static constexpr ui64 BytesPerString = 32;
+    static constexpr ui64 BytesPerNumber = 8;
+
+public:
+    struct TRejected {
+        TString Message;
+    };
+
+    TFooterWalker(TTransport& transport, TReader& reader, ui64 footerBytes, ui64 memoryLimit)
+        : Transport(transport)
+        , Reader(reader)
+        , MemoryLimit(memoryLimit)
+        , Estimate(footerBytes)
+    {
+    }
+
+    // Throws TRejected for a footer the import does not take, and thrift's
+    // exceptions for one it cannot read.
+    void Walk() {
+        NThrift::TInputRecursionTracker tracker(Reader);
+        std::string name;
+        Reader.readStructBegin(name);
+        while (true) {
+            NThrift::TType type;
+            int16_t id;
+            Reader.readFieldBegin(name, type, id);
+            if (type == NThrift::T_STOP) {
+                break;
+            }
+            if (id == FileMetaDataSchema && type == NThrift::T_LIST) {
+                const ui32 count = ReadListOfStructs(ParquetFooterBytesPerColumn);
+                for (ui32 i = 0; i < count; ++i) {
+                    WalkSchemaElement();
+                }
+                Reader.readListEnd();
+            } else if (id == FileMetaDataRowGroups && type == NThrift::T_LIST) {
+                const ui32 count = ReadListOfStructs(ParquetFooterBytesPerRowGroup);
+                for (ui32 i = 0; i < count; ++i) {
+                    WalkRowGroup();
+                }
+                Reader.readListEnd();
+            } else {
+                Skip(type);
+            }
+            Reader.readFieldEnd();
+        }
+        Reader.readStructEnd();
+    }
+
+private:
+    void WalkSchemaElement() {
+        NThrift::TInputRecursionTracker tracker(Reader);
+        std::string name;
+        int32_t numChildren = 0;
+        Reader.readStructBegin(name);
+        while (true) {
+            NThrift::TType type;
+            int16_t id;
+            Reader.readFieldBegin(name, type, id);
+            if (type == NThrift::T_STOP) {
+                break;
+            }
+            if (id == SchemaElementNumChildren && type == NThrift::T_I32) {
+                Reader.readI32(numChildren);
+            } else {
+                Skip(type);
+            }
+            Reader.readFieldEnd();
+        }
+        Reader.readStructEnd();
+
+        while (!Pending.empty() && Pending.back() == 0) {
+            Pending.pop_back();
+        }
+        if (!Pending.empty()) {
+            --Pending.back();
+        }
+        if (numChildren > 0) {
+            Pending.push_back(numChildren);
+            if (Pending.size() > MaxSchemaNesting) {
+                throw TRejected{TStringBuilder() << "Parquet schema is nested more than "
+                    << MaxSchemaNesting << " levels deep"};
+            }
+        }
+    }
+
+    void WalkRowGroup() {
+        NThrift::TInputRecursionTracker tracker(Reader);
+        std::string name;
+        Reader.readStructBegin(name);
+        while (true) {
+            NThrift::TType type;
+            int16_t id;
+            Reader.readFieldBegin(name, type, id);
+            if (type == NThrift::T_STOP) {
+                break;
+            }
+            if (id == RowGroupColumns && type == NThrift::T_LIST) {
+                const ui32 count = ReadListOfStructs(ParquetFooterBytesPerColumnChunk);
+                for (ui32 i = 0; i < count; ++i) {
+                    Skip(NThrift::T_STRUCT);
+                }
+                Reader.readListEnd();
+            } else {
+                Skip(type);
+            }
+            Reader.readFieldEnd();
+        }
+        Reader.readStructEnd();
+    }
+
+    // The header of a list of structures: its length, checked and charged.
+    ui32 ReadListOfStructs(ui64 bytesPerEntry) {
+        NThrift::TType type;
+        ui32 count;
+        Reader.readListBegin(type, count);
+        if (type != NThrift::T_STRUCT) {
+            throw TRejected{TStringBuilder() << "Parquet footer holds a list of values of type "
+                << static_cast<int>(type) << " where a list of structures is expected"};
+        }
+        Declared(count);
+        Charge(count * bytesPerEntry);
+        return count;
+    }
+
+    // A list of count entries is declared: an entry takes a byte at least.
+    void Declared(ui32 count) {
+        const ui32 remaining = Transport.available_read();
+        if (count > remaining) {
+            throw TRejected{TStringBuilder() << "Parquet footer declares a list of " << count
+                << " entries in its last " << remaining << " bytes"};
+        }
+    }
+
+    void Charge(ui64 bytes) {
+        Estimate += bytes;
+        if (MemoryLimit && Estimate >= MemoryLimit) {
+            throw TRejected{TStringBuilder() << "Parquet footer takes about " << Estimate
+                << " bytes in memory, the limit is " << MemoryLimit
+                << " bytes (RestoreReadBufferSizeLimit)"};
+        }
+    }
+
+    static ui64 BytesPerEntry(NThrift::TType type) {
+        switch (type) {
+        case NThrift::T_STRUCT:
+            return BytesPerOtherEntry;
+        case NThrift::T_STRING:
+        case NThrift::T_LIST:
+        case NThrift::T_SET:
+        case NThrift::T_MAP:
+            return BytesPerString; // a string, a vector or a map before its entries
+        default:
+            return BytesPerNumber;
+        }
+    }
+
+    // Thrift's skip, except that a list is checked and charged before its
+    // entries are passed, and that the strings land in one buffer.
+    void Skip(NThrift::TType type) {
+        switch (type) {
+        case NThrift::T_BOOL: {
+            bool value;
+            Reader.readBool(value);
+            break;
+        }
+        case NThrift::T_BYTE: {
+            int8_t value;
+            Reader.readByte(value);
+            break;
+        }
+        case NThrift::T_I16: {
+            int16_t value;
+            Reader.readI16(value);
+            break;
+        }
+        case NThrift::T_I32: {
+            int32_t value;
+            Reader.readI32(value);
+            break;
+        }
+        case NThrift::T_I64: {
+            int64_t value;
+            Reader.readI64(value);
+            break;
+        }
+        case NThrift::T_DOUBLE: {
+            double value;
+            Reader.readDouble(value);
+            break;
+        }
+        case NThrift::T_STRING:
+            Reader.readBinary(Scratch);
+            break;
+        case NThrift::T_STRUCT: {
+            NThrift::TInputRecursionTracker tracker(Reader);
+            std::string name;
+            Reader.readStructBegin(name);
+            while (true) {
+                NThrift::TType fieldType;
+                int16_t id;
+                Reader.readFieldBegin(name, fieldType, id);
+                if (fieldType == NThrift::T_STOP) {
+                    break;
+                }
+                Skip(fieldType);
+                Reader.readFieldEnd();
+            }
+            Reader.readStructEnd();
+            break;
+        }
+        case NThrift::T_LIST:
+        case NThrift::T_SET: {
+            NThrift::TInputRecursionTracker tracker(Reader);
+            NThrift::TType entryType;
+            ui32 count;
+            if (type == NThrift::T_LIST) {
+                Reader.readListBegin(entryType, count);
+            } else {
+                Reader.readSetBegin(entryType, count);
+            }
+            Declared(count);
+            Charge(count * BytesPerEntry(entryType));
+            for (ui32 i = 0; i < count; ++i) {
+                Skip(entryType);
+            }
+            if (type == NThrift::T_LIST) {
+                Reader.readListEnd();
+            } else {
+                Reader.readSetEnd();
+            }
+            break;
+        }
+        case NThrift::T_MAP: {
+            NThrift::TInputRecursionTracker tracker(Reader);
+            NThrift::TType keyType;
+            NThrift::TType valueType;
+            ui32 count;
+            Reader.readMapBegin(keyType, valueType, count);
+            Declared(count);
+            Charge(count * (BytesPerEntry(keyType) + BytesPerEntry(valueType)));
+            for (ui32 i = 0; i < count; ++i) {
+                Skip(keyType);
+                Skip(valueType);
+            }
+            Reader.readMapEnd();
+            break;
+        }
+        default:
+            throw TRejected{TStringBuilder() << "Parquet footer holds a value of unknown type "
+                << static_cast<int>(type)};
+        }
+    }
+
+    TTransport& Transport;
+    TReader& Reader;
+    const ui64 MemoryLimit; // 0 = no limit
+    ui64 Estimate; // what the parsed footer takes, so far
+    TVector<int32_t> Pending; // the children still to come, for every open group of the schema
+    std::string Scratch; // the strings passed over land here
+};
+
+std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui64 bufferSizeLimit) {
     static constexpr int64_t FooterTail = 8; // the length of the footer and the magic
 
     auto size = source.GetSize();
@@ -261,34 +549,20 @@ std::expected<void, TString> CheckSchemaNesting(arrow::io::RandomAccessFile& sou
             << (footer.ok() ? "short read" : footer.status().ToString()));
     }
 
-    parquet::format::FileMetaData metadata;
     try {
-        // the same limits Arrow reads the footer with
-        using TBuffer = apache::thrift::transport::TMemoryBuffer;
-        auto transport = std::make_shared<TBuffer>(const_cast<uint8_t*>((*footer)->data()), footerLength);
-        apache::thrift::protocol::TCompactProtocolFactoryT<TBuffer> factory;
-        factory.setStringSizeLimit(100 * 1000 * 1000);
-        factory.setContainerSizeLimit(1000 * 1000);
-        metadata.read(factory.getProtocol(transport).get());
+        using TTransport = apache::thrift::transport::TMemoryBuffer;
+        auto transport = std::make_shared<TTransport>(const_cast<uint8_t*>((*footer)->data()), footerLength);
+        // The limits of a string and of a list are the bytes of the footer,
+        // since an entry takes a byte at least. Arrow reads the footer with
+        // 100 MB and a million; a footer within these is within those.
+        const auto limit = static_cast<int32_t>(Min<ui64>(footerLength, Max<int32_t>()));
+        NThrift::TCompactProtocolT<TTransport> reader(transport, limit, limit);
+        TFooterWalker walker(*transport, reader, footerLength, bufferSizeLimit);
+        walker.Walk();
+    } catch (const TFooterWalker::TRejected& rejected) {
+        return std::unexpected(rejected.Message);
     } catch (const std::exception& ex) {
         return std::unexpected(TStringBuilder() << "failed to parse the parquet footer: " << ex.what());
-    }
-
-    TVector<int32_t> pending; // the children still to come, for every open group
-    for (const auto& element : metadata.schema) {
-        while (!pending.empty() && pending.back() == 0) {
-            pending.pop_back();
-        }
-        if (!pending.empty()) {
-            --pending.back();
-        }
-        if (element.num_children > 0) {
-            pending.push_back(element.num_children);
-            if (pending.size() > MaxSchemaNesting) {
-                return std::unexpected(TStringBuilder() << "Parquet schema is nested more than "
-                    << MaxSchemaNesting << " levels deep");
-            }
-        }
     }
 
     return {};
@@ -471,7 +745,8 @@ public:
     // uncompressed size is below the limit of the read buffer. So with twice
     // that limit a row group the engine accepts can be decoded.
     explicit TParquetDataParser(ui64 bufferSizeLimit)
-        : DecodeMemoryLimit(bufferSizeLimit > Max<ui64>() / 2 ? Max<ui64>() : 2 * bufferSizeLimit)
+        : BufferSizeLimit(bufferSizeLimit)
+        , DecodeMemoryLimit(bufferSizeLimit > Max<ui64>() / 2 ? Max<ui64>() : 2 * bufferSizeLimit)
         , Memory(DecodeMemoryLimit)
     {
     }
@@ -589,7 +864,7 @@ public:
         Memory.ResetRefused();
         session->Source = std::move(source);
 
-        if (auto result = CheckSchemaNesting(*session->Source); !result) {
+        if (auto result = CheckFooter(*session->Source, BufferSizeLimit); !result) {
             return result;
         }
 
@@ -1179,6 +1454,7 @@ private:
     }
 
 private:
+    const ui64 BufferSizeLimit; // what a parsed footer may take, 0 = no limit
     const ui64 DecodeMemoryLimit; // 0 = no limit
     TDecodeMemoryPool Memory; // declared before Session, which holds memory of it
     TVector<TColumnMeta> ColumnMeta;

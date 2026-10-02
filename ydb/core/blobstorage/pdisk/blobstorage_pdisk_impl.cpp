@@ -187,6 +187,15 @@ void TPDisk::NormalizeExpectedSlotSettings() {
     }
 }
 
+bool TPDisk::ValidateExpectedSlotSize(ui64 expectedSlotSize, TString& errorReason) const {
+    if (expectedSlotSize && expectedSlotSize < Format.ChunkSize) {
+        errorReason = TStringBuilder() << "ExpectedSlotSize must be at least one physical chunk"
+            << " ExpectedSlotSize# " << expectedSlotSize << " ChunkSize# " << Format.ChunkSize;
+        return false;
+    }
+    return true;
+}
+
 i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
     if (!ExpectedSlotSize || !Format.ChunkSize) {
         return 0;
@@ -2797,6 +2806,13 @@ void TPDisk::YardResize(TYardResize &ev) {
 
 void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
     TGuard<TMutex> guard(StateMutex);
+    TString errorReason;
+    if (!ValidateExpectedSlotSize(request.ExpectedSlotSize, errorReason)) {
+        Mon.ChangeExpectedSlotCount.CountResponse();
+        PCtx->ActorSystem->Send(request.Sender,
+            new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::ERROR, errorReason));
+        return;
+    }
     ExpectedSlotCount = request.ExpectedSlotCount;
     ExpectedSlotSize = request.ExpectedSlotSize;
     Cfg->SlotSizeInUnits = request.SlotSizeInUnits;

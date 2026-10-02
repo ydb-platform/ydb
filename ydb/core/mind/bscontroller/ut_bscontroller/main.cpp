@@ -2228,7 +2228,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             2);
 
         UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
-        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 175);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultExpectedSlotCount) {

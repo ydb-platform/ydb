@@ -3561,6 +3561,65 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         checkOwner(otherDisk, 1, poolSize / 8);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeBelowChunkRejectedOnStartup) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        auto config = testCtx.GetPDiskConfig();
+        config->ExpectedSlotCount = 8;
+        config->ExpectedSlotSize = chunkSize - 1;
+        testCtx.UpdateConfigRecreatePDisk(config);
+
+        const auto result = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(1, TVDiskID(0, 1, 0, 0, 0), testCtx.TestCtx.PDiskGuid),
+            NKikimrProto::CORRUPTED);
+        UNIT_ASSERT_STRING_CONTAINS(result->ErrorReason, "ExpectedSlotSize must be at least one physical chunk");
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeBelowChunkRejectedAtRuntime) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+        };
+
+        for (ui64 expectedSlotSize : {ui64{0}, ui64{100} * chunkSize}) {
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(8, 2, expectedSlotSize), NKikimrProto::OK);
+            const auto before = checkSpace();
+            const auto result = testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(1, 4, chunkSize - 1), NKikimrProto::ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result->ErrorReason, "ExpectedSlotSize must be at least one physical chunk");
+            const auto after = checkSpace();
+            UNIT_ASSERT_VALUES_EQUAL(after->TotalChunks, before->TotalChunks);
+            UNIT_ASSERT_VALUES_EQUAL(after->UsedChunks, before->UsedChunks);
+            UNIT_ASSERT_VALUES_EQUAL(after->NumActiveSlots, before->NumActiveSlots);
+            UNIT_ASSERT_VALUES_EQUAL(after->ExpectedSlotCount, before->ExpectedSlotCount);
+            testCtx.SafeRunOnPDisk([&](const NPDisk::TPDisk* pdisk) {
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->ExpectedSlotSize, expectedSlotSize);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->ExpectedSlotCount, 8);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->SlotSizeInUnits, expectedSlotSize ? 0 : 2);
+            });
+        }
+
+        // Exactly one physical chunk is valid; zero still disables fixed-size quotas.
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 0, chunkSize), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace()->TotalChunks, 3);
+        testCtx.GracefulPDiskRestart();
+        disk.InitFull(3);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace()->TotalChunks, 3);
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 2, 0), NKikimrProto::OK);
+        UNIT_ASSERT_GT(checkSpace()->TotalChunks, 3);
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
         TActorTestContext testCtx({
             .DiskSize = 1_GB,

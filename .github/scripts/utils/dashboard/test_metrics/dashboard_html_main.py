@@ -152,8 +152,14 @@ def build_html_dashboard(
       line-height: 1.5;
       margin-bottom: 10px;
     }}
+    .headline-tables {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 28px;
+      align-items: flex-start;
+    }}
     .headline-block {{
-      margin-top: 10px;
+      margin-top: 0;
     }}
     .headline-block h4 {{
       margin: 0 0 4px;
@@ -162,8 +168,7 @@ def build_html_dashboard(
       color: #475569;
     }}
     .headline-table {{
-      width: 100%;
-      max-width: 640px;
+      width: auto;
       border-collapse: collapse;
       background: #fff;
       font-size: 12px;
@@ -590,8 +595,10 @@ def build_html_dashboard(
       }}
       grid.innerHTML =
         runLine +
-        '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-        hostBlock;
+        '<div class="headline-tables">' +
+          '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
+          hostBlock +
+        '</div>';
       wrap.style.display = 'block';
     }}
     renderHeadlineStats();

@@ -3347,6 +3347,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
@@ -3385,6 +3386,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             secretType,
             authType
         );
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "externalDataSource"),
+            DescribeExternalDataSource(tableSession, path));
     }
 
     Y_UNIT_TEST_TWIN(RestoreExternalDataSourceWithoutSecret, UseSchemeSecret) {
@@ -3447,6 +3450,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestExternalTableBackupRestore() {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -3468,6 +3472,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+        const auto relativeDescription = DescribeExternalTable(tableSession, "externalTable");
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription, DescribeExternalTable(tableSession, path));
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription.data_source_path(), externalDataSource);
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription.location(), "folder");
     }
 
     void TestSystemViewBackupRestore() {

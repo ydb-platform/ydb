@@ -346,6 +346,9 @@ message TEvQueryResponse {
 
 message TCloseSessionRequest {
     optional bytes SessionId = 1;
+    optional bool Administrative = 2 [default = false];
+    optional string TerminationReason = 3;
+    optional string InitiatorSid = 4;
 }
 
 message TEvCloseSessionRequest {
@@ -373,6 +376,24 @@ message TEvCloseSessionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional TCloseSessionResponse Response = 3;
+}
+
+// Internal KILL SESSION request. The authorization decision is made by the
+// scheme executer for Database before forwarding to the owning KQP proxy.
+message TEvKillSessionRequest {
+    optional bytes SessionId = 1;
+    optional string Database = 2;
+    optional string UserToken = 3;
+    optional bool CanKillAnySession = 4 [default = false];
+    optional bytes SourceSessionId = 5;
+    optional uint64 DeadlineUs = 6;
+    optional string TraceId = 7;
+}
+
+message TEvKillSessionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional bytes SessionId = 3;
 }
 
 message TCompileCacheQueryInfo {

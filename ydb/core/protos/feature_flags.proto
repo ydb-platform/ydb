@@ -435,4 +435,5 @@ message TFeatureFlags {
     // Only a leading '/' makes a client path absolute. Otherwise prepend the
     // cluster root for database names, or the database for schema-object paths.
     optional bool EnableRelativePaths = 354 [default = false];
+    optional bool EnableKillSession = 355 [default = false];
 }

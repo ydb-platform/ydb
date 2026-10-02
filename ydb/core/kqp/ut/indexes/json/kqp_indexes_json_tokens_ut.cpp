@@ -2672,6 +2672,62 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                     .AddParam("$p").JsonDocument(R"(["v"])").Build()
                     .Build(),
                 "You can pass only values of Utf8, Bool, Json, date and numeric types");
+
+            const auto emptyParams = TParamsBuilder()
+                .AddParam("$p").Json("[]").Build()
+                .Build();
+            const TString errorHandlerMessage =
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))",
+                emptyParams,
+                errorHandlerMessage);
+            ValidateError(db,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR))",
+                emptyParams,
+                errorHandlerMessage);
+            ValidateError(db,
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR))",
+                emptyParams,
+                errorHandlerMessage);
+            ValidateError(db,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Utf8 NULL ON EMPTY ERROR ON ERROR) IN ("v"u, "other"u))",
+                emptyParams,
+                errorHandlerMessage);
+
+            // An unsafe side of AND is not used for token extraction; the other
+            // side still supplies a selective token and the full predicate stays
+            // in the residual filter.
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))",
+                {NJsonIndex::TToken{"\3k2", ""}},
+                emptyParams);
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))",
+                {NJsonIndex::TToken{"\3k2", ""}},
+                emptyParams);
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR) AND JSON_EXISTS(Text, '$.k2'))",
+                {NJsonIndex::TToken{"\3k2", ""}},
+                emptyParams);
+            ValidateTokens(db,
+                R"(NOT JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))",
+                {NJsonIndex::TToken{"\3k2", ""}},
+                emptyParams);
+
+            // OR needs an index representation for every branch.
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) OR JSON_EXISTS(Text, '$.k2'))",
+                emptyParams,
+                errorHandlerMessage);
+
+            // A JSON_VALUE that is otherwise ineligible for token extraction can
+            // likewise remain as a residual side of AND.
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) == "v"u AND JSON_EXISTS(Text, '$.k2'))",
+                {NJsonIndex::TToken{"\3k2", ""}},
+                emptyParams);
         });
     }
 

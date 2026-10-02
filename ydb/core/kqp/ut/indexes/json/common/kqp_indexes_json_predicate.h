@@ -67,6 +67,8 @@ struct TBuiltPredicate {
     // If true, both the primary-table and json_idx queries must fail.
     bool ExpectBothPathError = false;
     std::string ExpectedBothPathErrorSubstr;
+    // If set, json_idx is expected to fail with a different diagnostic than PRIMARY KEY.
+    std::string ExpectedIndexErrorSubstr;
 
     // Coverage metadata for mandatory Json-parameter corpus predicates.
     std::optional<EJsonShape> JsonParameterShape;

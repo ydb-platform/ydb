@@ -11,6 +11,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
+#include <algorithm>
 #include <expected>
 #include <utility>
 
@@ -23,8 +24,8 @@ using namespace NJsonIndex;
 namespace {
 
 constexpr std::string_view kErrorMessage = "Failed to extract jsonpath tokens from the predicate: ";
-constexpr std::string_view kFullRangeSearchMessage =
-    "full-range search cannot be performed using full-text search";
+constexpr std::string_view kFullRangeSearchMessage = "full-range search cannot be performed using full-text search";
+constexpr std::string_view kJsonParameterErrorHandlerMessage = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -38,6 +39,8 @@ struct TJsonNodeParams {
     std::unordered_map<TString, TString> Variables;
     std::unordered_map<TString, TString> ParamVariables;
     THashSet<TString> JsonCollectionParams;
+    bool ErrorOnEmpty = false;
+    bool ErrorOnError = false;
 };
 
 TPredicateCollectResult MakeCollectError(TExprContext& ctx, TPositionHandle pos, TStringBuf message) {
@@ -324,15 +327,11 @@ bool IsJsonCollectionParamType(const TTypeAnnotationNode* type) {
     return type && type->GetKind() == ETypeAnnotationKind::Data && type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Json;
 }
 
-std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode, const THashSet<TString>& indexedColumns) {
+std::expected<TJsonNodeParams, TString> ParseJsonNode(const TCoJsonQueryBase& jsonNode) {
     if (!jsonNode.Json().Maybe<TCoMember>()) {
         return std::unexpected("JSON source must be a column reference");
     }
-
     auto columnName = TString(jsonNode.Json().Cast<TCoMember>().Name().StringValue());
-    if (!indexedColumns.contains(columnName)) {
-        return std::unexpected("JSON source column is not indexed");
-    }
 
     if (!jsonNode.JsonPath().Maybe<TCoUtf8>()) {
         return std::unexpected("Expected JSON path as a string literal");
@@ -395,9 +394,14 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         return std::unexpected("Expected empty dict as variables");
     }
 
+    bool errorOnEmpty = false;
+    bool errorOnError = false;
+
     if (jsonNode.Maybe<TCoJsonExists>()) {
         const auto jsonExists = jsonNode.Cast<TCoJsonExists>();
-        if (jsonExists.OnError() && jsonExists.OnError().Maybe<TCoJust>()) {
+        if (!jsonExists.OnError()) {
+            errorOnError = true;
+        } else if (jsonExists.OnError().Maybe<TCoJust>()) {
             const auto arg = jsonExists.OnError().Cast<TCoJust>().Input();
             if (arg.Maybe<TCoBool>() && FromString<bool>(arg.Cast<TCoBool>().Literal().Value())) {
                 return std::unexpected("JSON_EXISTS with ON ERROR TRUE is not supported");
@@ -410,12 +414,14 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         const auto jsonValue = jsonNode.Cast<TCoJsonValue>();
 
         const auto onEmptyMode = FromString<EJsonValueHandlerMode>(jsonValue.OnEmptyMode().Ref().Content());
+        errorOnEmpty = onEmptyMode == EJsonValueHandlerMode::Error;
         const auto onEmptyValue = jsonValue.OnEmpty();
         if (onEmptyMode == EJsonValueHandlerMode::DefaultValue && !onEmptyValue.Maybe<TCoNull>()) {
             return std::unexpected("DEFAULT ON EMPTY in JSON_VALUE must be NULL");
         }
 
         const auto onErrorMode = FromString<EJsonValueHandlerMode>(jsonValue.OnErrorMode().Ref().Content());
+        errorOnError = onErrorMode == EJsonValueHandlerMode::Error;
         const auto onErrorValue = jsonValue.OnError();
         if (onErrorMode == EJsonValueHandlerMode::DefaultValue && !onErrorValue.Maybe<TCoNull>()) {
             return std::unexpected("DEFAULT ON ERROR in JSON_VALUE must be NULL");
@@ -438,7 +444,17 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         .ReturningType = returningType,
         .Variables = std::move(variables),
         .ParamVariables = std::move(paramVariables),
-        .JsonCollectionParams = std::move(jsonCollectionParams) };
+        .JsonCollectionParams = std::move(jsonCollectionParams),
+        .ErrorOnEmpty = errorOnEmpty,
+        .ErrorOnError = errorOnError };
+}
+
+std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode, const THashSet<TString>& indexedColumns) {
+    auto params = ParseJsonNode(jsonNode);
+    if (params && !indexedColumns.contains(params->ColumnName)) {
+        return std::unexpected("JSON source column is not indexed");
+    }
+    return params;
 }
 
 std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPredicateCollectResult> left,
@@ -516,6 +532,12 @@ TPredicateCollectResult AppendComparisonValue(
     return TPredicateCollectResult{ .ColumnName = columnName, .Collect = std::move(collectResult) };
 }
 
+bool HasJsonCollectionParamToken(const TJsonNodeParams& params, const TCollectResult& collectResult) {
+    return std::ranges::any_of(collectResult.GetTokens(), [&](const auto& token) {
+        return params.JsonCollectionParams.contains(token.ParamName);
+    });
+}
+
 TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params, ECallableType callableType, std::optional<TExprBase> comparisonValue,
     TExprContext& ctx, TPositionHandle pos) {
     TIssues parseIssues;
@@ -530,11 +552,13 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params, ECall
     }
 
     auto result = AppendComparisonValue(params.ColumnName, std::move(collectResult), std::move(comparisonValue));
-    for (const auto& token : result.Collect.GetTokens()) {
-        if (params.JsonCollectionParams.contains(token.ParamName)) {
-            result.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
-            break;
-        }
+    const bool hasJsonCollectionParamToken = HasJsonCollectionParamToken(params, result.Collect);
+    if (hasJsonCollectionParamToken && (params.ErrorOnEmpty || params.ErrorOnError)) {
+        return MakeCollectError(ctx, pos, kJsonParameterErrorHandlerMessage);
+    }
+
+    if (hasJsonCollectionParamToken) {
+        result.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
     }
 
     return result;

@@ -13,6 +13,7 @@ struct TAtom {
     bool IsJsonIndexable = true;
     bool ExpectBothPathError = false;
     std::string ExpectedBothPathErrorSubstr;
+    std::string ExpectedIndexErrorSubstr;
     std::optional<EJsonShape> JsonParameterShape;
     EJsonParameterFunction JsonParameterFunction = EJsonParameterFunction::None;
     bool IsJsonParameterComposition = false;
@@ -237,6 +238,9 @@ private:
             .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
                 ? a.ExpectedBothPathErrorSubstr
                 : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
             .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
                 || a.JsonParameterFunction != EJsonParameterFunction::None
                 || b.JsonParameterFunction != EJsonParameterFunction::None};
@@ -251,6 +255,9 @@ private:
             .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
                 ? a.ExpectedBothPathErrorSubstr
                 : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
             .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
                 || a.JsonParameterFunction != EJsonParameterFunction::None
                 || b.JsonParameterFunction != EJsonParameterFunction::None};
@@ -282,14 +289,15 @@ private:
     }
 
     void AddJBothPathErr(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP,
-        std::string errorSubstr)
+        std::string errorSubstr, std::string indexErrorSubstr = {})
     {
         ExecutionErrorAtoms.push_back(TAtom{
             .Sql = std::move(sql),
             .AddParams = std::move(addP),
             .IsJsonIndexable = true,
             .ExpectBothPathError = true,
-            .ExpectedBothPathErrorSubstr = std::move(errorSubstr)});
+            .ExpectedBothPathErrorSubstr = std::move(errorSubstr),
+            .ExpectedIndexErrorSubstr = std::move(indexErrorSubstr)});
     }
 
     void GenerateJsonExists() {
@@ -1607,7 +1615,8 @@ private:
                 [pn](NYdb::TParamsBuilder& bld) {
                     bld.AddParam(pn).Json(R"(["v"])").Build();
                 },
-                "Error executing jsonpath");
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
         }
 
         if (Opts.EnableJsonValue) {
@@ -1619,7 +1628,19 @@ private:
                 [pn](NYdb::TParamsBuilder& bld) {
                     bld.AddParam(pn).Json(R"(["v"])").Build();
                 },
-                "Error executing jsonpath");
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+
+            pn = NewPname();
+            vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, 'lax $.missing ? (@ == ${0})' PASSING {1} AS {0} RETURNING Bool ERROR ON EMPTY NULL ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json("[]").Build();
+                },
+                "",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
         }
     }
 
@@ -3809,6 +3830,7 @@ private:
             p.ExpectExtractError = !a.IsJsonIndexable;
             p.ExpectBothPathError = a.ExpectBothPathError;
             p.ExpectedBothPathErrorSubstr = a.ExpectedBothPathErrorSubstr;
+            p.ExpectedIndexErrorSubstr = a.ExpectedIndexErrorSubstr;
             p.JsonParameterShape = a.JsonParameterShape;
             p.JsonParameterFunction = a.JsonParameterFunction;
             p.IsJsonParameterComposition = a.IsJsonParameterComposition;

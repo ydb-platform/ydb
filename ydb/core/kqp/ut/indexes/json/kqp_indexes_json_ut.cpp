@@ -2161,16 +2161,46 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 tupleParam,
                 "Expected data or optional of data");
 
-            const auto strictArrayParam = TParamsBuilder()
-                .AddParam("$p").Json("[1]").Build()
+            const auto emptyJsonParam = TParamsBuilder()
+                .AddParam("$p").Json("[]").Build()
                 .Build();
-            ValidatePredicateError(db,
+            const TString indexError = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+
+            const auto validateErrorHandler = [&](const TString& predicate, const TString& primaryError = {}) {
+                const auto query = [&](TStringBuf view) {
+                    return std::format("SELECT Key FROM TestTable VIEW {} WHERE {} ORDER BY Key", view, predicate);
+                };
+
+                auto primary = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), emptyJsonParam).ExtractValueSync();
+                UNIT_ASSERT_C(!primary.IsSuccess(), "PRIMARY KEY unexpectedly succeeded for predicate: " << predicate);
+                if (!primaryError.empty()) {
+                    UNIT_ASSERT_STRING_CONTAINS_C(primary.GetIssues().ToString(), primaryError, predicate);
+                }
+
+                auto index = db.ExecuteQuery(query("json_idx"), TTxControl::NoTx(), emptyJsonParam).ExtractValueSync();
+                UNIT_ASSERT_C(!index.IsSuccess(), "json_idx unexpectedly succeeded for predicate: " << predicate);
+                UNIT_ASSERT_STRING_CONTAINS_C(index.GetIssues().ToString(), indexError, predicate);
+            };
+
+            validateErrorHandler(
                 R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))",
-                strictArrayParam,
+                "Error executing jsonpath");
+            validateErrorHandler(
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR))",
+                "Error executing jsonpath");
+            validateErrorHandler(
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR))");
+
+            // The unsafe branch is ignored only while extracting index tokens.
+            // It must remain in the residual filter and fail at execution time
+            // for rows found through the safe branch.
+            ValidatePredicateError(db,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k1'))",
+                emptyJsonParam,
                 "Error executing jsonpath");
             ValidatePredicateError(db,
-                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON ERROR))",
-                strictArrayParam,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k1'))",
+                emptyJsonParam,
                 "Error executing jsonpath");
         });
     }

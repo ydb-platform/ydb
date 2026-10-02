@@ -629,12 +629,19 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
         if (p.ExpectBothPathError) {
             UNIT_ASSERT_C(!idxResult.IsSuccess(), "Expected INDEX query error for predicate: " << p.Sql);
             UNIT_ASSERT_C(!mainResult.IsSuccess(), "Expected MAIN query error for predicate: " << p.Sql);
-            UNIT_ASSERT_VALUES_EQUAL_C(idxResult.GetStatus(), mainResult.GetStatus(), "Different error statuses for predicate: " << p.Sql
-                << ", index err: " << idxResult.GetIssues().ToString()
-                << ", main err: " << mainResult.GetIssues().ToString());
+            if (p.ExpectedIndexErrorSubstr.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(idxResult.GetStatus(), mainResult.GetStatus(), "Different error statuses for predicate: " << p.Sql
+                    << ", index err: " << idxResult.GetIssues().ToString()
+                    << ", main err: " << mainResult.GetIssues().ToString());
+            }
             if (!p.ExpectedBothPathErrorSubstr.empty()) {
-                UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), p.ExpectedBothPathErrorSubstr, "INDEX query, predicate: " << p.Sql);
                 UNIT_ASSERT_STRING_CONTAINS_C(mainResult.GetIssues().ToString(), p.ExpectedBothPathErrorSubstr, "MAIN query, predicate: " << p.Sql);
+            }
+            const auto& expectedIndexError = p.ExpectedIndexErrorSubstr.empty()
+                ? p.ExpectedBothPathErrorSubstr
+                : p.ExpectedIndexErrorSubstr;
+            if (!expectedIndexError.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), expectedIndexError, "INDEX query, predicate: " << p.Sql);
             }
             ++errCount;
 

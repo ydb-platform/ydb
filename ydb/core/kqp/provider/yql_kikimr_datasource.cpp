@@ -583,7 +583,8 @@ public:
         , ExternalSourceFactory(externalSourceFactory)
         , GUCSettings(gucSettings)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
-        , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
+        , IntentDeterminationTransformer(CreateSqlPathAliasesTransformer(sessionCtx,
+            new TKiSourceIntentDeterminationTransformer(sessionCtx)))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
@@ -895,8 +896,7 @@ public:
                     GUCSettings
                 );
                 settingsBuilder.SetFromConfig(SessionCtx->Config());
-                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData, cluster,
-                    SessionCtx->Config().NormalizePath);
+                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }
 

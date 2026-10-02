@@ -1,28 +1,45 @@
-#include "sql_path_aliases.h"
+#include "yql_kikimr_provider_impl.h"
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include "yql_kikimr_provider.h"
+#include "yql_kikimr_settings.h"
 
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
+
+#include <util/generic/is_in.h>
+
+#include <utility>
 
 namespace NYql {
 namespace {
 
 // Keep path-bearing tags below aligned with TKikimrKey::Extract and provider option handling.
 bool IsPathKey(TStringBuf tag) {
-    return tag == "table" || tag == "tablescheme" || tag == "tablelist" || tag == "topic"
-        || tag == "replication" || tag == "transfer" || tag == "sequence" || tag == "backupCollection"
-        || tag == "backup" || tag == "restore" || tag == "databasePath" || tag == "secret"
-        || tag == "objectId" || tag == "pgObject";
+    static constexpr TStringBuf pathTags[] = {
+        "table",
+        "tablescheme",
+        "tablelist",
+        "topic",
+        "replication",
+        "transfer",
+        "sequence",
+        "backupCollection",
+        "backup",
+        "restore",
+        "databasePath",
+        "secret",
+        "objectId",
+        "pgObject",
+    };
+    return IsIn(pathTags, tag);
 }
 
-TString NormalizeSqlPath(TStringBuf path, const std::function<TString(TStringBuf)>& normalizePath) {
-    TStringBuf canonicalPath = path;
-    while (canonicalPath.size() > 1 && canonicalPath[1] == '/') {
-        canonicalPath = canonicalPath.SubStr(1);
+TExprNode::TPtr RewritePathAtom(const TExprNode::TPtr& atom, TExprContext& ctx,
+    const std::function<TString(TStringBuf)>& normalizePath) {
+    TString normalized = normalizePath(atom->Content());
+    if (normalized == atom->Content()) {
+        return atom;
     }
-    TString normalized = normalizePath(canonicalPath);
-    return normalized == canonicalPath ? TString(path) : normalized;
+    return ctx.NewAtom(atom->Pos(), std::move(normalized));
 }
 
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
@@ -37,23 +54,18 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
         return key;
     }
 
-    const auto* atom = path->Child(0);
-    TString normalized = NormalizeSqlPath(atom->Content(), normalizePath);
+    const ui32 pathChildren = (tag == "backupCollection" || tag == "backup" || tag == "restore")
+        && key->Child(0)->ChildrenSize() > 2 ? 3 : 2;
     auto newEntry = key->ChildPtr(0);
-    if (normalized != atom->Content()) {
-        auto newPath = ctx.ChangeChild(*path, 0, ctx.NewAtom(atom->Pos(), std::move(normalized)));
-        newEntry = ctx.ChangeChild(*newEntry, 1, std::move(newPath));
-    }
-
-    if ((tag == "backupCollection" || tag == "backup" || tag == "restore") && key->Child(0)->ChildrenSize() > 2) {
-        const auto* prefix = key->Child(0)->Child(2);
-        if (prefix->ChildrenSize() == 1 && prefix->Child(0)->IsAtom()) {
-            const auto* prefixAtom = prefix->Child(0);
-            TString normalizedPrefix = NormalizeSqlPath(prefixAtom->Content(), normalizePath);
-            if (normalizedPrefix != prefixAtom->Content()) {
-                auto newPrefix = ctx.ChangeChild(*prefix, 0, ctx.NewAtom(prefixAtom->Pos(), std::move(normalizedPrefix)));
-                newEntry = ctx.ChangeChild(*newEntry, 2, std::move(newPrefix));
-            }
+    for (ui32 i = 1; i < pathChildren; ++i) {
+        const auto* path = key->Child(0)->Child(i);
+        if (path->ChildrenSize() != 1 || !path->Child(0)->IsAtom()) {
+            continue;
+        }
+        auto atom = RewritePathAtom(path->ChildPtr(0), ctx, normalizePath);
+        if (atom != path->ChildPtr(0)) {
+            auto newPath = ctx.ChangeChild(*path, 0, std::move(atom));
+            newEntry = ctx.ChangeChild(*newEntry, i, std::move(newPath));
         }
     }
 
@@ -63,10 +75,10 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
 TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx,
     const std::function<TString(TStringBuf)>& normalizePath) {
     if (value->IsAtom()) {
-        TString normalized = NormalizeSqlPath(value->Content(), normalizePath);
-        return normalized == value->Content() ? value : ctx.NewAtom(value->Pos(), std::move(normalized));
+        return RewritePathAtom(value, ctx, normalizePath);
     }
 
+    // String(Atom) represents a literal path; computed expressions are left unchanged.
     if (value->IsCallable("String") && value->ChildrenSize() == 1 && value->Child(0)->IsAtom()) {
         auto atom = RewritePathValue(value->ChildPtr(0), ctx, normalizePath);
         return atom == value->ChildPtr(0) ? value : ctx.ChangeChild(*value, 0, std::move(atom));
@@ -87,10 +99,17 @@ TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx
 }
 
 bool IsPathOption(TStringBuf tag, TStringBuf option) {
-    return (tag == "replication" && option == "local")
-        || (tag == "permission" && option == "paths")
-        || ((tag == "table" || tag == "tablescheme") && (option == "renameTo" || option == "data_source_path"))
-        || (tag == "backupCollection" && option == "path");
+    static constexpr std::pair<TStringBuf, TStringBuf> pathOptions[] = {
+        {"replication", "local"},
+        {"transfer", "target"},
+        {"permission", "paths"},
+        {"table", "renameTo"},
+        {"table", "data_source_path"},
+        {"tablescheme", "renameTo"},
+        {"tablescheme", "data_source_path"},
+        {"backupCollection", "path"},
+    };
+    return IsIn(pathOptions, std::pair{tag, option});
 }
 
 TExprNode::TPtr RewriteOptionPaths(const TExprNode::TPtr& node, TStringBuf tag, TExprContext& ctx,
@@ -115,52 +134,67 @@ TExprNode::TPtr RewriteOptionPaths(const TExprNode::TPtr& node, TStringBuf tag, 
     return result;
 }
 
+TExprNode::TPtr RewriteSqlPathAliases(const TExprNode::TPtr& node, TExprContext& ctx, TStringBuf localCluster,
+    const std::function<TString(TStringBuf)>& normalizePath) {
+    const bool isRead = node->IsCallable(ReadName);
+    if (!isRead && !node->IsCallable(WriteName)) {
+        return node;
+    }
+
+    if (node->ChildrenSize() < (isRead ? 3U : 5U)) {
+        return node;
+    }
+    // Database aliases apply only to Kikimr IO in the current query's cluster.
+    const auto* provider = node->Child(1);
+    if (!provider->IsCallable(isRead ? "DataSource" : "DataSink") || provider->ChildrenSize() < 2
+        || provider->Child(0)->Content() != KikimrProviderName
+        || provider->Child(1)->Content() != localCluster) {
+        return node;
+    }
+
+    auto key = RewriteKey(node->ChildPtr(2), ctx, normalizePath);
+    auto result = key == node->ChildPtr(2) ? node : ctx.ChangeChild(*node, 2, std::move(key));
+    if (!isRead && result->Child(2)->IsCallable("Key") && result->Child(2)->ChildrenSize()
+        && result->Child(2)->Child(0)->ChildrenSize()) {
+        const auto tag = result->Child(2)->Child(0)->Child(0)->Content();
+        auto options = RewriteOptionPaths(result->ChildPtr(4), tag, ctx, normalizePath);
+        if (options != result->ChildPtr(4)) {
+            result = ctx.ChangeChild(*result, 4, std::move(options));
+        }
+    }
+    return result;
 }
 
-bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf localCluster,
-    const std::function<TString(TStringBuf)>& normalizePath) {
-    if (!normalizePath) {
-        return true;
+class TSqlPathAliasesTransformer : public TSyncTransformerBase {
+public:
+    TSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TAutoPtr<IGraphTransformer> intents)
+        : SessionCtx(std::move(sessionCtx))
+        , Intents(std::move(intents))
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
+            SessionCtx->Config().NormalizePath);
+        return Intents->Transform(input, output, ctx);
     }
 
-    TExprNode::TPtr output;
-    TOptimizeExprSettings settings(nullptr);
-    settings.VisitChanges = true;
-    const auto status = OptimizeExpr(query, output,
-        [localCluster, &normalizePath](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            const bool isRead = node->IsCallable(ReadName);
-            if (!isRead && !node->IsCallable(WriteName)) {
-                return node;
-            }
-
-            if (node->ChildrenSize() < (isRead ? 3U : 5U)) {
-                return node;
-            }
-            const auto* provider = node->Child(1);
-            if (!provider->IsCallable(isRead ? "DataSource" : "DataSink") || provider->ChildrenSize() < 2
-                || provider->Child(0)->Content() != KikimrProviderName
-                || provider->Child(1)->Content() != localCluster) {
-                return node;
-            }
-
-            auto key = RewriteKey(node->ChildPtr(2), ctx, normalizePath);
-            auto result = key == node->ChildPtr(2) ? node : ctx.ChangeChild(*node, 2, std::move(key));
-            if (!isRead && result->Child(2)->IsCallable("Key") && result->Child(2)->ChildrenSize()
-                && result->Child(2)->Child(0)->ChildrenSize()) {
-                const auto tag = result->Child(2)->Child(0)->Child(0)->Content();
-                auto options = RewriteOptionPaths(result->ChildPtr(4), tag, ctx, normalizePath);
-                if (options != result->ChildPtr(4)) {
-                    result = ctx.ChangeChild(*result, 4, std::move(options));
-                }
-            }
-            return result;
-        }, ctx, settings);
-
-    if (status == IGraphTransformer::TStatus::Error) {
-        return false;
+    void Rewind() override {
+        Intents->Rewind();
     }
-    query = std::move(output);
-    return true;
+
+private:
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TAutoPtr<IGraphTransformer> Intents;
+};
+
+}
+
+TAutoPtr<IGraphTransformer> CreateSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TAutoPtr<IGraphTransformer> intents) {
+    if (!sessionCtx->Config().NormalizePath) {
+        return intents;
+    }
+    return new TSqlPathAliasesTransformer(std::move(sessionCtx), std::move(intents));
 }
 
 }

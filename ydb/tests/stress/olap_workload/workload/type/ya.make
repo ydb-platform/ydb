@@ -6,11 +6,9 @@ PY_SRCS(
     transactions.py
     rename_tables.py
     encodings.py
-    move_data.py
 )
 
 PEERDIR(
-    ydb/tests/library
     ydb/tests/stress/common
 )
 

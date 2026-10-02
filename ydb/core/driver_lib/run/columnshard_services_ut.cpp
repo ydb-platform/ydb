@@ -1,7 +1,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/testlib/tablet_helpers.h>

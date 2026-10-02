@@ -346,7 +346,9 @@ void TDataShardUserDb::EraseRow(
     Counters.EraseRowBytes += keyBytes + 8;
 
     if (CollectAffectedRows && rowExists) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
+        // The flag-gated existence check is a real read; account it.
+        IncreaseSelectCounters(key);
     }
 }
 
@@ -371,7 +373,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 
     if (CollectAffectedRows) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
     }
 }
 

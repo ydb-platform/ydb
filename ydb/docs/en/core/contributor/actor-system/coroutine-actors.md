@@ -159,6 +159,113 @@ An exception stored by a nested child is rethrown in the parent at co_await.
 `async<T>` is deliberately not a general future or detachable task. Do not use
 UnsafeMove in ordinary application code; it exists for library combinators.
 
+### Worker-Local Frame Cache
+
+To reduce repeated heap-allocation overhead, coroutine frames allocated on
+actor-system executor workers automatically use a worker-local
+`TAsyncFrameCache`, shared by all actors running on that worker.
+This applies to top-level actor coroutines and every `async<T>` allocation,
+including free functions, const members, and coroutine lambdas. Allocation
+outside an executor worker uses the heap. Requests up to 64 KiB are rounded to
+the cache bin capacity even when allocated outside a worker or with retention
+disabled, so the frame can later be freed into another worker's cache. BASIC,
+IO, and shared workers each have one cache per thread; switching executor
+pools retains the same cache. The cache is a member of the executor thread
+object (`TExecutorThread`). For the pool loop the worker publishes it on
+`TlsThreadContext`, the same thread-local context as the rest of the worker
+state, and clears that pointer when the thread procedure returns. The cache
+object is destroyed, releasing its idle blocks, only when the actor system
+destroys the thread objects during cleanup.
+
+`TActorSystemSetup::AsyncFrameCacheSizeBytes` sets the maximum total rounded
+capacity of idle frame allocations retained by each worker, in bytes. The
+default is `4194304` (4 MiB); `0` disables retention. Configure it before
+starting the actor system:
+
+```cpp
+TActorSystemSetup setup;
+setup.AsyncFrameCacheSizeBytes = 4 * 1024 * 1024;
+```
+
+For {{ ydb-short-name }} servers, the matching
+`NKikimrConfig::TActorSystemConfig::AsyncFrameCacheSizeBytes` field has the same
+default and is copied into actor-system setup. The value takes effect at
+actor-system startup. The budget excludes active frames, fixed cache metadata,
+and allocator bookkeeping, so it is not a limit on total coroutine memory.
+Each worker has an independent budget.
+
+The cache has seven last-in, first-out (LIFO) lists for capacities of 1, 2, 4,
+8, 16, 32, and 64 KiB. Requests up to 1 KiB use the 1 KiB bin; larger requests up to 64 KiB
+use the smallest bin that fits. A cache miss allocates a block of that bin's
+capacity. Requests over 64 KiB use the heap directly and are never retained.
+Returns that exceed the remaining byte budget are freed to the heap. The
+budget charges each idle block's rounded bin capacity, with no separate
+block-count limit per bin. Idle blocks store their list links in their own
+memory. Allocations preserve `__STDCPP_DEFAULT_NEW_ALIGNMENT__`; extended
+coroutine-frame alignment is unsupported. The compiler may elide coroutine
+allocations entirely.
+
+Cache reuse remains enabled in sanitizer builds. Under AddressSanitizer (ASAN),
+idle blocks are poisoned in full, including the list link; the cache temporarily
+unpoisons that link for its own bookkeeping. A live allocation exposes only the
+requested bytes, with the remaining rounded capacity poisoned, including
+allocations made outside workers or with retention disabled. Under
+MemorySanitizer (MSAN), reused frame contents are marked uninitialized again.
+These annotations detect stale
+accesses while a frame is idle; they cannot detect a stale pointer after the
+same address has been legitimately reused.
+
+Sized deletion returns a frame to the cache of the thread freeing it, subject
+to that cache's limits, or to the heap outside executor workers. Frames carry
+no origin-cache pointers and may outlive the worker that allocated them. A
+worker's cache destructor releases only idle blocks. This also permits frame
+cleanup on another worker or during shutdown without actor TLS. Frame ownership,
+actor lifetime, cancellation, and forced task teardown retain their existing
+rules; caching does not extend the lifetime of an actor or its captured data.
+
+To migrate from an actor-owned cache, remove the `TAsyncFrameCache` actor member
+and the `IActor::GetAsyncFrameCache()` override; that accessor has been removed.
+No actor argument is needed to select a cache. Move any capacity setting to
+actor-system setup or configuration. Origin-cache `LiveFrames` accounting has
+also been removed. On a worker, `TAsyncFrameCache::GetCurrent()->GetStats()`
+reports `HeapAllocations`, `CachedBytes` (rounded capacity of idle blocks),
+`CachedFrames`, and `SizeClasses` (nonempty lists). Measure these statistics on
+the worker performing the workload, and establish warmup state on that same
+worker.
+
+`TActorSystem::GetAsyncFrameCacheStats()` can be called from any thread to
+obtain the total `CachedFrames` and `CachedBytes` across the caches of that
+actor system's executor threads: BASIC, IO, and shared pools, each thread
+counted once. It walks the pools and their threads, the same way as pool
+statistics, so there is no process-wide registry and no lock. Caches of other
+actor systems and caches constructed by tests are not included. The
+actor-system stats collector publishes these non-derivative gauges under
+`counters=utils/subsystem=async_frame_cache` once per collection cycle,
+normally every second:
+
+| Gauge | Meaning |
+|---|---|
+| `CachedFrames` | Total number of idle frames retained in caches |
+| `CachedBytes` | Total rounded capacity of those idle frames, in bytes |
+
+The gauges have no thread, pool, or bin breakdown. Active frames are excluded.
+Both values derive from the same sampled bin counts, which each worker updates
+with plain relaxed loads and stores and other threads only read; snapshots are
+approximate while workers allocate or release and exact when caches are
+quiescent. A cache stops contributing when the actor system destroys its
+executor thread object during cleanup.
+
+The implementation lives in `ydb/library/actors/core/async_frame_cache.h`; the
+old `ydb/library/actors/async/frame_cache.h` path remains a forwarding include.
+Deterministic tests can construct a `TAsyncFrameCache` with a byte budget and
+use `TScopedAsyncFrameCache` to publish it through `TlsThreadContext` for a
+scope instead of relying on executor scheduling. Nested bindings restore the
+previous cache. Allocation,
+deletion, and `GetStats()` are local to the binding thread and must not run
+concurrently from other threads. `GetCachedStats()` safely samples the idle
+block counts of one cache from any thread; `GetAsyncFrameCacheStats()` sums it
+over the workers.
+
 ## Parameters, captures, and frame-owned data
 
 The top-level specialization is selected only for:

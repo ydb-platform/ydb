@@ -1173,9 +1173,19 @@ protected:
     }
 
     void Handle(typename TKVRequest::TResponse::TPtr &ev) {
-        auto status = PullStatus(ev->Get()->Record);
+        const bool requestLimitReached = [&] {
+            if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
+                return ev->Get()->Record.status() == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED
+                    && ev->Get()->Record.msg() == TEvKeyValue::RequestInFlightLimitReached;
+            } else {
+                return false;
+            }
+        }();
+        const auto status = requestLimitReached
+            ? Ydb::StatusIds::OVERLOADED
+            : PullStatus(ev->Get()->Record);
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
-            if (status != Ydb::StatusIds::SUCCESS) {
+            if (status != Ydb::StatusIds::SUCCESS && !requestLimitReached) {
                 this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
                 return;
             }

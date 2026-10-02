@@ -24,6 +24,8 @@ bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSc
 
 bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info);
 
+bool IsCpuGuaranteeValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TPathId& resourcePoolPathId, const TResourcePoolInfo::TPtr& info, const TOperationContext& context);
+
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 
 }  // namespace NKikimr::NSchemeShard::NResourcePool

@@ -1901,6 +1901,8 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 
     optional bytes LastKeyAck = 13;
+
+    repeated uint32 EmptyClusters = 14;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -2292,6 +2294,8 @@ message TEvKqpScan {
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
     optional bool UseBatchPool = 31 [default = false];
+    optional string DatabaseId = 32;
+    optional string PoolId = 33;
 }
 
 message TEvCompactTable {

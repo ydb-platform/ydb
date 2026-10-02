@@ -112,6 +112,7 @@ namespace NKikimr::NKqp {
         connector.SetUseSsl(false);
         connector.MutableEndpoint()->set_host("localhost");
         connector.MutableEndpoint()->set_port(1234);
+        connector.AddDatabaseNames(DEFAULT_DATABASE);
 
         config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
         config.SetAllExternalDataSourcesAreAvailable(false);
@@ -790,7 +791,23 @@ namespace NKikimr::NKqp {
                 .SetEnableScriptExecutionOperations(true)
                 .SetInitFederatedQuerySetupFactory(true));
 
-            CreateExternalDataSource(EProviderType::Ydb, kikimr);
+            auto tableClient = kikimr->GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto createTable = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE example_1 (key Uint64, PRIMARY KEY (key));
+            )").GetValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+
+            auto createDataSource = session.ExecuteSchemeQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE {name} WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{endpoint}",
+                    AUTH_METHOD = "NONE",
+                    DATABASE_NAME = "/Root",
+                    USE_TLS = "FALSE"
+                );
+            )", "name"_a = DEFAULT_DATA_SOURCE_NAME, "endpoint"_a = kikimr->GetEndpoint())).GetValueSync();
+            UNIT_ASSERT_C(createDataSource.IsSuccess(), createDataSource.GetIssues().ToString());
 
             const TString query = fmt::format(
                 R"(

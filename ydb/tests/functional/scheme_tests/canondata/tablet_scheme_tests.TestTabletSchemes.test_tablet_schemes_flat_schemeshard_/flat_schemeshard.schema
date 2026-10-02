@@ -1586,6 +1586,11 @@
                 "ColumnId": 34,
                 "ColumnName": "TablesMetricsLevel",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "StorageSpaceExhausted",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1625,7 +1630,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9583,6 +9589,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Properties",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "OperationOwnerActorId",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
@@ -9592,7 +9603,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -233,6 +233,15 @@ public:
         });
     }
 
+    void DropTopics() {
+        if (InputTopic) {
+            DropTopic(InputTopic);
+        }
+        if (OutputTopic) {
+            DropTopic(OutputTopic);
+        }
+    }
+
     void WriteAndCheck(const std::vector<std::string>& input, const std::vector<std::string>& expected) {
         WriteTopicMessages(InputTopic, input);
         CheckOutput(expected);
@@ -317,7 +326,7 @@ public:
         AggregationAppConfig.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         CreateStateTable(useStateTable);
         InputTopic = TStringBuilder() << "finiteAggregationInput_" << CreateGuidAsString();
-        CreateTopic(InputTopic);
+        CreateScopedTopic(InputTopic);
         CreatePqSource("source");
         const std::vector<std::string> messages = {
             R"({"key":"a","value":5})", R"({"key":"b","value":10})",
@@ -394,6 +403,9 @@ public:
                 WHEN 0 THEN "detail" WHEN 1 THEN "key" WHEN 2 THEN "subkey" ELSE "total"
                 END) || ":" || )" + result;
         }
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(useStateTable, "key String NOT NULL, subkey Uint64 NOT NULL, value Int64 NOT NULL",
             result, keys, "", {.ExpectedError = useStateTable
                 ? "At most one streaming aggregation with a state table is allowed per query" : ""});
@@ -433,6 +445,9 @@ public:
 
     void CheckRestart(bool useStateTable, bool injectFailure) {
         const auto pqGateway = SetupMockPqGateway();
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(useStateTable, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))");
         auto readSession = pqGateway->WaitReadSession(InputTopic);
@@ -527,6 +542,9 @@ public:
                                  const std::vector<TCheckpointBatch>& batches, bool injectFailure = true,
                                  const TString& prelude = "") {
         const auto pqGateway = SetupMockPqGateway();
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, columns, result, keys, "", {.DisableCheckpoints = false, .Prelude = prelude});
         auto readSession = pqGateway->WaitReadSession(InputTopic);
         auto writeSession = pqGateway->WaitWriteSession(OutputTopic);
@@ -567,6 +585,10 @@ public:
         const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(useStateTable);
         CreateAggregationTopics();
+        Y_DEFER {
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
+        };
         const auto setQuery = [&](bool create, bool aggregate) {
             ExecQuery(fmt::format(R"(
                 {ddl} STREAMING QUERY aggregation {settings} AS DO BEGIN
@@ -640,6 +662,9 @@ public:
         const TString repeated = fmt::format(
             R"(String::JoinFromList(ListReplicate(String::LeftPad(value, {}ul, value), {}ul), ""))",
             chunkSize, chunks);
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(true, "key String NOT NULL, value String NOT NULL",
             largeKey ? "CAST(COUNT(*) AS String)" : fmt::format("CAST(LENGTH(SOME({})) AS String)", repeated),
             largeKey ? repeated + " AS large_key" : "key");
@@ -666,9 +691,13 @@ public:
         const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(useStateTable);
         CreateAggregationTopics();
+        Y_DEFER {
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
+        };
         const TString secondOutput = TStringBuilder() << OutputTopic << "_subkey";
         const TString rawOutput = TStringBuilder() << OutputTopic << "_raw";
-        CreateTopic(secondOutput);
+        CreateScopedTopic(secondOutput);
         TString sinks;
         if (extraSinks) {
             CreateTopic(rawOutput);
@@ -685,6 +714,11 @@ public:
                 UPSERT INTO rawRows SELECT id, key, subkey, value FROM $input LIMIT 4;
             )", rawOutput);
         }
+        Y_DEFER {
+            if (extraSinks) {
+                DropTopic(rawOutput);
+            }
+        };
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY aggregation AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";
@@ -782,6 +816,9 @@ public:
     }
 
     void CheckInputVolume(bool useStateTable, ui32 inputSizeMiB) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(useStateTable, "key String NOT NULL, value Int64 NOT NULL, payload String NOT NULL", R"(
             key || ":" || CAST(COUNT(*) AS String)
                 || ":" || CAST(SUM(value) AS String)
@@ -848,6 +885,9 @@ public:
 
         constexpr ui32 Partitions = 4;
         constexpr ui32 Keys = 32;
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(useStateTable, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))",
             "key", "", {.Tasks = tasks, .Partitions = Partitions});
@@ -933,6 +973,9 @@ public:
             $factory = AggregationFactory("UDAF", $init, $update, NULL, $finish);
         )");
         const bool needsPersistence = useStateTable || checkpointsEnabled;
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(useStateTable, "key String NOT NULL, value Double NOT NULL",
             R"(key || ":" || CAST(AGGREGATE_BY(value, $factory) AS String))", "key", "",
             {.DisableCheckpoints = !checkpointsEnabled,
@@ -951,6 +994,9 @@ public:
     }
 
     void CheckStateTableFailure(bool writeFailure) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(true, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(SUM(value) AS String))");
         ExecQuery("DROP TABLE aggregationState;");
@@ -1069,6 +1115,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointsWithStateTableValidation, ValidateCheckpoints, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(true, "key String NOT NULL, value Int64 NOT NULL", R"(CAST(SUM(value) AS String))", "key", "",
             {.DisableCheckpoints = false,
              .Prelude = ValidateCheckpoints ? "" : "PRAGMA ydb.OptValidateStreamingCheckpoints = \"FALSE\";",
@@ -1093,6 +1142,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_F(KeylessAggregation, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64 NOT NULL",
             R"(CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))", "");
         WriteAndCheck({R"({"key":"a","value":5})", R"({"key":"b","value":3})"}, {"1:5", "2:8"});
@@ -1101,6 +1153,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(AggregationWithoutHandlers, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String", R"(COALESCE(key, "null"))");
         WriteAndCheck({R"({"key":"a"})", R"({"key":"b"})", R"({"key":"a"})", R"({"key":null})"},
             {"a", "b", "a", "null"});
@@ -1222,6 +1277,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(SomeAggregate, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64", R"(
             key || ":" || CAST(COUNT(*) AS String) || ":" || COALESCE(CAST(SOME(value) AS String), "null")
         )", "key", "", {.Prelude = "PRAGMA EmitAggApply;"});
@@ -1235,6 +1293,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(GroupByExpression, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key Int64 NOT NULL, value Int64 NOT NULL", R"(
             CAST(bucket AS String) || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String)
         )", "key % 2 AS bucket");
@@ -1258,6 +1319,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_F(GroupingSetsWithIntersectingKeys, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(/* useStateTable */ false, "a String NOT NULL, b String NOT NULL, value Int64 NOT NULL", R"(
             (CASE GROUPING(a, b) WHEN 1 THEN "a:" ELSE "b:" END)
                 || COALESCE(a, b) || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String)
@@ -1283,12 +1347,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(SessionWindowsAreRejected, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL", "CAST(SUM(value) AS String)",
             "key, SessionWindow(value, 10) AS session_start", "",
             {.ExpectedError = "Session windows are not supported for streaming aggregation"});
     }
 
     Y_UNIT_TEST_TWIN_F(HoppingWindowsTakePrecedence, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL", "CAST(SUM(value) AS String)",
             R"(key, HOP(CurrentUtcTimestamp(TableRow()), "PT10S", "PT10S", "PT10S"))", "",
             {.ExpectHopping = true});
@@ -1296,6 +1366,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(RunningCountAndSum, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))");
         WriteAndCheck({
@@ -1314,6 +1387,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(NullableValuesAndMultipleAggregates, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64", R"(
             key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(COUNT(value) AS String)
                 || ":" || COALESCE(CAST(SUM(value) AS String), "null")
@@ -1343,6 +1419,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             || ":" || COALESCE(CAST(PERCENTILE(value, 0.50) AS String), "null")
             || ":" || COALESCE(CAST(PERCENTILE(value, 0.95) AS String), "null")
         )";
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64", result, Keyless ? "" : "key");
         WriteAndCheck({
             R"({"key":"a","value":null})",
@@ -1363,6 +1442,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(ProjectedGroupKeys, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String, subkey Uint64 NOT NULL, value Int64", R"(
             CAST(COUNT(*) AS String) || ":" || COALESCE(CAST(SUM(value) AS String), "null")
         )", "key, subkey", "", {.Prelude = "PRAGMA EmitAggApply;"});
@@ -1379,6 +1461,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_F(ProjectedPercentiles, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64", R"(
             COALESCE(CAST(PERCENTILE(value, 0.50) AS String), "null")
                 || ":" || COALESCE(CAST(PERCENTILE(value, 0.95) AS String), "null")
@@ -1402,6 +1487,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(CompositeKeysAndFilter, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, subkey Uint64 NOT NULL, value Int64 NOT NULL, keep Bool NOT NULL", R"(
             key || ":" || CAST(subkey AS String) || ":" || CAST(COUNT(*) AS String)
                 || ":" || CAST(SUM(value * 2) AS String)
@@ -1419,6 +1507,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(NullableGroupKeys, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String, value Int64 NOT NULL", R"(
             COALESCE(key, "null") || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String)
         )");
@@ -1434,6 +1525,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(FloatingPointGroupKeys, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL", R"(
             CASE WHEN number == 0.0 THEN "zero" WHEN number == 1.0 THEN "one" ELSE "nan" END
                 || ":" || CAST(COUNT(*) AS String)
@@ -1454,6 +1548,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(AggregateListPreservesDuplicates, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64", R"(
             key || ":[" || String::JoinFromList(
                 ListMap(ListSort(AGGREGATE_LIST(value)), ($v) -> (CAST($v AS String))), ",") || "]"
@@ -1475,6 +1572,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(ConditionalAndKeyedAggregates, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL, label String NOT NULL, keep Bool NOT NULL", R"(
             key || ":" || CAST(COUNT_IF(keep) AS String)
                 || ":" || COALESCE(CAST(SUM_IF(value, keep) AS String), "null")
@@ -1543,6 +1643,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
                     || "]:" || $result.Labels
             );
         )";
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "tenant String, bucket Uint64 NOT NULL, value Int64 NOT NULL, label String NOT NULL",
             R"($render(group_key, AGGREGATE_BY(AsStruct(value AS value, label AS label), $factory)))",
             "$make_key(tenant, bucket) AS group_key", "",
@@ -1577,6 +1680,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             $load = ($saved) -> (Stat::TDigest_Deserialize($saved.payload));
             $factory = AggregationFactory("UDAF", $init, $update, $merge, $finish, $save, $load);
         )";
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Double NOT NULL",
             R"(key || ":" || CAST(AGGREGATE_BY(value, $factory) AS String))", "key", "",
             {.Prelude = prelude});
@@ -1601,6 +1707,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(UdafWithRowState, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL", R"(
             key || ":" || CAST(AGGREGATE_BY(AsStruct(value AS value), $factory).value AS String)
         )", "key", "", {.Prelude = R"(
@@ -1624,6 +1733,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             $update = ($state, $item) -> (COALESCE($state + $item.value, $state, $item.value));
             $factory = AggregationFactory("UDAF", $init, $update, NULL);
         )";
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64",
             R"(key || ":" || COALESCE(CAST(AGGREGATE_BY(AsStruct(value AS value), $factory) AS String), "null"))", "key", "",
             {.Prelude = prelude});
@@ -1637,6 +1749,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_F(UdafWithoutMergeWithNullableInputIsRejected, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64",
             R"(COALESCE(CAST(AGGREGATE_BY(value, $factory) AS String), "null"))", "key", "",
             {.Prelude = R"(
@@ -1653,6 +1768,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             $identity = ($state) -> ($state);
             $factory = AggregationFactory("UDAF", $init, $update, $merge, $identity, $identity, $identity, {default});
         )", "default"_a = OptionalDefault ? "Just(42l)" : "42l");
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "value Int64", R"(CAST(AGGREGATE_BY(value, $factory) AS String))", "", "",
             {.Prelude = prelude});
         WriteAndCheck({R"({"value":null})", R"({"value":5})", R"({"value":null})", R"({"value":2})"},
@@ -1667,6 +1785,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             $identity = ($state) -> ($state);
             $factory = AggregationFactory("UDAF", $init, $update, NULL, $identity, $identity, $identity, {default});
         )", "default"_a = OptionalDefault ? "Just(42l)" : "42.0");
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64 NOT NULL",
             R"(CAST(AGGREGATE_BY(value, $factory) AS String))", Keyed ? "key" : "", "",
             {.Prelude = prelude, .ExpectedError = Keyed ? ""
@@ -1739,6 +1860,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(UdafParentIndices, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL",
             TStringBuilder() << "key || \":\" || " << ParentIndexUdafResult, "key", "",
             {.Prelude = ParentIndexUdafPrelude});
@@ -1787,6 +1911,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_F(UdafNonComputableSerializerIsRejected, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(false, "key String NOT NULL, value Int64 NOT NULL",
             R"(CAST(AGGREGATE_BY(value, $factory) AS String))", "key", "", {.Prelude = R"(
                 $init = ($item) -> ($item);
@@ -1807,6 +1934,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(RepeatedUpdatesAreNotUnique, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(MIN(value) AS String))");
         WriteAndCheck({
@@ -1817,6 +1947,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(DistinctAggregateIsRejected, UseStateTable, TStreamingAggregationTestFixture) {
+        Y_DEFER {
+            DropTopics();
+        };
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL",
             R"(key || ":" || CAST(COUNT(DISTINCT value) AS String))", "key", "",
             {.ExpectedError = "DISTINCT aggregation is not supported for mode: KqpStreamingAggregation"});
@@ -1866,8 +1999,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         )");
         const TString inputTopic = TStringBuilder() << "aggregationInput_" << CreateGuidAsString();
         const TString outputTopic = TStringBuilder() << "aggregationOutput_" << CreateGuidAsString();
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSource("source");
 
         // A relative state table path must resolve in the serverless query's database.

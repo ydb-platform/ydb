@@ -331,7 +331,7 @@ class TopicClientAsyncIO:
         topic,
         *,
         producer_id: Optional[str] = None,  # default - random
-        session_metadata: Mapping[str, str] = None,
+        session_metadata: Optional[Mapping[str, str]] = None,
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
@@ -363,7 +363,7 @@ class TopicClientAsyncIO:
         topic,
         *,
         producer_id: Optional[str] = None,  # default - random
-        session_metadata: Mapping[str, str] = None,
+        session_metadata: Optional[Mapping[str, str]] = None,
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
@@ -665,7 +665,7 @@ class TopicClient:
         topic,
         *,
         producer_id: Optional[str] = None,  # default - random
-        session_metadata: Mapping[str, str] = None,
+        session_metadata: Optional[Mapping[str, str]] = None,
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
@@ -698,7 +698,7 @@ class TopicClient:
         topic,
         *,
         producer_id: Optional[str] = None,  # default - random
-        session_metadata: Mapping[str, str] = None,
+        session_metadata: Optional[Mapping[str, str]] = None,
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,

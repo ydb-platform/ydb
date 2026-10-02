@@ -1046,6 +1046,25 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         unit.on_do_ts_yndexing()
 
 
+def _parse_ts_checks(checks_raw: str, check_separator: str) -> list[list[str]]:
+    ts_check_list = []
+    for check in checks_raw.removeprefix("$_TS_CHECK_LIST").split(check_separator):
+        fields = check.strip().split(maxsplit=3)
+        if fields:
+            if len(fields) == 3:
+                fields.append("")
+            ts_check_list.append(fields)
+    return ts_check_list
+
+
+def _ts_check_size(check_type: str, timeout_medium: str) -> str | None:
+    if timeout_medium == "yes":
+        return "MEDIUM"
+    if check_type == "lint":
+        return "SMALL"
+    return None
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
@@ -1055,15 +1074,7 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    checks_raw = unit.get("_TS_CHECK_LIST").removeprefix("$_TS_CHECK_LIST")
-    check_separator = unit.get("_TS_CHECK_SEPARATOR")
-    ts_check_list = []
-    for check in checks_raw.split(check_separator):
-        fields = check.strip().split(maxsplit=2)
-        if fields:
-            if len(fields) == 2:
-                fields.append("")
-            ts_check_list.append(fields)
+    ts_check_list = _parse_ts_checks(unit.get("_TS_CHECK_LIST"), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
         if validation_mode == "TS_TEST_FOR":
             ymake.report_configure_error(
@@ -1098,8 +1109,7 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 
-    for check in ts_check_list:
-        script_name, check_type, command = check
+    for script_name, check_type, timeout_medium, command in ts_check_list:
         cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
@@ -1109,8 +1119,9 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
             TS_CHECK_COMMAND=command,
             erm_json=_create_erm_json(unit),
         )
-        if check_type == "lint":
-            spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
+        size = _ts_check_size(check_type, timeout_medium)
+        if size:
+            spec_args["SIZE"] = size
 
         dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
 

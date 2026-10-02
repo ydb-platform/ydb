@@ -1,7 +1,6 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
-#include "xdc_limits.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -189,10 +188,6 @@ namespace NActors {
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
-                        if (!IsXdcDeclareWithinLimit(*SerializationInfo, event.EventSerializedSize,
-                                MaxSerializedEventSize)) {
-                            throw TExSerializedEventTooLarge(event.Descr.Type);
-                        }
                         State = EState::SECTIONS;
                         SectionIndex = 0;
                         XXH3_64bits_reset(&RdmaCumulativeChecksumState);

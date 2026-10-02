@@ -1,5 +1,6 @@
 #include "detailed_metrics_binding.h"
 #include "detailed_metrics_descriptor.h"
+#include "ut_helpers.h"
 
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
@@ -17,6 +18,7 @@
 #include <util/string/join.h>
 
 using namespace NKikimr;
+using namespace NKikimr::NDetailedMetricsTests;
 using NTabletFlatExecutor::TExecutorCounters;
 
 namespace {
@@ -60,52 +62,6 @@ constexpr TTabletPercentileCounter::TRangeDef RANGES_5[] = {
     {20, "20"},
     {30, "30"},
     {40, "40"},
-};
-
-/**
- * The counter names of one bank, nullptr is an unnamed slot.
- */
-struct TTestNames {
-    TVector<const char*> Simple;
-    TVector<const char*> Cumulative;
-    TVector<const char*> Percentile;
-};
-
-/**
- * One bank (the Executor or the application counters) of a synthetic layout.
- */
-class TTestCounters {
-public:
-    explicit TTestCounters(TTestNames names = {})
-        : Names(std::move(names))
-        , Counters(MakeHolder<TTabletCountersBase>(
-            Names.Simple.size(),
-            Names.Cumulative.size(),
-            Names.Percentile.size(),
-            Names.Simple.data(),
-            Names.Cumulative.data(),
-            Names.Percentile.data()))
-    {
-    }
-
-    template <ui32 RangeCount>
-    TTestCounters& InitPercentile(
-        ui32 slot,
-        const TTabletPercentileCounter::TRangeDef (&ranges)[RangeCount],
-        bool integral)
-    {
-        Counters->Percentile()[slot].Initialize(ranges, integral);
-        return *this;
-    }
-
-    const TTabletCountersBase& Get() const {
-        return *Counters;
-    }
-
-private:
-    // NOTE: The counters keep pointers into the name vectors, which survive a move
-    TTestNames Names;
-    THolder<TTabletCountersBase> Counters;
 };
 
 TSourceRef ExecutorSource(ESourceWrapper wrapper, const TString& name) {

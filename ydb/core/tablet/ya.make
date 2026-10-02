@@ -62,6 +62,8 @@ SRCS(
     detailed_metrics/detailed_metrics_descriptor.h
     detailed_metrics/detailed_metrics_tree.cpp
     detailed_metrics/detailed_metrics_tree.h
+    detailed_metrics/detailed_values_accumulator.cpp
+    detailed_metrics/detailed_values_accumulator.h
     detailed_metrics/memory_tags.cpp
     detailed_metrics/memory_tags.h
     detailed_metrics/metric_value_aggregator.cpp

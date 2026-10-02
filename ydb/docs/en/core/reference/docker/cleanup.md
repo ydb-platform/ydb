@@ -1,4 +1,4 @@
-## Docker stop
+# Docker stop
 
 To stop {{ ydb-short-name }} in Docker, run the following command:
 

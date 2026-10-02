@@ -1,22 +1,20 @@
-UNITTEST_FOR(ydb/core/kqp)
+UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
+SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 FORK_SUBTESTS()
-
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(MEDIUM)
-ENDIF()
+SPLIT_FACTOR(8)
 
 SRCS(
-    # kqp_executer_ut.cpp
+    kqp_executer_stats_ut.cpp
+    kqp_executer_ut.cpp
+    kqp_tasks_graph_ut.cpp
+    max_tasks_graph_ut.cpp
 )
 
 PEERDIR(
-    ydb/core/kqp
     ydb/core/kqp/common
-    ydb/core/kqp/host
     ydb/core/kqp/ut/common
-    ydb/public/sdk/cpp/src/client/proto
-    ydb/library/yql/providers/common/http_gateway
     yql/essentials/sql/pg_dummy
 )
 

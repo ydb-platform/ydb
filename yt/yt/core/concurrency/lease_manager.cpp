@@ -140,6 +140,6 @@ bool TLeaseManager::CloseLease(TLease lease)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NConcurrency::NYT
+} // namespace NYT::NConcurrency
 
 

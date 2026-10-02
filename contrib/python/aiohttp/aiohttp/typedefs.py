@@ -1,18 +1,12 @@
 import json
 import os
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Awaitable,
-    Callable,
-    Iterable,
-    Mapping,
-    Tuple,
-    Union,
-)
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Protocol, Union
 
 from multidict import CIMultiDict, CIMultiDictProxy, MultiDict, MultiDictProxy, istr
-from yarl import URL
+from yarl import URL, Query as _Query
+
+Query = _Query
 
 DEFAULT_JSON_ENCODER = json.dumps
 DEFAULT_JSON_DECODER = json.loads
@@ -33,14 +27,21 @@ else:
 
 Byteish = Union[bytes, bytearray, memoryview]
 JSONEncoder = Callable[[Any], str]
+JSONBytesEncoder = Callable[[Any], bytes]
 JSONDecoder = Callable[[str], Any]
-LooseHeaders = Union[Mapping[Union[str, istr], str], _CIMultiDict, _CIMultiDictProxy]
-RawHeaders = Tuple[Tuple[bytes, bytes], ...]
+LooseHeaders = Union[
+    Mapping[str, str],
+    Mapping[istr, str],
+    _CIMultiDict,
+    _CIMultiDictProxy,
+    Iterable[tuple[str | istr, str]],
+]
+RawHeaders = tuple[tuple[bytes, bytes], ...]
 StrOrURL = Union[str, URL]
 
 LooseCookiesMappings = Mapping[str, Union[str, "BaseCookie[str]", "Morsel[Any]"]]
 LooseCookiesIterables = Iterable[
-    Tuple[str, Union[str, "BaseCookie[str]", "Morsel[Any]"]]
+    tuple[str, Union[str, "BaseCookie[str]", "Morsel[Any]"]]
 ]
 LooseCookies = Union[
     LooseCookiesMappings,
@@ -49,6 +50,12 @@ LooseCookies = Union[
 ]
 
 Handler = Callable[["Request"], Awaitable["StreamResponse"]]
-Middleware = Callable[["Request", Handler], Awaitable["StreamResponse"]]
+
+
+class Middleware(Protocol):
+    def __call__(
+        self, request: "Request", handler: Handler
+    ) -> Awaitable["StreamResponse"]: ...
+
 
 PathLike = Union[str, "os.PathLike[str]"]

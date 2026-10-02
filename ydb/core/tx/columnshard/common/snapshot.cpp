@@ -1,4 +1,5 @@
 #include "snapshot.h"
+
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 
 #include <library/cpp/json/writer/json_value.h>
@@ -39,6 +40,10 @@ NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanStep(const ui64 planStep) noexcep
     return TSnapshot(planStep, ::Max<ui64>());
 }
 
+NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanStep(const TPositiveIncreasingControlInteger planStep) noexcept {
+    return MaxForPlanStep(planStep.Val());
+}
+
 NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanInstant(const TInstant planInstant) noexcept {
     return TSnapshot(planInstant.MilliSeconds(), ::Max<ui64>());
 }
@@ -47,4 +52,4 @@ NJson::TJsonValue TSnapshot::SerializeToJson() const {
     return DebugJson();
 }
 
-};
+};   // namespace NKikimr::NOlap

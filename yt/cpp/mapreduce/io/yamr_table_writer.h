@@ -5,6 +5,7 @@
 namespace NYT {
 
 class IProxyOutput;
+class IOutputStreamWithResponse;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -25,6 +26,24 @@ public:
 
 private:
     std::unique_ptr<IProxyOutput> Output_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TYaMRTableFragmentWriter
+    : public ITableFragmentWriter<TYaMRRow>
+{
+public:
+    explicit TYaMRTableFragmentWriter(std::unique_ptr<IOutputStreamWithResponse> output);
+
+    TWriteTableFragmentResult GetWriteFragmentResult() const override;
+
+    void AddRow(const TYaMRRow& row) override;
+
+    void Finish() override;
+
+private:
+    std::unique_ptr<IOutputStreamWithResponse> Output_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

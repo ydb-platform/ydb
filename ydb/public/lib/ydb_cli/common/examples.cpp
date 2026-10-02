@@ -1,4 +1,5 @@
 #include "examples.h"
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -46,8 +47,9 @@ TExampleSet TExampleSetBuilder::Build() {
 void TCommandWithExamples::AddExamplesOption(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption("help-ex", "Print usage with examples")
         .HasArg(NLastGetopt::NO_ARGUMENT)
-        .IfPresentDisableCompletion()
-        .Handler(&NLastGetopt::PrintUsageAndExit);
+        .GetOpt()
+        .Handler(&NLastGetopt::PrintUsageAndExit)
+        .IfPresentDisableCompletion();
 }
 
 void TCommandWithExamples::AddOptionExamples(const TString& optionName, TExampleSet&& examples) {
@@ -60,7 +62,7 @@ void TCommandWithExamples::AddCommandExamples(TExampleSet&& examples) {
 
 namespace {
     void PrintExamples(TStringStream& descr, const TVector<TExample>& examples) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         if (examples.size() == 1) {
             if (examples[0].Title) {
                 descr << examples[0].Title << ':' << Endl;
@@ -85,12 +87,12 @@ void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) 
     }
 
     for (const auto& [optionName, examples] : OptionExamples) {
-        NLastGetopt::TOpt* opt = config.Opts->FindLongOption(optionName);
+        NLastGetopt::TOpt* opt = config.Opts->GetOpts().FindLongOption(optionName);
         if (!opt) {
             continue;
         }
         TStringStream descr;
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         descr << opt->Help_ << Endl << Endl << colors.BoldColor();
         if (examples.Title) {
             descr << examples.Title;
@@ -108,7 +110,7 @@ void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) 
     if (CommandExamples.Examples.size()) {
         TStringStream descr;
         PrintExamples(descr, CommandExamples.Examples);
-        config.Opts->AddSection(CommandExamples.Title ? CommandExamples.Title
+        config.Opts->GetOpts().AddSection(CommandExamples.Title ? CommandExamples.Title
                 : (CommandExamples.Examples.size() == 1 ? "Example" : "Examples"),
             descr.Str());
     }

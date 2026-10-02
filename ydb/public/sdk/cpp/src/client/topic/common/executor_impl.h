@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/executor.h>
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/thread/pool.h>
 
 #include <queue>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class IAsyncExecutor : public IExecutor {
 private:
@@ -20,37 +20,6 @@ public:
     }
     // Post Implementation MUST NOT run f before it returns
     void Post(TFunction&& f) final;
-};
-
-IExecutor::TPtr CreateDefaultExecutor();
-
-
-class TThreadPoolExecutor : public IAsyncExecutor {
-private:
-    std::shared_ptr<IThreadPool> ThreadPool;
-
-public:
-    TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool);
-    TThreadPoolExecutor(size_t threadsCount);
-    ~TThreadPoolExecutor() = default;
-
-    bool IsAsync() const override {
-        return !IsFakeThreadPool;
-    }
-
-    void DoStart() override {
-        if (ThreadsCount) {
-            ThreadPool->Start(ThreadsCount);
-        }
-    }
-
-private:
-    void PostImpl(std::vector<TFunction>&& fs) override;
-    void PostImpl(TFunction&& f) override;
-
-private:
-    bool IsFakeThreadPool = false;
-    size_t ThreadsCount = 0;
 };
 
 class TSerialExecutor : public IAsyncExecutor, public std::enable_shared_from_this<TSerialExecutor> {
@@ -80,8 +49,8 @@ public:
     }
     void DoStart() override {
     }
+    void Stop() override {
+    }
 };
-
-IExecutor::TPtr CreateGenericExecutor();
 
 } // namespace NYdb::NTopic

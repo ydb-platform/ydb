@@ -97,6 +97,7 @@ struct drm_virtgpu_execbuffer {
 #define VIRTGPU_PARAM_CROSS_DEVICE 5 /* Cross virtio-device resource sharing  */
 #define VIRTGPU_PARAM_CONTEXT_INIT 6 /* DRM_VIRTGPU_CONTEXT_INIT */
 #define VIRTGPU_PARAM_SUPPORTED_CAPSET_IDs 7 /* Bitmask of supported capability set ids */
+#define VIRTGPU_PARAM_EXPLICIT_DEBUG_NAME 8 /* Ability to set debug name from userspace */
 
 struct drm_virtgpu_getparam {
 	__u64 param;
@@ -162,6 +163,12 @@ struct drm_virtgpu_3d_wait {
 	__u32 flags;
 };
 
+#define VIRTGPU_DRM_CAPSET_VIRGL 1
+#define VIRTGPU_DRM_CAPSET_VIRGL2 2
+#define VIRTGPU_DRM_CAPSET_GFXSTREAM_VULKAN 3
+#define VIRTGPU_DRM_CAPSET_VENUS 4
+#define VIRTGPU_DRM_CAPSET_CROSS_DOMAIN 5
+#define VIRTGPU_DRM_CAPSET_DRM 6
 struct drm_virtgpu_get_caps {
 	__u32 cap_set_id;
 	__u32 cap_set_ver;
@@ -198,6 +205,7 @@ struct drm_virtgpu_resource_create_blob {
 #define VIRTGPU_CONTEXT_PARAM_CAPSET_ID       0x0001
 #define VIRTGPU_CONTEXT_PARAM_NUM_RINGS       0x0002
 #define VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK 0x0003
+#define VIRTGPU_CONTEXT_PARAM_DEBUG_NAME      0x0004
 struct drm_virtgpu_context_set_param {
 	__u64 param;
 	__u64 value;

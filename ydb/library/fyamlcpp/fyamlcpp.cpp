@@ -616,6 +616,7 @@ TDocument TDocument::Parse(TString str) {
     fy_document* doc = fy_document_build_from_string(&cfg, cstr, FY_NT);
     if (!doc) {
         NDetail::ThrowAllExceptionsIfAny(diag.get());
+        ythrow TFyamlEx("Failed to build YAML document from string");
     }
     return TDocument(std::move(str), doc, diag.release());
 }
@@ -641,6 +642,21 @@ void TDocument::InsertAt(const char* path, const TNodeRef& node) {
 TNodeRef TDocument::Buildf(const char* content) {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
     return TNodeRef(fy_node_build_from_string(Document_.get(), content, strlen(content)));
+}
+
+TNodeRef TDocument::CreateScalar(const TString& content) {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_scalar_copy(Document_.get(), content.data(), content.size()));
+}
+
+TNodeRef TDocument::CreateMapping() {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_mapping(Document_.get()));
+}
+
+TNodeRef TDocument::CreateSequence() {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    return TNodeRef(fy_node_create_sequence(Document_.get()));
 }
 
 void TDocument::Resolve() {
@@ -973,7 +989,7 @@ std::optional<TString> TNodeOpsBase::Tag(fy_node* node) const {
 void TNodeOpsBase::SetTag(fy_node* node, const TString& tag) {
     ENSURE_NODE_NOT_EMPTY(node);
     auto* str = new TString(std::move(tag));
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_tag(node, str->c_str(), str->length()), node);
 }
@@ -992,7 +1008,7 @@ bool TNodeOpsBase::HasAnchor(fy_node* node) const {
 
 void TNodeOpsBase::SetAnchor(fy_node* node, const TString& anchor) {
     auto* str = new TString(anchor);
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_anchor(node, str->c_str(), str->length()), node);
 }

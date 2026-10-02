@@ -1,23 +1,53 @@
 name: Automerge PR
 on:
   schedule:
-    - cron: "30 1-23 * * *"   # Hourly during 1-23 interval for PR completion
+    - cron: "17 * * * *"   # At minute 17 past every hour
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 jobs:
   check-pr:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    timeout-minutes: 70
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           sparse-checkout: |
             .github
             ydb/ci/
-      - uses: ./.github/actions/rightlib_sync
-        with:
-          command: check-pr
-          repository: ${{ github.repository }}
-          gh_personal_access_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0
+
+      - name: configure
+        shell: bash
+        run: |
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
+            git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: run-command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd ./ydb/ci/rightlib
+          end_time=$(( SECONDS + 55 * 60 ))
+          poll_interval=300
+          iteration=1
+
+          while (( SECONDS < end_time )); do
+            echo "::group::automerge iteration ${iteration}"
+            ./automerge.py || echo "::warning::automerge iteration ${iteration} failed with exit code $?"
+            echo "::endgroup::"
+            remaining=$(( end_time - SECONDS ))
+            (( remaining > 0 )) && sleep $(( remaining < poll_interval ? remaining : poll_interval ))
+            iteration=$(( iteration + 1 ))
+          done

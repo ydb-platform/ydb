@@ -2,13 +2,7 @@ UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:32)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     cluster_discovery_service_ut.cpp

@@ -19,4 +19,4 @@ struct TGcNodeConfig {
     TGcNodeStatistics Statistics;
 };
 
-}
+} // namespace NYql

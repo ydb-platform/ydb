@@ -8,6 +8,12 @@
 #include <map>
 
 namespace NYql {
+
+inline const TString& DqStrippedSuffied() {
+    static const TString suffix(".s");
+    return suffix;
+}
+
 namespace NCommon {
 
 struct TResultFormatSettings {
@@ -16,8 +22,6 @@ struct TResultFormatSettings {
     TMaybe<ui64> SizeLimit;
     TMaybe<ui64> RowsLimit;
 };
-
-TMaybe<TString> SqlToSExpr(const TString& query);
 
 TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);
 TString GetSerializedResultType(const TString& program);

@@ -1,0 +1,16 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --database-space-block-color YELLOW --database-space-unblock-color LIGHT_YELLOW
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    UpdateSettings {
+      DatabaseSpaceBlockColor: YELLOW
+      DatabaseSpaceUnblockColor: LIGHT_YELLOW
+    }
+  }
+}

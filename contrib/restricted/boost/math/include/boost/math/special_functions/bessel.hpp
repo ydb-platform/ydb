@@ -96,7 +96,7 @@ BOOST_MATH_GPU_ENABLED inline T sph_bessel_j_small_z_series(unsigned v, T x, con
 }
 
 template <class T, class Policy>
-BOOST_MATH_GPU_ENABLED T cyl_bessel_j_imp_final(T v, T x, const bessel_no_int_tag& t, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T cyl_bessel_j_imp_final(T v, T x, const bessel_no_int_tag&, const Policy& pol)
 {
    BOOST_MATH_STD_USING
 
@@ -264,7 +264,7 @@ BOOST_MATH_GPU_ENABLED T cyl_bessel_i_imp(T v, T x, const Policy& pol)
 }
 
 template <class T, class Policy>
-BOOST_MATH_GPU_ENABLED inline T cyl_bessel_k_imp(T v, T x, const bessel_no_int_tag& /* t */, const Policy& pol)
+BOOST_MATH_GPU_ENABLED inline T cyl_bessel_k_imp(T v, T x, const bessel_no_int_tag&, const Policy& pol)
 {
    constexpr auto function = "boost::math::cyl_bessel_k<%1%>(%1%,%1%)";
    BOOST_MATH_STD_USING
@@ -524,7 +524,7 @@ BOOST_MATH_GPU_ENABLED inline T cyl_neumann_zero_imp(T v, int m, const Policy& p
 
    if(number_of_iterations >= policies::get_max_root_iterations<Policy>())
    {
-      return policies::raise_evaluation_error<T>(function, "Unable to locate root in a reasonable time: Current best guess is %1%", yvm, Policy()); //LCOV_EXCL_LINE
+      return policies::raise_evaluation_error<T>(function, "Unable to locate root in a reasonable time: Current best guess is %1%", yvm, Policy()); // LCOV_EXCL_LINE
    }
 
    return yvm;

@@ -40,6 +40,8 @@
 // last . and everything after it) is stripped from each filename prior to
 // matching, as is the special suffix "-inl".
 //
+// Example: --vmodule=module_a=1,module_b=2
+//
 // Files are matched against globs in `--vmodule` in order, and the first match
 // determines the verbosity level.
 //
@@ -60,8 +62,6 @@
 #include "absl/base/config.h"
 #include "absl/log/internal/vlog_config.h"  // IWYU pragma: export
 #include "absl/strings/string_view.h"
-
-// IWYU pragma: private, include "absl/log/log.h"
 
 // This is expanded at the callsite to allow the compiler to optimize
 // always-false cases out of the build.

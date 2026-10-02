@@ -22,6 +22,8 @@ struct ITabletPipeFactory {
     static THolder<ITabletPipeFactory> GetDefaultFactory();
 };
 
+extern const ui64 KesusReconnectLimit;
+
 NActors::IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const NActors::TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory = ITabletPipeFactory::GetDefaultFactory());
 
 class TKesusResourceAllocationStatistics {

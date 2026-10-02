@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE == "thread")
     SPLIT_FACTOR(20)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -18,7 +18,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/testlib/actors
     ydb/core/testlib/basics/default
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
 )
 
 SRCS(

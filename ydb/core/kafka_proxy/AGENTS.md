@@ -1,0 +1,13 @@
+# Kafka proxy
+
+**Kafka-compatible API on top of YDB Topics**.
+Accepts **Kafka wire-protocol** connections (`kafka_connection.cpp`).
+Core: [`ydb/core/persqueue/AGENTS.md`](../persqueue/AGENTS.md).
+Shared rules: [`RULES.md`](../persqueue/RULES.md).
+
+## Layout
+
+* Root — connections, message codecs (`kafka_messages.*`), transactions.
+* `actors/` — produce, fetch, metadata, offsets, consumer groups, SASL, …
+
+Tests: `./ya make --build relwithdebinfo -tA ydb/core/kafka_proxy`

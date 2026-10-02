@@ -1,16 +1,19 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
+
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace NFq {
 
 struct TTopicSessionClientStatistic {
     NActors::TActorId ReadActorId;
+    ui64 Generation = 0;
     ui32 PartitionId = 0;
     i64 QueuedRows = 0;         // Current value
     i64 QueuedBytes = 0;        // Current value
-    ui64 Offset = 0;            // Current value
+    TMaybe<ui64> Offset;        // Current value
     ui64 FilteredBytes = 0;     // Increment / filtered
     ui64 FilteredRows = 0;      // Increment / filtered
     ui64 ReadBytes = 0;         // Increment

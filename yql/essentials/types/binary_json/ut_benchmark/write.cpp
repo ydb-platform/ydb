@@ -9,14 +9,14 @@
 
 // ya test -r -D BENCHMARK_MAKE_LARGE_PART
 #ifndef BENCHMARK_MAKE_LARGE_PART
-#define BENCHMARK_MAKE_LARGE_PART 0
+    #define BENCHMARK_MAKE_LARGE_PART 0
 #endif
 
 using namespace NKikimr::NBinaryJson;
 
 namespace {
 
-static ui64 seed = 0;
+ui64 seed = 0;
 
 NJson::TJsonValue GetTestJson(ui64 depth = 10, ui64 nChildren = 2) {
     NJson::TJsonValue value;
@@ -35,16 +35,16 @@ TString GetTestJsonString() {
     return NJson::WriteJson(GetTestJson(3, 50));
 }
 
-static void BenchWriteSimdJson(benchmark::State& state) {
-  TString value = GetTestJsonString();
-  TStringBuf buf(value);
-  for (auto _ : state) {
-    auto result = SerializeToBinaryJson(buf);
-    benchmark::DoNotOptimize(result);
-    benchmark::ClobberMemory();
-  }
+void BenchWriteSimdJson(benchmark::State& state) {
+    TString value = GetTestJsonString();
+    TStringBuf buf(value);
+    for (auto _ : state) {
+        auto result = SerializeToBinaryJson(buf);
+        benchmark::DoNotOptimize(result);
+        benchmark::ClobberMemory();
+    }
 }
 
-}
+} // namespace
 
 BENCHMARK(BenchWriteSimdJson)->MinTime(1);

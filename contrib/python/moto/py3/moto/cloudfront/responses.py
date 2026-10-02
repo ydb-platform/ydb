@@ -1,54 +1,71 @@
 import xmltodict
+from typing import Any, Dict
 from urllib.parse import unquote
 
-from moto.core.responses import BaseResponse
-from .models import cloudfront_backends
+from moto.core.responses import BaseResponse, TYPE_RESPONSE
+from .models import cloudfront_backends, CloudFrontBackend
 
 
 XMLNS = "http://cloudfront.amazonaws.com/doc/2020-05-31/"
 
 
 class CloudFrontResponse(BaseResponse):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(service_name="cloudfront")
 
-    def _get_xml_body(self):
-        return xmltodict.parse(self.body, dict_constructor=dict)
+    def _get_xml_body(self) -> Dict[str, Any]:
+        return xmltodict.parse(self.body, dict_constructor=dict, force_list="Path")
 
     @property
-    def backend(self):
+    def backend(self) -> CloudFrontBackend:
         return cloudfront_backends[self.current_account]["global"]
 
-    def distributions(self, request, full_url, headers):
+    def distributions(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "POST":
             return self.create_distribution()
         if request.method == "GET":
             return self.list_distributions()
 
-    def invalidation(self, request, full_url, headers):
+    def invalidation(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "POST":
             return self.create_invalidation()
         if request.method == "GET":
             return self.list_invalidations()
 
-    def tags(self, request, full_url, headers):
+    def tags(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "GET":
             return self.list_tags_for_resource()
 
-    def create_distribution(self):
+    def origin_access_controls(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "POST":
+            return self.create_origin_access_control()
+        if request.method == "GET":
+            return self.list_origin_access_controls()
+
+    def origin_access_control(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "GET":
+            return self.get_origin_access_control()
+        if request.method == "PUT":
+            return self.update_origin_access_control()
+        if request.method == "DELETE":
+            return self.delete_origin_access_control()
+
+    def create_distribution(self) -> TYPE_RESPONSE:
         params = self._get_xml_body()
         if "DistributionConfigWithTags" in params:
             config = params.get("DistributionConfigWithTags")
-            tags = (config.get("Tags", {}).get("Items") or {}).get("Tag", [])
+            tags = (config.get("Tags", {}).get("Items") or {}).get("Tag", [])  # type: ignore[union-attr]
             if not isinstance(tags, list):
                 tags = [tags]
         else:
             config = params
             tags = []
-        distribution_config = config.get("DistributionConfig")
+        distribution_config = config.get("DistributionConfig")  # type: ignore[union-attr]
         distribution, location, e_tag = self.backend.create_distribution(
             distribution_config=distribution_config,
             tags=tags,
@@ -58,13 +75,13 @@ class CloudFrontResponse(BaseResponse):
         headers = {"ETag": e_tag, "Location": location}
         return 200, headers, response
 
-    def list_distributions(self):
+    def list_distributions(self) -> TYPE_RESPONSE:
         distributions = self.backend.list_distributions()
         template = self.response_template(LIST_TEMPLATE)
         response = template.render(distributions=distributions)
         return 200, {}, response
 
-    def individual_distribution(self, request, full_url, headers):
+    def individual_distribution(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         distribution_id = full_url.split("/")[-1]
         if request.method == "DELETE":
@@ -77,36 +94,44 @@ class CloudFrontResponse(BaseResponse):
             response = template.render(distribution=dist, xmlns=XMLNS)
             return 200, {"ETag": etag}, response
 
-    def update_distribution(self, request, full_url, headers):
+    def update_distribution(  # type: ignore[return]
+        self, request: Any, full_url: str, headers: Any
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
-        params = self._get_xml_body()
-        distribution_config = params.get("DistributionConfig")
         dist_id = full_url.split("/")[-2]
-        if_match = headers["If-Match"]
+        if request.method == "GET":
+            distribution_config, etag = self.backend.get_distribution_config(dist_id)
+            template = self.response_template(GET_DISTRIBUTION_CONFIG_TEMPLATE)
+            response = template.render(distribution=distribution_config, xmlns=XMLNS)
+            return 200, {"ETag": etag}, response
+        if request.method == "PUT":
+            params = self._get_xml_body()
+            dist_config = params.get("DistributionConfig")
+            if_match = headers["If-Match"]
 
-        dist, location, e_tag = self.backend.update_distribution(
-            dist_config=distribution_config,
-            _id=dist_id,
-            if_match=if_match,
-        )
-        template = self.response_template(UPDATE_DISTRIBUTION_TEMPLATE)
-        response = template.render(distribution=dist, xmlns=XMLNS)
-        headers = {"ETag": e_tag, "Location": location}
-        return 200, headers, response
+            dist, location, e_tag = self.backend.update_distribution(
+                dist_config=dist_config,  # type: ignore[arg-type]
+                _id=dist_id,
+                if_match=if_match,
+            )
+            template = self.response_template(UPDATE_DISTRIBUTION_TEMPLATE)
+            response = template.render(distribution=dist, xmlns=XMLNS)
+            headers = {"ETag": e_tag, "Location": location}
+            return 200, headers, response
 
-    def create_invalidation(self):
+    def create_invalidation(self) -> TYPE_RESPONSE:
         dist_id = self.path.split("/")[-2]
         params = self._get_xml_body()["InvalidationBatch"]
         paths = ((params.get("Paths") or {}).get("Items") or {}).get("Path") or []
         caller_ref = params.get("CallerReference")
 
-        invalidation = self.backend.create_invalidation(dist_id, paths, caller_ref)
+        invalidation = self.backend.create_invalidation(dist_id, paths, caller_ref)  # type: ignore[arg-type]
         template = self.response_template(CREATE_INVALIDATION_TEMPLATE)
         response = template.render(invalidation=invalidation, xmlns=XMLNS)
 
         return 200, {"Location": invalidation.location}, response
 
-    def list_invalidations(self):
+    def list_invalidations(self) -> TYPE_RESPONSE:
         dist_id = self.path.split("/")[-2]
         invalidations = self.backend.list_invalidations(dist_id)
         template = self.response_template(INVALIDATIONS_TEMPLATE)
@@ -114,12 +139,43 @@ class CloudFrontResponse(BaseResponse):
 
         return 200, {}, response
 
-    def list_tags_for_resource(self):
+    def list_tags_for_resource(self) -> TYPE_RESPONSE:
         resource = unquote(self._get_param("Resource"))
         tags = self.backend.list_tags_for_resource(resource=resource)["Tags"]
         template = self.response_template(TAGS_TEMPLATE)
         response = template.render(tags=tags, xmlns=XMLNS)
         return 200, {}, response
+
+    def create_origin_access_control(self) -> TYPE_RESPONSE:
+        config = self._get_xml_body().get("OriginAccessControlConfig", {})
+        config.pop("@xmlns", None)
+        control = self.backend.create_origin_access_control(config)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {}, template.render(control=control)
+
+    def get_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-1]
+        control = self.backend.get_origin_access_control(control_id)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {"ETag": control.etag}, template.render(control=control)
+
+    def list_origin_access_controls(self) -> TYPE_RESPONSE:
+        controls = self.backend.list_origin_access_controls()
+        template = self.response_template(LIST_ORIGIN_ACCESS_CONTROl)
+        return 200, {}, template.render(controls=controls)
+
+    def update_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-2]
+        config = self._get_xml_body().get("OriginAccessControlConfig", {})
+        config.pop("@xmlns", None)
+        control = self.backend.update_origin_access_control(control_id, config)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {"ETag": control.etag}, template.render(control=control)
+
+    def delete_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-1]
+        self.backend.delete_origin_access_control(control_id)
+        return 200, {}, "{}"
 
 
 DIST_META_TEMPLATE = """
@@ -548,6 +604,16 @@ GET_DISTRIBUTION_TEMPLATE = (
 """
 )
 
+GET_DISTRIBUTION_CONFIG_TEMPLATE = (
+    """<?xml version="1.0"?>
+  <DistributionConfig>
+"""
+    + DIST_CONFIG_TEMPLATE
+    + """
+  </DistributionConfig>
+"""
+)
+
 
 LIST_TEMPLATE = (
     """<?xml version="1.0"?>
@@ -603,6 +669,7 @@ CREATE_INVALIDATION_TEMPLATE = """<?xml version="1.0"?>
 INVALIDATIONS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <InvalidationList>
    <IsTruncated>false</IsTruncated>
+   {% if invalidations %}
    <Items>
       {% for invalidation in invalidations %}
       <InvalidationSummary>
@@ -612,6 +679,7 @@ INVALIDATIONS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
       </InvalidationSummary>
       {% endfor %}
    </Items>
+   {% endif %}
    <Marker></Marker>
    <MaxItems>100</MaxItems>
    <Quantity>{{ invalidations|length }}</Quantity>
@@ -629,4 +697,40 @@ TAGS_TEMPLATE = """<?xml version="1.0"?>
     {% endfor %}
   </Items>
 </Tags>
+"""
+
+
+ORIGIN_ACCESS_CONTROl = """<?xml version="1.0"?>
+<OriginAccessControl>
+  <Id>{{ control.id }}</Id>
+  <OriginAccessControlConfig>
+    <Name>{{ control.name }}</Name>
+    {% if control.description %}
+    <Description>{{ control.description }}</Description>
+    {% endif %}
+    <SigningProtocol>{{ control.signing_protocol }}</SigningProtocol>
+    <SigningBehavior>{{ control.signing_behaviour }}</SigningBehavior>
+    <OriginAccessControlOriginType>{{ control.origin_type }}</OriginAccessControlOriginType>
+  </OriginAccessControlConfig>
+</OriginAccessControl>
+"""
+
+
+LIST_ORIGIN_ACCESS_CONTROl = """<?xml version="1.0"?>
+<OriginAccessControlList>
+  <Items>
+  {% for control in controls %}
+    <OriginAccessControlSummary>
+      <Id>{{ control.id }}</Id>
+      <Name>{{ control.name }}</Name>
+      {% if control.description %}
+      <Description>{{ control.description }}</Description>
+      {% endif %}
+      <SigningProtocol>{{ control.signing_protocol }}</SigningProtocol>
+      <SigningBehavior>{{ control.signing_behaviour }}</SigningBehavior>
+      <OriginAccessControlOriginType>{{ control.origin_type }}</OriginAccessControlOriginType>
+    </OriginAccessControlSummary>
+  {% endfor %}
+  </Items>
+</OriginAccessControlList>
 """

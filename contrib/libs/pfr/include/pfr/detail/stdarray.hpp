@@ -9,31 +9,31 @@
 
 #include <pfr/detail/config.hpp>
 
-#include <utility> // metaprogramming stuff
-#include <array>
-#include <type_traits> // for std::common_type_t
-#include <cstddef>
-
 #include <pfr/detail/sequence_tuple.hpp>
+
+#if !defined(PFR_INTERFACE_UNIT)
+#include <array>
+#if PFR_CORE_NAME_ENABLED
+#   include <string_view>
+#endif
+#include <utility> // metaprogramming stuff
+#endif
 
 namespace pfr { namespace detail {
 
-template <class... Types>
-constexpr auto make_stdarray(const Types&... t) noexcept {
-    return std::array<std::common_type_t<Types...>, sizeof...(Types)>{t...};
-}
-
+#if PFR_CORE_NAME_ENABLED
 template <class T, std::size_t... I>
-constexpr auto make_stdarray_from_tietuple(const T& t, std::index_sequence<I...>, int) noexcept {
-    return detail::make_stdarray(
+constexpr auto make_stdarray_from_tietuple(const T& t, std::index_sequence<I...>) noexcept {
+    return std::array<std::string_view, sizeof...(I)>{
         pfr::detail::sequence_tuple::get<I>(t)...
-    );
+    };
 }
-
-template <class T>
-constexpr auto make_stdarray_from_tietuple(const T&, std::index_sequence<>, long) noexcept {
-    return std::array<std::nullptr_t, 0>{};
+#else
+template <class T, std::size_t... I>
+constexpr auto make_stdarray_from_tietuple(const T&, std::index_sequence<I...>) noexcept {
+    return nullptr;
 }
+#endif
 
 }} // namespace pfr::detail
 

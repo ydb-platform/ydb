@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(Utf8('true') AS bool),
     CAST(Utf8('-1') AS Int32),

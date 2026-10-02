@@ -7,7 +7,6 @@ ENDIF()
 
 
 PY_SRCS(
-    dqrun.py
     kqprun.py
     parent.py
     result.py
@@ -21,7 +20,6 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/public/api/protos
-    yt/python/yt/yson
 )
 
 END()

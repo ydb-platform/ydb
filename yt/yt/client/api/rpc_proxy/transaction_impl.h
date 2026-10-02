@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -43,10 +44,11 @@ public:
         NTransactionClient::EDurability durability,
         TDuration timeout,
         bool pingAncestors,
+        std::optional<std::string> pingerAddress,
         std::optional<TDuration> pingPeriod,
         std::optional<TStickyTransactionParameters> stickyParameters,
         i64 sequenceNumberSourceId,
-        TStringBuf capitalizedCreationReason);
+        TStringBuf creationReason);
 
     void Initialize();
 
@@ -61,10 +63,10 @@ public:
     NTransactionClient::EDurability GetDurability() const override;
     TDuration GetTimeout() const override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const NApi::TPrerequisitePingOptions& options = {}) override;
     TFuture<NApi::TTransactionFlushResult> Flush() override;
     TFuture<NApi::TTransactionCommitResult> Commit(const NApi::TTransactionCommitOptions&) override;
-    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options = {}) override;
+    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options) override;
     void Detach() override;
     void RegisterAlienTransaction(const ITransactionPtr& transaction) override;
 
@@ -241,16 +243,32 @@ public:
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) override;
 
+    TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) override;
+
     TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
 
+    TFuture<TDistributedWriteFileSessionWithCookies> StartDistributedWriteFileSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options = {}) override;
+
+    TFuture<void> PingDistributedWriteFileSession(
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options = {}) override;
+
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.
-    //! Empty for non-sticky transactions (e.g.: master) or
+    //! Null for non-sticky transactions (e.g.: master) or
     //! if address resolution is not supported by the implementation.
-    const TString& GetStickyProxyAddress() const;
+    const std::optional<std::string>& GetStickyProxyAddress() const;
 
     //! Flushes all modifications to RPC proxy.
     //!
@@ -277,8 +295,9 @@ private:
     const NTransactionClient::EDurability Durability_;
     const TDuration Timeout_;
     const bool PingAncestors_;
+    const std::optional<std::string> PingerAddress_;
     const std::optional<TDuration> PingPeriod_;
-    const TString StickyProxyAddress_;
+    const std::optional<std::string> StickyProxyAddress_;
     const i64 SequenceNumberSourceId_;
 
     const NLogging::TLogger Logger;
@@ -292,7 +311,7 @@ private:
     TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
-    THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;
+    THashMap<NObjectClient::TCellId, NTransactionClient::TTransactionSignature> AdditionalParticipantCellIds_;
 
     TApiServiceProxy::TReqBatchModifyRowsPtr BatchModifyRowsRequest_;
     std::vector<TFuture<void>> BatchModifyRowsFutures_;
@@ -308,6 +327,8 @@ private:
     TFuture<void> DoAbort(
         TGuard<NThreading::TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
+
+    void Abandon(TGuard<NThreading::TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

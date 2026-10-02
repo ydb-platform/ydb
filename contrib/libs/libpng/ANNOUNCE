@@ -1,0 +1,37 @@
+libpng 1.6.58 - April 15, 2026
+==============================
+
+This is a public release of libpng, intended for use in production code.
+
+
+Files available for download
+----------------------------
+
+Source files:
+
+ * libpng-1.6.58.tar.xz (LZMA-compressed, recommended)
+ * libpng-1.6.58.tar.gz (deflate-compressed)
+ * lpng1658.7z (LZMA-compressed)
+ * lpng1658.zip (deflate-compressed)
+
+Other information:
+
+ * README.md
+ * LICENSE.md
+ * AUTHORS.md
+ * TRADEMARK.md
+
+
+Changes from version 1.6.57 to version 1.6.58
+---------------------------------------------
+
+ * Fixed a regression introduced in version 1.6.56 that caused `png_get_PLTE`
+   to return stale palette data after applying gamma and background transforms
+   in-place.
+   (Reported by ralfjunker <ralfjunker@users.noreply.github.com>.)
+
+
+Send comments/corrections/commendations to png-mng-implement at lists.sf.net.
+Subscription is required; visit
+<https://lists.sourceforge.net/lists/listinfo/png-mng-implement>
+to subscribe.

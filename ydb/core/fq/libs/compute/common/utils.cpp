@@ -7,7 +7,7 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -233,7 +233,7 @@ TString FormatInstant(TInstant instant) {
     return builder;
 }
 
-void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& name, TTotalStatistics& totals) {
+void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& name, TTotalStatistics& totals) {
     switch (node.GetType()) {
         case NJson::JSON_INTEGER:
         case NJson::JSON_DOUBLE:
@@ -261,7 +261,7 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
             }
             break;
         case NJson::JSON_ARRAY: {
-            for (auto item : node.GetArray()) {
+            for (const auto& item : node.GetArray()) {
                 if (auto* subNode = item.GetValueByPath("Name")) {
                     WriteNamedNode(writer, item, name + "=" + subNode->GetStringSafe(), totals);
                 }
@@ -404,7 +404,7 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                     writer.OnKeyedItem(name);
                     writer.OnBeginMap();
                 }
-                for (auto& [key, value] : node.GetMapSafe()) {
+                for (const auto& [key, value] : node.GetMapSafe()) {
                     WriteNamedNode(writer, value, key, totals);
                 }
                 if (name) {
@@ -418,9 +418,9 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
     }
 }
 
-void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& stageViewIndex, TTotalStatistics& totals) {
+void EnumeratePlans(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, ui32& stageViewIndex, TTotalStatistics& totals) {
     if (auto* subNode = value.GetValueByPath("Plans")) {
-        for (auto plan : subNode->GetArray()) {
+        for (const auto& plan : subNode->GetArray()) {
             EnumeratePlans(writer, plan, stageViewIndex, totals);
         }
     }
@@ -446,7 +446,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline, TString* timelineError) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -455,7 +455,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
         if (auto* topNode = stat.GetValueByPath("Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
-                for (auto plan : subNode->GetArray()) {
+                for (const auto& plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {
                         auto nodeType = typeNode->GetStringSafe();
                         TTotalStatistics totals;
@@ -492,9 +492,17 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
         }
     }
     if (timeline) {
-        TPlanVisualizer planViz;
-        planViz.LoadPlans(plan);
-        *timeline = planViz.PrintSvg();
+        NPlan2Svg::TPlanVisualizer planViz;
+        planViz.LoadPlansSafe(plan);
+        if (const auto& error = planViz.GetLoadError()) {
+            // No timeline rather than an error picture stored as one; the
+            // caller reports the failure through its own channel.
+            if (timelineError) {
+                *timelineError = error;
+            }
+        } else {
+            *timeline = planViz.PrintSvgSafe();
+        }
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -590,7 +598,7 @@ struct TStatsAggregator {
 void TraverseOperators(const NJson::TJsonValue& node, TStatsAggregator& aggregator) {
     auto type = node.GetType();
     if (type == NJson::JSON_MAP) {
-        if (auto source = node.GetValueByPath("ExternalDataSource")) {
+        if (node.GetValueByPath("ExternalDataSource")) {
             if (auto sourceType = node.GetValueByPath("SourceType")) {
                 aggregator.Aggregates["Operator." + sourceType->GetStringSafe()]++;
             }
@@ -668,7 +676,7 @@ THashMap<TString, i64> AggregateStats(TStringBuf plan) {
     return aggregator.Aggregates;
 }
 
-std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
+std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
     std::optional<ui64> value;
     if (auto* subNode = node.GetValueByPath(name)) {
         auto t = tag;
@@ -710,7 +718,7 @@ std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& n
     return value;
 }
 
-std::vector<std::pair<TString, TString>> columns = {
+const std::vector<std::pair<TString, TString>> columns = {
     std::make_pair<TString, TString>("id", ""), 
     std::make_pair<TString, TString>("cpu", ""), 
     std::make_pair<TString, TString>("scpu", ""), 
@@ -725,8 +733,8 @@ std::vector<std::pair<TString, TString>> columns = {
     std::make_pair<TString, TString>("rows", "Rows")
 };
 
-void WriteAggregates(NYson::TYsonWriter& writer, TAggregates& aggregates) {
-    for (auto& p : aggregates) {
+void WriteAggregates(NYson::TYsonWriter& writer, const TAggregates& aggregates) {
+    for (const auto& p : aggregates) {
         if (*p.second) {
             writer.OnKeyedItem(p.first);
             if (p.first == "first" || p.first == "pause" || p.first == "resume" || p.first == "last") {
@@ -740,8 +748,8 @@ void WriteAggregates(NYson::TYsonWriter& writer, TAggregates& aggregates) {
     }
 }
 
-void MergeAggregates(TAggregates& parentAggregates, TAggregates& aggregates) {
-    for (auto& p : aggregates) {
+void MergeAggregates(TAggregates& parentAggregates, const TAggregates& aggregates) {
+    for (const auto& p : aggregates) {
         if (*p.second) {
             auto& aggr = parentAggregates[p.first];
             if (!aggr) {
@@ -757,10 +765,10 @@ void MergeAggregates(TAggregates& parentAggregates, TAggregates& aggregates) {
     }
 }
 
-void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& name, TAggregates& aggregates) {
+void WriteAsyncStatNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& name, TAggregates& aggregates) {
         writer.OnKeyedItem(name);
         writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     auto value = WriteMetric(writer, node, p.first, p.second, "");
                     if (value) {
@@ -779,7 +787,7 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
             }
             writer.OnKeyedItem("1_Min");
             writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     WriteMetric(writer, node, p.first, p.second, "Min");
                 }
@@ -787,7 +795,7 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
             writer.OnEndMap();
             writer.OnKeyedItem("2_Avg");
             writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     WriteMetric(writer, node, p.first, p.second, "Avg");
                 }
@@ -795,7 +803,7 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
             writer.OnEndMap();
             writer.OnKeyedItem("3_Max");
             writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     WriteMetric(writer, node, p.first, p.second, "Max");
                 }
@@ -803,7 +811,7 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
             writer.OnEndMap();
             writer.OnKeyedItem("4_Sum");
             writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     WriteMetric(writer, node, p.first, p.second, "Sum");
                 }
@@ -811,7 +819,7 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
             writer.OnEndMap();
             writer.OnKeyedItem("5_Count");
             writer.OnBeginMap();
-            for (auto& p : columns) {
+            for (const auto& p : columns) {
                 if (p.second) {
                     WriteMetric(writer, node, p.first, p.second, "Count");
                 }
@@ -820,9 +828,9 @@ void WriteAsyncStatNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, con
         writer.OnEndMap();
 }
 
-void WriteAsyncIoNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& prefix, TAggregates& parentAggregates) {
+void WriteAsyncIoNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& prefix, TAggregates& parentAggregates) {
     if (node.GetType() == NJson::JSON_ARRAY) {
-        for (auto item : node.GetArray()) {
+        for (const auto& item : node.GetArray()) {
             if (auto* subNode = item.GetValueByPath("Name")) {
                 writer.OnKeyedItem(prefix + "_" + subNode->GetStringSafe());
                 writer.OnBeginMap();
@@ -847,9 +855,9 @@ void WriteAsyncIoNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const
     }
 }
 
-void EnumeratePlansV2(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& stageViewIndex, TTotalStatistics& totals) {
+void EnumeratePlansV2(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, ui32& stageViewIndex, TTotalStatistics& totals) {
     if (auto* subNode = value.GetValueByPath("Plans")) {
-        for (auto plan : subNode->GetArray()) {
+        for (const auto& plan : subNode->GetArray()) {
             EnumeratePlansV2(writer, plan, stageViewIndex, totals);
         }
     }
@@ -914,7 +922,7 @@ TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
  
     writer.OnKeyedItem("Columns");
     writer.OnBeginList();
-    for (auto& p : columns) {
+    for (const auto& p : columns) {
         writer.OnListItem();
         writer.OnStringScalar(p.first);
     }
@@ -925,7 +933,7 @@ TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
         if (auto* topNode = stat.GetValueByPath("Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
-                for (auto plan : subNode->GetArray()) {
+                for (const auto& plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {
                         auto nodeType = typeNode->GetStringSafe();
                         TTotalStatistics totals;
@@ -1202,7 +1210,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*, TString*) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1235,8 +1243,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline, timelineError);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1267,8 +1275,8 @@ struct TProfileStatProcessor : TPlanStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, timelineError));
     }
 };
 
@@ -1365,7 +1373,12 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     CpuUsage = 0.0;
     try {
         TString timeline;
-        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+        TString timelineError;
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr, &timelineError);
+
+        if (timelineError) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error timeline processing: " << timelineError));
+        }
 
         if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
             Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));

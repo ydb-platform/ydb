@@ -3,7 +3,7 @@ Loads functions that are mixed in to the standard library. E.g. builtins are
 written in C (binaries), but my autocompletion only understands Python code. By
 mixing in Python code, the autocompletion should work much better for builtins.
 """
-import sys
+
 import os
 from itertools import chain
 
@@ -15,14 +15,18 @@ fake_modules = {}
 
 
 def _get_path_dict():
-    path = os.path.dirname(__file__)
+    path = os.path.dirname(os.path.abspath(__file__)) if os.getenv("Y_PYTHON_SOURCE_ROOT") else os.path.dirname(__file__)
     base_path = os.path.join(path, 'fake')
     dct = {}
-    for file_name in __res.resfs_files():
-        if sys.version_info[0] == 3:
+    if os.getenv("Y_PYTHON_SOURCE_ROOT"):
+        for file_name in os.listdir(base_path):
+            if file_name.endswith('.pym'):
+                dct[file_name[:-4]] = os.path.join(base_path, file_name)
+    else:
+        for file_name in __res.resfs_files():
             file_name = str(file_name, 'ascii')
-        if file_name.startswith(base_path) and file_name.endswith('.pym'):
-            dct[file_name[len(base_path) + 1:-4]] = file_name
+            if file_name.startswith(base_path) and file_name.endswith('.pym'):
+                dct[file_name[len(base_path) + 1:-4]] = file_name
     return dct
 
 
@@ -49,9 +53,12 @@ def _load_faked_module(evaluator, module_name):
         fake_modules[module_name] = None
         return
 
-    if sys.version_info[0] == 3:
+    if os.getenv("Y_PYTHON_SOURCE_ROOT"):
+        with open(path) as f:
+            source = f.read()
+    else:
         path = bytes(path, 'ascii')
-    source = __res.resfs_read(path)
+        source = __res.resfs_read(path)
 
     fake_modules[module_name] = m = evaluator.latest_grammar.parse(unicode(source))
 

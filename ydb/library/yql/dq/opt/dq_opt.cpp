@@ -140,6 +140,15 @@ bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     });
 }
 
+bool IsDqDependsOnOtherStage(const TExprBase& node, const TDqStageBase& stage) {
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& node) {
+        if (TMaybeNode<TDqStage>(node)) {
+            return node.Get() != ptr;
+        }
+        return false;
+    });
+}
+
 bool IsDqDependsOnStageOutput(const TExprBase& node, const TDqStageBase& stage, ui32 outputIndex) {
     return !!FindNode(node.Ptr(), [ptr = stage.Raw(), outputIndex](const TExprNode::TPtr& exprNode) {
         if (TDqOutput::Match(exprNode.Get())) {
@@ -169,6 +178,55 @@ IDqOptimization* GetDqOptCallback(const TExprBase& providerCall, const TTypeAnno
         return (*datasource)->GetDqOptimization();
     }
     return nullptr;
+}
+
+// Returns all parents for specific node.
+template <typename Type> TVector<const TExprNode*> GetParentsWithType(const TExprNode* node, const TParentsMap& parentsMap) {
+    auto it = parentsMap.find(node);
+    if (it == parentsMap.end() || it->second.empty()) {
+        return {};
+    }
+
+    TVector<const TExprNode*> parents;
+    for (const auto* node : it->second) {
+        if (!Type::Match(node)) {
+            return {};
+        }
+        parents.push_back(node);
+    }
+
+    return parents;
+}
+
+// Do not create a scalar precompute for specific pattern if `AggregationResultStage` option is enabled.
+// The specific pattern is `(AsStruct((Memer(ToOptional)...)))`.
+bool IsSuitableToBuildScalarPrecompute(const TExprBase& node, const TParentsMap& parentsMap, bool allowStageMultiUsage,
+                                       const TBuildAggregationResultStageOptions& options) {
+    // Do not apply for global opt (when `allowStageMultiUsage` is enabled)
+    if (options.ApplyForDqPhyPrecompute || !options.IsEnabled || allowStageMultiUsage) {
+        return true;
+    }
+
+    // Get all `TCoMembers`
+    auto members = GetParentsWithType<TCoMember>(node.Raw(), parentsMap);
+    if (!members.size()) {
+        return true;
+    }
+
+    for (const auto* member : members) {
+        auto exprLists = GetParentsWithType<TExprList>(member, parentsMap);
+        // Only one parent is allowed.
+        if (!exprLists.size() || exprLists.size() > 1) {
+            return true;
+        }
+
+        auto exprStructs = GetParentsWithType<TCoAsStruct>(exprLists.front(), parentsMap);
+        if (!exprStructs.size()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace NYql::NDq

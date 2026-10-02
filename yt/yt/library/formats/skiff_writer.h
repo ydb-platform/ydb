@@ -34,4 +34,4 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormat
+} // namespace NYT::NFormats

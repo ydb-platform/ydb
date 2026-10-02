@@ -355,7 +355,7 @@ namespace xsimd
         {
             return _mm256_castsi256_pd(self);
         }
-        template <class A, class T, class Tp, class = typename std::enable_if<std::is_integral<typename std::common_type<T, Tp>::type>::value, void>::type>
+        template <class A, class T, class Tp, class = typename std::enable_if<std::is_integral<std::common_type_t<T, Tp>>::value, void>::type>
         XSIMD_INLINE batch<Tp, A> bitwise_cast(batch<T, A> const& self, batch<Tp, A> const&, requires_arch<avx>) noexcept
         {
             return batch<Tp, A>(self.data);

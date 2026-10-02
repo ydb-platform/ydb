@@ -4,6 +4,7 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -69,25 +70,18 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
         if (keys.HasWrites()) {
             const int batchSize = 10;
-            bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
-                TStringStream ss;
-
-                LogKeyValue("Component", "DataShard", ss);
-                LogKeyValue("Type", "Keys", ss);
-                LogKeyValue("TabletId", ToString(tabletId), ss);
-                LogKeyValue("PhyTxId", ToString(txId), ss);
+                auto message = YDB_LOG_CREATE_MESSAGE(
+                    {"component", "DataShard"},
+                    {"type", "Keys"},
+                    {"tabletId", ToString(tabletId)},
+                    {"phyTxId", ToString(txId)});
 
                 for (size_t i = offset, j = 0; i < keys.Keys.size() && j < batchSize; i++, j++) {
                     auto& keyDef = keys.Keys[i].Key;
 
                     if (TSysTables::IsSystemTable(keyDef->TableId)) {
                         continue;
-                    }
-
-                    if (first) {
-                        LogKeyValue("TableId", ToString(keyDef->TableId), ss);
-                        first = false;
                     }
 
                     auto& range = keyDef->Range;
@@ -105,44 +99,65 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         case NKikimr::TKeyDesc::ERowOperation::Erase:
                             rowOp = "Erase";
                             break;
-                        default:                   
+                        default:
                             rowOp = "Invalid operation";
                             break;
                     }
 
-                    LogKeyValue("Op", rowOp, ss);
+                    TStringStream keysStr;
+                    WriteTableRange(range, keyDef->KeyColumnTypes, keysStr);
 
-                    ss << "Key: ";
-                    WriteTableRange(range, keyDef->KeyColumnTypes, ss);
-
-                    if (i + 1 < keys.Keys.size() && j + 1 < batchSize) {
-                        ss << ",";
-                    }
+                    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                        message,
+                        {"tableId", ToString(keyDef->TableId)},
+                        {"op", rowOp},
+                        {"keys", keysStr.Str()});
                 }
-
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
             }
         }
     }
 }
 
+inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletId, const ui64 txId, const TVector<ui64>& locks) {
+    if (locks.empty()) {
+        return;
+    }
+
+    for (const auto& lock : locks) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            {"component", "DataShard"},
+            {"type", "Locks"},
+            {"tabletId", ToString(tabletId)},
+            {"phyTxId", ToString(txId)},
+            {"brokenLock", lock});
+    }
+}
+
+// Unsafe truncate drops every row without moving the snapshot low watermark, so a concurrent reader
+// on an older snapshot can silently see an empty table. This trail is what makes that observable.
+inline void LogIntegrityTrailsUnsafeTruncate(const TActorContext& ctx, const ui64 tabletId, const ui64 txId,
+    const ui64 localPathId, const TString& version, const ui64 brokenLocks, const ui64 preservedLocks)
+{
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "DataShard"},
+        {"type", "UnsafeTruncate"},
+        {"tabletId", ToString(tabletId)},
+        {"phyTxId", ToString(txId)},
+        {"pathId", ToString(localPathId)},
+        {"version", version},
+        {"brokenLocks", ToString(brokenLocks)},
+        {"preservedLocks", ToString(preservedLocks)});
+}
+
 template <typename TxResult>
 inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
-    auto logFn = [&]() {
-        TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
-
-        TStringStream ss;
-
-        LogKeyValue("Component", "DataShard", ss);
-        LogKeyValue("Type", "Finished", ss);
-        LogKeyValue("TabletId", ToString(tabletId), ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "DataShard"},
+        {"type", "Finished"},
+        {"tabletId", ToString(tabletId)},
+        {"phyTxId", ToString(txId)},
+        {"status", statusString});
 }
 
 }

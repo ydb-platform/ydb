@@ -14,12 +14,4 @@ size_t TStatelessLexer::ParseToken(TStringBuf data, TToken* token)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t ParseToken(TStringBuf data, TToken* token)
-{
-    TStatelessLexer lexer;
-    return lexer.ParseToken(data, token);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NYson

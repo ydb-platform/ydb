@@ -13,8 +13,7 @@ PYTHONIC_NS_BEGIN
 namespace bisect
 {
   template <class X, class A>
-  long bisect(X const &x, A const &a, long lo,
-              details::bisect_fun<X, A> const &fun)
+  long bisect(X const &x, A const &a, long lo, details::bisect_fun<X, A> const &fun)
   {
     if (lo < 0)
       throw types::ValueError("lo must be non-negative");
@@ -22,8 +21,7 @@ namespace bisect
   }
 
   template <class X, class A>
-  long bisect(X const &x, A const &a, long lo, long hi,
-              details::bisect_fun<X, A> const &fun)
+  long bisect(X const &x, A const &a, long lo, long hi, details::bisect_fun<X, A> const &fun)
   {
     if (lo < 0)
       throw types::ValueError("lo must be non-negative");

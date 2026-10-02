@@ -474,7 +474,7 @@ class TestBoundedExecutor(unittest.TestCase):
     def get_task(self, task_cls, main_kwargs=None):
         return task_cls(self.coordinator, main_kwargs=main_kwargs)
 
-    def get_sleep_task(self, sleep_time=0.01):
+    def get_sleep_task(self, sleep_time=0.03):
         return self.get_task(SleepTask, main_kwargs={'sleep_time': sleep_time})
 
     def add_semaphore(self, task_tag, count):
@@ -489,9 +489,7 @@ class TestBoundedExecutor(unittest.TestCase):
             self.executor.submit(task, tag=tag, block=False)
         except NoResourcesAvailable:
             self.fail(
-                'Task {} should not have been blocked. Caused by:\n{}'.format(
-                    task, traceback.format_exc()
-                )
+                f'Task {task} should not have been blocked. Caused by:\n{traceback.format_exc()}'
             )
 
     def add_done_callback_to_future(self, future, fn, *args, **kwargs):

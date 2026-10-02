@@ -10,10 +10,9 @@ namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFetchChunkSpecConfig
+struct TFetchChunkSpecConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int MaxChunksPerFetch;
     int MaxChunksPerLocateRequest;
 
@@ -26,10 +25,9 @@ DEFINE_REFCOUNTED_TYPE(TFetchChunkSpecConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFetcherConfig
+struct TFetcherConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     TDuration NodeRpcTimeout;
 
     //! If node throttled fetch request, it becomes banned for this period of time.
@@ -52,10 +50,9 @@ DEFINE_REFCOUNTED_TYPE(TFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlockReordererConfig
+struct TBlockReordererConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableBlockReordering;
 
     //! Instead of grouping blocks by column groups, shuffle them.
@@ -71,10 +68,9 @@ DEFINE_REFCOUNTED_TYPE(TBlockReordererConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkSliceFetcherConfig
+struct TChunkSliceFetcherConfig
     : public TFetcherConfig
 {
-public:
     int MaxSlicesPerFetch;
 
     REGISTER_YSON_STRUCT(TChunkSliceFetcherConfig);
@@ -86,11 +82,10 @@ DEFINE_REFCOUNTED_TYPE(TChunkSliceFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterConfig
+struct TEncodingWriterConfig
     : public virtual TWorkloadConfig
     , public virtual TBlockReordererConfig
 {
-public:
     i64 EncodeWindowSize;
     double DefaultCompressionRatio;
     bool VerifyCompression;
@@ -106,10 +101,9 @@ DEFINE_REFCOUNTED_TYPE(TEncodingWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteReaderConfigBase
+struct TRemoteReaderConfigBase
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;
@@ -130,10 +124,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationReaderConfig
+struct TReplicationReaderConfig
     : public virtual TRemoteReaderConfigBase
 {
-public:
     //! Timeout for a block request.
     TDuration BlockRpcTimeout;
 
@@ -183,6 +176,9 @@ public:
 
     //! Enable fetching blocks from peers suggested by seeds.
     bool FetchFromPeers;
+
+    //! Enable fetching node descriptors from seeds.
+    bool FetchNodeDescriptors;
 
     //! Timeout after which a node forgets about the peer.
     //! Only makes sense if the reader is equipped with peer descriptor.
@@ -244,11 +240,29 @@ public:
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
 
+    //! For testing purposes.
+    //! If true, reader will throw when node descriptor lookup fails for a replica node id.
+    bool FailOnUnresolvedNodeId;
+
     //! Use chunk prober to reduce the number of probing requests.
     bool UseChunkProber;
 
     //! Use request batcher to reduce the number of get blocks requests.
     bool UseReadBlocksBatcher;
+
+    std::optional<i64> BlockSetSubrequestThreshold;
+
+    //! Each pair corresponds to a number of peers and a timeout which signify that probing will be stopped
+    //! beforehand if this timeout is reached and this number of peers have responded.
+    std::vector<std::pair<int, TDuration>> PartialPeerProbingTimeouts;
+
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
+
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    //! Not reported when an attached job I/O meter has reporting disabled.
+    std::optional<double> IoFairShareWeight;
 
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
@@ -259,10 +273,9 @@ DEFINE_REFCOUNTED_TYPE(TReplicationReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlockFetcherConfig
+struct TBlockFetcherConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Prefetch window size (in bytes).
     i64 WindowSize;
 
@@ -284,11 +297,10 @@ DEFINE_REFCOUNTED_TYPE(TBlockFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TErasureReaderConfig
+struct TErasureReaderConfig
     : public virtual TReplicationReaderConfig
     , public virtual TBlockFetcherConfig
 {
-public:
     bool EnableAutoRepair;
     double ReplicationReaderSpeedLimitPerSec;
     TDuration SlowReaderExpirationTimeout;
@@ -304,13 +316,12 @@ DEFINE_REFCOUNTED_TYPE(TErasureReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiChunkReaderConfig
+struct TMultiChunkReaderConfig
     : public virtual TErasureReaderConfig
     , public virtual TBlockFetcherConfig
     , public virtual TFetchChunkSpecConfig
     , public virtual TWorkloadConfig
 {
-public:
     i64 MaxBufferSize;
     int MaxParallelReaders;
 
@@ -323,11 +334,10 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationWriterConfig
+struct TReplicationWriterConfig
     : public virtual TWorkloadConfig
     , public virtual TBlockReordererConfig
 {
-public:
     //! Maximum window size (in bytes).
     i64 SendWindowSize;
 
@@ -340,6 +350,8 @@ public:
      *  uploading is not stalled.
      */
     TDuration NodeRpcTimeout;
+
+    TDuration ProbePutBlocksTimeout;
 
     NRpc::TRetryingChannelConfigPtr NodeChannel;
 
@@ -362,7 +374,8 @@ public:
     //! If |true| then the chunk is fsynced to disk upon closing.
     bool SyncOnClose;
 
-    bool EnableDirectIO;
+    //! Will write with DirectIO (unless disabled via location config).
+    bool UseDirectIO;
 
     //! If |true| then the chunk is finished as soon as MinUploadReplicationFactor chunks are written.
     bool EnableEarlyFinish;
@@ -376,6 +389,24 @@ public:
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
 
+    //! Enable write protocol with probe put blocks.
+    //! Acquiring resources for putting blocks before invoking PutBlocks.
+    bool UseProbePutBlocks;
+
+    //! If |false| all replicas receive blocks directly via PutBlocks.
+    bool UseSendBlocks;
+
+    //! If |true| data node will preallocate disk space before writing.
+    bool PreallocateDiskSpace;
+
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
+
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    //! Not reported when an attached job I/O meter has reporting disabled.
+    std::optional<double> IoFairShareWeight;
+
     int GetDirectUploadNodeCount();
 
     REGISTER_YSON_STRUCT(TReplicationWriterConfig);
@@ -387,10 +418,9 @@ DEFINE_REFCOUNTED_TYPE(TReplicationWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TErasureWriterConfig
+struct TErasureWriterConfig
     : public virtual TBlockReordererConfig
 {
-public:
     i64 WriterWindowSize;
     i64 WriterGroupSize;
 
@@ -416,14 +446,16 @@ DEFINE_REFCOUNTED_TYPE(TErasureWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiChunkWriterConfig
+struct TMultiChunkWriterConfig
     : public TReplicationWriterConfig
     , public TErasureWriterConfig
 {
-public:
     i64 DesiredChunkSize;
     i64 DesiredChunkWeight;
     i64 MaxMetaSize;
+
+    // For testing purposes only.
+    std::optional<TDuration> TestingDelayBeforeChunkClose;
 
     REGISTER_YSON_STRUCT(TMultiChunkWriterConfig);
 
@@ -434,19 +466,17 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMemoryTrackedWriterOptions
+struct TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterOptions
+struct TEncodingWriterOptions
     : public virtual TMemoryTrackedWriterOptions
 {
-public:
     NCompression::ECodec CompressionCodec;
     bool ChunksEden;
     bool SetChunkCreationTime;
@@ -460,10 +490,9 @@ DEFINE_REFCOUNTED_TYPE(TEncodingWriterOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkFragmentReaderConfig
+struct TChunkFragmentReaderConfig
     : public virtual TRemoteReaderConfigBase
 {
-public:
     //! Expiration timeout of corresponding sync expiring cache.
     TDuration PeerInfoExpirationTimeout;
 
@@ -498,8 +527,15 @@ public:
     //! Upper bound on count of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentCount;
 
-    // If |true| will request full blocks and store them in a cache for further access.
+    //! If |true| will request full blocks and cache them for future access.
     bool PrefetchWholeBlocks;
+
+    //! If |true| instead of accessing fragments from disk will access whole blocks and cache them for future access.
+    //! NB: Currently supported only for journal hunk chunks.
+    bool ReadAndCacheWholeBlocks;
+    //! Used in case the option above is |true|. Will precache this number of blocks following the requested one.
+    //! NB: Currently supported only for journal hunk chunks.
+    int BlockCountToPrecache;
 
     REGISTER_YSON_STRUCT(TChunkFragmentReaderConfig);
 

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <src/client/persqueue_public/impl/aliases.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
 
 #include <util/generic/buffer.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionEventsQueue
@@ -325,6 +325,7 @@ private:
     TStringBuilder LogPrefix() const;
 
     void UpdateTokenIfNeededImpl();
+    void UpdateTokenImpl(const NThreading::TFuture<std::string>& future);
 
     void WriteInternal(TContinuationToken&& continuationToken, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt);
@@ -356,7 +357,7 @@ private:
 
     //std::string GetDebugIdentity() const;
     Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 id);
+    bool CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult& processResult);
     bool IsReadyToSendNextImpl();
     void DumpState();
     ui64 GetNextIdImpl(const std::optional<ui64>& seqNo);
@@ -387,7 +388,7 @@ private:
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     std::string PrevToken;
-    bool UpdateTokenInProgress = false;
+    std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.

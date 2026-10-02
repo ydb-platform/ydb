@@ -10,3 +10,18 @@
 @@ -6,1 +6,1 @@ import re
 -from tests import unittest, OrderedDict
 +from . import unittest, OrderedDict
+--- contrib/python/jmespath/py3/tests/test_functions.py	(index)
++++ contrib/python/jmespath/py3/tests/test_functions.py	(working tree)
+@@ -2 +2 @@
+-from tests import unittest
++from . import unittest
+--- contrib/python/jmespath/py3/tests/test_lexer.py	(index)
++++ contrib/python/jmespath/py3/tests/test_lexer.py	(working tree)
+@@ -1 +1 @@
+-from tests import unittest
++from . import unittest
+--- contrib/python/jmespath/py3/tests/test_search.py	(index)
++++ contrib/python/jmespath/py3/tests/test_search.py	(working tree)
+@@ -3 +3 @@ import decimal
+-from tests import unittest, OrderedDict
++from . import unittest, OrderedDict

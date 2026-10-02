@@ -21,6 +21,8 @@ public:
         Folder,
         WalkFolders,
         WalkFoldersImpl,
+        Link,
+        View
     };
 
     struct TRange {
@@ -29,7 +31,7 @@ public:
         TString Suffix;
         bool IsStrict = true;
 
-        friend bool operator ==(const TRange& left, const TRange& right) {
+        friend bool operator==(const TRange& left, const TRange& right) {
             return left.Prefix == right.Prefix
                 && left.Filter == right.Filter
                 && left.Suffix == right.Suffix
@@ -41,12 +43,12 @@ public:
         TString Prefix;
         TVector<TString> Attributes;
 
-        friend bool operator ==(const TFolderList& left, const TFolderList& right) {
+        friend bool operator==(const TFolderList& left, const TFolderList& right) {
             return left.Prefix == right.Prefix
                 && left.Attributes == right.Attributes;
         }
     };
-    
+
     struct TWalkFoldersArgs {
         TFolderList InitialFolder;
 
@@ -88,6 +90,11 @@ public:
         return View;
     }
 
+    const TMaybe<TString>& GetTarget() const {
+        YQL_ENSURE(Type == EType::Link);
+        return Target;
+    }
+
     bool IsAnonymous() const {
         return Anonymous;
     }
@@ -112,6 +119,10 @@ public:
         return WalkFolderImplArgs;
     }
 
+    TExprNode::TPtr GetExtraColumns() const {
+        return ExtraColumns;
+    }
+
     bool Parse(const TExprNode& key, TExprContext& ctx, bool isOutput = false);
 
 private:
@@ -119,11 +130,13 @@ private:
     const TExprNode* KeyNode = nullptr;
     TString Path;
     TString View;
+    TMaybe<TString> Target;
     bool Anonymous = false;
     TMaybe<TRange> Range;
     TMaybe<TFolderList> Folder;
     TMaybe<TWalkFoldersArgs> WalkFolderArgs;
     TMaybe<TWalkFoldersImplArgs> WalkFolderImplArgs;
+    TExprNode::TPtr ExtraColumns;
 };
 
 class TYtInputKeys {

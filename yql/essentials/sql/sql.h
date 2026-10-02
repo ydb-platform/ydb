@@ -9,44 +9,32 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/settings/translator.h>
 
-#include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-
-#include <google/protobuf/message.h>
+#include <functional>
 
 namespace NSQLTranslation {
 
-    struct TTranslators {
-        TTranslatorPtr const V0;
-        TTranslatorPtr const V1;
-        TTranslatorPtr const PG;
+using TTranslatorsRegistry = THashMap<TString, std::function<TTranslatorPtr()>>;
 
-        TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg);
-    };
+struct TTranslators {
+    TTranslatorPtr const V0;
+    TTranslatorPtr const V1;
+    TTranslatorPtr const PG;
+    TTranslatorsRegistry const Registry;
 
-    //FIXME drop this function and overloads without translators
-    TTranslators MakeAllTranslators();
+    TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg, TTranslatorsRegistry registry = {});
+};
 
-    NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules = nullptr, NYql::TStmtParseInfo* stmtParseInfo = nullptr,
-        TTranslationSettings* effectiveSettings = nullptr);
-    NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules = nullptr, NYql::TStmtParseInfo* stmtParseInfo = nullptr,
-        TTranslationSettings* effectiveSettings = nullptr);
+NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
+                               NYql::TWarningRules* warningRules = nullptr, NYql::TStmtParseInfo* stmtParseInfo = nullptr,
+                               TTranslationSettings* effectiveSettings = nullptr);
 
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues, size_t maxErrors,
-        const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
-    google::protobuf::Message* SqlAST(const TTranslators& translators, const TString& query, const TString& queryName, NYql::TIssues& issues, size_t maxErrors,
-        const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
+google::protobuf::Message* SqlAST(const TTranslators& translators, const TString& query, const TString& queryName, NYql::TIssues& issues, size_t maxErrors,
+                                  const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
 
-    ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
-    ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
+ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
 
-    NYql::TAstParseResult SqlASTToYql(const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
-    NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
+NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
 
-    TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
-    TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
-}  // namespace NSQLTranslation
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
+                                                  NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
+} // namespace NSQLTranslation

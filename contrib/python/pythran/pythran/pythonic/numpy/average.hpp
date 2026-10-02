@@ -11,8 +11,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  auto average(E const &expr,
-               types::none_type const &axis) -> decltype(sum(expr, axis) / 1.)
+  auto average(E const &expr, types::none_type const &axis) -> decltype(sum(expr, axis) / 1.)
   {
     return sum(expr, axis) / double(expr.flat_size());
   }

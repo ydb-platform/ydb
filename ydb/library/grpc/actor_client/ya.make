@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/util
     library/cpp/digest/crc32c
+    ydb/library/protobuf_printer
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/services
 

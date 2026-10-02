@@ -43,11 +43,8 @@ Parser Tree Classes
 """
 
 import re
-try:
-    from collections.abc import Mapping
-except ImportError:
-    from collections import Mapping
-from typing import Tuple
+from collections.abc import Mapping
+from typing import Tuple, Any
 
 from parso.tree import Node, BaseNode, Leaf, ErrorNode, ErrorLeaf, search_ancestor  # noqa
 from parso.python.prefix import split_prefix
@@ -70,6 +67,9 @@ _IMPORTS = set(['import_name', 'import_from'])
 
 class DocstringMixin:
     __slots__ = ()
+    type: str
+    children: "list[Any]"
+    parent: Any
 
     def get_doc_node(self):
         """
@@ -101,6 +101,7 @@ class PythonMixin:
     Some Python specific utilities.
     """
     __slots__ = ()
+    children: "list[Any]"
 
     def get_name_of_position(self, position):
         """
@@ -219,7 +220,7 @@ class Name(_LeafWithoutNewlines):
         type_ = node.type
 
         if type_ in ('funcdef', 'classdef'):
-            if self == node.name:
+            if self == node.name:  # type: ignore[union-attr]
                 return node
             return None
 
@@ -232,7 +233,7 @@ class Name(_LeafWithoutNewlines):
             if node.type == 'suite':
                 return None
             if node.type in _GET_DEFINITION_TYPES:
-                if self in node.get_defined_names(include_setitem):
+                if self in node.get_defined_names(include_setitem):  # type: ignore[attr-defined]
                     return node
                 if import_name_always and node.type in _IMPORTS:
                     return node
@@ -296,6 +297,7 @@ class FStringEnd(PythonLeaf):
 
 class _StringComparisonMixin:
     __slots__ = ()
+    value: Any
 
     def __eq__(self, other):
         """
@@ -368,7 +370,7 @@ class Scope(PythonBaseNode, DocstringMixin):
 
     def __repr__(self):
         try:
-            name = self.name.value
+            name = self.name.value  # type: ignore[attr-defined]
         except AttributeError:
             name = ''
 
@@ -477,13 +479,13 @@ class Class(ClassOrFunc):
         Returns the `arglist` node that defines the super classes. It returns
         None if there are no arguments.
         """
-        if self.children[2] != '(':  # Has no parentheses
-            return None
-        else:
-            if self.children[3] == ')':  # Empty parentheses
-                return None
-            else:
-                return self.children[3]
+        for i, child in enumerate(self.children):
+            if child == '(':
+                next_child = self.children[i + 1]
+                if next_child == ')':
+                    return None
+                return next_child
+        return None
 
 
 def _create_params(parent, argslist_list):
@@ -550,15 +552,21 @@ class Function(ClassOrFunc):
 
     def __init__(self, children):
         super().__init__(children)
-        parameters = self.children[2]  # After `def foo`
+        parameters = self._find_parameters()
         parameters_children = parameters.children[1:-1]
-        # If input parameters list already has Param objects, keep it as is;
-        # otherwise, convert it to a list of Param objects.
         if not any(isinstance(child, Param) for child in parameters_children):
-            parameters.children[1:-1] = _create_params(parameters, parameters_children)
+            parameters.children[1:-1] = _create_params(
+                parameters, parameters_children
+            )
+
+    def _find_parameters(self):
+        for child in self.children:
+            if child.type == 'parameters':
+                return child
+        raise Exception("A function should always have parameters")
 
     def _get_param_nodes(self):
-        return self.children[2].children
+        return self._find_parameters().children
 
     def get_params(self):
         """
@@ -631,13 +639,10 @@ class Function(ClassOrFunc):
         """
         Returns the test node after `->` or `None` if there is no annotation.
         """
-        try:
-            if self.children[3] == "->":
-                return self.children[4]
-            assert self.children[3] == ":"
-            return None
-        except IndexError:
-            return None
+        for i, child in enumerate(self.children):
+            if child == '->':
+                return self.children[i + 1]
+        return None
 
 
 class Lambda(Function):
@@ -794,6 +799,8 @@ class WithStmt(Flow):
 
 class Import(PythonBaseNode):
     __slots__ = ()
+    get_paths: Any
+    _aliases: Any
 
     def get_path_for_name(self, name):
         """
@@ -817,6 +824,9 @@ class Import(PythonBaseNode):
 
     def is_star_import(self):
         return self.children[-1] == '*'
+
+    def get_defined_names(self):
+        raise NotImplementedError("Use ImportFrom or ImportName")
 
 
 class ImportFrom(Import):

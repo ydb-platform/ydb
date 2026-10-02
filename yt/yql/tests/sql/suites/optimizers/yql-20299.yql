@@ -1,0 +1,22 @@
+/* yt can not */
+
+USE plato;
+
+PRAGMA warning('disable', '4525');
+PRAGMA warning('disable', '1101');
+PRAGMA DisableDirectRowDependsOn;
+PRAGMA config.flags("NormalizeDependsOn");
+
+$table1 = AsList(
+    AsStruct('023' AS key, 'aaa' AS value)
+);
+
+$table2 = AsList(
+    AsStruct('023' AS key, 'bbb' AS value)
+);
+
+SELECT
+    min_by(TableName(), i1.key) AS fail,
+FROM AS_TABLE($table1) AS i1
+JOIN AS_TABLE($table2) AS i2
+ON i1.key = i2.key;

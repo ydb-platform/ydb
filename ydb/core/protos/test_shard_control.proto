@@ -1,0 +1,119 @@
+import "ydb/core/protos/load_test.proto";
+
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
+package NKikimrClient;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TTestShardControlRequest {
+    message TSizeInterval {
+        optional uint64 Weight = 1; // nonzero
+        optional uint32 Min = 2;
+        optional uint32 Max = 3;
+        optional bool Inline = 4; // if true, then keys are stored as inline values of KV tablet rows
+    }
+    message TTimeInterval { // Poisson distribution of events
+        optional uint64 Weight = 1; // nonzero
+        optional double Frequency = 2; // events per second
+        optional uint32 MaxIntervalMs = 3; // max interval between two events in milliseconds
+    }
+    message TCmdInitialize {
+        optional string StorageServerHost = 1; // location of storage server containing tablet actual state
+        optional int32 StorageServerPort = 2; // part of storage server location
+        optional uint64 MaxDataBytes = 3; // when total length of stored keys reaches MaxDataBytes...
+        optional uint64 MinDataBytes = 4; // then random keys are collected until total length drops below MinDataBytes
+        optional uint32 MaxInFlight = 5;
+        optional uint64 ValidateAfterBytes = 9; // number of bytes to write before starting automatic validation
+        optional uint32 MaxReadsInFlight = 10;
+        optional bool ResetWritePeriodOnFull = 11; // restart write periods when inflight is full
+        repeated TSizeInterval Sizes = 6; // distribution of generated value size
+        repeated TTimeInterval WritePeriods = 7; // time between two events
+        repeated TTimeInterval RestartPeriods = 8; // time between automatic restarts
+        optional uint32 PatchRequestsFractionPPM = 12;
+        optional uint32 PutTraceFractionPPM = 13;
+        optional uint32 PutTraceVerbosity = 14 [default = 15];
+        optional uint32 SecondsBeforeLoadStart = 15; // number of seconds to wait before starting load
+        optional uint32 StallCounter = 16; // number of requests before issuing barrier and waiting for all of them to complete
+    }
+
+    optional uint64 TabletId = 1;
+    oneof Command {
+        TCmdInitialize Initialize = 2;
+        TNbsDbgLikeLoadControl NbsDbgLikeLoadControl = 4;
+    }
+    optional string SecurityToken = 3 [(Ydb.sensitive) = true];
+}
+
+message TTestShardControlResponse {
+    optional uint64 TabletId = 1;
+}
+
+// V1 is coordinator-owned, bounded, in-memory history. All commands require Database.
+message TNbsDbgLikeLoadControl {
+    enum EOperation {
+        CAPABILITIES = 0;
+        CREATE = 1;
+        LIST = 2;
+        DESCRIBE = 3;
+        DELETE = 4;
+        START = 5;
+        GET = 6;
+        STOP = 7;
+    }
+    optional EOperation Operation = 1;
+    optional string Database = 2;
+    optional uint32 CoordinatorNodeId = 3;
+    optional string Incarnation = 4;
+    optional string RequestId = 5;
+    optional uint64 OwnerIndex = 6;
+    optional uint64 TabletId = 7;
+    optional NKikimr.TEvLoadTestRequest.TNbsDbgLikeLoad.TAllocConfig Allocation = 8;
+    optional NKikimr.TEvLoadTestRequest Load = 9;
+    optional uint32 StartupTimeoutSeconds = 10 [default = 60];
+    optional uint32 RpcTimeoutMs = 11 [default = 90000];
+}
+
+message TNbsDbgLikeLoadResult {
+    enum EState {
+        IN_PROGRESS = 0;
+        STOPPING = 1;
+        SUCCEEDED = 2;
+        FAILED = 3;
+        CANCELLED = 4;
+    }
+    optional EState State = 1;
+    optional string ExecutionError = 2;
+    optional NKikimr.TEvLoadTestRequest EffectiveConfig = 3;
+    optional uint64 StartedAtMs = 4;
+    optional uint64 FinishedAtMs = 5;
+    optional string Build = 6;
+    optional NKikimr.TEvNodeFinishResponse.TNbsDbgLikeNodeStats Stats = 7;
+    repeated NKikimr.TEvNodeFinishResponse.TNbsDbgLikeNodeStats Tablets = 8;
+    optional double WriteIOPS = 9;
+    optional double ReadIOPS = 10;
+    optional double WriteBytesPerSecond = 11;
+    optional double ReadBytesPerSecond = 12;
+    optional string LatencyUnit = 13 [default = "microseconds"];
+    optional bool TerminationConfirmed = 14;
+}
+
+message TNbsDbgLikeLoadTablet {
+    optional uint64 TabletId = 1;
+    optional uint64 OwnerIndex = 2;
+    optional uint32 NodeId = 3;
+    optional NKikimr.TEvNbsLoadTabletGetSummaryResult Summary = 4;
+    repeated string ChannelPools = 5;
+}
+
+message TNbsDbgLikeLoadControlResponse {
+    optional uint32 Status = 1;
+    optional string Error = 2;
+    optional uint32 ProtocolVersion = 3;
+    optional uint32 CoordinatorNodeId = 4;
+    optional string Incarnation = 5;
+    optional string Database = 6;
+    optional string RequestId = 7;
+    repeated TNbsDbgLikeLoadControl.EOperation Operations = 8;
+    repeated TNbsDbgLikeLoadTablet Tablets = 9;
+    optional TNbsDbgLikeLoadResult Run = 10;
+}

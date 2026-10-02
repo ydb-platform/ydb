@@ -5,7 +5,7 @@
 #include <ydb/library/yql/providers/ydb/proto/source.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYql::NDq {
 
@@ -17,6 +17,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateYdbRead
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ::NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

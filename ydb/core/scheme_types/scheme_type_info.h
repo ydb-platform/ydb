@@ -4,6 +4,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr::NPg {
 struct ITypeDesc;
 TString TypeModFromPgTypeName(const TStringBuf name);
@@ -27,7 +29,7 @@ public:
         : TypeId(typeId)
         , RawDesc(0)
     {
-        Y_ABORT_UNLESS(!NTypeIds::IsParametrizedType(typeId));
+        Y_ENSURE(!NTypeIds::IsParametrizedType(typeId), "TTypeInfo(TTypeId) cannot be used for parameterized types");
     }
 
     constexpr TTypeInfo(const NKikimr::NPg::ITypeDesc* typeDesc)
@@ -59,7 +61,7 @@ public:
     }
 
     constexpr const NKikimr::NPg::ITypeDesc* GetPgTypeDesc() const {
-        Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
+        Y_ENSURE(TypeId == NTypeIds::Pg, "TTypeInfo::GetPgTypeDesc() requires a Pg type info");
         return PgTypeDesc;
     }
 
@@ -68,7 +70,7 @@ public:
     }
 
     constexpr const TDecimalType& GetDecimalType() const {
-        Y_ABORT_UNLESS (TypeId == NTypeIds::Decimal);
+        Y_ENSURE(TypeId == NTypeIds::Decimal, "TTypeInfo::GetDecimalType() requires a Decimal type info");
         return DecimalTypeDesc;
     }
 private:

@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
-PY_SRCS(__init__.py)
+ALL_PY_SRCS()
+
+STYLE_RUFF()
 
 END()

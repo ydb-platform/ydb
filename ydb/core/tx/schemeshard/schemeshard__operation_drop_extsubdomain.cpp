@@ -1,21 +1,54 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TDeletePrivateShards: public TDeleteParts {
+class TDeleteSubdomainSystemShards: public TSubOperationState {
+protected:
+    const TOperationId OperationId;
+
 public:
-    explicit TDeletePrivateShards(const TOperationId& id)
-        : TDeleteParts(id, TTxState::Done)
+    virtual const char* Name() const override final { return "TDeleteSubdomainSystemShards"; }
+
+    explicit TDeleteSubdomainSystemShards(const TOperationId& id)
+        : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), AllIncomingEvents());
+        IgnoreMessages(AllIncomingEvents());
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
+
+        auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
+        Y_ABORT_UNLESS(subdomain);
+
+        // Initiate asynchronous deletion of system shards
+        if (subdomain->GetSharedHive()) {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        } else {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteSystemShard(shard.Idx);
+            }
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
     }
 };
 
@@ -23,20 +56,16 @@ class TDeleteExternalShards: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TDeleteExternalShards"
-            << ", operationId: " << OperationId;
-    }
-
 public:
+    virtual const char* Name() const override final { return "TDeleteExternalShards"; }
+
     TDeleteExternalShards(TOperationId id)
         : OperationId(id)
     {
         TSet<ui32> toIgnore = AllIncomingEvents();
         toIgnore.erase(TEvHive::TEvDeleteOwnerTabletsReply::EventType);
 
-        IgnoreMessages(DebugHint(), toIgnore);
+        IgnoreMessages(toIgnore);
     }
 
     void FinishState(TTxState* txState, TOperationContext& context) {
@@ -65,20 +94,20 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         NKikimrHive::TEvDeleteOwnerTabletsReply record = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TDeleteExternalShards"
-                               << ", Status: " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
-                               << ", from Hive: " << record.GetOrigin()
-                               << ", Owner: " << record.GetOwner()
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"status", NKikimrProto::EReplyStatus_Name(record.GetStatus())},
+            {"hive", record.GetOrigin()},
+            {"owner", record.GetOwner()},
+        );
 
         if (record.GetStatus() != NKikimrProto::EReplyStatus::OK && record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
             TStringBuilder errMsg;
-            errMsg << DebugHint()
-                   << " Unexpected answer status from hive "
+            errMsg << "Unexpected answer status from hive "
                    << ", msg: " << record.ShortDebugString()
                    << ", at schemeshard: " << ssId;
-            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, errMsg);
+            YDB_LOG_ERROR_CTX(context.Ctx, "Unexpected answer status from hive",
+                {"message", record.ShortDebugString()},
+            );
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;
         }
@@ -97,11 +126,7 @@ public:
 
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -119,7 +144,7 @@ public:
             return true;
         }
 
-        TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, context.Ctx, TSchemeShard::EHiveSelection::IGNORE_TENANT);
+        TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, TSchemeShard::EHiveSelection::IGNORE_TENANT);
 
         auto event = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
         context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, TPipeMessageId(0, 0), event.Release());
@@ -132,29 +157,24 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TPropose"
-            << ", operationId: " << OperationId;
-    }
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     TPropose(TOperationId id)
         : OperationId(id)
     {
         TSet<ui32> toIgnore = AllIncomingEvents();
         toIgnore.erase(TEvPrivate::TEvOperationPlan::EventType);
 
-        IgnoreMessages(DebugHint(), toIgnore);
+        IgnoreMessages(toIgnore);
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
@@ -188,11 +208,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -237,7 +253,7 @@ class TDropExtSubdomain: public TSubOperation {
         case TTxState::DeleteExternalShards:
             return MakeHolder<TDeleteExternalShards>(OperationId);
         case TTxState::DeletePrivateShards:
-            return MakeHolder<TDeletePrivateShards>(OperationId);
+            return MakeHolder<TDeleteSubdomainSystemShards>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -248,7 +264,9 @@ class TDropExtSubdomain: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    virtual const char* Name() const override final { return "TDropExtSubdomain"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& drop = Transaction.GetDrop();
@@ -256,12 +274,10 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropExtSubdomain Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", drop.GetId()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -309,28 +325,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto relatedTx = context.SS->GetRelatedTransactions({path.Base()->PathId}, context.Ctx);
-
-        for (auto otherTxId: relatedTx) {
-            if (otherTxId == OperationId.GetTxId()) {
-                continue;
-            }
-
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TDropExtSubdomain Propose dependence has found"
-                             << ", dependent transaction: " << OperationId.GetTxId()
-                             << ", parent transaction: " << otherTxId
-                             << ", at schemeshard: " << ssId);
-
-            context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
-
-            Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
-            auto otherOperation = context.SS->Operations.at(otherTxId);
-            for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
-                if (auto part = otherOperation->Parts.at(partId)) {
-                    part->AbortUnsafe(OperationId.GetTxId(), context);
-                }
-            }
-        }
+        NForceDrop::AbortRelatedOperations(OperationId, relatedTx, context);
 
         context.SS->MarkAsDropping(path.Base(), OperationId.GetTxId(), context.Ctx);
 
@@ -352,7 +347,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TDropExtSubdomain");
     }
 
@@ -375,3 +370,5 @@ ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxSt
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

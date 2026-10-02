@@ -32,12 +32,17 @@ public:
         TMaybe<bool> DocumentApiRestricted;
         TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
+        i32 RuntimeParameterSizeLimit = 0;
+        bool RuntimeParameterSizeLimitSatisfied = false;
+        TMaybe<NSQLTranslation::EYqlSelect> YqlSelect;
 
         TString ToString() const {
             return TStringBuilder() << "TExecSettings{"
                 << " DocumentApiRestricted: " << DocumentApiRestricted
                 << " UsePgParser: " << UsePgParser
                 << " SyntaxVersion: " << SyntaxVersion
+                << " RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit
+                << " RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
                 << " }";
         }
     };
@@ -45,6 +50,7 @@ public:
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
+        bool UsePessimisticLocks = false;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"
@@ -53,6 +59,7 @@ public:
                 << " SyntaxVersion: " << SyntaxVersion
                 << " IsInternalCall: " << IsInternalCall
                 << " ConcurrentResults: " << ConcurrentResults
+                << " UsePessimisticLocks: " << UsePessimisticLocks
                 << " }";
         }
     };
@@ -125,7 +132,8 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
-    NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr);
+    NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
+    bool usePessimisticLocks = false);
 
 } // namespace NKqp
 } // namespace NKikimr

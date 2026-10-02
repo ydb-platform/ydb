@@ -7,22 +7,42 @@ namespace NKikimr::NMemory {
 enum class EMemoryConsumerKind {
     SharedCache,
     MemTable,
+
+    ColumnTablesScanGroupedMemory,
+    ColumnTablesCompGroupedMemory,
+    ColumnTablesBlobCache,
+    ColumnTablesDataAccessorCache,
+    ColumnTablesColumnDataCache,
+    ColumnTablesDeduplicationGroupedMemory,
+    ColumnTablesPortionsMetaDataCache,
+};
+
+struct TConsumerReport {
+    ui64 Used = 0;
+    ui64 Demand = 0; // total desired footprint, invariant: Demand >= Used
+    ui64 Reclaimable = 0; // releasable asynchronously on request, invariant: Reclaimable <= Used
 };
 
 struct IMemoryConsumer : public TThrRefBase {
-    virtual void SetConsumption(ui64 value) = 0;
+    virtual void SetReport(TConsumerReport report) = 0;
+
+    void SetConsumption(ui64 value) {
+        SetReport({.Used = value, .Demand = value, .Reclaimable = 0});
+    }
 };
 
 enum EEvMemory {
     EvConsumerRegister = EventSpaceBegin(TKikimrEvents::ES_MEMORY),
     EvConsumerRegistered,
     EvConsumerLimit,
-    
+
     EvMemTableRegister,
     EvMemTableRegistered,
     EvMemTableCompact,
     EvMemTableCompacted,
     EvMemTableUnregister,
+
+    EvConsumerUnregister,
 
     EvEnd
 };
@@ -33,6 +53,15 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
     const EMemoryConsumerKind Kind;
 
     TEvConsumerRegister(EMemoryConsumerKind kind)
+        : Kind(kind)
+    {}
+};
+
+// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
+    const EMemoryConsumerKind Kind;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind)
         : Kind(kind)
     {}
 };
@@ -49,8 +78,8 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     ui64 LimitBytes;
 
     TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes)
-    {}
+        : LimitBytes(limitBytes) {
+    }
 };
 
 struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {

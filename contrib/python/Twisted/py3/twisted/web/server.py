@@ -13,13 +13,14 @@ This is a web server which integrates with the twisted.internet infrastructure.
     value.
 """
 
+from __future__ import annotations
+
 import copy
 import os
 import re
 import zlib
 from binascii import hexlify
 from html import escape
-from typing import List, Optional
 from urllib.parse import quote as _quote
 
 from zope.interface import implementer
@@ -87,18 +88,33 @@ class Request(Copyable, http.Request, components.Componentized):
         will be transmitted only over HTTPS.
     """
 
-    defaultContentType: Optional[bytes] = b"text/html"
+    defaultContentType: bytes | None = b"text/html"
     site = None
     appRootURL = None
-    prepath: Optional[List[bytes]] = None
-    postpath: Optional[List[bytes]] = None
+    prepath: list[bytes] | None = None
+    postpath: list[bytes] | None = None
     __pychecker__ = "unusednames=issuer"
     _inFakeHead = False
     _encoder = None
     _log = Logger()
 
-    def __init__(self, *args, **kw):
-        _HTTPRequest.__init__(self, *args, **kw)
+    def __init__(self, channel, *args, parsePOSTFormSubmission=None, **kw):
+        """
+        @param parsePOSTFormSubmission: By default, get this setting from the L{Site}, but
+            can also be set explicitly. If C{False}, don't parse HTTP bodies.
+        @type parsePOSTFormSubmission: C{None} or C{bool}
+        """
+        if parsePOSTFormSubmission is None:
+            parsePOSTFormSubmissionBool = channel.site._parsePOSTFormSubmission
+        else:
+            parsePOSTFormSubmissionBool = parsePOSTFormSubmission
+        _HTTPRequest.__init__(
+            self,
+            channel,
+            *args,
+            parsePOSTFormSubmission=parsePOSTFormSubmissionBool,
+            **kw,
+        )
         components.Componentized.__init__(self)
 
     def getStateToCopyFor(self, issuer):
@@ -784,8 +800,16 @@ class Site(HTTPFactory):
     sessionFactory = Session
     sessionCheckTime = 1800
     _entropy = os.urandom
+    _parsePOSTFormSubmission: bool
 
-    def __init__(self, resource, requestFactory=None, *args, **kwargs):
+    def __init__(
+        self,
+        resource,
+        requestFactory=None,
+        *args,
+        parsePOSTFormSubmission=True,
+        **kwargs,
+    ):
         """
         @param resource: The root of the resource hierarchy.  All request
             traversal for requests received by this factory will begin at this
@@ -794,6 +818,11 @@ class Site(HTTPFactory):
         @param requestFactory: Overwrite for default requestFactory.
         @type requestFactory: C{callable} or C{class}.
 
+        @param parsePOSTFormSubmission: If C{True}, the default, parse MIME multipart and
+            URL-encoded body uploads into C{request.args}. This can use large
+            amounts of memory for large uploads.
+        @type parsePOSTFormSubmission: C{bool}
+
         @see: L{twisted.web.http.HTTPFactory.__init__}
         """
         super().__init__(*args, **kwargs)
@@ -801,6 +830,7 @@ class Site(HTTPFactory):
         self.resource = resource
         if requestFactory is not None:
             self.requestFactory = requestFactory
+        self._parsePOSTFormSubmission = parsePOSTFormSubmission
 
     def _openLogFile(self, path):
         from twisted.python import logfile

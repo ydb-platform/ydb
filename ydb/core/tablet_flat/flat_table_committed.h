@@ -2,8 +2,8 @@
 #include "defs.h"
 
 #include <ydb/core/base/row_version.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <util/generic/ptr.h>
 
 #include <unordered_map>
@@ -211,6 +211,10 @@ namespace NTable {
             return State_ && !State_->empty();
         }
 
+        bool Contains(ui64 txId) const {
+            return State_ && State_->contains(txId);
+        }
+
         const TRowVersion* Find(ui64 txId) const {
             if (State_) {
                 return State_->Find(txId);
@@ -259,12 +263,12 @@ namespace NTable {
         }
 
         ITransactionMap& operator*() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return *State_;
         }
 
         ITransactionMap* operator->() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return State_.Get();
         }
 

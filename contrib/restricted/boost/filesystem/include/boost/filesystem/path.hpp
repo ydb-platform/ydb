@@ -108,7 +108,7 @@ struct path_algorithms
     BOOST_FILESYSTEM_DECL static path generic_path_v3(path const& p);
     BOOST_FILESYSTEM_DECL static path generic_path_v4(path const& p);
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     BOOST_FILESYSTEM_DECL static void make_preferred_v3(path& p);
     BOOST_FILESYSTEM_DECL static void make_preferred_v4(path& p);
 #endif
@@ -160,7 +160,7 @@ struct path_algorithms
 
 class path :
     public filesystem::path_detail::path_constants<
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         detail::path_traits::path_native_char_type, L'/', L'\\', L'.'
 #else
         detail::path_traits::path_native_char_type, '/', '/', '.'
@@ -865,7 +865,7 @@ public:
     template< typename String >
     String string(codecvt_type const& cvt) const;
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
     std::string string() const
     {
         std::string tmp;
@@ -884,7 +884,7 @@ public:
     //  string_type is std::wstring, so there is no conversion
     std::wstring const& wstring() const { return m_pathname; }
     std::wstring const& wstring(codecvt_type const&) const { return m_pathname; }
-#else // BOOST_POSIX_API
+#else // BOOST_FILESYSTEM_POSIX_API
     //  string_type is std::string, so there is no conversion
     std::string const& string() const { return m_pathname; }
     std::string const& string(codecvt_type const&) const { return m_pathname; }
@@ -1012,7 +1012,7 @@ public:
     bool is_relative() const { return !is_absolute(); }
     bool is_absolute() const
     {
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
         return has_root_name() && has_root_directory();
 #else
         return has_root_directory();
@@ -1343,12 +1343,12 @@ inline typename std::enable_if<
     std::size_t
 >::type hash_value(Path const& p) noexcept
 {
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
     std::size_t seed = 0u;
     for (typename Path::value_type const* it = p.c_str(); *it; ++it)
         hash_combine(seed, *it == L'/' ? L'\\' : *it);
     return seed;
-#else // BOOST_POSIX_API
+#else // BOOST_FILESYSTEM_POSIX_API
     return hash_range(p.native().begin(), p.native().end());
 #endif
 }
@@ -1416,7 +1416,7 @@ namespace detail {
 inline bool is_directory_separator(path::value_type c) noexcept
 {
     return c == path::separator
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         || c == path::preferred_separator
 #endif
         ;
@@ -1425,7 +1425,7 @@ inline bool is_directory_separator(path::value_type c) noexcept
 inline bool is_element_separator(path::value_type c) noexcept
 {
     return c == path::separator
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         || c == path::preferred_separator || c == L':'
 #endif
         ;
@@ -1621,7 +1621,7 @@ BOOST_FORCEINLINE path path::generic_path() const
 BOOST_FORCEINLINE path& path::make_preferred()
 {
     // No effect on POSIX
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::make_preferred)(*this);
 #endif
     return *this;

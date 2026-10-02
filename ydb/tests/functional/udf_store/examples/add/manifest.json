@@ -1,0 +1,17 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Add",
+  "module_extension": "wasm",
+  "required_libraries": [],
+  "functions": [
+    {
+      "name": "add",
+      "argument_types": [
+        "Optional<Int64>",
+        "Optional<Int64>"
+      ],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

@@ -11,20 +11,15 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -86,15 +81,17 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle: {
-                LOG_T("Scope: " << Scope << " Single control plane mode has been chosen");
+                YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: Single control plane mode has been chosen",
+                    {"scope", Scope});
                 const auto& singleConfig = Config.GetYdb().GetControlPlane().GetSingle();
                 *Result.mutable_connection() = singleConfig.GetConnection();
-                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), singleConfig.GetWorkloadManagerConfig()});
+                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), GetWorkloadManagerConfig(singleConfig)});
             }
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
             case NConfig::TYdbComputeControlPlane::kYdbcp:
-            LOG_T("Scope: " << Scope << " CMS or YDBCP mode has been chosen");
+            YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: CMS or YDBCP mode has been chosen",
+                {"scope", Scope});
             Send(NFq::ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvDescribeDatabaseRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope});
             break;
         }
@@ -118,13 +115,16 @@ public:
         const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
-            LOG_T("Scope: " << Scope << " Couldn't find the information about database in control plane storage for this scope");
+            YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: Couldn't find the information about database in control plane storage for this scope",
+                {"scope", Scope});
             Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));
             return;
         }
 
         if (issues) {
-            LOG_E("Scope: " << Scope << " Describe database (control plane storage) has been failed. " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: Describe database (control plane storage) has been failed",
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -136,7 +136,10 @@ public:
         auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after DescribeDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -146,7 +149,9 @@ public:
     void Handle(TEvYdbCompute::TEvCheckDatabaseResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Issues) {
-            LOG_E("Scope: " << Scope << " The database existence check has been failed. " << response.Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: The database existence check has been failed",
+                {"scope", Scope},
+                {"issues", response.Issues.ToOneLineString()});
             FailedAndPassAway(response.Issues);
             return;
         }
@@ -157,13 +162,16 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
 
         if (response.IsExists) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
         } else {
             auto invalidateSynchronizationEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Scope);
             invalidateSynchronizationEvent->Synchronized = false;
@@ -178,12 +186,15 @@ public:
             : Clients->GetClient(Scope);
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
         FillRequest(Request, client->Config);
-        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection()}, 0, ev->Cookie);
+        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection(), client->Config.GetFolderId()}, 0, ev->Cookie);
     }
 
     void Handle(TEvYdbCompute::TEvAddDatabaseResponse::TPtr& ev) {
@@ -193,13 +204,16 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
 
         if (ev->Cookie == OnlyDatabaseCreateCookie) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
             return;
         }
         Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Result});
@@ -208,7 +222,9 @@ public:
     void Handle(TEvControlPlaneStorage::TEvModifyDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " The modification of the information about database has been failed. " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: The modification of the information about database has been failed",
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -231,7 +247,9 @@ public:
     void Handle(TEvYdbCompute::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (compute) has been failed. " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: CreateDatabaseRequest (compute) has been failed",
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -240,7 +258,10 @@ public:
         auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -250,7 +271,9 @@ public:
     void Handle(TEvControlPlaneStorage::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (control plane storage) has been failed. " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: CreateDatabaseRequest (control plane storage) has been failed",
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -261,18 +284,23 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
 
-        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
     }
 
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Scope: " << Scope << " SynchronizeRequest has been failed. " << response.Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: SynchronizeRequest has been failed",
+                {"scope", Scope},
+                {"issues", response.Issues.ToOneLineString()});
             FailedAndPassAway(response.Issues);
             return;
         }
@@ -289,15 +317,29 @@ public:
     void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
         NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
         ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
-        const TString databaseName = TStringBuilder{} << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_"  : TString{}) << scope.ParseFolder();
-        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
+
+        const auto& tenant = config.GetTenant();
+        if (const auto& previousPath = Result.connection().database(); previousPath && (!tenant || previousPath.StartsWith(tenant + "/"))) {
+            ev.Get()->Get()->Path = previousPath;
+        } else {
+            ev.Get()->Get()->Path = TStringBuilder() << (tenant ? tenant + "/" : TString{}) << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_" : TString{}) << scope.ParseFolder();
+        }
+    }
+
+private:
+    template <typename TComputeConfig>
+    NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TComputeConfig& config) const {
+        if (config.HasWorkloadManagerConfig()) {
+            return config.GetWorkloadManagerConfig();
+        }
+        return Config.GetYdb().GetControlPlane().GetDefaultWorkloadManagerConfig();
     }
 
 private:
     TString Scope;
     std::shared_ptr<TDatabaseClients> Clients;
     TActorId SynchronizationServiceActorId;
-    NFq::NConfig::TComputeConfig Config;
+    NConfig::TComputeConfig Config;
     TEvYdbCompute::TEvCreateDatabaseRequest::TPtr Request;
     FederatedQuery::Internal::ComputeDatabaseInternal Result;
 
@@ -400,7 +442,7 @@ public:
         for (const auto& config: mapping.GetCommon()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
@@ -424,7 +466,7 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             TActorId databaseMonitoringActor;
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
@@ -449,7 +491,7 @@ public:
         for (const auto& config: mapping.GetCommon()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, {}});
         }
 
@@ -458,7 +500,7 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             auto databaseCounters = Counters->GetSubgroup("database", config.GetControlPlaneConnection().GetDatabase());
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, databaseCounters, config.GetControlPlaneConnection().GetDatabase()).release());
             Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, {}};
         }
     }

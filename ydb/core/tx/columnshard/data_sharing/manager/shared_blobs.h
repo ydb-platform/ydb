@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -13,8 +13,8 @@ class TStorageSharedBlobsManager {
 private:
     const TString StorageId;
     const TTabletId SelfTabletId;
-    THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds; // blobId -> owned by tabletId
-    TTabletsByBlob SharedBlobIds; // blobId -> shared with tabletIds
+    THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds;   // blobId -> owned by tabletId
+    TTabletsByBlob SharedBlobIds;   // blobId -> shared with tabletIds
 
     bool CheckRemoveBlobId(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobsCategories& blobs) const {
         const THashSet<TTabletId>* shared = SharedBlobIds.Find(blobId);
@@ -40,17 +40,18 @@ private:
         }
         return doRemove;
     }
+
 public:
     TStorageSharedBlobsManager(const TString& storageId, const TTabletId tabletId)
         : StorageId(storageId)
         , SelfTabletId(tabletId)
     {
-
     }
 
     bool IsTrivialLinks() const {
         return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
     }
+
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
     }
@@ -134,7 +135,8 @@ public:
         }
     }
 
-    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
+    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo,
+        const THashSet<TUnifiedBlobId>& blobIds);
 
     void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
@@ -161,11 +163,11 @@ private:
     const TTabletId SelfTabletId;
     THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
     TAtomicCounter ExternalModificationsCount;
+
 public:
     TSharedBlobsManager(const TTabletId tabletId)
         : SelfTabletId(tabletId)
     {
-
     }
 
     void StartExternalModification() {
@@ -250,4 +252,4 @@ public:
     bool LoadIdempotency(NTable::TDatabase& database);
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

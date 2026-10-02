@@ -54,8 +54,7 @@ namespace numpy
   types::ndarray<long, types::pshape<long>> lexsort(pS const &keys)
   {
     long n = std::get<0>(keys).size();
-    types::ndarray<long, types::pshape<long>> out(types::pshape<long>(n),
-                                                  builtins::None);
+    types::ndarray<long, types::pshape<long>> out(types::pshape<long>(n), builtins::None);
     // fill with the original indices
     std::iota(out.buffer, out.buffer + n, 0L);
     // then sort using keys as the comparator

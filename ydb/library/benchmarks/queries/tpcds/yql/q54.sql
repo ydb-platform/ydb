@@ -58,7 +58,7 @@ cross join
  );
 
  $segments =
- (select cast((revenue/50) as int) as segment
+ (select cast((cast(revenue as double)/50) as int) as segment
   from   $my_revenue
  );
 

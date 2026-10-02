@@ -1,0 +1,11 @@
+--- a/src/string_converter_filter.cpp	(index)
++++ b/src/string_converter_filter.cpp	(working tree)
+@@ -379,7 +379,7 @@ InternalValue StringConverter::Filter(const InternalValue& baseVal, RenderContex
+             if (string_length >= width)
+                 return str;
+             auto whitespaces = width - string_length;
+-            str.insert(0, static_cast<std::string::size_type>(whitespaces + 1) / 2, ' ');
++            str = decltype(str)(static_cast<std::string::size_type>(whitespaces + 1) / 2, ' ') + str;
+             str.append(static_cast<std::string::size_type>(whitespaces / 2), ' ');
+             return TargetString(std::move(str));
+         });

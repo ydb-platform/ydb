@@ -1,0 +1,2 @@
+$x = a[0];
+SELECT count(*) FROM $x;

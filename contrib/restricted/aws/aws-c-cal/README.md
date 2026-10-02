@@ -19,13 +19,19 @@ CMake 3.0+ is required to build.
 
 #### Linux-Only Dependencies
 
-If you are building on Linux, you will need to build aws-lc first.
+If you are building on Linux, there are several options for crypto libraries.
+Preferred choice is aws-lc, that can be build as follows.
 
 ```
 git clone git@github.com:awslabs/aws-lc.git
 cmake -S aws-lc -B aws-lc/build -DCMAKE_INSTALL_PREFIX=<install-path>
 cmake --build aws-lc/build --target install
 ```
+
+Alternatively, OpenSSL versions 1.0.2 or 1.1.1 or BoringSSL at commit 9939e14
+(other commits are not tested and not guaranteed to work) can be used. To build
+against OpenSSL or BoringSSL specify -DUSE_OPENSSL=ON. Typical OpenSSL flags can
+be used to help project locate artifacts (-DLibCrypto_INCLUDE_DIR and -DLibCrypto_STATIC_LIBRARY)
 
 #### Building aws-c-cal and Remaining Dependencies
 

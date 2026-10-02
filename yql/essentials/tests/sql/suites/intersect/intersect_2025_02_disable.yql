@@ -1,0 +1,3 @@
+PRAGMA DisableExceptIntersectBefore202503;
+
+select 666 as x intersect select 666 as x;

@@ -160,7 +160,7 @@ public:
             RequestSchemeCacheNavigate(DomainPath);
         }
         RootHiveId = domains->GetHive();
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             ReplyAndPassAway();
         }
 
@@ -259,7 +259,8 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        BLOG_TRACE("ProcessNodeIds()");
+        YDB_LOG_TRACE_COMP(NKikimrServices::VIEWER, "ProcessNodeIds",
+            {"logPrefix", GetLogPrefix()});
 
         auto nodeStats = ev->Get()->Record.GetNodeStats();
         if (NeedNodesSorting() && Sort == ESort::NodeId && !IsNodeFilter()) {

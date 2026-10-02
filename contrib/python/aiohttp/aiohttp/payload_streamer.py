@@ -24,7 +24,8 @@ Then you can use `file_sender` like this:
 
 import types
 import warnings
-from typing import Any, Awaitable, Callable, Dict, Tuple
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from .abc import AbstractStreamWriter
 from .payload import Payload, payload_type
@@ -36,8 +37,8 @@ class _stream_wrapper:
     def __init__(
         self,
         coro: Callable[..., Awaitable[None]],
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
     ) -> None:
         self.coro = types.coroutine(coro)
         self.args = args
@@ -64,6 +65,9 @@ class streamer:
 class StreamWrapperPayload(Payload):
     async def write(self, writer: AbstractStreamWriter) -> None:
         await self._value(writer)
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        raise TypeError("Unable to decode.")
 
 
 @payload_type(streamer)

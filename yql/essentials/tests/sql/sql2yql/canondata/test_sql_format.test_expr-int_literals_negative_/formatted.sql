@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT
     -9223372036854775808 AS i64_min
 ;

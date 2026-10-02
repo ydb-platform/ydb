@@ -29,7 +29,7 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         // NB(eshcherbin): This writer is synchronous and it's always ready.
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
@@ -52,7 +52,7 @@ public:
 
     TFuture<void> Close() override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     const TTableSchemaPtr& GetSchema() const override
@@ -65,7 +65,7 @@ public:
         return NameTable_;
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }

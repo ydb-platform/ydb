@@ -13,4 +13,4 @@ std::optional<std::string> RoundToNearestValidUtf8(const std::string_view& str, 
 std::optional<std::string> NextValidUtf8(const std::string_view& str);
 std::optional<std::string> NextLexicographicString(const std::string_view& str);
 
-}
+} // namespace NYql

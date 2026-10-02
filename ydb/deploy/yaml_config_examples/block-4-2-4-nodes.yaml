@@ -1,0 +1,75 @@
+# YDB configuration options and their values
+# are described in documentation: https://ydb.tech/en/docs/deploy/configuration/config
+
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  erasure: block-4-2 # erasure is the parameter that describes
+                     # the fault tolerance mode of the cluster.
+                     # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+  fail_domain_type: disk_scope
+  self_management_config: # automatic management of static resources (static group, state storage, etc)
+    enabled: true
+  default_disk_type: SSD # default disk type used for group creation of both kinds
+  host_configs: # the list of available host configurations in the cluster.
+  - host_config_id: 1
+    drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configuration.
+      type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
+      disk_scope: fail-domain-1                       # label to calculate fail domains for storage groups mapping
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+      disk_scope: fail-domain-1
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      type: SSD
+      disk_scope: fail-domain-2
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_04
+      type: SSD
+      disk_scope: fail-domain-2
+  hosts:
+  - host: ydb-node-zone-a-1.local     # storage node DNS name
+    host_config_id: 1                 # numeric host configuration template identifier
+    location:                         # this parameter describes where host is located.
+      body: 1                         # string representing a host serial number.
+      data_center: 'zone-a'           # string representing the datacenter / availability zone where the host is located.
+                                      # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
+                                      # across 3 datacenters.
+      rack: '1'                       # string representing a rack identifier where the host is located.
+                                      # if cluster is deployed using block-4-2 erasure, all hosts should be distributed
+                                      # across at least 8 racks.
+  - host: ydb-node-zone-a-2.local
+    host_config_id: 1
+    location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: ydb-node-zone-a-3.local
+    host_config_id: 1
+    location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: ydb-node-zone-a-4.local
+    host_config_id: 1
+    location:
+      body: 4
+      data_center: 'zone-a'
+      rack: '4'
+  actor_system_config:          # the configuration of the actor system which describes how cores of the instance are distributed
+    use_auto_config: true       # across different types of workloads in the instance.
+    cpu_count: 8
+  interconnect_config:
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+    services_enabled:
+    - legacy

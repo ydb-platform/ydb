@@ -2,9 +2,9 @@
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <yql/essentials/core/yql_holding_file_storage.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/retry.h>
@@ -23,9 +23,9 @@
 #include <util/string/split.h>
 
 #include <regex>
+#include <utility>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -38,12 +38,16 @@ void RunResolver(
     IInputStream* input,
     const F& outputHandler,
     const TString& ldLibraryPath = {}) {
-
     TShellCommandOptions shellOptions;
     shellOptions
         .SetUseShell(false)
-        .SetDetachSession(false)
-        .SetInputStream(input); // input can be nullptr
+        .SetDetachSession(true)
+        .SetInputStream(input) // input can be nullptr
+        .SetFuncAfterFork([]() {
+#ifdef _unix_
+            signal(SIGUSR1, SIG_IGN);
+#endif
+        });
 
     if (ldLibraryPath) {
         YQL_LOG(DEBUG) << "Using LD_LIBRARY_PATH = " << ldLibraryPath << " for Udf resolver";
@@ -51,19 +55,28 @@ void RunResolver(
     }
 
     TShellCommand shell(resolverPath, args, shellOptions);
+    auto status = shell.Run().GetStatus();
+    auto exitCode = shell.GetExitCode();
+    TStringBuilder formattedExitcode;
+    formattedExitcode << "Exit code: ";
+    if (exitCode) {
+        formattedExitcode << *exitCode;
+    } else {
+        formattedExitcode << "(empty)";
+    }
 
-    switch (shell.Run().GetStatus()) {
-    case TShellCommand::SHELL_INTERNAL_ERROR:
-        ythrow yexception() << "Udf resolver internal error: "
-            << shell.GetInternalError();
-    case TShellCommand::SHELL_ERROR:
-        ythrow yexception() << "Udf resolver shell error: "
-            << StripString(shell.GetError());
-    case TShellCommand::SHELL_FINISHED:
-        break;
-    default:
-        ythrow yexception() << "Unexpected udf resolver state: "
-            << int(shell.GetStatus());
+    switch (status) {
+        case TShellCommand::SHELL_INTERNAL_ERROR:
+            ythrow yexception() << "Udf resolver internal error: "
+                                << shell.GetInternalError();
+        case TShellCommand::SHELL_ERROR:
+            ythrow yexception() << "Udf resolver shell error. " << formattedExitcode
+                                << " StdErr: " << StripString(shell.GetError());
+        case TShellCommand::SHELL_FINISHED:
+            break;
+        default:
+            ythrow yexception() << "Unexpected udf resolver state: "
+                                << int(shell.GetStatus());
     }
 
     if (shell.GetError()) {
@@ -80,7 +93,6 @@ void RunResolver(
     const TResolve& request,
     const F& outputHandler,
     const TString& ldLibraryPath = {}) {
-
     TStringStream input;
     YQL_ENSURE(request.SerializeToArcadiaStream(&input), "Cannot serialize TResolve proto message");
     RunResolver(resolverPath, args, &input, outputHandler, ldLibraryPath);
@@ -93,31 +105,31 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 
     // example:
     // util/system/dynlib.cpp:56: libcuda.so.1: cannot open shared object file: No such file or directory
-    static std::regex re(".*: (.+): cannot open shared object file: No such file or directory");
+    static std::regex Re(".*: (.+): cannot open shared object file: No such file or directory");
     std::cmatch match;
-    if (!std::regex_match(message, match, re)) {
+    if (!std::regex_match(message, match, Re)) {
         return "";
     }
 
     return TString(match[1].str());
 }
-}
+} // namespace
 
-class TOutProcUdfResolver : public IUdfResolver {
+class TOutProcUdfResolver: public IUdfResolver {
 public:
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TFileStoragePtr& fileStorage, const TString& resolverPath,
-        const TString& user, const TString& group, bool filterSyscalls,
-        const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
+                        TFileStoragePtr fileStorage, TString resolverPath,
+                        const TString& user, const TString& group, bool filterSyscalls,
+                        TString udfDependencyStubPath, const TMap<TString, TString>& path2md5)
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FileStorage_(fileStorage)
-        , ResolverPath_(resolverPath)
-        , UdfDependencyStubPath_(udfDependencyStubPath)
+        , FileStorage_(std::move(fileStorage))
+        , ResolverPath_(std::move(resolverPath))
+        , UdfDependencyStubPath_(std::move(udfDependencyStubPath))
         , Path2Md5_(path2md5)
     {
         if (user) {
-            UserGroupArgs_ = { "-U", user, "-G", group };
+            UserGroupArgs_ = {"-U", user, "-G", group};
         }
 
         if (filterSyscalls) {
@@ -139,7 +151,7 @@ public:
         return FunctionRegistry_->IsLoadedUdfModule(moduleName);
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         THashSet<TString> requiredLoadedModules;
         THashSet<TString> requiredExternalModules;
         TVector<TFunction*> loadedFunctions;
@@ -147,10 +159,10 @@ public:
 
         bool hasErrors = false;
         for (auto udf : functions) {
-            TStringBuf moduleName, funcName;
+            TStringBuf moduleName;
+            TStringBuf funcName;
             if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
-                ctx.AddError(TIssue(udf->Pos, TStringBuilder() <<
-                    "Incorrect format of function name: " << udf->Name));
+                ctx.AddError(TIssue(udf->Pos, TStringBuilder() << "Incorrect format of function name: " << udf->Name));
                 hasErrors = true;
             } else {
                 if (FunctionRegistry_->IsLoadedUdfModule(moduleName)) {
@@ -164,8 +176,8 @@ public:
         }
 
         TResolve request;
+        request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
         TVector<TImport*> usedImports;
-        THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
 
         THashMap<TString, TImport*> path2LoadedImport;
@@ -193,7 +205,7 @@ public:
             }
 
             try {
-                LoadImport(holdingFileStorage, *filesBox, *import, request);
+                LoadImport(storage, *filesBox, *import, request);
                 usedImports.push_back(import);
             } catch (const std::exception& e) {
                 ctx.AddError(ExceptionToIssue(e));
@@ -211,7 +223,6 @@ public:
             }
         }
 
-
         for (auto udf : externalFunctions) {
             auto udfRequest = request.AddUdfs();
             udfRequest->SetName(udf->Name);
@@ -219,11 +230,14 @@ public:
             if (udf->UserType) {
                 udfRequest->SetUserType(WriteTypeToYson(udf->UserType));
             }
+
+            udfRequest->SetLangVer(udf->LangVer);
+            *udfRequest->MutableRuntimeSettings() = SerializeRuntimeSettingsToProto(*udf->RuntimeSettings);
         }
 
         TResolveResult response;
         try {
-            response = RunResolverAndParseResult(request, { }, *filesBox);
+            response = RunResolverAndParseResult(request, {}, *filesBox);
             filesBox->Destroy();
         } catch (const std::exception& e) {
             ctx.AddError(ExceptionToIssue(e));
@@ -232,7 +246,7 @@ public:
 
         // extract regardless of hasErrors value
         hasErrors = !ExtractMetadata(response, usedImports, externalFunctions, ctx) || hasErrors;
-        hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx) || hasErrors;
+        hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx, logLevel) || hasErrors;
 
         if (!hasErrors) {
             for (auto& m : FunctionRegistry_->GetAllModuleNames()) {
@@ -246,19 +260,19 @@ public:
         return !hasErrors;
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         TResolve request;
-        THoldingFileStorage holdingFileStorage(FileStorage_);
+        request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
         Y_DEFER {
             filesBox->Destroy();
         };
 
         for (auto import : imports) {
-            LoadImport(holdingFileStorage, *filesBox, import, request);
+            LoadImport(storage, *filesBox, import, request);
         }
 
-        return RunResolverAndParseResult(request, { "--discover-proto" }, *filesBox);
+        return RunResolverAndParseResult(request, {"--discover-proto"}, *filesBox);
     }
 
 private:
@@ -287,8 +301,7 @@ private:
             RunResolver(ResolverPath_, args, request, [&](const TString& output) {
                 YQL_ENSURE(response.ParseFromString(output), "Cannot deserialize TResolveResult proto message");
             }, ldLibraryPath);
-            return response;
-        }, [&](const yexception& e, int, int) {
+            return response; }, [&](const yexception& e, int, int) {
             TStringStream stream;
             SerializeToTextFormat(request, stream);
             YQL_LOG(DEBUG) << "Exception from UdfResolver: " << e.what() << " for request " << stream.Str();
@@ -311,8 +324,7 @@ private:
 
             YQL_LOG(DEBUG) << "Using dependency stub for shared library " << sharedLibrary;
             PutSharedLibraryStub(sharedLibrary, filesBox);
-            ldLibraryPath = filesBox.GetDir();
-        });
+            ldLibraryPath = filesBox.GetDir(); });
     }
 
     void PutSharedLibraryStub(const TString& sharedLibrary, TFilesBox& filesBox) const {
@@ -369,13 +381,17 @@ private:
                 }
                 udf->SupportsBlocks = udfRes.GetSupportsBlocks();
                 udf->IsStrict = udfRes.GetIsStrict();
+                udf->MinLangVer = udfRes.GetMinLangVer();
+                udf->MaxLangVer = udfRes.GetMaxLangVer();
+                for (const auto& m : udfRes.GetMessages()) {
+                    udf->Messages.push_back(m);
+                }
             }
         }
 
         return !hasErrors;
     }
 
-private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TFileStoragePtr FileStorage_;
@@ -386,17 +402,18 @@ private:
 };
 
 void LoadSystemModulePaths(
-        const TString& resolverPath,
-        const TString& dir,
-        TUdfModulePathsMap* paths)
+    const TString& resolverPath,
+    const TString& dir,
+    TUdfModulePathsMap* paths)
 {
-    const TList<TString> args = { TString("--list"), dir };
-    RunResolver(resolverPath, args, nullptr, [&](const TString& output) {
+    const TList<TString> args = {TString("--list"), dir};
+    RunResolver(resolverPath, args, /*input=*/nullptr, [&](const TString& output) {
         // output format is:
         // {{module_name}}\t{{module_path}}\n
 
         for (const auto& it : StringSplitter(output).Split('\n')) {
-            TStringBuf moduleName, modulePath;
+            TStringBuf moduleName;
+            TStringBuf modulePath;
             const TStringBuf& line = it.Token();
             if (!line.empty()) {
                 line.Split('\t', moduleName, modulePath);
@@ -418,5 +435,4 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

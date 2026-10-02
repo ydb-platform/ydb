@@ -105,10 +105,26 @@ std::unique_ptr<TEvBlobStorage::TEvGetResult> TEvBlobStorage::TEvGet::MakeErrorR
     return res;
 }
 
+void TEvBlobStorage::TEvCheckIntegrity::ToSpan(NWilson::TSpan& span) const {
+    span
+        .Attribute("Id", Id.ToString())
+        .Attribute("GetHandleClass", NKikimrBlobStorage::EGetHandleClass_Name(GetHandleClass));
+}
+
+std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> TEvBlobStorage::TEvCheckIntegrity::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId /*groupId*/) {
+    auto res = std::make_unique<TEvCheckIntegrityResult>(status);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
 void TEvBlobStorage::TEvBlock::ToSpan(NWilson::TSpan& span) const {
     span
         .Attribute("TabletId", ::ToString(TabletId))
         .Attribute("Generation", Generation);
+    if (Version) {
+        span.Attribute("Version", *Version);
+    }
 }
 
 std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse(
@@ -255,4 +271,9 @@ void Out<NKikimr::TStorageStatusFlags>(IOutputStream& o,
 template<>
 void Out<NKikimr::TPDiskCategory>(IOutputStream &str, const NKikimr::TPDiskCategory &value) {
     str << value.ToString();
+}
+
+template<>
+void Out<NKikimr::TBridgePileId>(IOutputStream& str, const NKikimr::TBridgePileId& bridgePileId) {
+    str << bridgePileId.ToString();
 }

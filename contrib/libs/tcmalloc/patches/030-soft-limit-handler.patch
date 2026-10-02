@@ -1,0 +1,55 @@
+diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
+index 3835dde..c061b54 100644
+--- a/tcmalloc/malloc_extension.cc
++++ b/tcmalloc/malloc_extension.cc
+@@ -837,6 +837,20 @@ void MallocExtension::EnableForkSupport() {
+ #endif
+ }
+ 
++static std::atomic<MallocExtension::SoftMemoryLimitCallback*> SoftMemoryLimitHandler_;
++
++void MallocExtension::SetSoftMemoryLimitHandler(SoftMemoryLimitCallback* handler) {
++#if ABSL_INTERNAL_HAVE_WEAK_MALLOCEXTENSION_STUBS
++  SoftMemoryLimitHandler_.store(handler);
++#endif
++}
++
++MallocExtension::SoftMemoryLimitCallback* MallocExtension::GetSoftMemoryLimitHandler() {
++#if ABSL_INTERNAL_HAVE_WEAK_MALLOCEXTENSION_STUBS
++  return SoftMemoryLimitHandler_.load();
++#endif
++}
++
+ void MallocExtension::SetSampleUserDataCallbacks(
+     CreateSampleUserDataCallback create,
+     CopySampleUserDataCallback copy,
+diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
+index 95cd108..d104a9f 100644
+--- a/tcmalloc/malloc_extension.h
++++ b/tcmalloc/malloc_extension.h
+@@ -691,6 +691,10 @@ class MallocExtension final {
+   // Allocator will continue to function correctly in the child, after calling fork().
+   static void EnableForkSupport();
+ 
++  using SoftMemoryLimitCallback = void();
++  static void SetSoftMemoryLimitHandler(SoftMemoryLimitCallback* handler);
++  static SoftMemoryLimitCallback* GetSoftMemoryLimitHandler();
++
+   using CreateSampleUserDataCallback = void*();
+   using CopySampleUserDataCallback = void*(void*);
+   using DestroySampleUserDataCallback = void(void*);
+diff --git a/tcmalloc/page_allocator.cc b/tcmalloc/page_allocator.cc
+index f2a10a7..dbba15b 100644
+--- a/tcmalloc/page_allocator.cc
++++ b/tcmalloc/page_allocator.cc
+@@ -140,6 +140,10 @@ void PageAllocator::ShrinkToUsageLimit(Length n) {
+   warned = true;
+   TC_LOG("Couldn't respect usage limit of %v and OOM is likely to follow.",
+          limits_[kSoft]);
++
++  if (auto* handler = MallocExtension::GetSoftMemoryLimitHandler()) {
++    (*handler)();
++  }
+ }
+ 
+ bool PageAllocator::ShrinkHardBy(Length pages, LimitKind limit_kind) {

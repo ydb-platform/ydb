@@ -19,7 +19,8 @@ namespace NYql {
 */
 class TSizedCache {
 public:
-    struct ICacheObj: public TThrRefBase {
+    class ICacheObj: public TThrRefBase {
+    public:
         // Unique object identifier
         virtual TString GetName() = 0;
         // Object size
@@ -28,7 +29,6 @@ public:
         virtual void Dismiss() = 0;
     };
 
-public:
     // Constructs the cache with the specified limits.
     // maxEntries and maxSize must be greater than zero
     TSizedCache(size_t maxEntries, ui64 maxSize);
@@ -47,12 +47,13 @@ public:
     TMaybe<ui32> GetLocks(const TString& name) const;
     // Total size of all objects in the cache
     ui64 GetOccupiedSize() const {
-        return CurrentSize;
+        return CurrentSize_;
     }
     // Total count of objects in the cache
     size_t GetCount() const {
-        return Cache.Size();
+        return Cache_.Size();
     }
+
 private:
     struct TEntry {
         TIntrusivePtr<ICacheObj> Obj;
@@ -62,14 +63,11 @@ private:
 
     void Remove(TCache::TIterator it);
 
-private:
-    TCache Cache;
-    size_t MaxEntries = 0;
-    ui64 MaxSize = 0;
-    ui64 CurrentSize = 0;
-    TAdaptiveLock Lock;
+    TCache Cache_;
+    size_t MaxEntries_ = 0;
+    ui64 MaxSize_ = 0;
+    ui64 CurrentSize_ = 0;
+    TAdaptiveLock Lock_;
 };
 
-} // NYql
-
-
+} // namespace NYql

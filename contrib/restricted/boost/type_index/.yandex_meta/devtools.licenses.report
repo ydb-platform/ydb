@@ -47,6 +47,7 @@ BELONGS ya.make
         include/boost/type_index.hpp [4:5]
         include/boost/type_index/ctti_type_index.hpp [5:6]
         include/boost/type_index/detail/compile_time_type_info.hpp [5:6]
+        include/boost/type_index/detail/config.hpp [5:6]
         include/boost/type_index/detail/ctti_register_class.hpp [5:6]
         include/boost/type_index/detail/stl_register_class.hpp [5:6]
         include/boost/type_index/runtime_cast.hpp [5:6]

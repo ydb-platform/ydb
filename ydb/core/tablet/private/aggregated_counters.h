@@ -18,14 +18,9 @@ namespace NKikimr::NPrivate {
 using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
 
 struct THistogramCounter {
-    TVector<TTabletPercentileCounter::TRangeDef> Ranges;
-    TCountersVector Values;
     NMonitoring::THistogramPtr Histogram;
 
-    THistogramCounter(
-        const TVector<TTabletPercentileCounter::TRangeDef>& ranges,
-        TCountersVector&& values,
-        NMonitoring::THistogramPtr histogram);
+    THistogramCounter(NMonitoring::THistogramPtr histogram);
 
     void Clear();
     void IncrementFor(ui64 value);
@@ -33,10 +28,18 @@ struct THistogramCounter {
 
 using THistogramVector = TVector<THolder<THistogramCounter>>;
 
+struct TTabletCounterValue {
+    TStringBuf Name;
+    ui64 TabletId;
+    ui64 Value;
+};
+
 class TAggregatedSimpleCounters {
 public:
-    //
-    TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedSimpleCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
@@ -52,8 +55,11 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
+    bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
+
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     TCountersVector MaxSimpleCounters;
     TCountersVector SumSimpleCounters;
@@ -63,12 +69,15 @@ private:
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
+    TVector<TStringBuf> CounterNames;
 };
 
 class TAggregatedCumulativeCounters {
 public:
-    //
-    TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedCumulativeCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
@@ -81,8 +90,11 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
+    bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
+
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
@@ -91,15 +103,22 @@ private:
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
+    TVector<TStringBuf> CounterNames;
 };
 
 class TAggregatedHistogramCounters {
 public:
-    TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedHistogramCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
-    void AddCounter(
+    // Returns whether the histogram is derivative (HIST_RATE, accumulates increments)
+    // rather than non-derivative (an Integral percentile counter or a HIST(x) aggregate,
+    // monlib HIST, holds the current state)
+    bool AddCounter(
         const char* name,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
         THashMap<TString, THolder<THistogramCounter>>& histogramAggregates);
@@ -124,11 +143,12 @@ private:
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     // monitoring counters holders, updated only during recalculation
-    TVector<TCountersVector> PercentileCounters;    // old style (ranges);
-    TVector<NMonitoring::THistogramPtr> Histograms; // new style (bins);
+    TVector<NMonitoring::THistogramPtr> Histograms;
     TVector<bool> IsDerivative;
+    TVector<bool> IsHistogramAggregate;
 
     // per percentile counter bounds.
     TVector<NMonitoring::TBucketBounds> BucketBounds;

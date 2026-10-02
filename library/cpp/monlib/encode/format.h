@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/http/io/headers.h>
+
 #include <util/generic/strbuf.h>
 
 namespace NMonitoring {
@@ -134,6 +136,12 @@ namespace NMonitoring {
     EFormat FormatFromContentType(TStringBuf value);
 
     /**
+     * Content-encoding policy that disables HTTP encoding for monitoring media types.
+     * Monitoring formats manage compression inside their payload and must pass through.
+     */
+    bool DisableContentEncoding(const THttpHeaders& requestHeaders, const THttpHeaders& responseHeaders);
+
+    /**
      * Returns value for "Content-Type" header determined by the given
      * format type.
      *
@@ -150,6 +158,16 @@ namespace NMonitoring {
      * @return most preffered compression algorithm
      */
     ECompression CompressionFromAcceptEncodingHeader(TStringBuf value);
+
+    /**
+     * Matches fasters compression algorithm by the given "Accept-Encoding"
+     * header value. Currently fastest accepted algorithm is lz4. If lz4 is not
+     * found in header fallbacks to CompressionFromAcceptEncodingHeader
+     *
+     * @param value  value of the "Accept-Encoding" header.
+     * @return fastest accepted compression algorithm
+     */
+    ECompression FastestCompressionFromAcceptEncodingHeader(TStringBuf value);
 
     /**
      * Matches compression algorithm by the given "Content-Encoding" header value.

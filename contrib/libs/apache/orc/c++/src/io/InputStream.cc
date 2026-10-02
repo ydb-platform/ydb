@@ -102,7 +102,7 @@ namespace orc {
   bool SeekableArrayInputStream::Skip(int count) {
     if (count >= 0) {
       uint64_t unsignedCount = static_cast<uint64_t>(count);
-      if (unsignedCount + position_ <= length_) {
+      if (unsignedCount <= length_ - position_) {
         position_ += unsignedCount;
         return true;
       } else {
@@ -113,7 +113,7 @@ namespace orc {
   }
 
   int64_t SeekableArrayInputStream::ByteCount() const {
-    return static_cast<google::protobuf::int64>(position_);
+    return static_cast<int64_t>(position_);
   }
 
   void SeekableArrayInputStream::seek(PositionProvider& seekPosition) {
@@ -186,7 +186,11 @@ namespace orc {
       return false;
     }
     uint64_t count = static_cast<uint64_t>(signedCount);
-    position_ = std::min(position_ + count, length_);
+    if (count > length_ - position_) {
+      position_ = length_;
+    } else {
+      position_ += count;
+    }
     pushBack_ = 0;
     return position_ < length_;
   }

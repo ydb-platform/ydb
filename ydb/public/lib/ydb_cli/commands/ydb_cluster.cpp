@@ -1,12 +1,15 @@
 #include "ydb_cluster.h"
 
+#include "ydb_bridge.h"
+#include "ydb_diagnostics.h"
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NKikimr;
@@ -17,9 +20,11 @@ TCommandCluster::TCommandCluster()
     : TClientCommandTree("cluster", {}, "Cluster-wide administration")
 {
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
-    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(true));
+    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false, true));
     AddCommand(std::make_unique<TCommandClusterDump>());
     AddCommand(std::make_unique<TCommandClusterRestore>());
+    AddCommand(std::make_unique<TCommandBridge>(true));
+    AddCommand(std::make_unique<TCommandClusterDiagnostics>());
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()
@@ -29,6 +34,8 @@ TCommandClusterBootstrap::TCommandClusterBootstrap()
 void TCommandClusterBootstrap::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("uuid", "Self-assembly UUID").RequiredArgument("STRING").StoreResult(&SelfAssemblyUUID);
+    config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
+        .StoreTrue(&AllowUnknownFields);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = true;
 }
@@ -38,9 +45,10 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 }
 
 int TCommandClusterBootstrap::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    NYdb::NStorageConfig::TStorageConfigClient client(*driver);
-    auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
+    auto driver = CreateDriver(config);
+    NYdb::NConfig::TConfigClient client(driver);
+    auto settings = NYdb::NConfig::TBootstrapClusterSettings().AllowUnknownFields(AllowUnknownFields);
+    auto result = client.BootstrapCluster(SelfAssemblyUUID, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;
 }
@@ -66,10 +74,11 @@ void TCommandClusterDump::Parse(TConfig& config) {
 }
 
 int TCommandClusterDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpCluster(FilePath));
 
     return EXIT_SUCCESS;
@@ -99,13 +108,14 @@ void TCommandClusterRestore::Parse(TConfig& config) {
 }
 
 int TCommandClusterRestore::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     auto settings = NDump::TRestoreClusterSettings()
         .WaitNodesDuration(WaitNodesDuration);
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreCluster(FilePath, settings));
 
     return EXIT_SUCCESS;

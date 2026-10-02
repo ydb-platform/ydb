@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/datashard_config.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 static constexpr size_t MAX_DATASHARD_STATE_CHUNK_SIZE = 8_MB;
@@ -49,11 +51,7 @@ private:
 
     void Restored() {
         auto* owner = Owner;
-        Y_ABORT_UNLESS(owner);
-
-        if (Locks) {
-            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
-        }
+        Y_ENSURE(owner);
 
         if (Vars) {
             owner->SnapshotManager.RestoreImmediateWriteEdge(Vars->ImmediateWriteEdge, Vars->ImmediateWriteEdgeReplied);
@@ -61,10 +59,14 @@ private:
             owner->InMemoryVarsRestored = true;
         }
 
+        if (Locks) {
+            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
+        }
+
         Detach();
         PassAway();
 
-        owner->OnInMemoryStateRestored();
+        owner->OnInMemoryStateRestored(std::move(Transactions));
     }
 
     void Failed() {
@@ -91,6 +93,9 @@ private:
             Buffer.Insert(Buffer.End(), std::move(payload));
         }
 
+        // We must not have any checkpoints in the buffer yet
+        Y_ENSURE(Checkpoints.empty());
+
         size_t lastOffset = 0;
         for (size_t offset : msg->Record.GetSerializedStateCheckpoints()) {
             // These offsets are relative to the start of the new chunk, we make
@@ -99,14 +104,12 @@ private:
             offset += prevSize;
             // Try to fail gracefully instead of crashing on unexpected data
             if (offset < lastOffset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that go backwards");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that go backwards");
                 Failed();
                 return;
             }
             if (Buffer.size() < offset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
                 Failed();
                 return;
             }
@@ -123,15 +126,14 @@ private:
         }
 
         for (size_t chunkSize : Checkpoints) {
-            Y_ABORT_UNLESS(chunkSize <= Buffer.size(), "Unexpected end of buffer");
+            Y_ENSURE(chunkSize <= Buffer.size(), "Unexpected end of buffer");
 
             NKikimrTxDataShard::TInMemoryState* state = google::protobuf::Arena::CreateMessage<NKikimrTxDataShard::TInMemoryState>(&Arena);
             {
                 TRopeStream stream(Buffer.Begin(), chunkSize);
                 bool ok = state->ParseFromZeroCopyStream(&stream);
                 if (!ok) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
+                    YDB_LOG_CRIT("Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
                     Failed();
                     return;
                 }
@@ -161,6 +163,22 @@ private:
                 row.Counter = protoLock.GetCounter();
                 row.CreateTs = protoLock.GetCreateTs();
                 row.Flags = protoLock.GetFlags();
+                if (protoLock.HasVictimQuerySpanId()) {
+                    row.VictimQuerySpanId = protoLock.GetVictimQuerySpanId();
+                }
+                if (protoLock.HasBreakerQuerySpanId()) {
+                    row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
+                    row.BreakerNodeId = protoLock.GetBreakerNodeId();
+                }
+                for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -174,8 +192,8 @@ private:
             for (const auto& protoRange : state->GetLockRanges()) {
                 auto* row = Locks.FindPtr(protoRange.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock range for a missing lock " << protoRange.GetLockId());
+                    YDB_LOG_CRIT("Received lock range for a missing lock",
+                        {"rangeLockId", protoRange.GetLockId()});
                     Failed();
                     return;
                 }
@@ -187,8 +205,8 @@ private:
             for (const auto& protoConflict : state->GetLockConflicts()) {
                 auto* row = Locks.FindPtr(protoConflict.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock conflict for a missing lock " << protoConflict.GetLockId());
+                    YDB_LOG_CRIT("Received lock conflict for a missing lock",
+                        {"conflictLockId", protoConflict.GetLockId()});
                     Failed();
                     return;
                 }
@@ -197,16 +215,51 @@ private:
             for (const auto& protoVolatileDep : state->GetLockVolatileDependencies()) {
                 auto* row = Locks.FindPtr(protoVolatileDep.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received volatile dependency for a missing lock " << protoVolatileDep.GetLockId());
+                    YDB_LOG_CRIT("Received volatile dependency for a missing lock",
+                        {"volatileDepLockId", protoVolatileDep.GetLockId()});
                     Failed();
                     return;
                 }
                 row->VolatileDependencies.push_back(protoVolatileDep.GetTxId());
             }
 
+            for (const auto& protoTx : state->GetPreparedVolatileTxs()) {
+                ui64 txId = protoTx.GetTxId();
+                EOperationKind kind = EOperationKind(protoTx.GetKind());
+                ui64 flags = protoTx.GetFlags();
+                if (flags & TTxFlags::Immediate) {
+                    // Cannot restore immediate transactions
+                    continue;
+                }
+                if (!(flags & TTxFlags::VolatilePrepare)) {
+                    // Cannot restore non-volatile transactions
+                    continue;
+                }
+                flags |= TTxFlags::Stored; // Volatile transactions also have a Stored flag (stored in memory, not on disk)
+                ui64 maxStep = protoTx.GetMaxStep();
+                ui64 receivedAt = protoTx.GetReceivedAt();
+                TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::MicroSeconds(receivedAt), Owner->NextTieBreakerIndex++);
+                TOperation::TPtr op = NEvWrite::TConvertor::MakeOperation(kind, info, Owner->TabletID());
+                op->SetMinStep(protoTx.GetMinStep());
+                if (protoTx.HasStep()) {
+                    op->SetStep(protoTx.GetStep());
+                }
+                if (protoTx.HasPredictedStep()) {
+                    op->SetPredictedStep(protoTx.GetPredictedStep());
+                }
+                op->SetTarget(ActorIdFromProto(protoTx.GetSource()));
+                op->SetCookie(protoTx.GetCookie());
+                if (!op->OnRestoreMigrated(*Owner, protoTx.GetBody())) {
+                    // This transaction cannot be restored
+                    continue;
+                }
+                Transactions[txId] = std::move(op);
+            }
+
             Arena.Reset();
         }
+
+        Checkpoints.clear();
 
         if (msg->Record.HasContinuationToken()) {
             // Request the next data chunk
@@ -256,8 +309,9 @@ private:
     TVector<size_t> Checkpoints;
 
     google::protobuf::Arena Arena;
-    THashMap<ui64, ILocksDb::TLockRow> Locks;
     std::optional<TVars> Vars;
+    THashMap<ui64, ILocksDb::TLockRow> Locks;
+    THashMap<ui64, TOperation::TPtr> Transactions;
 };
 
 void TDataShard::StartInMemoryRestoreActor() {
@@ -274,7 +328,7 @@ void TDataShard::StartInMemoryRestoreActor() {
         return;
     }
 
-    OnInMemoryStateRestored();
+    OnInMemoryStateRestored({});
 }
 
 class TDataShardInMemoryStateActor
@@ -300,8 +354,8 @@ public:
     }
 
     void PreserveState() {
-        Y_ABORT_UNLESS(Owner, "Unexpected call from a detached tablet");
-        Y_ABORT_UNLESS(Owner->InMemoryStateActor == this, "Unexpected call while state actor is not attached");
+        Y_ENSURE(Owner, "Unexpected call from a detached tablet");
+        Y_ENSURE(Owner->InMemoryStateActor == this, "Unexpected call while state actor is not attached");
 
         auto state = Owner->PreserveInMemoryState();
 
@@ -367,7 +421,7 @@ public:
         if (msg->Record.HasContinuationToken()) {
             NKikimrTxDataShard::TInMemoryStateContinuationToken token;
             bool ok = token.ParseFromString(msg->Record.GetContinuationToken());
-            Y_ABORT_UNLESS(ok, "Cannot parse continuation token");
+            Y_ENSURE(ok, "Cannot parse continuation token");
             nextIndex = token.GetNextIndex();
         }
 
@@ -384,7 +438,7 @@ public:
                 NKikimrTxDataShard::TInMemoryStateContinuationToken token;
                 token.SetNextIndex(nextIndex);
                 bool ok = token.SerializeToString(res->Record.MutableContinuationToken());
-                Y_ABORT_UNLESS(ok, "Cannot serialize continuation token");
+                Y_ENSURE(ok, "Cannot serialize continuation token");
             }
         }
 
@@ -466,17 +520,17 @@ public:
         }
 
         // We should have at least 1 byte available
-        Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+        Y_ENSURE(WriteIndex < Buffers.size());
         if (Buffers[WriteIndex].size() == Buffers[WriteIndex].capacity()) {
             ++WriteIndex;
-            Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+            Y_ENSURE(WriteIndex < Buffers.size());
         }
         TString& buffer = Buffers[WriteIndex];
-        Y_ABORT_UNLESS(buffer.size() < buffer.capacity());
+        Y_ENSURE(buffer.size() < buffer.capacity());
         size_t oldSize = buffer.size();
         size_t newSize = buffer.capacity();
         buffer.resize(newSize);
-        Y_ABORT_UNLESS(buffer.capacity() == newSize);
+        Y_ENSURE(buffer.capacity() == newSize);
         Written += newSize - oldSize;
         Reserved -= newSize - oldSize;
         *data = buffer.Detach() + oldSize;
@@ -485,13 +539,13 @@ public:
     }
 
     void BackUp(int count) override {
-        Y_ABORT_UNLESS(count >= 0);
-        Y_ABORT_UNLESS(WriteIndex < Buffers.size());
+        Y_ENSURE(count >= 0);
+        Y_ENSURE(WriteIndex < Buffers.size());
         TString& buffer = Buffers[WriteIndex];
-        Y_ABORT_UNLESS(buffer.size() >= (size_t)count);
+        Y_ENSURE(buffer.size() >= (size_t)count);
         size_t oldCapacity = buffer.capacity();
         buffer.resize(buffer.size() - (size_t)count);
-        Y_ABORT_UNLESS(buffer.capacity() == oldCapacity);
+        Y_ENSURE(buffer.capacity() == oldCapacity);
         Reserved += count;
         Written -= count;
     }
@@ -519,6 +573,8 @@ private:
 };
 
 TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
+    TActorContext ctx = TActivationContext::ActorContextFor(SelfId());
+
     TDataShardPreservedInMemoryStateOutputStream stream;
     TVector<size_t> checkpoints;
 
@@ -530,7 +586,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     auto flushState = [&]() {
         stream.Reserve(state->ByteSizeLong());
         bool ok = state->SerializeToZeroCopyStream(&stream);
-        Y_ABORT_UNLESS(ok, "Unexpected failure to serialize in-memory state");
+        Y_ENSURE(ok, "Unexpected failure to serialize in-memory state");
     };
 
     auto resetState = [&]() {
@@ -540,6 +596,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     };
 
     auto addedMessage = [&](size_t messageSize) {
+        // Note: assumes field tag is always 1 byte, which is exact as long as
+        // all field numbers are less than 15 in TInMemoryState. Checkpoints
+        // don't rely on this being exact however.
         currentStateSize += 1 + google::protobuf::io::CodedOutputStream::VarintSize32(messageSize) + messageSize;
         if (currentStateSize >= MAX_DATASHARD_STATE_CHUNK_SIZE) {
             flushState();
@@ -578,8 +637,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         InMemoryVarsFrozen = true;
     }
 
-    for (const auto& pr : SysLocks.GetLocks()) {
-        const auto& lockInfo = *pr.second;
+    auto processLock = [&](TLockInfo& lockInfo) {
         auto* protoLockInfo = state->AddLocks();
         protoLockInfo->SetLockId(lockInfo.GetLockId());
         protoLockInfo->SetLockNodeId(lockInfo.GetLockNodeId());
@@ -587,8 +645,26 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         protoLockInfo->SetCounter(lockInfo.GetRawCounter());
         protoLockInfo->SetCreateTs(lockInfo.GetCreationTime().MicroSeconds());
         protoLockInfo->SetFlags((ui64)lockInfo.GetFlags());
+        if (ui64 victimId = lockInfo.GetVictimQuerySpanId(); victimId != 0) {
+            protoLockInfo->SetVictimQuerySpanId(victimId);
+        }
+        if (ui64 breakerSpanId = lockInfo.GetBreakerQuerySpanId(); breakerSpanId != 0) {
+            protoLockInfo->SetBreakerQuerySpanId(breakerSpanId);
+            protoLockInfo->SetBreakerNodeId(lockInfo.GetBreakerNodeId());
+        }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
+        }
+        for (const auto& [writerIndex, state] : lockInfo.GetWriteSeqNumStates()) {
+            if (state.WriteSeqNum == 0) {
+                continue;
+            }
+            auto* proto = protoLockInfo->AddWriteSeqNumStates();
+            proto->SetWriterIndex(writerIndex);
+            proto->SetWriteSeqNum(state.WriteSeqNum);
+            if (!state.SerializedResult.empty()) {
+                proto->SetSerializedResult(state.SerializedResult);
+            }
         }
         for (const auto& pathId : lockInfo.GetReadTables()) {
             pathId.ToProto(protoLockInfo->AddReadTables());
@@ -631,6 +707,44 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
                 addedMessage(protoDep->ByteSizeLong());
             });
         maybeCheckpoint();
+    };
+
+    for (const auto& pr : SysLocks.GetLocks()) {
+        processLock(*pr.second);
+    }
+
+    for (const auto& pr : SysLocks.GetRemovedLocks()) {
+        processLock(*pr.second);
+    }
+
+    for (const auto& [txId, op] : TransQueue.GetTxsInFly()) {
+        if (op->IsImmediate() || !op->HasVolatilePrepareFlag()) {
+            // Non-volatile transactions don't need to be migrated
+            continue;
+        }
+        auto txBody = op->OnMigration(*this, ctx);
+        if (!txBody) {
+            // This transaction cannot be migrated
+            continue;
+        }
+        auto* protoTx = state->AddPreparedVolatileTxs();
+        protoTx->SetTxId(txId);
+        ActorIdToProto(op->GetTarget(), protoTx->MutableSource());
+        protoTx->SetCookie(op->GetCookie());
+        protoTx->SetKind(static_cast<ui64>(op->GetKind()));
+        protoTx->SetBody(std::move(*txBody));
+        protoTx->SetFlags(op->GetFlags() & (TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask));
+        protoTx->SetMinStep(op->GetMinStep());
+        protoTx->SetMaxStep(op->GetMaxStep());
+        if (auto step = op->GetPredictedStep()) {
+            protoTx->SetPredictedStep(step);
+        }
+        if (auto step = op->GetStep()) {
+            protoTx->SetStep(step);
+        }
+        protoTx->SetReceivedAt(op->GetReceivedAt().MicroSeconds());
+        addedMessage(protoTx->ByteSizeLong());
+        maybeCheckpoint();
     }
 
     if (state->ByteSizeLong()) {
@@ -641,3 +755,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

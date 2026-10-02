@@ -1,0 +1,8 @@
+/* ytfile can not */
+/* dqfile can not */
+/* hybridfile can not */
+use yt:default;
+
+insert into Output
+select * from Input;
+

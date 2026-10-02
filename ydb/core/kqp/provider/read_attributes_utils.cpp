@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <library/cpp/json/writer/json.h>
 
 namespace NYql {

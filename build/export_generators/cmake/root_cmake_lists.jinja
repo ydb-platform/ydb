@@ -14,6 +14,13 @@ project({{ project_name }} LANGUAGES
 {%- endfor -%}
 )
 
+if(" ${PROJECT_SOURCE_DIR}" STREQUAL " ${PROJECT_BINARY_DIR}")
+  message(FATAL_ERROR "
+FATAL: In-source builds are not allowed.
+       You should create a separate directory for build files.
+")
+endif()
+
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS Off)
@@ -34,28 +41,9 @@ include(cmake/global_flags.cmake)
 include(cmake/global_vars.cmake)
 {% if includes is defined -%}
 {%     for incl in includes -%}
-{%         if not(use_conan2) or (incl != "cmake/conan1_deprecated.cmake") -%}
 include({{ incl }})
-{%         endif -%}
 {%     endfor -%}
 {%  endif -%}
-
-{%- if (conan.requires or conan.tool_requires) and not(use_conan2) %}
-if (CMAKE_CROSSCOMPILING)
-  include(${PROJECT_BINARY_DIR}/conan_paths.cmake)
-else()
-  conan_cmake_autodetect(settings)
-  conan_cmake_install(
-    PATH_OR_REFERENCE ${PROJECT_SOURCE_DIR}
-    INSTALL_FOLDER ${PROJECT_BINARY_DIR}
-    BUILD missing
-    REMOTE conancenter
-    SETTINGS ${settings}
-    ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
-    CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
-  )
-endif()
-{% endif -%}
 
 {%- if vanilla_protobuf %}
 

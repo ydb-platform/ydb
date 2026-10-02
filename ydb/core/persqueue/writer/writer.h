@@ -5,14 +5,20 @@
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <variant>
 
 #include "partition_chooser.h"
 
 namespace NKikimr::NPQ {
+
+struct TDeferredPublishWriterOpts {
+    ui64 IntPublicationId = 0;
+    TMaybe<TString> ExtPublicationId;
+};
 
 struct TEvPartitionWriter {
     enum EEv {
@@ -21,8 +27,12 @@ struct TEvPartitionWriter {
         EvWriteAccepted,
         EvWriteResponse,
         EvDisconnected,
+        EvAbortDeferredStaging,
 
         EvTxWriteRequest,
+
+        EvRequestDeferredDestinationUpsert,
+        EvDeferredDestinationUpsertResult,
 
         EvEnd,
     };
@@ -157,26 +167,55 @@ struct TEvPartitionWriter {
         const TEvWriteResponse::EErrorCode ErrorCode;
     };
 
+    struct TEvAbortDeferredStaging : public TEventLocal<TEvAbortDeferredStaging, EvAbortDeferredStaging> {
+    };
+
+    struct TEvRequestDeferredDestinationUpsert : public TEventLocal<TEvRequestDeferredDestinationUpsert, EvRequestDeferredDestinationUpsert> {
+        ui64 IntPublicationId = 0;
+        TString TopicPath;
+        TString Database;
+        ui32 PartitionId = 0;
+        ui64 TabletId = 0;
+    };
+
+    struct TEvDeferredDestinationUpsertResult : public TEventLocal<TEvDeferredDestinationUpsertResult, EvDeferredDestinationUpsertResult> {
+        bool Success = false;
+        TString Reason;
+    };
+
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {
-        TEvTxWriteRequest(const TString& sessionId, const TString& txId, THolder<TEvWriteRequest>&& request) :
-            SessionId(sessionId),
-            TxId(txId),
-            Request(std::move(request))
+        TEvTxWriteRequest(
+            const TString& sessionId,
+            const TString& txId,
+            THolder<TEvWriteRequest>&& request,
+            TMaybe<TDeferredPublishWriterOpts> deferredPublish = Nothing())
+            : SessionId(sessionId)
+            , TxId(txId)
+            , Request(std::move(request))
+            , DeferredPublish(std::move(deferredPublish))
         {
         }
 
         TString SessionId;
         TString TxId;
         THolder<TEvWriteRequest> Request;
+        TMaybe<TDeferredPublishWriterOpts> DeferredPublish;
     };
 
 }; // TEvPartitionWriter
 
 
 struct TPartitionWriterOpts {
+    class IGetter {
+    public:
+        virtual ~IGetter() = default;
+        virtual const TPartitionWriterOpts& GetOpts() const = 0;
+    };
+
     bool CheckState = false;
     bool AutoRegister = false;
     bool UseDeduplication = true;
+    bool TrackProducerId = true;
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
@@ -187,6 +226,11 @@ struct TPartitionWriterOpts {
     TString Token;
     TString SessionId;
     TString TxId;
+    // Used for deduplication in kafka idempotent producer (both in the transaction and out of the transaction)
+    std::optional<NKafka::TProducerInstanceId> KafkaProducerInstanceId;
+    // Indicates that this writer will write records in transactions
+    std::optional<TString> KafkaTransactionalId;
+    std::optional<TDeferredPublishWriterOpts> DeferredPublish;
     TString TraceId;
     TString RequestType;
 
@@ -210,6 +254,13 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithTraceId(const TString& value) { TraceId = value; return *this; }
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
     TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
+    TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
+    TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
+    TPartitionWriterOpts& WithTrackProducerId(bool value) { TrackProducerId = value; return *this; }
+    TPartitionWriterOpts& WithDeferredPublish(ui64 intPublicationId, TMaybe<TString> extPublicationId = Nothing()) {
+        DeferredPublish = TDeferredPublishWriterOpts{intPublicationId, std::move(extPublicationId)};
+        return *this;
+    }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

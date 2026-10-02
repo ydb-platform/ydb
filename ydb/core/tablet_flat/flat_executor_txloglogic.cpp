@@ -7,6 +7,7 @@
 #include "logic_redo_entry.h"
 #include "logic_redo_queue.h"
 #include "probes.h"
+#include "util_fmt_abort.h"
 #include "util_string.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
@@ -20,10 +21,11 @@ const static ui64 MaxSizeToEmbedInLog = 2048;
 const static ui64 MaxBytesToBatch = 2 * 1024 * 1024;
 const static ui64 MaxItemsToBatch = 64;
 
-TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step)
+TLogicRedo::TCompletionEntry::TCompletionEntry(std::unique_ptr<TSeat> seat, ui32 step)
     : Step(step)
-    , InFlyRWTransaction(seat)
-{}
+{
+    Transactions.PushBack(seat.release());
+}
 
 TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TCommitManager *commitManager, TAutoPtr<NRedo::TQueue> queue)
     : CommitManager(commitManager)
@@ -36,7 +38,7 @@ TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookie
 TLogicRedo::~TLogicRedo()
 {}
 
-void TLogicRedo::Describe(IOutputStream &out) const noexcept
+void TLogicRedo::Describe(IOutputStream &out) const
 {
     return Queue->Describe(out);
 }
@@ -46,33 +48,18 @@ void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWit
     AppTxCounters = appTxCounters;
 }
 
-NRedo::TStats TLogicRedo::LogStats() const noexcept
+NRedo::TStats TLogicRedo::LogStats() const
 {
     return { Queue->Items, Queue->Memory, Queue->LargeGlobIdsBytes };
 }
 
-TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
+TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const
 {
     return Queue->GrabUsage();
 }
 
-bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx, const TActorId &ownerID) {
-    if (CompletionQueue.empty()) {
-        const TTxType txType = seat->Self->GetTxType();
-
-        seat->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID));
-        Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
-        if (AppTxCounters && txType != UnknownTxType)
-            AppTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
-        return true;
-    } else {
-        CompletionQueue.back().WaitingTerminatedTransactions.push_back(seat);
-        return false;
-    }
-}
-
-void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters ) {
-    const TTxType txType = seat->Self->GetTxType();
+void CompleteRoTransaction(std::unique_ptr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters) {
+    const TTxType txType = seat->TxType;
 
     const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_RO].IncrementFor(latencyus);
@@ -84,22 +71,33 @@ void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, 
 
     const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
 
-    counters->Cumulative()[TExecutorCounters::TX_RO_COMPLETED].Increment(1);
-    if (appTxCounters && txType != UnknownTxType)
-        appTxCounters->TxCumulative(txType, COUNTER_TT_RO_COMPLETED).Increment(1);
+    if (Y_UNLIKELY(seat->IsTerminated())) {
+        counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
+        if (appTxCounters && txType != UnknownTxType) {
+            appTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
+            appTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
+        }
+    } else {
+        counters->Cumulative()[TExecutorCounters::TX_RO_COMPLETED].Increment(1);
+        if (appTxCounters && txType != UnknownTxType) {
+            appTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
+            appTxCounters->TxCumulative(txType, COUNTER_TT_RO_COMPLETED).Increment(1);
+        }
+    }
+
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMITED_CPUTIME].IncrementFor(completeTimeus);
     counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus);
     if (appTxCounters && txType != UnknownTxType)
         appTxCounters->TxCumulative(txType, COUNTER_TT_COMMITED_CPUTIME).Increment(completeTimeus);
 }
 
-bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx) {
+bool TLogicRedo::CommitROTransaction(std::unique_ptr<TSeat> seat, const TActorContext &ownerCtx) {
     if (CompletionQueue.empty()) {
-        CompleteRoTransaction(seat, ownerCtx, Counters, AppTxCounters);
+        CompleteRoTransaction(std::move(seat), ownerCtx, Counters, AppTxCounters);
         return true;
     } else {
         LWTRACK(TransactionReadOnlyWait, seat->Self->Orbit, seat->UniqID, CompletionQueue.back().Step);
-        CompletionQueue.back().WaitingROTransactions.push_back(seat);
+        CompletionQueue.back().Transactions.PushBack(seat.release());
         return false;
     }
 }
@@ -124,17 +122,17 @@ void TLogicRedo::FlushBatchedLog()
         CommitManager->Commit(commit);
     }
 
-    Y_ABORT_UNLESS(Batch->Commit == nullptr, "Batch still has acquired commit");
+    Y_ENSURE(Batch->Commit == nullptr, "Batch still has acquired commit");
 }
 
 TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
-                TAutoPtr<TSeat> seat, NTable::TChange &change, bool force)
+                std::unique_ptr<TSeat> seat, NTable::TChange &change, bool force)
 {
     seat->CommitTimer.Reset();
 
-    Y_ABORT_UNLESS(force || !(change.Scheme || change.Annex));
+    Y_ENSURE(force || !(change.Scheme || change.Annex));
 
-    const TTxType txType = seat->Self->GetTxType();
+    const TTxType txType = seat->TxType;
 
     if (auto bytes = change.Redo.size()) {
         Counters->Cumulative()[TMonCo::DB_REDO_WRITTEN_BYTES].Increment(bytes);
@@ -159,15 +157,15 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 
         auto commit = CommitManager->Begin(true, ECommit::Redo, seat->GetTxTraceId());
 
-        commit->PushTx(seat.Get());
-        CompletionQueue.push_back({ seat, commit->Step });
+        commit->PushTx(seat.get());
+        CompletionQueue.push_back({ std::move(seat), commit->Step });
         MakeLogEntry(*commit, std::move(change.Redo), change.Affects, !force);
 
         const auto was = commit->GcDelta.Created.size();
 
         for (auto &one: change.Annex) {
             if (one.GId.Logo.Step() != commit->Step) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     "Leader{" << Cookies->Tablet << ":" << Cookies->Gen << "}"
                     << " got for " << NFmt::Do(*commit) << " annex blob "
                     << one.GId.Logo << " out of step order");
@@ -181,12 +179,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             ref.Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput;
         }
 
-        /* Sometimes clang drops the last emplace_back above if move was used
-            before for data field. This hacky Y_ABORT_UNLESS prevents this and check
-            that emplace always happens.
-         */
-
-        Y_ABORT_UNLESS(was + change.Annex.size() == commit->GcDelta.Created.size());
+        Y_ENSURE(was + change.Annex.size() == commit->GcDelta.Created.size());
 
         return { commit, false };
     } else {
@@ -208,9 +201,9 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             }
         }
         
-        Batch->Commit->PushTx(seat.Get());
+        Batch->Commit->PushTx(seat.get());
 
-        CompletionQueue.push_back({ seat, Batch->Commit->Step });
+        CompletionQueue.push_back({ std::move(seat), Batch->Commit->Step });
 
         Batch->Add(std::move(change.Redo), change.Affects);
 
@@ -248,26 +241,32 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
 }
 
 ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) {
-    Y_ABORT_UNLESS(!CompletionQueue.empty(), "t: %" PRIu64
-        " non-expected confirmation %" PRIu32
-        ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep);
+    Y_ENSURE(!CompletionQueue.empty(),
+        "tablet: " << Cookies->Tablet
+        << " unexpected confirmation step: " << step
+        << ", prev: " << PrevConfirmedStep);
 
-    Y_ABORT_UNLESS(CompletionQueue[0].Step == step, "t: %" PRIu64
-        " inconsistent confirmation head: %" PRIu32
-        ", step: %" PRIu32
-        ", queue size: %" PRISZT
-        ", prev confimed: %" PRIu32
-        , Cookies->Tablet, CompletionQueue[0].Step, step, CompletionQueue.size(), PrevConfirmedStep);
+    Y_ENSURE(CompletionQueue.front().Step == step,
+        "tablet: " << Cookies->Tablet
+        << " inconsistent confirmation step: " << step
+        << ", queue head: " << CompletionQueue.front().Step
+        << ", queue size: " << CompletionQueue.size()
+        << ", prev confimed: " << PrevConfirmedStep);
 
     PrevConfirmedStep = step;
 
     const TActorContext ownerCtx = ctx.MakeFor(ownerId);
     ui64 confirmedTransactions = 0;
     do {
-        TCompletionEntry &entry = CompletionQueue[0];
-        auto &seat = entry.InFlyRWTransaction;
+        TCompletionEntry &entry = CompletionQueue.front();
 
-        const TTxType txType = seat->Self->GetTxType();
+        Y_ENSURE(entry.Transactions,
+            "tablet: " << Cookies->Tablet
+            << " entry without transactions, step: " << step);
+
+        std::unique_ptr<TSeat> seat{entry.Transactions.PopFront()};
+
+        const TTxType txType = seat->TxType;
         const ui64 commitLatencyus = ui64(1000000. * seat->CommitTimer.Passed());
         const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_COMMIT].IncrementFor(commitLatencyus);
@@ -276,44 +275,38 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
         ++confirmedTransactions;
         THPTimer completeTimer;
         LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID);
-        entry.InFlyRWTransaction->Complete(ownerCtx, true);
+        seat->Complete(ownerCtx, true);
         LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
         const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
 
         Counters->Cumulative()[TExecutorCounters::TX_RW_COMPLETED].Increment(1);
-        if (AppTxCounters && txType != UnknownTxType)
+        if (AppTxCounters && txType != UnknownTxType) {
+            AppTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
             AppTxCounters->TxCumulative(txType, COUNTER_TT_RW_COMPLETED).Increment(1);
+        }
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMITED_CPUTIME].IncrementFor(completeTimeus);
         Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_COMMITED_CPUTIME).Increment(completeTimeus);
 
-        for (auto &x : entry.WaitingROTransactions) {
+        seat.reset();
+
+        while (entry.Transactions) {
+            std::unique_ptr<TSeat> seat{entry.Transactions.PopFront()};
             ++confirmedTransactions;
-            CompleteRoTransaction(x, ownerCtx, Counters, AppTxCounters);
-        }
-
-        for (auto &x : entry.WaitingTerminatedTransactions) {
-            const TTxType roTxType = x->Self->GetTxType();
-            x->Terminate(x->TerminationReason, ownerCtx);
-
-            Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
-            if (AppTxCounters && roTxType != UnknownTxType)
-                AppTxCounters->TxCumulative(roTxType, COUNTER_TT_TERMINATED).Increment(1);
-
-            ++confirmedTransactions;
+            CompleteRoTransaction(std::move(seat), ownerCtx, Counters, AppTxCounters);
         }
 
         CompletionQueue.pop_front();
-    } while (!CompletionQueue.empty() && CompletionQueue[0].Step == step);
+    } while (!CompletionQueue.empty() && CompletionQueue.front().Step == step);
 
     return confirmedTransactions;
 }
 
 void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
 {
-    Y_ABORT_UNLESS(Batch->Commit == nullptr);
+    Y_ENSURE(Batch->Commit == nullptr);
 
     Queue->Flush(snap);
 

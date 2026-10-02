@@ -20,19 +20,17 @@ class TDirectTxErase : public IDirectTx {
     struct TExecuteParams {
         TDirectTxErase* const Tx;
         TTransactionContext* const Txc;
-        const TRowVersion ReadVersion;
-        const TRowVersion WriteVersion;
+        const TRowVersion MvccVersion;
         const ui64 GlobalTxId;
         absl::flat_hash_set<ui64>* const VolatileReadDependencies;
 
     private:
         explicit TExecuteParams(TDirectTxErase* tx, TTransactionContext* txc,
-                const TRowVersion& readVersion, const TRowVersion& writeVersion,
-                ui64 globalTxId, absl::flat_hash_set<ui64>* volatileReadDependencies)
+                const TRowVersion& mvccVersion, ui64 globalTxId,
+                absl::flat_hash_set<ui64>* volatileReadDependencies)
             : Tx(tx)
             , Txc(txc)
-            , ReadVersion(readVersion)
-            , WriteVersion(writeVersion)
+            , MvccVersion(mvccVersion)
             , GlobalTxId(globalTxId)
             , VolatileReadDependencies(volatileReadDependencies)
         {
@@ -40,7 +38,7 @@ class TDirectTxErase : public IDirectTx {
 
     public:
         static TExecuteParams ForCheck() {
-            return TExecuteParams(nullptr, nullptr, TRowVersion(), TRowVersion(), 0, nullptr);
+            return TExecuteParams(nullptr, nullptr, TRowVersion(), 0, nullptr);
         }
 
         template <typename... Args>
@@ -50,7 +48,7 @@ class TDirectTxErase : public IDirectTx {
 
         explicit operator bool() const {
             if (!Tx || !Txc) {
-                Y_ABORT_UNLESS(!Tx && !Txc);
+                Y_ENSURE(!Tx && !Txc);
                 return false;
             }
 
@@ -74,8 +72,8 @@ public:
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
 
     bool Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) override;
+        const TRowVersion& mvccVersion, ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };

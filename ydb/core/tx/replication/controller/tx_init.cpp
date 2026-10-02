@@ -1,4 +1,10 @@
 #include "controller_impl.h"
+#include "target_table.h"
+#include "target_transfer.h"
+
+#include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -52,10 +58,20 @@ class TController::TTxInit: public TTxBase {
             const auto state = rowset.GetValue<Schema::Replications::State>();
             const auto issue = rowset.GetValue<Schema::Replications::Issue>();
             const auto nextTid = rowset.GetValue<Schema::Replications::NextTargetId>();
+            const auto desiredState = rowset.GetValue<Schema::Replications::DesiredState>();
+            const auto database = rowset.GetValue<Schema::Replications::Database>();
 
-            auto replication = Self->Add(rid, pathId, config);
+            auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
+            replication->SetDesiredState(desiredState);
+            if (rowset.GetValueOrDefault<Schema::Replications::DeferredAlter>(false)) {
+                Self->DeferredAlters.insert(rid);
+            }
+
+            if (!database) {
+                Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -79,6 +95,8 @@ class TController::TTxInit: public TTxBase {
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
+            const auto workerSetComplete =
+                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
@@ -87,12 +105,41 @@ class TController::TTxInit: public TTxBase {
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
-            auto* target = replication->AddTarget(tid, kind, srcPath, dstPath);
+            TReplication::ITarget::IConfig::TPtr config;
+            switch (kind) {
+            case TReplication::ETargetKind::Table:
+                config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
+                break;
+            case TReplication::ETargetKind::IndexTable:
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                break;
+            case TReplication::ETargetKind::Transfer:
+                config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
+                break;
+            }
+
+            auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            if (workerSetComplete) {
+                Self->CompleteWorkerSets.insert({rid, tid});
+            }
+            const auto barrierPhase = rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierPhase>(0);
+            if (barrierPhase) {
+                auto& barrier = Self->SchemaBarriers[{rid, tid}];
+                barrier.Phase = static_cast<ESchemaBarrierPhase>(barrierPhase);
+                Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
+                    rowset.GetValue<Schema::Targets::SchemaBarrierChange>()));
+                barrier.DstAlterTxId = rowset.GetValueOrDefault<Schema::Targets::DstAlterTxId>(0);
+                NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
+                Y_ABORT_UNLESS(flushTxIds.ParseFromString(
+                    rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierFlushTxIds>(TString())));
+                Y_ABORT_UNLESS(barrier.Phase != ESchemaBarrierPhase::FlushingTarget || flushTxIds.WriteTxIdsSize());
+                barrier.TargetFlushTxIds.assign(flushTxIds.GetWriteTxIds().begin(), flushTxIds.GetWriteTxIds().end());
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -113,6 +160,7 @@ class TController::TTxInit: public TTxBase {
             const auto tid = rowset.GetValue<Schema::SrcStreams::TargetId>();
             const auto name = rowset.GetValue<Schema::SrcStreams::Name>();
             const auto state = rowset.GetValue<Schema::SrcStreams::State>();
+            const auto consumerName = rowset.GetValueOrDefault<Schema::SrcStreams::ConsumerName>(ReplicationConsumerName);
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -124,6 +172,7 @@ class TController::TTxInit: public TTxBase {
 
             target->SetStreamName(name);
             target->SetStreamState(state);
+            target->SetStreamConsumerName(consumerName);
 
             if (!rowset.Next()) {
                 return false;
@@ -175,15 +224,50 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
+            // Zero denotes a registered worker that has not reported a
+            // heartbeat yet and must not join a recovered heartbeat quorum.
+            if (version != TRowVersion::Min()) {
+                worker->SetHeartbeat(version);
+                Self->WorkersWithHeartbeat.insert(id);
+                Self->WorkersByHeartbeat[version].insert(id);
+            }
 
             if (!rowset.Next()) {
                 return false;
             }
         }
 
+        return true;
+    }
+
+    bool LoadSchemaBarrierWorkers(NIceDb::TNiceDb& db) {
+        auto workers = db.Table<Schema::SchemaBarrierWorkers>().Select();
+        if (!workers.IsReady()) {
+            return false;
+        }
+        while (!workers.EndOfSet()) {
+            const auto key = std::make_pair(
+                workers.GetValue<Schema::SchemaBarrierWorkers::ReplicationId>(),
+                workers.GetValue<Schema::SchemaBarrierWorkers::TargetId>());
+            auto it = Self->SchemaBarriers.find(key);
+            Y_ABORT_UNLESS(it != Self->SchemaBarriers.end(), "Barrier member without barrier");
+            const auto id = TWorkerId(key.first, key.second,
+                workers.GetValue<Schema::SchemaBarrierWorkers::WorkerId>());
+            it->second.ExpectedWorkers.insert(id);
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Reported>()) {
+                it->second.ReportedWorkers.insert(id);
+                it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
+                it->second.AppliedWorkers.insert(id);
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Completed>()) {
+                it->second.CompletedWorkers.insert(id);
+            }
+            if (!workers.Next()) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -194,7 +278,8 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-            && LoadWorkers(db);
+            && LoadWorkers(db)
+            && LoadSchemaBarrierWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {
@@ -213,13 +298,26 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute");
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
-        Self->SwitchToWork(ctx);
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        if (Self->UnresolvedDatabaseReplications.empty()) {
+            Self->SwitchToWork(ctx);
+        } else {
+            for (auto& [rid, resolveAttempts] : Self->UnresolvedDatabaseReplications) {
+                auto replication = Self->Find(rid);
+                replication->ResolveDatabase(ctx);
+                --resolveAttempts;
+            }
+
+            Self->SwitchToDatabaseResolve(ctx);
+        }
     }
 
 }; // TTxInit

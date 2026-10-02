@@ -1,0 +1,2 @@
+{"component": "console", "database": "/Root/Database", "operation": "BEGIN INIT DATABASE CONFIG", "remote_address": "<canonized_remote_address>", "sanitized_token": "**** (B6C6F477)", "status": "SUCCESS", "subject": "root@builtin"}
+{"component": "console", "database": "/Root/Database", "operation": "END INIT DATABASE CONFIG", "remote_address": "<canonized_remote_address>", "sanitized_token": "**** (B6C6F477)", "status": "SUCCESS", "subject": "root@builtin"}

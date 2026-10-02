@@ -1,4 +1,3 @@
-/* postgres can not */
 $x = 1 + 0;
 $y = 2ul + 0ul;
 

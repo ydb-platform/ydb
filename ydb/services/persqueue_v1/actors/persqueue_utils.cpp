@@ -4,19 +4,25 @@
 
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/charset/utf8.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
-    Y_ABORT_UNLESS(AclOldSchemeCache);
+    AFL_ENSURE(AclOldSchemeCache);
 }
 
 TAclWrapper::TAclWrapper(TIntrusivePtr<TSecurityObject> acl)
     : AclNewSchemeCache(std::move(acl))
 {
-    Y_ABORT_UNLESS(AclNewSchemeCache);
+    AFL_ENSURE(AclNewSchemeCache);
 }
 
 bool TAclWrapper::CheckAccess(NACLib::EAccessRights rights, const NACLib::TUserToken& userToken) {
@@ -174,4 +180,21 @@ Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TScheme
     }
 }
 
+void SetBatchSourceId(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch, TString value) {
+    AFL_ENSURE(batch);
+    batch->set_source_id(std::move(value));
+}
+
+void SetBatchSourceId(Ydb::Topic::StreamReadMessage_ReadResponse_Batch* batch, TString value) {
+    AFL_ENSURE(batch);
+    if (IsUtf(value)) {
+        batch->set_producer_id(std::move(value));
+    } else {
+        TString encoded = Base64Encode(value);
+        batch->set_producer_id(encoded);
+        (*batch->mutable_write_session_meta())["_encoded_producer_id"] = encoded;
+    }
+}
+
 } // namespace NKikimr::NGRpcProxy::V1
+

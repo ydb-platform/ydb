@@ -1,4 +1,6 @@
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/tools/yqlrun/lib/yqlrun_lib.h>
+#include <yql/tools/yqlrun/lib/yqlrun_lib_spark.h>
 #include <yql/tools/yqlrun/http/yql_server.h>
 
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
@@ -23,6 +25,12 @@
 #include <yql/essentials/core/yql_udf_index.h>
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/stream.h>
@@ -75,8 +83,9 @@ void CommonInit(const NLastGetopt::TOptsParseResult& res, const TString& udfReso
         udfResolver = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, udfResolverPath, {}, {}, filterSysCalls, {});
 
         Cerr << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << udfsPaths.size() << " udfs ..." << Endl;
+        THoldingFileStorage storage(fileStorage);
         udfIndex = new TUdfIndex();
-        LoadRichMetadataToUdfIndex(*udfResolver, udfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+        LoadRichMetadataToUdfIndex(*udfResolver, udfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
         Cerr << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done." << Endl;
 
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, fileStorage);
@@ -110,6 +119,7 @@ int RunUI(int argc, const char* argv[])
 
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
+    EnableKikimrBacktraceFormat();
 
     TVector<TString> udfsPaths;
     TString udfsDir;
@@ -120,6 +130,7 @@ int RunUI(int argc, const char* argv[])
     TString gatewaysCfgFile;
     TString fsCfgFile;
     TString pgExtConfig;
+    std::shared_ptr<NSparkTool::TSparkSettings> sparkSettings;
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
@@ -141,12 +152,15 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
+    InitSparkSettings(sparkSettings);
+    AddSparkOptions(opts, sparkSettings, /*withSyntax=*/false);
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
     config.InitCliOptions(opts);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     config.ParseFromCli(res);
+    ValidateSparkSettings(sparkSettings);
 
     TUserDataTable userData;
     for (auto& s : filesMappingList) {
@@ -177,6 +191,11 @@ int RunUI(int argc, const char* argv[])
 
     NPg::GetSqlLanguageParser()->Freeze();
 
+    NSQLTranslation::TExtendedSqlFlags extendedSqlFlags;
+    for (const auto& flag : sqlFlags) {
+        extendedSqlFlags[flag] = {};
+    }
+
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {
         gatewaysConfig = ParseProtoConfig<TGatewaysConfig>(gatewaysCfgFile);
@@ -184,9 +203,8 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        if (gatewaysConfig->HasSqlCore()) {
-            sqlFlags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
-        }
+        extendedSqlFlags = TGatewaySQLFlags::FromTesting(*gatewaysConfig)
+                               .ToMap(std::move(extendedSqlFlags));
     }
 
     THolder<TFileStorageConfig> fsConfig;
@@ -207,6 +225,25 @@ int RunUI(int argc, const char* argv[])
 
     CommonInit(res, udfResolverPath, udfResolverFilterSyscalls, udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
@@ -216,13 +253,18 @@ int RunUI(int argc, const char* argv[])
         Y_ABORT_UNLESS(mount);
         FillUserDataTableFromFileSystem(*mount, userData);
 
-        if (!CompileLibraries(userData, ctx, modules)) {
+        if (!CompileLibraries(translators, userData, ctx, modules)) {
             Cerr << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(Cerr);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
+        moduleResolver = std::make_shared<TModuleResolver>(
+            translators,
+            std::move(modules),
+            ctx.NextUniqueId,
+            clusterMapping,
+            extendedSqlFlags);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping)) {
             Cerr << "Errors loading default YQL libraries:" << Endl;
@@ -248,12 +290,17 @@ int RunUI(int argc, const char* argv[])
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CoreEval, NLog::ELevel::DEBUG);
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::DEBUG);
 
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
+    AddSparkTranslator(translatorsRegistry, sparkSettings);
+
     auto server = CreateYqlServer(config,
                 funcRegistry.Get(), udfIndex, ctx.NextUniqueId,
                 userData,
                 std::move(gatewaysConfig),
                 sqlFlags,
-                moduleResolver, udfResolver, fileStorage);
+                moduleResolver, udfResolver, fileStorage, std::move(translatorsRegistry),
+                Nothing()
+    );
     server->Start();
     server->Wait();
 

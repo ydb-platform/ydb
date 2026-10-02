@@ -26,7 +26,8 @@ public:
     TTxLambdaReader(const TString& name, const TFunction& precharge, const TFunction& execute)
         : TBase(name)
         , PrechargeFunction(precharge)
-        , ExecuteFunction(execute) {
+        , ExecuteFunction(execute)
+    {
     }
 };
 

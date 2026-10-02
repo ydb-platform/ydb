@@ -1,0 +1,125 @@
+--- contrib/libs/apache/arrow/cpp/src/arrow/python/arrow_to_pandas.cc	(index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/python/arrow_to_pandas.cc	(working tree)
+@@ -234,7 +234,8 @@ Status SetBufferBase(PyArrayObject* arr, const std::shared_ptr<Buffer>& buffer) 
+ }
+ 
+ inline void set_numpy_metadata(int type, const DataType* datatype, PyArray_Descr* out) {
+-  auto metadata = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(out->c_metadata);
++  auto metadata =
++      reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(out));
+   if (type == NPY_DATETIME) {
+     if (datatype->id() == Type::TIMESTAMP) {
+       const auto& timestamp_type = checked_cast<const TimestampType&>(*datatype);
+@@ -255,7 +256,7 @@ Status PyArray_NewFromPool(int nd, npy_intp* dims, PyArray_Descr* descr, MemoryP
+   //
+   // * Track allocations
+   // * Get better performance through custom allocators
+-  int64_t total_size = descr->elsize;
++  int64_t total_size = PyDataType_ELSIZE(descr);
+   for (int i = 0; i < nd; ++i) {
+     total_size *= dims[i];
+   }
+@@ -511,8 +512,9 @@ class PandasWriter {
+ 
+   void SetDatetimeUnit(NPY_DATETIMEUNIT unit) {
+     PyAcquireGIL lock;
+-    auto date_dtype = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(
+-        PyArray_DESCR(reinterpret_cast<PyArrayObject*>(block_arr_.obj()))->c_metadata);
++    auto date_dtype =
++        reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(
++            PyArray_DESCR(reinterpret_cast<PyArrayObject*>(block_arr_.obj()))));
+     date_dtype->meta.base = unit;
+   }
+ 
+--- contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_convert.cc	(index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_convert.cc	(working tree)
+@@ -46,7 +46,7 @@ NumPyBuffer::NumPyBuffer(PyObject* ao) : Buffer(nullptr, 0) {
+     PyArrayObject* ndarray = reinterpret_cast<PyArrayObject*>(ao);
+     auto ptr = reinterpret_cast<uint8_t*>(PyArray_DATA(ndarray));
+     data_ = const_cast<const uint8_t*>(ptr);
+-    size_ = PyArray_SIZE(ndarray) * PyArray_DESCR(ndarray)->elsize;
++    size_ = PyArray_NBYTES(ndarray);
+     capacity_ = size_;
+     is_mutable_ = !!(PyArray_FLAGS(ndarray) & NPY_ARRAY_WRITEABLE);
+   }
+@@ -148,7 +148,7 @@ Status NumPyDtypeToArrow(PyArray_Descr* descr, std::shared_ptr<DataType>* out) {
+     TO_ARROW_TYPE_CASE(UNICODE, utf8);
+     case NPY_DATETIME: {
+       auto date_dtype =
+-          reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(descr->c_metadata);
++          reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(descr));
+       switch (date_dtype->meta.base) {
+         case NPY_FR_s:
+           *out = timestamp(TimeUnit::SECOND);
+@@ -173,7 +173,7 @@ Status NumPyDtypeToArrow(PyArray_Descr* descr, std::shared_ptr<DataType>* out) {
+     } break;
+     case NPY_TIMEDELTA: {
+       auto timedelta_dtype =
+-          reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(descr->c_metadata);
++          reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(descr));
+       switch (timedelta_dtype->meta.base) {
+         case NPY_FR_s:
+           *out = duration(TimeUnit::SECOND);
+--- contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_interop.h	(index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_interop.h	(working tree)
+@@ -67,6 +67,13 @@
+ #define NPY_INT32_IS_INT 0
+ #endif
+ 
++// Backported NumPy 2 API (can be removed if numpy 2 is required)
++#if NPY_ABI_VERSION < 0x02000000
++#define PyDataType_ELSIZE(descr) ((descr)->elsize)
++#define PyDataType_C_METADATA(descr) ((descr)->c_metadata)
++#define PyDataType_FIELDS(descr) ((descr)->fields)
++#endif
++
+ namespace arrow {
+ namespace py {
+ 
+--- contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_to_arrow.cc	(index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/python/numpy_to_arrow.cc	(working tree)
+@@ -193,7 +193,7 @@ class NumPyConverter {
+       mask_ = reinterpret_cast<PyArrayObject*>(mo);
+     }
+     length_ = static_cast<int64_t>(PyArray_SIZE(arr_));
+-    itemsize_ = static_cast<int>(PyArray_DESCR(arr_)->elsize);
++    itemsize_ = static_cast<int64_t>(PyArray_ITEMSIZE(arr_));
+     stride_ = static_cast<int64_t>(PyArray_STRIDES(arr_)[0]);
+   }
+ 
+@@ -470,7 +470,8 @@ inline Status NumPyConverter::ConvertData<Date32Type>(std::shared_ptr<Buffer>* d
+ 
+   RETURN_NOT_OK(PrepareInputData<Date32Type>(data));
+ 
+-  auto date_dtype = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(dtype_->c_metadata);
++  auto date_dtype =
++      reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(dtype_));
+   if (dtype_->type_num == NPY_DATETIME) {
+     // If we have inbound datetime64[D] data, this needs to be downcasted
+     // separately here from int64_t to int32_t, because this data is not
+@@ -506,7 +507,8 @@ inline Status NumPyConverter::ConvertData<Date64Type>(std::shared_ptr<Buffer>* d
+ 
+   RETURN_NOT_OK(PrepareInputData<Date64Type>(data));
+ 
+-  auto date_dtype = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(dtype_->c_metadata);
++  auto date_dtype =
++      reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(dtype_));
+   if (dtype_->type_num == NPY_DATETIME) {
+     // If we have inbound datetime64[D] data, this needs to be downcasted
+     // separately here from int64_t to int32_t, because this data is not
+@@ -736,12 +738,13 @@ Status NumPyConverter::Visit(const StructType& type) {
+     PyAcquireGIL gil_lock;
+ 
+     // Create converters for each struct type field
+-    if (dtype_->fields == NULL || !PyDict_Check(dtype_->fields)) {
++    if (PyDataType_FIELDS(dtype_) == NULL || !PyDict_Check(PyDataType_FIELDS(dtype_))) {
+       return Status::TypeError("Expected struct array");
+     }
+ 
+     for (auto field : type.fields()) {
+-      PyObject* tup = PyDict_GetItemString(dtype_->fields, field->name().c_str());
++      PyObject* tup =
++          PyDict_GetItemString(PyDataType_FIELDS(dtype_), field->name().c_str());
+       if (tup == NULL) {
+         return Status::Invalid("Missing field '", field->name(), "' in struct array");
+       }

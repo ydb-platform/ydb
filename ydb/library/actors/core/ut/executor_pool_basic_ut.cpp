@@ -2,17 +2,13 @@
 #include "executor_pool_basic.h"
 #include "hfunc.h"
 #include "scheduler_basic.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/util/should_continue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
-
-#define VALUES_EQUAL(a, b, ...) \
-        UNIT_ASSERT_VALUES_EQUAL_C((a), (b), (i64)semaphore.OldSemaphore \
-                << ' ' << (i64)semaphore.CurrentSleepThreadCount \
-                << ' ' << (i64)semaphore.CurrentThreadCount __VA_ARGS__);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,190 +86,7 @@ THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
     return setup;
 }
 
-Y_UNIT_TEST_SUITE(WaitingBenchs) {
-
-    Y_UNIT_TEST(SpinPause) {
-        const ui32 count = 1'000'000;
-        ui64 startTs = GetCycleCountFast();
-        for (ui32 idx = 0; idx < count; ++idx) {
-            SpinLockPause();
-        }
-        ui64 stopTs = GetCycleCountFast();
-        Cerr << Ts2Us(stopTs - startTs) / count << Endl;
-        Cerr << double(stopTs - startTs) / count << Endl;
-    }
-
-    struct TThread : public ISimpleThread {
-        static const ui64 CyclesInMicroSecond;
-        std::array<ui64, 128> Hist;
-        ui64 WakingTime = 0;
-        ui64 AwakeningTime = 0;
-        ui64 SleepTime = 0;
-        ui64 IterationCount = 0;
-
-        std::atomic<ui64> Awakens = 0;
-        std::atomic<ui64> *OtherAwaken;
-
-        TThreadParkPad OwnPad;
-        TThreadParkPad *OtherPad;
-
-        bool IsWaiting = false;
-
-        void GoToWait() {
-            ui64 start = GetCycleCountFast();
-            OwnPad.Park();
-            ui64 elapsed = GetCycleCountFast() - start;
-            AwakeningTime += elapsed;
-            ui64 idx = std::min(Hist.size() - 1, (elapsed - 20 * CyclesInMicroSecond) / CyclesInMicroSecond);
-            Hist[idx]++;
-            Awakens++;
-        }
-
-        void GoToWakeUp() {
-            ui64 start = GetCycleCountFast();
-            OtherPad->Unpark();
-            ui64 elapsed = GetCycleCountFast() - start;
-            WakingTime += elapsed;
-            ui64 idx = std::min(Hist.size() - 1, elapsed / CyclesInMicroSecond);
-            Hist[idx]++;
-        }
-
-        void GoToSleep() {
-            ui64 start = GetCycleCountFast();
-            ui64 stop = start;
-            while (stop - start < 20 * CyclesInMicroSecond) {
-                SpinLockPause();
-                stop = GetCycleCountFast();
-            }
-            SleepTime += stop - start;
-        }
-
-        void* ThreadProc() {
-            for (ui32 idx = 0; idx < IterationCount; ++idx) {
-                if (IsWaiting) {
-                    GoToWait();
-                } else {
-                    GoToSleep();
-                    GoToWakeUp();
-                    while(OtherAwaken->load() == idx) {
-                        SpinLockPause();
-                    }
-                }
-            }
-            return nullptr;
-        }
-    };
-
-    const ui64 TThread::CyclesInMicroSecond =  NHPTimer::GetCyclesPerSecond() * 0.000001;
-
-    Y_UNIT_TEST(WakingUpTest) {
-        TThread a, b;
-        constexpr ui64 iterations = 100'000;
-        std::fill(a.Hist.begin(), a.Hist.end(), 0);
-        std::fill(b.Hist.begin(), b.Hist.end(), 0);
-        a.IterationCount = iterations;
-        b.IterationCount = iterations;
-        a.IsWaiting = true;
-        b.IsWaiting = false;
-        b.OtherAwaken = &a.Awakens;
-        a.OtherPad = &b.OwnPad;
-        b.OtherPad = &a.OwnPad;
-        a.Start();
-        b.Start();
-        a.Join();
-        b.Join();
-
-        ui64 awakeningTime = a.AwakeningTime + b.AwakeningTime - a.SleepTime - b.SleepTime;
-        ui64 wakingUpTime = a.WakingTime + b.WakingTime;
-
-        Cerr << "AvgAwakeningCycles: " << double(awakeningTime) / iterations << Endl;
-        Cerr << "AvgAwakeningUs: " << Ts2Us(awakeningTime) / iterations  << Endl;
-        Cerr << "AvgSleep20usCycles:" << double(b.SleepTime) / iterations << Endl;
-        Cerr << "AvgSleep20usUs:" << Ts2Us(b.SleepTime) / iterations << Endl;
-        Cerr << "AvgWakingUpCycles: " << double(wakingUpTime) / iterations  << Endl;
-        Cerr << "AvgWakingUpUs: " << Ts2Us(wakingUpTime) / iterations  << Endl;
-
-        Cerr << "AwakeningHist:\n";
-        for (ui32 idx = 0; idx < a.Hist.size(); ++idx) {
-            if (a.Hist[idx]) {
-                if (idx + 1 != a.Hist.size()) {
-                    Cerr << "  [" << idx << "us - " << idx + 1 << "us] " << a.Hist[idx] << Endl;
-                } else {
-                    Cerr << "  [" << idx << "us - ...] " << a.Hist[idx] << Endl;
-                }
-            }
-        }
-
-        Cerr << "WakingUpHist:\n";
-        for (ui32 idx = 0; idx < b.Hist.size(); ++idx) {
-            if (b.Hist[idx]) {
-                if (idx + 1 != b.Hist.size()) {
-                    Cerr << "  [" << idx << "us - " << idx + 1 << "us] " << b.Hist[idx] << Endl;
-                } else {
-                    Cerr << "  [" << idx << "us - ...] " << b.Hist[idx] << Endl;
-                }
-            }
-        }
-    }
-
-}
-
 Y_UNIT_TEST_SUITE(BasicExecutorPool) {
-
-    Y_UNIT_TEST(Semaphore) {
-        TBasicExecutorPool::TSemaphore semaphore;
-        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(0);
-
-        VALUES_EQUAL(0, semaphore.ConvertToI64());
-        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(-1);
-        VALUES_EQUAL(-1, semaphore.ConvertToI64());
-        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(1);
-        VALUES_EQUAL(1, semaphore.ConvertToI64());
-
-        for (i64 value = -1'000'000; value <= 1'000'000; ++value) {
-            VALUES_EQUAL(TBasicExecutorPool::TSemaphore::GetSemaphore(value).ConvertToI64(), value);
-        }
-
-        for (i8 sleepThreads = -10; sleepThreads <= 10; ++sleepThreads) {
-
-            semaphore = TBasicExecutorPool::TSemaphore();
-            semaphore.CurrentSleepThreadCount = sleepThreads;
-            i64 initialValue = semaphore.ConvertToI64();
-
-            semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(initialValue - 1);
-            VALUES_EQUAL(-1, semaphore.OldSemaphore);
-
-            i64 value = initialValue;
-            value -= 100;
-            for (i32 expected = -100; expected <= 100; ++expected) {
-                semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
-                UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
-                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.CurrentThreadCount);
-                UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
-                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.CurrentThreadCount);
-                semaphore = TBasicExecutorPool::TSemaphore();
-                semaphore.OldSemaphore = expected;
-                semaphore.CurrentSleepThreadCount = sleepThreads;
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.ConvertToI64(), value);
-                value++;
-            }
-
-            for (i32 expected = 101; expected >= -101; --expected) {
-                semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
-                UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
-                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.CurrentThreadCount);
-                UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
-                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.CurrentThreadCount);
-                value--;
-            }
-        }
-
-        //UNIT_ASSERT_VALUES_EQUAL_C(-1, TBasicExecutorPool::TSemaphore::GetSemaphore(value-1).OldSemaphore);
-    }
 
     Y_UNIT_TEST(CheckCompleteOne) {
         const size_t size = 4;
@@ -460,7 +273,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         TVector<TExecutorThreadStats> stats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats);
         // Sum all per-thread counters into the 0th element
         for (ui32 idx = 1; idx < stats.size(); ++idx) {
             stats[0].Aggregate(stats[idx]);
@@ -487,6 +300,27 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4096); // one line
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
+    }
+
+    Y_UNIT_TEST(GetExecutorPoolStateWithoutHarmonizerUsesMinAndMaxLimits) {
+        TBasicExecutorPoolConfig config;
+        config.Threads = 4;
+        config.MinThreadCount = 1;
+        config.DefaultThreadCount = 2;
+        config.MaxThreadCount = 4;
+
+        TBasicExecutorPool executorPool(config, nullptr, nullptr);
+
+        TExecutorPoolState state;
+        state.PossibleMaxLimit = -1;
+        state.MaxLimit = -1;
+
+        executorPool.GetExecutorPoolState(state);
+
+        UNIT_ASSERT_VALUES_EQUAL(state.CurrentLimit, executorPool.GetThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MinLimit, executorPool.GetMinThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, executorPool.GetMaxThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.PossibleMaxLimit, state.MaxLimit);
     }
 }
 

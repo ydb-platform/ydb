@@ -30,11 +30,13 @@ NActors::IActor* CreateS3FileQueueActor(
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles);
+        bool allowLocalFiles,
+        IDqSchedulableWorkFactoryPtr workFactory);
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
@@ -44,12 +46,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const THashMap<TString, TString>& taskParams,
     const TVector<TString>& readRanges,
     const NActors::TActorId& computeActorId,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
-    bool allowLocalFiles);
+    bool allowLocalFiles,
+    IDqSchedulableWorkFactoryPtr workFactory = nullptr);
 
 } // namespace NYql::NDq

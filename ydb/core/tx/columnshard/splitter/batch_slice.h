@@ -1,14 +1,16 @@
 #pragma once
+#include "blob_info.h"
 #include "chunks.h"
 #include "column_info.h"
-#include "blob_info.h"
+
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/library/formats/arrow/splitter/stats.h>
-#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -23,6 +25,7 @@ protected:
     virtual TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
         return Schema->GetColumnSaver(columnId);
     }
+
 public:
     TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
         : Schema(schema)
@@ -30,6 +33,7 @@ public:
     {
         AFL_VERIFY(Stats);
     }
+
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
         return Schema->GetFieldByColumnIdOptional(columnId);
     }
@@ -41,10 +45,12 @@ public:
         }
         return std::nullopt;
     }
+
     virtual std::optional<NArrow::NSplitter::TBatchSerializationStat> GetBatchSerializationStats(
         const std::shared_ptr<arrow::RecordBatch>& rb) const override {
         return Stats->GetStatsForRecordBatch(rb);
     }
+
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
         return Schema->GetColumnId(fieldName);
     }
@@ -54,6 +60,7 @@ class TGeneralSerializedSlice {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, InternalSplitsCount, 0);
+
 protected:
     std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
@@ -70,10 +77,10 @@ protected:
         AFL_VERIFY(false)("id", entityId);
         return Data.front();
     }
+
     bool GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs);
 
 public:
-
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToHash() const {
         THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         for (auto&& i : Data) {
@@ -102,6 +109,15 @@ public:
         return arrow::RecordBatch::Make(pkSchema, 2, pkColumns);
     }
 
+    ui64 GetPackedSize() const {
+        ui64 result = 0;
+        for (auto&& i : Data) {
+            result += i.GetPackedSize();
+        }
+        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        return result;
+    }
+
     ui64 GetSize() const {
         return Size;
     }
@@ -119,6 +135,7 @@ public:
             MergeSlice(std::move(objects[i]));
         }
     }
+
     TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
         NArrow::NSplitter::ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters);
     TGeneralSerializedSlice(
@@ -127,10 +144,6 @@ public:
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
     bool GroupBlobs(std::vector<TSplittedBlob>& blobs, const NSplitter::TEntityGroups& groups);
-
-    bool operator<(const TGeneralSerializedSlice& item) const {
-        return Size < item.Size;
-    }
 };
 
-}
+}   // namespace NKikimr::NOlap

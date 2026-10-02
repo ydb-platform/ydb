@@ -5,12 +5,14 @@
     "endpointPrefix":"codedeploy",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceAbbreviation":"CodeDeploy",
     "serviceFullName":"AWS CodeDeploy",
     "serviceId":"CodeDeploy",
     "signatureVersion":"v4",
     "targetPrefix":"CodeDeploy_20141006",
-    "uid":"codedeploy-2014-10-06"
+    "uid":"codedeploy-2014-10-06",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AddTagsToOnPremisesInstances":{
@@ -246,7 +248,8 @@
         {"shape":"InvalidMinimumHealthyHostValueException"},
         {"shape":"DeploymentConfigLimitExceededException"},
         {"shape":"InvalidComputePlatformException"},
-        {"shape":"InvalidTrafficRoutingConfigurationException"}
+        {"shape":"InvalidTrafficRoutingConfigurationException"},
+        {"shape":"InvalidZonalDeploymentConfigurationException"}
       ],
       "documentation":"<p> Creates a deployment configuration. </p>"
     },
@@ -625,7 +628,8 @@
         {"shape":"InvalidDeploymentIdException"},
         {"shape":"InvalidInstanceStatusException"},
         {"shape":"InvalidInstanceTypeException"},
-        {"shape":"InvalidDeploymentInstanceTypeException"}
+        {"shape":"InvalidDeploymentInstanceTypeException"},
+        {"shape":"InvalidTargetFilterNameException"}
       ],
       "documentation":"<p> Returns an array of target IDs that are associated a deployment. </p>"
     },
@@ -967,8 +971,7 @@
     "AlarmName":{"type":"string"},
     "AlarmsLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The maximum number of alarms for a deployment group (10) was exceeded.</p>",
       "exception":true
     },
@@ -988,15 +991,13 @@
     },
     "ApplicationAlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An application with the specified name with the user or Amazon Web Services account already exists.</p>",
       "exception":true
     },
     "ApplicationDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The application does not exist with the user or Amazon Web Services account.</p>",
       "exception":true
     },
@@ -1033,8 +1034,7 @@
     },
     "ApplicationLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>More applications were attempted to be created than are allowed.</p>",
       "exception":true
     },
@@ -1045,8 +1045,7 @@
     },
     "ApplicationNameRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The minimum number of required application names was not specified.</p>",
       "exception":true
     },
@@ -1073,8 +1072,7 @@
     },
     "ArnNotSupportedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The specified ARN is not supported. For example, it might be an ARN for a resource that is not expected. </p>",
       "exception":true
     },
@@ -1113,7 +1111,11 @@
         },
         "hook":{
           "shape":"AutoScalingGroupHook",
-          "documentation":"<p>An Auto Scaling lifecycle event hook name.</p>"
+          "documentation":"<p>The name of the launch hook that CodeDeploy installed into the Auto Scaling group.</p> <p>For more information about the launch hook, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html#integrations-aws-auto-scaling-behaviors\">How Amazon EC2 Auto Scaling works with CodeDeploy</a> in the <i>CodeDeploy User Guide</i>.</p>"
+        },
+        "terminationHook":{
+          "shape":"AutoScalingGroupHook",
+          "documentation":"<p>The name of the termination hook that CodeDeploy installed into the Auto Scaling group.</p> <p>For more information about the termination hook, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html#integrations-aws-auto-scaling-behaviors-hook-enable\">Enabling termination deployments during Auto Scaling scale-in events</a> in the <i>CodeDeploy User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Information about an Auto Scaling group.</p>"
@@ -1251,6 +1253,10 @@
     },
     "BatchGetDeploymentTargetsInput":{
       "type":"structure",
+      "required":[
+        "deploymentId",
+        "targetIds"
+      ],
       "members":{
         "deploymentId":{
           "shape":"DeploymentId",
@@ -1315,8 +1321,7 @@
     },
     "BatchLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The maximum number of names or IDs allowed for this request (100) was exceeded.</p>",
       "exception":true
     },
@@ -1355,8 +1360,7 @@
     "Boolean":{"type":"boolean"},
     "BucketNameFilterRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A bucket name is required, but was not provided.</p>",
       "exception":true
     },
@@ -1475,6 +1479,10 @@
         "computePlatform":{
           "shape":"ComputePlatform",
           "documentation":"<p>The destination platform type for the deployment (<code>Lambda</code>, <code>Server</code>, or <code>ECS</code>).</p>"
+        },
+        "zonalConfig":{
+          "shape":"ZonalConfig",
+          "documentation":"<p>Configure the <code>ZonalConfig</code> object if you want CodeDeploy to deploy your application to one <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html#concepts-availability-zones\">Availability Zone</a> at a time, within an Amazon Web Services Region.</p> <p>For more information about the zonal configuration feature, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations-create.html#zonal-config\">zonal configuration</a> in the <i>CodeDeploy User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Represents the input of a <code>CreateDeploymentConfig</code> operation.</p>"
@@ -1568,6 +1576,10 @@
         "tags":{
           "shape":"TagList",
           "documentation":"<p> The metadata that you apply to CodeDeploy deployment groups to help you organize and categorize them. Each tag consists of a key and an optional value, both of which you define. </p>"
+        },
+        "terminationHookEnabled":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>This parameter only applies if you are using CodeDeploy with Amazon EC2 Auto Scaling. For more information, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html\">Integrating CodeDeploy with Amazon EC2 Auto Scaling</a> in the <i>CodeDeploy User Guide</i>.</p> <p>Set <code>terminationHookEnabled</code> to <code>true</code> to have CodeDeploy install a termination hook into your Auto Scaling group when you create a deployment group. When this hook is installed, CodeDeploy will perform termination deployments.</p> <p>For information about termination deployments, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html#integrations-aws-auto-scaling-behaviors-hook-enable\">Enabling termination deployments during Auto Scaling scale-in events</a> in the <i>CodeDeploy User Guide</i>.</p> <p>For more information about Auto Scaling scale-in events, see the <a href=\"https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-lifecycle.html#as-lifecycle-scale-in\">Scale in</a> topic in the <i>Amazon EC2 Auto Scaling User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Represents the input of a <code>CreateDeploymentGroup</code> operation.</p>"
@@ -1724,42 +1736,36 @@
     },
     "DeleteResourcesByExternalIdOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeploymentAlreadyCompletedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment is already complete.</p>",
       "exception":true
     },
     "DeploymentAlreadyStartedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> A deployment to a target was attempted while another deployment was in progress. </p>",
       "exception":true
     },
     "DeploymentConfigAlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A deployment configuration with the specified name with the user or Amazon Web Services account already exists.</p>",
       "exception":true
     },
     "DeploymentConfigDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment configuration does not exist with the user or Amazon Web Services account.</p>",
       "exception":true
     },
     "DeploymentConfigId":{"type":"string"},
     "DeploymentConfigInUseException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment configuration is still in use.</p>",
       "exception":true
     },
@@ -1776,7 +1782,7 @@
         },
         "minimumHealthyHosts":{
           "shape":"MinimumHealthyHosts",
-          "documentation":"<p>Information about the number or percentage of minimum healthy instance.</p>"
+          "documentation":"<p>Information about the number or percentage of minimum healthy instances.</p>"
         },
         "createTime":{
           "shape":"Timestamp",
@@ -1789,14 +1795,17 @@
         "trafficRoutingConfig":{
           "shape":"TrafficRoutingConfig",
           "documentation":"<p>The configuration that specifies how the deployment traffic is routed. Used for deployments with a Lambda or Amazon ECS compute platform only.</p>"
+        },
+        "zonalConfig":{
+          "shape":"ZonalConfig",
+          "documentation":"<p>Information about a zonal configuration.</p>"
         }
       },
       "documentation":"<p>Information about a deployment configuration.</p>"
     },
     "DeploymentConfigLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment configurations limit was exceeded.</p>",
       "exception":true
     },
@@ -1807,8 +1816,7 @@
     },
     "DeploymentConfigNameRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment configuration name was not specified.</p>",
       "exception":true
     },
@@ -1825,27 +1833,25 @@
         "CodeDeploy",
         "CodeDeployAutoUpdate",
         "CloudFormation",
-        "CloudFormationRollback"
+        "CloudFormationRollback",
+        "autoscalingTermination"
       ]
     },
     "DeploymentDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment with the user or Amazon Web Services account does not exist.</p>",
       "exception":true
     },
     "DeploymentGroupAlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A deployment group with the specified name with the user or Amazon Web Services account already exists.</p>",
       "exception":true
     },
     "DeploymentGroupDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The named deployment group with the user or Amazon Web Services account does not exist.</p>",
       "exception":true
     },
@@ -1940,6 +1946,10 @@
         "ecsServices":{
           "shape":"ECSServiceList",
           "documentation":"<p> The target Amazon ECS services in the deployment group. This applies only to deployment groups that use the Amazon ECS compute platform. A target Amazon ECS service is specified as an Amazon ECS cluster and service name pair using the format <code>&lt;clustername&gt;:&lt;servicename&gt;</code>. </p>"
+        },
+        "terminationHookEnabled":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the deployment group was configured to have CodeDeploy install a termination hook into an Auto Scaling group.</p> <p>For more information about the termination hook, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html#integrations-aws-auto-scaling-behaviors\">How Amazon EC2 Auto Scaling works with CodeDeploy</a> in the <i>CodeDeploy User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Information about a deployment group.</p>"
@@ -1950,8 +1960,7 @@
     },
     "DeploymentGroupLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The deployment groups limit was exceeded.</p>",
       "exception":true
     },
@@ -1962,8 +1971,7 @@
     },
     "DeploymentGroupNameRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment group name was not specified.</p>",
       "exception":true
     },
@@ -1974,8 +1982,7 @@
     "DeploymentId":{"type":"string"},
     "DeploymentIdRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>At least one deployment ID must be specified.</p>",
       "exception":true
     },
@@ -2101,22 +2108,19 @@
     },
     "DeploymentIsNotInReadyStateException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment does not have a status of Ready and can't continue yet.</p>",
       "exception":true
     },
     "DeploymentLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The number of allowed deployments was exceeded.</p>",
       "exception":true
     },
     "DeploymentNotStartedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified deployment has not started.</p>",
       "exception":true
     },
@@ -2238,15 +2242,13 @@
     },
     "DeploymentTargetDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The provided target ID does not belong to the attempted deployment. </p>",
       "exception":true
     },
     "DeploymentTargetIdRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> A deployment target ID was not provided. </p>",
       "exception":true
     },
@@ -2256,8 +2258,7 @@
     },
     "DeploymentTargetListSizeExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The maximum number of targets that can be associated with an Amazon ECS or Lambda deployment was exceeded. The target list of both types of deployments must have exactly one item. This exception does not apply to EC2/On-premises deployments. </p>",
       "exception":true
     },
@@ -2306,8 +2307,7 @@
     "Description":{"type":"string"},
     "DescriptionTooLongException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The description is too long.</p>",
       "exception":true
     },
@@ -2399,8 +2399,7 @@
     },
     "ECSServiceMappingLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The Amazon ECS service is associated with more than one deployment groups. An Amazon ECS service can be associated with only one deployment group. </p>",
       "exception":true
     },
@@ -2751,6 +2750,10 @@
     },
     "GetDeploymentTargetInput":{
       "type":"structure",
+      "required":[
+        "deploymentId",
+        "targetId"
+      ],
       "members":{
         "deploymentId":{
           "shape":"DeploymentId",
@@ -2794,8 +2797,7 @@
     },
     "GitHubAccountTokenDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>No GitHub account connection exists with the named specified in the call.</p>",
       "exception":true
     },
@@ -2806,8 +2808,7 @@
     },
     "GitHubAccountTokenNameRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The call is missing a required GitHub account connection name.</p>",
       "exception":true
     },
@@ -2844,31 +2845,27 @@
     },
     "IamArnRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>No IAM ARN was included in the request. You must use an IAM session ARN or user ARN in the request.</p>",
       "exception":true
     },
     "IamSessionArn":{"type":"string"},
     "IamSessionArnAlreadyRegisteredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request included an IAM session ARN that has already been used to register a different instance.</p>",
       "exception":true
     },
     "IamUserArn":{"type":"string"},
     "IamUserArnAlreadyRegisteredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified user ARN is already registered with an on-premises instance.</p>",
       "exception":true
     },
     "IamUserArnRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An user ARN was not specified.</p>",
       "exception":true
     },
@@ -2883,8 +2880,7 @@
     "InstanceCount":{"type":"long"},
     "InstanceDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified instance does not exist in the deployment group.</p>",
       "deprecated":true,
       "deprecatedMessage":"This exception is deprecated, use DeploymentTargetDoesNotExistException instead.",
@@ -2893,8 +2889,7 @@
     "InstanceId":{"type":"string"},
     "InstanceIdRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The instance ID was not specified.</p>",
       "deprecated":true,
       "deprecatedMessage":"This exception is deprecated, use DeploymentTargetIdRequiredException instead.",
@@ -2940,16 +2935,14 @@
     },
     "InstanceLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The maximum number of allowed on-premises instances in a single call was exceeded.</p>",
       "exception":true
     },
     "InstanceName":{"type":"string"},
     "InstanceNameAlreadyRegisteredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified on-premises instance name is already registered.</p>",
       "exception":true
     },
@@ -2959,15 +2952,13 @@
     },
     "InstanceNameRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An on-premises instance name was not specified.</p>",
       "exception":true
     },
     "InstanceNotRegisteredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified on-premises instance is not registered.</p>",
       "exception":true
     },
@@ -3076,394 +3067,344 @@
     },
     "InvalidAlarmConfigException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The format of the alarm configuration is invalid. Possible causes include:</p> <ul> <li> <p>The alarm list is null.</p> </li> <li> <p>The alarm object is null.</p> </li> <li> <p>The alarm name is empty or null or exceeds the limit of 255 characters.</p> </li> <li> <p>Two alarms with the same name have been specified.</p> </li> <li> <p>The alarm configuration is enabled, but the alarm list is empty.</p> </li> </ul>",
       "exception":true
     },
     "InvalidApplicationNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The application name was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidArnException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The specified ARN is not in a valid format. </p>",
       "exception":true
     },
     "InvalidAutoRollbackConfigException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The automatic rollback configuration was specified in an invalid format. For example, automatic rollback is enabled, but an invalid triggering event type or no event types were listed.</p>",
       "exception":true
     },
     "InvalidAutoScalingGroupException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The Auto Scaling group was specified in an invalid format or does not exist.</p>",
       "exception":true
     },
     "InvalidBlueGreenDeploymentConfigurationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The configuration for the blue/green deployment group was provided in an invalid format. For information about deployment configuration format, see <a>CreateDeploymentConfig</a>.</p>",
       "exception":true
     },
     "InvalidBucketNameFilterException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The bucket name either doesn't exist or was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidComputePlatformException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The computePlatform is invalid. The computePlatform should be <code>Lambda</code>, <code>Server</code>, or <code>ECS</code>.</p>",
       "exception":true
     },
     "InvalidDeployedStateFilterException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployed state filter was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidDeploymentConfigNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment configuration name was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidDeploymentGroupNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The deployment group name was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidDeploymentIdException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>At least one of the deployment IDs was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidDeploymentInstanceTypeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An instance type was specified for an in-place deployment. Instance types are supported for blue/green deployments only.</p>",
       "exception":true
     },
     "InvalidDeploymentStatusException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified deployment status doesn't exist or cannot be determined.</p>",
       "exception":true
     },
     "InvalidDeploymentStyleException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An invalid deployment style was specified. Valid deployment types include \"IN_PLACE\" and \"BLUE_GREEN.\" Valid deployment options include \"WITH_TRAFFIC_CONTROL\" and \"WITHOUT_TRAFFIC_CONTROL.\"</p>",
       "exception":true
     },
     "InvalidDeploymentTargetIdException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The target ID provided was not valid. </p>",
       "exception":true
     },
     "InvalidDeploymentWaitTypeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The wait type is invalid. </p>",
       "exception":true
     },
     "InvalidEC2TagCombinationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A call was submitted that specified both Ec2TagFilters and Ec2TagSet, but only one of these data types can be used in a single call.</p>",
       "exception":true
     },
     "InvalidEC2TagException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The tag was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidECSServiceException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The Amazon ECS service identifier is not valid. </p>",
       "exception":true
     },
     "InvalidExternalIdException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The external ID was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidFileExistsBehaviorException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An invalid fileExistsBehavior option was specified to determine how CodeDeploy handles files or directories that already exist in a deployment target location, but weren't part of the previous successful deployment. Valid values include \"DISALLOW,\" \"OVERWRITE,\" and \"RETAIN.\"</p>",
       "exception":true
     },
     "InvalidGitHubAccountTokenException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The GitHub token is not valid.</p>",
       "exception":true
     },
     "InvalidGitHubAccountTokenNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The format of the specified GitHub account connection name is invalid.</p>",
       "exception":true
     },
     "InvalidIamSessionArnException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The IAM session ARN was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidIamUserArnException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The user ARN was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidIgnoreApplicationStopFailuresValueException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The IgnoreApplicationStopFailures value is invalid. For Lambda deployments, <code>false</code> is expected. For EC2/On-premises deployments, <code>true</code> or <code>false</code> is expected.</p>",
       "exception":true
     },
     "InvalidInputException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The input was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidInstanceIdException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> </p>",
       "exception":true
     },
     "InvalidInstanceNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The on-premises instance name was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidInstanceStatusException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified instance status does not exist.</p>",
       "exception":true
     },
     "InvalidInstanceTypeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An invalid instance type was specified for instances in a blue/green deployment. Valid values include \"Blue\" for an original environment and \"Green\" for a replacement environment.</p>",
       "exception":true
     },
     "InvalidKeyPrefixFilterException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified key prefix filter was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidLifecycleEventHookExecutionIdException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A lifecycle event hook is invalid. Review the <code>hooks</code> section in your AppSpec file to ensure the lifecycle events and <code>hooks</code> functions are valid.</p>",
       "exception":true
     },
     "InvalidLifecycleEventHookExecutionStatusException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The result of a Lambda validation function that verifies a lifecycle event is invalid. It should return <code>Succeeded</code> or <code>Failed</code>.</p>",
       "exception":true
     },
     "InvalidLoadBalancerInfoException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An invalid load balancer name, or no load balancer name, was specified.</p>",
       "exception":true
     },
     "InvalidMinimumHealthyHostValueException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The minimum healthy instance value was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidNextTokenException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The next token was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidOnPremisesTagCombinationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A call was submitted that specified both OnPremisesTagFilters and OnPremisesTagSet, but only one of these data types can be used in a single call.</p>",
       "exception":true
     },
     "InvalidOperationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An invalid operation was detected.</p>",
       "exception":true
     },
     "InvalidRegistrationStatusException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The registration status was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidRevisionException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The revision was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidRoleException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The service role ARN was specified in an invalid format. Or, if an Auto Scaling group was specified, the specified service role does not grant the appropriate permissions to Amazon EC2 Auto Scaling.</p>",
       "exception":true
     },
     "InvalidSortByException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The column name to sort by is either not present or was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidSortOrderException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The sort order was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidTagException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The tag was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidTagFilterException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The tag filter was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidTagsToAddException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The specified tags are not valid. </p>",
       "exception":true
     },
     "InvalidTargetException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> A target is not valid. </p>",
       "exception":true
     },
     "InvalidTargetFilterNameException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The target filter name is invalid. </p>",
       "exception":true
     },
     "InvalidTargetGroupPairException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> A target group pair associated with this deployment is not valid. </p>",
       "exception":true
     },
     "InvalidTargetInstancesException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The target instance configuration is invalid. Possible causes include:</p> <ul> <li> <p>Configuration data for target instances was entered for an in-place deployment.</p> </li> <li> <p>The limit of 10 tags for a tag type was exceeded.</p> </li> <li> <p>The combined length of the tag names exceeded the limit. </p> </li> <li> <p>A specified tag is not currently applied to any instances.</p> </li> </ul>",
       "exception":true
     },
     "InvalidTimeRangeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified time range was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidTrafficRoutingConfigurationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The configuration that specifies how traffic is routed during a deployment is invalid.</p>",
       "exception":true
     },
     "InvalidTriggerConfigException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The trigger was specified in an invalid format.</p>",
       "exception":true
     },
     "InvalidUpdateOutdatedInstancesOnlyValueException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The UpdateOutdatedInstancesOnly value is invalid. For Lambda deployments, <code>false</code> is expected. For EC2/On-premises deployments, <code>true</code> or <code>false</code> is expected.</p>",
+      "exception":true
+    },
+    "InvalidZonalDeploymentConfigurationException":{
+      "type":"structure",
+      "members":{},
+      "documentation":"<p>The <code>ZonalConfig</code> object is not valid.</p>",
       "exception":true
     },
     "Key":{"type":"string"},
@@ -3590,8 +3531,7 @@
     },
     "LifecycleEventAlreadyCompletedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An attempt to return the status of an already completed lifecycle event occurred.</p>",
       "exception":true
     },
@@ -3614,8 +3554,7 @@
     },
     "LifecycleHookLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The limit for lifecycle hooks was exceeded.</p>",
       "exception":true
     },
@@ -3789,6 +3728,7 @@
     },
     "ListDeploymentTargetsInput":{
       "type":"structure",
+      "required":["deploymentId"],
       "members":{
         "deploymentId":{
           "shape":"DeploymentId",
@@ -3989,8 +3929,30 @@
           "documentation":"<p>The minimum healthy instance value.</p>"
         }
       },
-      "documentation":"<p>Information about minimum healthy instance.</p>"
+      "documentation":"<p>Information about the minimum number of healthy instances.</p>"
     },
+    "MinimumHealthyHostsPerZone":{
+      "type":"structure",
+      "members":{
+        "type":{
+          "shape":"MinimumHealthyHostsPerZoneType",
+          "documentation":"<p>The <code>type</code> associated with the <code>MinimumHealthyHostsPerZone</code> option.</p>"
+        },
+        "value":{
+          "shape":"MinimumHealthyHostsPerZoneValue",
+          "documentation":"<p>The <code>value</code> associated with the <code>MinimumHealthyHostsPerZone</code> option.</p>"
+        }
+      },
+      "documentation":"<p>Information about the minimum number of healthy instances per Availability Zone.</p>"
+    },
+    "MinimumHealthyHostsPerZoneType":{
+      "type":"string",
+      "enum":[
+        "HOST_COUNT",
+        "FLEET_PERCENT"
+      ]
+    },
+    "MinimumHealthyHostsPerZoneValue":{"type":"integer"},
     "MinimumHealthyHostsType":{
       "type":"string",
       "enum":[
@@ -4001,8 +3963,7 @@
     "MinimumHealthyHostsValue":{"type":"integer"},
     "MultipleIamArnsProvidedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Both an user ARN and an IAM session ARN were included in the request. Use only one ARN type.</p>",
       "exception":true
     },
@@ -4024,8 +3985,7 @@
     },
     "OperationNotSupportedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The API used does not support the deployment.</p>",
       "exception":true
     },
@@ -4164,22 +4124,19 @@
     "Repository":{"type":"string"},
     "ResourceArnRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p> The ARN of a resource is required, but was not found. </p>",
       "exception":true
     },
     "ResourceValidationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified resource could not be validated.</p>",
       "exception":true
     },
     "RevisionDoesNotExistException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The named revision does not exist with the user or Amazon Web Services account.</p>",
       "exception":true
     },
@@ -4242,16 +4199,14 @@
     },
     "RevisionRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The revision ID was not specified.</p>",
       "exception":true
     },
     "Role":{"type":"string"},
     "RoleRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The role ID was not specified.</p>",
       "exception":true
     },
@@ -4404,8 +4359,7 @@
     },
     "TagLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The maximum allowed number of tags was exceeded.</p>",
       "exception":true
     },
@@ -4415,8 +4369,7 @@
     },
     "TagRequiredException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A tag was not specified.</p>",
       "exception":true
     },
@@ -4439,13 +4392,11 @@
     },
     "TagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagSetListLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The number of tag groups included in the tag set list exceeded the maximum allowed limit of 3.</p>",
       "exception":true
     },
@@ -4543,8 +4494,7 @@
     },
     "ThrottlingException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An API function was called too frequently.</p>",
       "exception":true
     },
@@ -4674,15 +4624,13 @@
     "TriggerTargetArn":{"type":"string"},
     "TriggerTargetsLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The maximum allowed number of triggers was exceeded.</p>",
       "exception":true
     },
     "UnsupportedActionForDeploymentTypeException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A call was submitted that is not supported for the specified deployment type.</p>",
       "exception":true
     },
@@ -4705,8 +4653,7 @@
     },
     "UntagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateApplicationInput":{
       "type":"structure",
@@ -4800,6 +4747,10 @@
         "onPremisesTagSet":{
           "shape":"OnPremisesTagSet",
           "documentation":"<p>Information about an on-premises instance tag set. The deployment group includes only on-premises instances identified by all the tag groups.</p>"
+        },
+        "terminationHookEnabled":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>This parameter only applies if you are using CodeDeploy with Amazon EC2 Auto Scaling. For more information, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html\">Integrating CodeDeploy with Amazon EC2 Auto Scaling</a> in the <i>CodeDeploy User Guide</i>.</p> <p>Set <code>terminationHookEnabled</code> to <code>true</code> to have CodeDeploy install a termination hook into your Auto Scaling group when you update a deployment group. When this hook is installed, CodeDeploy will perform termination deployments.</p> <p>For information about termination deployments, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/integrations-aws-auto-scaling.html#integrations-aws-auto-scaling-behaviors-hook-enable\">Enabling termination deployments during Auto Scaling scale-in events</a> in the <i>CodeDeploy User Guide</i>.</p> <p>For more information about Auto Scaling scale-in events, see the <a href=\"https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-lifecycle.html#as-lifecycle-scale-in\">Scale in</a> topic in the <i>Amazon EC2 Auto Scaling User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Represents the input of an <code>UpdateDeploymentGroup</code> operation.</p>"
@@ -4817,7 +4768,26 @@
     "Value":{"type":"string"},
     "Version":{"type":"string"},
     "VersionId":{"type":"string"},
-    "WaitTimeInMins":{"type":"integer"}
+    "WaitTimeInMins":{"type":"integer"},
+    "WaitTimeInSeconds":{"type":"long"},
+    "ZonalConfig":{
+      "type":"structure",
+      "members":{
+        "firstZoneMonitorDurationInSeconds":{
+          "shape":"WaitTimeInSeconds",
+          "documentation":"<p>The period of time, in seconds, that CodeDeploy must wait after completing a deployment to the <i>first</i> Availability Zone. CodeDeploy will wait this amount of time before starting a deployment to the second Availability Zone. You might set this option if you want to allow extra bake time for the first Availability Zone. If you don't specify a value for <code>firstZoneMonitorDurationInSeconds</code>, then CodeDeploy uses the <code>monitorDurationInSeconds</code> value for the first Availability Zone.</p> <p>For more information about the zonal configuration feature, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations-create.html#zonal-config\">zonal configuration</a> in the <i>CodeDeploy User Guide</i>.</p>"
+        },
+        "monitorDurationInSeconds":{
+          "shape":"WaitTimeInSeconds",
+          "documentation":"<p>The period of time, in seconds, that CodeDeploy must wait after completing a deployment to an Availability Zone. CodeDeploy will wait this amount of time before starting a deployment to the next Availability Zone. Consider adding a monitor duration to give the deployment some time to prove itself (or 'bake') in one Availability Zone before it is released in the next zone. If you don't specify a <code>monitorDurationInSeconds</code>, CodeDeploy starts deploying to the next Availability Zone immediately.</p> <p>For more information about the zonal configuration feature, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations-create.html#zonal-config\">zonal configuration</a> in the <i>CodeDeploy User Guide</i>.</p>"
+        },
+        "minimumHealthyHostsPerZone":{
+          "shape":"MinimumHealthyHostsPerZone",
+          "documentation":"<p>The number or percentage of instances that must remain available per Availability Zone during a deployment. This option works in conjunction with the <code>MinimumHealthyHosts</code> option. For more information, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/instances-health.html#minimum-healthy-hosts-az\">About the minimum number of healthy hosts per Availability Zone</a> in the <i>CodeDeploy User Guide</i>.</p> <p>If you don't specify the <code>minimumHealthyHostsPerZone</code> option, then CodeDeploy uses a default value of <code>0</code> percent.</p> <p>For more information about the zonal configuration feature, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations-create.html#zonal-config\">zonal configuration</a> in the <i>CodeDeploy User Guide</i>.</p>"
+        }
+      },
+      "documentation":"<p>Configure the <code>ZonalConfig</code> object if you want CodeDeploy to deploy your application to one <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html#concepts-availability-zones\">Availability Zone</a> at a time, within an Amazon Web Services Region. By deploying to one Availability Zone at a time, you can expose your deployment to a progressively larger audience as confidence in the deployment's performance and viability grows. If you don't configure the <code>ZonalConfig</code> object, CodeDeploy deploys your application to a random selection of hosts across a Region.</p> <p>For more information about the zonal configuration feature, see <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations-create.html#zonal-config\">zonal configuration</a> in the <i>CodeDeploy User Guide</i>.</p>"
+    }
   },
   "documentation":"<p>CodeDeploy is a deployment service that automates application deployments to Amazon EC2 instances, on-premises instances running in your own facility, serverless Lambda functions, or applications in an Amazon ECS service.</p> <p>You can deploy a nearly unlimited variety of application content, such as an updated Lambda function, updated applications in an Amazon ECS service, code, web and configuration files, executables, packages, scripts, multimedia files, and so on. CodeDeploy can deploy application content stored in Amazon S3 buckets, GitHub repositories, or Bitbucket repositories. You do not need to make changes to your existing code before you can use CodeDeploy.</p> <p>CodeDeploy makes it easier for you to rapidly release new features, helps you avoid downtime during application deployment, and handles the complexity of updating your applications, without many of the risks associated with error-prone manual deployments.</p> <p> <b>CodeDeploy Components</b> </p> <p>Use the information in this guide to help you work with the following CodeDeploy components:</p> <ul> <li> <p> <b>Application</b>: A name that uniquely identifies the application you want to deploy. CodeDeploy uses this name, which functions as a container, to ensure the correct combination of revision, deployment configuration, and deployment group are referenced during a deployment.</p> </li> <li> <p> <b>Deployment group</b>: A set of individual instances, CodeDeploy Lambda deployment configuration settings, or an Amazon ECS service and network details. A Lambda deployment group specifies how to route traffic to a new version of a Lambda function. An Amazon ECS deployment group specifies the service created in Amazon ECS to deploy, a load balancer, and a listener to reroute production traffic to an updated containerized application. An Amazon EC2/On-premises deployment group contains individually tagged instances, Amazon EC2 instances in Amazon EC2 Auto Scaling groups, or both. All deployment groups can specify optional trigger, alarm, and rollback settings.</p> </li> <li> <p> <b>Deployment configuration</b>: A set of deployment rules and deployment success and failure conditions used by CodeDeploy during a deployment.</p> </li> <li> <p> <b>Deployment</b>: The process and the components used when updating a Lambda function, a containerized application in an Amazon ECS service, or of installing content on one or more instances. </p> </li> <li> <p> <b>Application revisions</b>: For an Lambda deployment, this is an AppSpec file that specifies the Lambda function to be updated and one or more functions to validate deployment lifecycle events. For an Amazon ECS deployment, this is an AppSpec file that specifies the Amazon ECS task definition, container, and port where production traffic is rerouted. For an EC2/On-premises deployment, this is an archive file that contains source content—source code, webpages, executable files, and deployment scripts—along with an AppSpec file. Revisions are stored in Amazon S3 buckets or GitHub repositories. For Amazon S3, a revision is uniquely identified by its Amazon S3 object key and its ETag, version, or both. For GitHub, a revision is uniquely identified by its commit ID.</p> </li> </ul> <p>This guide also contains information to help you get details about the instances in your deployments, to make on-premises instances available for CodeDeploy deployments, to get details about a Lambda function deployment, and to get details about Amazon ECS service deployments.</p> <p> <b>CodeDeploy Information Resources</b> </p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/codedeploy/latest/userguide\">CodeDeploy User Guide</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/codedeploy/latest/APIReference/\">CodeDeploy API Reference Guide</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/cli/latest/reference/deploy/index.html\">CLI Reference for CodeDeploy</a> </p> </li> <li> <p> <a href=\"https://forums.aws.amazon.com/forum.jspa?forumID=179\">CodeDeploy Developer Forum</a> </p> </li> </ul>"
 }

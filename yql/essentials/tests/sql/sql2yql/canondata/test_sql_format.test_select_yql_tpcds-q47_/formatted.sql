@@ -1,0 +1,132 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: No such column: avg_monthly_sales */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$v1 = (
+    SELECT
+        i_category,
+        i_brand,
+        s_store_name,
+        s_company_name,
+        d_year,
+        d_moy,
+        Sum(ss_sales_price) AS sum_sales,
+        Avg(Sum(ss_sales_price)) OVER (
+            PARTITION BY
+                i_category,
+                i_brand,
+                s_store_name,
+                s_company_name,
+                d_year
+        ) AS avg_monthly_sales,
+        Rank() OVER (
+            PARTITION BY
+                i_category,
+                i_brand,
+                s_store_name,
+                s_company_name
+            ORDER BY
+                d_year,
+                d_moy
+        ) AS rn
+    FROM (
+        VALUES
+            (1, 'cat1', 'brand1')
+    ) AS item (
+        i_item_sk,
+        i_category,
+        i_brand
+    )
+    , (
+        VALUES
+            (1, 10, 1, 100),
+            (1, 11, 1, 200),
+            (1, 12, 1, 300)
+    ) AS store_sales (
+        ss_item_sk,
+        ss_sold_date_sk,
+        ss_store_sk,
+        ss_sales_price
+    )
+    , (
+        VALUES
+            (10, 1999, 12),
+            (11, 2000, 1),
+            (12, 2001, 1)
+    ) AS date_dim (
+        d_date_sk,
+        d_year,
+        d_moy
+    )
+    , (
+        VALUES
+            (1, 'storeA', 'companyA')
+    ) AS store (
+        s_store_sk,
+        s_store_name,
+        s_company_name
+    )
+    WHERE
+        ss_item_sk == i_item_sk
+        AND ss_sold_date_sk == d_date_sk
+        AND ss_store_sk == s_store_sk
+        AND (
+            d_year == 2000
+            OR (d_year == 2000 - 1 AND d_moy == 12)
+            OR (d_year == 2000 + 1 AND d_moy == 1)
+        )
+    GROUP BY
+        i_category,
+        i_brand,
+        s_store_name,
+        s_company_name,
+        d_year,
+        d_moy
+);
+
+$v2 = (
+    SELECT
+        v1.i_category,
+        v1.i_brand,
+        v1.d_year,
+        v1.d_moy,
+        v1.avg_monthly_sales,
+        v1.sum_sales,
+        v1_lag.sum_sales AS psum,
+        v1_lead.sum_sales AS nsum
+    FROM
+        $v1 AS v1
+    ,
+        $v1 AS v1_lag
+    ,
+        $v1 AS v1_lead
+    WHERE
+        v1.i_category == v1_lag.i_category
+        AND v1.i_category == v1_lead.i_category
+        AND v1.i_brand == v1_lag.i_brand
+        AND v1.i_brand == v1_lead.i_brand
+        AND v1.s_store_name == v1_lag.s_store_name
+        AND v1.s_store_name == v1_lead.s_store_name
+        AND v1.s_company_name == v1_lag.s_company_name
+        AND v1.s_company_name == v1_lead.s_company_name
+        AND v1.rn == v1_lag.rn + 1
+        AND v1.rn == v1_lead.rn - 1
+);
+
+SELECT
+    *
+FROM
+    $v2
+WHERE
+    d_year == 2000
+    AND avg_monthly_sales > 0
+    AND CASE
+        WHEN avg_monthly_sales > 0 THEN Abs(sum_sales - avg_monthly_sales) / avg_monthly_sales
+        ELSE NULL
+    END > 0.1
+ORDER BY
+    sum_sales - avg_monthly_sales,
+    nsum
+LIMIT 100;

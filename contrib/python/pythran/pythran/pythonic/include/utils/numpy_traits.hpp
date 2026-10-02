@@ -131,8 +131,7 @@ namespace types
 
   template <class T>
   struct is_numexpr_arg<list<T>> {
-    static constexpr bool value =
-        is_numexpr_arg<T>::value || is_dtype<T>::value;
+    static constexpr bool value = is_numexpr_arg<T>::value || is_dtype<T>::value;
   };
 
   template <class T, class S>
@@ -149,32 +148,27 @@ namespace types
   };
 
   template <class T, class S>
-  struct is_numexpr_arg<sliced_array<T, S>>
-      : is_numexpr_arg<sliced_list<T, S>> {
+  struct is_numexpr_arg<sliced_array<T, S>> : is_numexpr_arg<sliced_list<T, S>> {
   };
 
   template <class T>
   struct is_numexpr_arg<broadcasted<T>> {
-    static constexpr bool value =
-        is_numexpr_arg<T>::value || is_dtype<T>::value;
+    static constexpr bool value = is_numexpr_arg<T>::value || is_dtype<T>::value;
   };
 
   template <class T, class Tp>
   struct is_numexpr_arg<broadcast<T, Tp>> {
-    static constexpr bool value =
-        is_numexpr_arg<T>::value || is_dtype<T>::value;
+    static constexpr bool value = is_numexpr_arg<T>::value || is_dtype<T>::value;
   };
 
   template <class T, size_t N, class V>
   struct is_numexpr_arg<array_base<T, N, V>> {
-    static constexpr bool value =
-        is_numexpr_arg<T>::value || is_dtype<T>::value;
+    static constexpr bool value = is_numexpr_arg<T>::value || is_dtype<T>::value;
   };
 
   template <class T>
   struct is_numexpr_arg<dynamic_tuple<T>> {
-    static constexpr bool value =
-        is_numexpr_arg<T>::value || is_dtype<T>::value;
+    static constexpr bool value = is_numexpr_arg<T>::value || is_dtype<T>::value;
   };
 
   template <class E>
@@ -185,6 +179,25 @@ namespace types
     static T get(...);
     using type = decltype(get<E>(nullptr));
   };
+
+  template <class T>
+  struct has_buffer {
+    static constexpr bool value = false;
+  };
+
+  template <class T, class pS>
+  struct has_buffer<ndarray<T, pS>> {
+    static constexpr bool value = true;
+  };
+
+  template <class A>
+  struct has_buffer<numpy_iexpr<A>> : has_buffer<A> {
+  };
+
+  template <class A, class... S>
+  struct has_buffer<numpy_gexpr<A, S...>> : has_buffer<A> {
+  };
+
 } // namespace types
 PYTHONIC_NS_END
 

@@ -1,5 +1,3 @@
 #include "const.h"
 
-namespace NKikimr::NOlap::NBlobOperations {
-
-}
+namespace NKikimr::NOlap::NBlobOperations {}

@@ -1,20 +1,26 @@
 LIBRARY()
 
 SRCS(
+    actor_monotonic_time_provider.cpp
+    actor_monotonic_time_provider.h
     activeactors.h
     address_classifier.cpp
     backoff.cpp
     cache.cpp
     cache.h
-    cache_cache.h
     circular_queue.h
+    circular_sparse_queue.h
+    circular_sparse_queue.cpp
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp
     console.h
     counted_leaky_bucket.h
+    cpuinfo.cpp
+    cpuinfo.h
     defs.h
     event_priority_queue.h
+    exceptions.cpp
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp
@@ -22,6 +28,7 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    frequently_called_hptimer.h
     gen_step.cpp
     gen_step.h
     hazard.cpp
@@ -35,6 +42,7 @@ SRCS(
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
+    numerical_maybe.h
     operation_queue.h
     page_map.cpp
     pb.h
@@ -44,6 +52,7 @@ SRCS(
     random.cpp
     simple_cache.h
     source_location.cpp
+    spsc_circular_queue.h
     stlog.cpp
     stlog.h
     text.cpp

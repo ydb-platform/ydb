@@ -1,0 +1,61 @@
+From 6bbe8d6619958b9eb4809b5a353a1a1228117c71 Mon Sep 17 00:00:00 2001
+From: William Butler <wab@google.com>
+Date: Wed, 29 Sep 2021 01:01:10 +0000
+Subject: [PATCH] ARROW-14109: [C++] Fix segfault when parsing JSON with
+ duplicate keys.
+
+When reading a JSON object with duplicate keys, Arrow can crash if the duplicate key was not in schema. In this case, the absent_fields_stack_ will not have an index to represent the duplicated key. When we encounter the duplicated key for a second time, field_index_ will be non-negative and greater than the size of absent_fields_stack_, thus triggering a crash when we attempt to read from absent_fields_stack_.
+
+Closes #11222 from tachyonwill/json_duplicate
+
+Authored-by: William Butler <wab@google.com>
+Signed-off-by: Yibo Cai <yibo.cai@arm.com>
+---
+ cpp/src/arrow/json/parser.cc      |  8 +++++++-
+ cpp/src/arrow/json/parser_test.cc | 11 +++++++++++
+ 2 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/cpp/src/arrow/json/parser.cc b/cpp/src/arrow/json/parser.cc
+index 62e1cd7fc4..16a2fa1ce5 100644
+--- a/cpp/src/arrow/json/parser.cc
++++ b/cpp/src/arrow/json/parser.cc
+@@ -753,7 +753,13 @@ class HandlerBase : public BlockParser,
+     if (ARROW_PREDICT_FALSE(field_index_ == -1)) {
+       return false;
+     }
+-    *duplicate_keys = !absent_fields_stack_[field_index_];
++    if (field_index_ < absent_fields_stack_.TopSize()) {
++      *duplicate_keys = !absent_fields_stack_[field_index_];
++    } else {
++      // When field_index is beyond the range of absent_fields_stack_ we have a duplicated
++      // field that wasn't declared in schema or previous records.
++      *duplicate_keys = true;
++    }
+     if (*duplicate_keys) {
+       status_ = ParseError("Column(", Path(), ") was specified twice in row ", num_rows_);
+       return false;
+>>>> diff --git a/cpp/src/arrow/json/parser_test.cc b/cpp/src/arrow/json/parser_test.cc
+>>>> index d9861b385c..2a44ed8375 100644
+>>>> --- a/cpp/src/arrow/json/parser_test.cc
+>>>> +++ b/cpp/src/arrow/json/parser_test.cc
+>>>> @@ -179,6 +179,17 @@ TEST_P(BlockParserTypeError, FailOnDuplicateKeys) {
+>>>>        testing::StartsWith("JSON parse error: Column(/a) was specified twice in row 0"));
+>>>>  }
+>>>>  
+>>>> +TEST_P(BlockParserTypeError, FailOnDuplicateKeysNoSchema) {
+>>>> +  std::shared_ptr<Array> parsed;
+>>>> +  Status error =
+>>>> +      ParseFromString(ParseOptions::Defaults(), "{\"a\":0, \"a\":1}\n", &parsed);
+>>>> +
+>>>> +  ASSERT_RAISES(Invalid, error);
+>>>> +  EXPECT_THAT(
+>>>> +      error.message(),
+>>>> +      testing::StartsWith("JSON parse error: Column(/a) was specified twice in row 0"));
+>>>> +}
+>>>> +
+>>>>  INSTANTIATE_TEST_SUITE_P(BlockParserTypeError, BlockParserTypeError,
+>>>>                           ::testing::Values(UnexpectedFieldBehavior::Ignore,
+>>>>                                             UnexpectedFieldBehavior::Error,
+>>>> -- 
+>>>> 2.34.1
+>>>> 

@@ -6,11 +6,19 @@ SRCS(
     compact_hash.cpp
     compact_hash.h
     defs.h
+    fake_mmap.cpp
+    fake_mmap.h
+    global_page_pool.h
+    global_pools.h
     mkql_alloc.cpp
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
+    mkql_bridge_mode.cpp
+    mkql_bridge_mode.h
     mkql_buffer.cpp
     mkql_buffer.h
+    mkql_date_scaler.cpp
+    mkql_date_scaler.h
     mkql_function_metadata.cpp
     mkql_function_metadata.h
     mkql_function_registry.cpp
@@ -46,12 +54,16 @@ SRCS(
     mkql_type_ops.cpp
     mkql_type_ops.h
     mkql_watermark.h
+    mkql_window_comparator_bounds.h
     mkql_unboxed_value_stream.cpp
     mkql_unboxed_value_stream.h
     pack_num.cpp
     pack_num.h
+    page_pool_constants.h
     primes.cpp
     primes.h
+    system_mmap.cpp
+    system_mmap.h
     watermark_tracker.cpp
     watermark_tracker.h
 )
@@ -63,6 +75,7 @@ PEERDIR(
     library/cpp/enumbitset
     library/cpp/monlib/dynamic_counters
     library/cpp/packedtypes
+    library/cpp/type_info/tz
     library/cpp/resource
     library/cpp/yson
     yql/essentials/core/pg_settings
@@ -72,12 +85,13 @@ PEERDIR(
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
+    yql/essentials/public/langver
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/utils/memory_profiling
 )
 
@@ -102,9 +116,12 @@ RECURSE(
     jsonpath
     perf
     protobuf_udf
+    runtime_settings
 )
 
 RECURSE_FOR_TESTS(
     benchmark
     ut
+    sanitizer_ut
+    udf_value_test_support
 )

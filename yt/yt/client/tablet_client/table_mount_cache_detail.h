@@ -15,6 +15,10 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const THashSet<TErrorCode> TableMountCacheRetryableCodes;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTabletInfoOwnerCache
 {
 public:
@@ -58,7 +62,8 @@ public:
     void InvalidateTablet(TTabletId tabletId) override;
     TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) override;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) override;
 
     void Clear() override;
 
@@ -69,18 +74,27 @@ protected:
 
     TTabletInfoOwnerCache TabletInfoOwnerCache_;
 
-    virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
-
     virtual void RegisterCell(NYTree::INodePtr cellDescriptor);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     TTableMountCacheConfigPtr Config_;
 
-    TTabletInfoPtr FindTabletInfo(TTabletId tabletId);
+    TTabletInfoPtr FindTabletInfo(
+        TTabletId tabletId,
+        std::optional<NHydra::TRevision> mountRevision = {});
+
+    void SetTableInfos(std::vector<TTableMountInfoPtr> clonedTableInfos);
+
+    std::optional<TInvalidationResult> TryHandleRedirectionError(
+        const TError& error);
 
     std::optional<TInvalidationResult> TryHandleServantNotActiveError(
-        const TError& error);
+        std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> hints);
+
+    std::optional<TInvalidationResult> TryHandleTabletReshardedError(
+        const TReshardRedirectionHintPtr& reshardHint,
+        const TTabletInfoPtr& tabletInfo);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

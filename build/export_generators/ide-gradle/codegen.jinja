@@ -1,0 +1,87 @@
+{%- macro TopDepends(taskvar) -%}
+{%-     if current_target.is_test -%}
+{%-         if named_tests -%}
+{%-             set testname = SourceSetName(current_target) -%}
+{%-         else -%}
+{%-             set testname = NS_TEST -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if proto_template %}
+
+tasks.named("prepareMainProtos").configure {
+    dependsOn({{ taskvar }})
+}
+{%-     endif -%}
+
+{%-     if not current_target.is_test %}
+tasks.compileJava.configure {
+    dependsOn({{ taskvar }})
+}
+{%-     else %}
+tasks.named("compile{{ testname|title }}Java").configure {
+    dependsOn({{ taskvar }})
+}
+{%-     endif -%}
+{%-     if hasResources -%}
+{%-         if not current_target.is_test %}
+tasks.processResources.configure {
+    dependsOn({{ taskvar }})
+}
+{%-         else %}
+tasks.named("process{{ testname|title }}Resources").configure {
+    dependsOn({{ taskvar }})
+}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if with_lombok_plugin %}
+tasks.named("delombok").configure {
+    mustRunAfter({{ taskvar }})
+}
+{%-     endif -%}
+
+{%-     if with_kotlin -%}
+{%-         if not current_target.is_test %}
+tasks.compileKotlin.configure {
+    dependsOn({{ taskvar }})
+}
+{%-         else %}
+tasks.named("compile{{ testname|title }}Kotlin").configure {
+    dependsOn({{ taskvar }})
+}
+{%-         endif -%}
+{%-         if with_kapt or with_test_kapt %}
+tasks.withType<KaptGenerateStubsTask>().configureEach {
+    mustRunAfter({{ taskvar }})
+}
+{%-         endif -%}
+{%      endif -%}
+{%- endmacro -%}
+
+{%- macro ObjDepends(obj) -%}
+{%-     set taskvar = varprefix + obj['_object_index'] -%}
+{%-     if obj['_parent_object_index'] and obj['_parent_object_index'] in current_target_object_indexes -%}
+{%-         set parent_taskvar = varprefix + obj['_parent_object_index'] %}
+
+tasks.named("{{ parent_taskvar }}").configure {
+    dependsOn({{ taskvar }})
+}
+{%-     elif not obj['_object_index'] in current_target_object_indexes_with_codegen_dirs -%}
+{{ TopDepends(taskvar) }}
+{%-     endif  -%}
+{%- endmacro -%}
+
+{%- set codegenBindir = export_root + "/" + curdir -%}
+
+{%- if target is defined -%}
+{%-     set current_target = target -%}
+{#-     Main target codegen -#}
+{%-     set varprefix = MAIN_VARPREFIX -%}
+{%-     include "[generator]/codegen_current_target.jinja" -%}
+{%- endif -%}
+{%- if extra_targets|length -%}
+{%-     for current_target in extra_targets -%}
+{#-         TestN target codegen -#}
+{%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{%-         include "[generator]/codegen_current_target.jinja" -%}
+{%-     endfor -%}
+{%- endif -%}

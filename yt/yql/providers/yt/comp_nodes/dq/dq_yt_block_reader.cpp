@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/threading/thread.h>
@@ -153,11 +154,17 @@ public:
     using TPtr = std::shared_ptr<TListener>;
     TListener(size_t initLatch, size_t inflight)
         : Latch_(initLatch)
-        , Queue_(inflight) {}
+        , GotEOF_(false)
+        , Queue_(inflight)
+    {
+        if (!initLatch) {
+            OnEOF();
+        }
+    }
 
     void OnEOF() {
-        bool excepted = 0;
-        if (GotEOF_.compare_exchange_strong(excepted, 1)) {
+        bool expected = false;
+        if (GotEOF_.compare_exchange_strong(expected, true)) {
             // block poining to nullptr is marker of EOF
             HandleResult(nullptr);
         } else {
@@ -229,48 +236,15 @@ public:
         ++RowsCnt_;
     }
 
-    std::vector<TResultBatch::TPtr> Build() {
+    TResultBatch::TPtr Build() {
         std::vector<arrow::Datum> columns;
         columns.reserve(ColumnBuilders_.size());
         for (size_t i = 0; i < ColumnBuilders_.size(); ++i) {
             columns.emplace_back(std::move(ColumnBuilders_[i]->Build(false)));
         }
-        std::vector<std::shared_ptr<TResultBatch>> blocks;
-        int64_t offset = 0;
-        std::vector<int64_t> currentChunk(columns.size()), inChunkOffset(columns.size());
-        while (RowsCnt_) {
-            int64_t max_curr_len = RowsCnt_;
-            for (size_t i = 0; i < columns.size(); ++i) {
-                if (arrow::Datum::Kind::CHUNKED_ARRAY == columns[i].kind()) {
-                    auto& c_arr = columns[i].chunked_array();
-                    while (currentChunk[i] < c_arr->num_chunks() && !c_arr->chunk(currentChunk[i])) {
-                        ++currentChunk[i];
-                    }
-                    YQL_ENSURE(currentChunk[i] < c_arr->num_chunks());
-                    max_curr_len = std::min(max_curr_len, c_arr->chunk(currentChunk[i])->length() - inChunkOffset[i]);
-                }
-            }
-            RowsCnt_ -= max_curr_len;
-            decltype(columns) result_columns;
-            result_columns.reserve(columns.size());
-            offset += max_curr_len;
-            for (size_t i = 0; i < columns.size(); ++i) {
-                auto& e = columns[i];
-                if (arrow::Datum::Kind::CHUNKED_ARRAY == e.kind()) {
-                    result_columns.emplace_back(e.chunked_array()->chunk(currentChunk[i])->Slice(inChunkOffset[i], max_curr_len));
-                    if (max_curr_len + inChunkOffset[i] == e.chunked_array()->chunk(currentChunk[i])->length()) {
-                        ++currentChunk[i];
-                        inChunkOffset[i] = 0;
-                    } else {
-                        inChunkOffset[i] += max_curr_len;
-                    }
-                } else {
-                    result_columns.emplace_back(e.array()->Slice(offset - max_curr_len, max_curr_len));
-                }
-            }
-            blocks.emplace_back(std::make_shared<TResultBatch>(max_curr_len, std::move(result_columns)));
-        }
-        return blocks;
+        auto res = std::make_shared<TResultBatch>(RowsCnt_, std::move(columns));
+        RowsCnt_ = 0;
+        return res;
     }
 
 private:
@@ -286,7 +260,7 @@ public:
         , std::shared_ptr<std::vector<TType*>> columnTypes
         , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
         , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
-        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
+        , ui64 nativeYtTypeFlags, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
@@ -294,7 +268,7 @@ public:
     {
         ColumnConverters_.reserve(columnTypes->size());
         for (size_t i = 0; i < columnTypes->size(); ++i) {
-            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, isNative));
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, nativeYtTypeFlags));
         }
     }
 
@@ -309,25 +283,26 @@ public:
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
-        NKikimr::NMiniKQL::TScopedAlloc scope(__LOCATION__);
-        TThrowingBindTerminator t;
-
-        YQL_ENSURE(batch);
-        MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
-        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
-        result.resize(ColumnConverters_.size());
-        size_t matchedColumns = 0;
-        for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
-            if (ColumnOrderMapping.end() == columnIdxIt) {
-                continue;
+        {
+            auto ctx = NCommon::CreateMemoryArenaContext();
+
+            YQL_ENSURE(batch);
+            MKQL_ADD_STAT(JobStats_, BlockCount, 1);
+            YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
+            result.resize(ColumnConverters_.size());
+            size_t matchedColumns = 0;
+            for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
+                auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
+                if (ColumnOrderMapping.end() == columnIdxIt) {
+                    continue;
+                }
+                ++matchedColumns;
+                auto columnIdx =  columnIdxIt->second;
+                result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
             }
-            ++matchedColumns;
-            auto columnIdx =  columnIdxIt->second;
-            result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
+            Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         }
-        Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
         return arrow::Status::OK();
     }
@@ -371,8 +346,7 @@ public:
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
-            bool native = decoder->NativeYtTypeFlags;
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, decoder->NativeYtTypeFlags, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);
@@ -394,7 +368,7 @@ public:
             }
         }
         if (!Inputs_[inputIdx]) {
-            CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
+            CreateInputStream(Settings_->Requests[inputIdx]).AsUnique().Subscribe(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
                 self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, stream = std::move(stream)]() mutable {
                     try {
                         self->Inputs_[inputIdx] = std::move(stream.ValueOrThrow());
@@ -407,7 +381,7 @@ public:
             }));
             return;
         }
-        Inputs_[inputIdx]->Read().SubscribeUnique(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
+        Inputs_[inputIdx]->Read().AsUnique().Subscribe(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
             self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, res = std::move(res)]() mutable {
                 try {
                     self->Accept(inputIdx, std::move(res));
@@ -428,7 +402,7 @@ public:
 
         if (!res.IsOK()) {
             // Propagate error
-            Listener_->HandleError(res.GetMessage());
+            Listener_->HandleError(TString(res.GetMessage()));
             return;
         }
 
@@ -479,9 +453,7 @@ public:
                 }
             }
             if (payload) {
-                for (auto &e: FallbackHandler(inputIdx, payload)) {
-                    Listener_->HandleFallback(std::move(e));
-                }
+                Listener_->HandleFallback(FallbackHandler(inputIdx, payload));
                 InputDone(inputIdx);
                 RunRead();
             }
@@ -493,7 +465,7 @@ public:
         }
     }
 
-    std::vector<TResultBatch::TPtr> FallbackHandler(size_t idx, NYT::TSharedRef payload) {
+    TResultBatch::TPtr FallbackHandler(size_t idx, NYT::TSharedRef payload) {
         if (!payload.Size()) {
             return {};
         }
@@ -558,12 +530,13 @@ private:
 class TReaderState: public TComputationValue<TReaderState> {
     using TBase = TComputationValue<TReaderState>;
 public:
-    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes)
+    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes, NYql::EDatumValidationMode validationMode)
         : TBase(memInfo)
         , Source_(std::move(source))
         , Width_(width)
         , Types_(arrowTypes)
         , Result_(width)
+        , ValidationMode_(validationMode)
     {
     }
 
@@ -582,9 +555,9 @@ public:
 
             for (size_t i = 0; i < Width_; ++i) {
                 YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
-                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
+                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]), ValidationMode_);
             }
-            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)), ValidationMode_);
         } catch (...) {
             Cerr << "YT RPC Reader exception:\n";
             throw;
@@ -598,6 +571,7 @@ private:
     std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> Types_;
     std::vector<NUdf::TUnboxedValue*> Result_;
     bool GotFinish_ = 0;
+    const NYql::EDatumValidationMode ValidationMode_;
 };
 };
 
@@ -609,7 +583,8 @@ public:
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets,
+        const TString& optLLVM)
         : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
@@ -623,9 +598,10 @@ public:
         , JobStats_(jobStats)
     {
         // TODO() Enable range indexes + row indexes
-        Specs_.SetUseSkiff("", 0);
+        Specs_.SetUseSkiff(optLLVM, 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
         Specs_.SetTableOffsets(tableOffsets);
+        Specs_.SetDatumValidationMode(ctx.RuntimeSettings->DatumValidation.Get());
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -645,7 +621,7 @@ public:
         settings->SetColumns(columnNames);
         auto source = std::make_shared<TSource>(std::move(settings), Inflight_, Type_, types, ctx.HolderFactory, JobStats_);
         source->SetSelfAndRun(source);
-        return ctx.HolderFactory.Create<TReaderState>(source, Width_, types);
+        return ctx.HolderFactory.Create<TReaderState>(source, Width_, types, Specs_.DatumValidationMode_);
     }
 
     void RegisterDependencies() const final {}
@@ -668,9 +644,10 @@ IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContex
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets,
+        const TString& optLLVM)
 {
     return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
-                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);
+                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets, optLLVM);
 }
 }

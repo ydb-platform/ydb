@@ -27,7 +27,7 @@
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
-#endif /* HAVE_CONFIG_H */
+#endif /* defined(HAVE_CONFIG_H) */
 
 #include <nghttp2/nghttp2.h>
 
@@ -364,10 +364,10 @@ nghttp2_ssize nghttp2_hd_inflate_hd_nv(nghttp2_hd_inflater *inflater,
 
 /* For unittesting purpose */
 int nghttp2_hd_emit_indname_block(nghttp2_bufs *bufs, size_t index,
-                                  nghttp2_nv *nv, int indexing_mode);
+                                  const nghttp2_nv *nv, int indexing_mode);
 
 /* For unittesting purpose */
-int nghttp2_hd_emit_newname_block(nghttp2_bufs *bufs, nghttp2_nv *nv,
+int nghttp2_hd_emit_newname_block(nghttp2_bufs *bufs, const nghttp2_nv *nv,
                                   int indexing_mode);
 
 /* For unittesting purpose */
@@ -439,4 +439,4 @@ nghttp2_ssize nghttp2_hd_huff_decode(nghttp2_hd_huff_decode_context *ctx,
  */
 int nghttp2_hd_huff_decode_failure_state(nghttp2_hd_huff_decode_context *ctx);
 
-#endif /* NGHTTP2_HD_H */
+#endif /* !defined(NGHTTP2_HD_H) */

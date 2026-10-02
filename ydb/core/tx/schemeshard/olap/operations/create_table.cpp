@@ -1,3 +1,7 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -9,6 +13,8 @@
 #include <ydb/core/mind/hive/hive.h>
 
 #include <util/random/shuffle.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -99,7 +105,7 @@ private:
 
 class TOlapPresetConstructor : public TTableConstructorBase {
     ui32 PresetId = 0;
-    TString PresetName = "default";
+    TString PresetName = TOlapStoreInfo::DefaultPresetName;
     const TOlapStoreInfo& StoreInfo;
     mutable bool NeedUpdateObject = false;
 public:
@@ -118,27 +124,16 @@ public:
             return false;
         }
 
-        if (description.HasSchemaPresetId()) {
-            PresetId = description.GetSchemaPresetId();
-            if (!StoreInfo.SchemaPresets.contains(PresetId)) {
-                errors.AddError(Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", PresetId));
-                return false;
-            }
-            PresetName = StoreInfo.SchemaPresets.at(PresetId).GetName();
-        } else {
-            if (description.HasSchemaPresetName()) {
-                PresetName = description.GetSchemaPresetName();
-            }
-            if (!StoreInfo.SchemaPresetByName.contains(PresetName)) {
-                errors.AddError(Sprintf("Specified schema preset '%s' does not exist in tablestore", PresetName.c_str()));
-                return false;
-            }
-            PresetId = StoreInfo.SchemaPresetByName.at(PresetName);
-            Y_ABORT_UNLESS(StoreInfo.SchemaPresets.contains(PresetId));
+        auto* preset = StoreInfo.GetPresetOptional(description);
+        if (!preset) {
+            errors.AddError("preset not found in tables store");
+            return false;
         }
+        PresetId = preset->GetId();
+        PresetName = preset->GetName();
 
         if (description.HasSchema()) {
-            if (!GetSchema().Validate(description.GetSchema(), errors)) {
+            if (!GetSchema().ValidateForStore(description.GetSchema(), errors)) {
                 return false;
             }
         }
@@ -175,6 +170,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
+    TOlapMultiColumnStatisticsDescription TableMultiColumnStatistics;
     ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
@@ -192,15 +188,15 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+        if (!TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 
-        if (!TableSchema.Update(schemaDiff, errors)) {
+        TOlapMultiColumnStatisticsUpdate statisticsUpdate;
+        if (!statisticsUpdate.Parse(description, errors)) {
             return false;
         }
-        return true;
+        return TableMultiColumnStatistics.ApplyUpdate(TableSchema, statisticsUpdate, errors);
     }
 
 private:
@@ -208,6 +204,7 @@ private:
         auto& description = table->Description;
         description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
+        TableMultiColumnStatistics.Serialize(description);
         return TConclusionStatus::Success();
     }
 
@@ -218,20 +215,17 @@ private:
 
 
 class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TConfigureParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -239,11 +233,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                   << " at tabletId# " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
@@ -311,23 +301,24 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
+                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
-
+                    context.SS->SelectProcessingParams(txState->TargetPathId),
+                    0,
+                    subDomainPathId);
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
-                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
+                YDB_LOG_ERROR_CTX(context.Ctx, "Unexpected tablet type");
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose modify scheme on shard"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on shard",
+                {"tabletId", tabletId},
+            );
         }
 
         txState->UpdateShardsInProgress();
@@ -337,32 +328,26 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TPropose"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvOperationPlan"
-                     << " at tablet: " << ssId
-                     << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
@@ -401,11 +386,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -424,21 +405,17 @@ public:
 };
 
 class TProposedWaitParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TProposedWaitParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TProposedWaitParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TProposedWaitParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }
@@ -461,11 +438,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -484,14 +457,13 @@ public:
                     break;
                 }
                 default: {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "Unexpected tablet type");
                 }
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " wait for NotifyTxCompletionResult"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Wait for NotifyTxCompletionResult",
+                {"tabletId", tabletId},
+            );
         }
 
         if (txState->NeedUpdateObject) {
@@ -504,7 +476,7 @@ public:
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             TPathId pathId = txState->TargetPathId;
-            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(pathId);
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
@@ -513,6 +485,10 @@ public:
 };
 
 class TCreateColumnTable: public TSubOperation {
+public:
+    virtual const char* Name() const override final { return "TCreateColumnTable"; }
+
+private:
     static TTxState::ETxState NextState(bool inStore) {
         if (inStore) {
             return TTxState::ConfigureParts;
@@ -559,28 +535,7 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
-        auto schema = createDescription.GetSchema();
-        for (const auto& family : schema.GetColumnFamilies()) {
-            if (family.GetName() == "default") {
-                return;
-            }
-        }
-
-        auto mutableSchema = createDescription.MutableSchema();
-        auto defaultFamily = mutableSchema->AddColumnFamilies();
-        defaultFamily->SetName("default");
-        defaultFamily->SetId(0);
-
-        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
-                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
-                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
-            }
-        }
-    }
-
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -595,11 +550,9 @@ public:
         const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
         auto opTxId = OperationId.GetTxId();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTable Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
@@ -614,6 +567,13 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Incoming tx message has initialized shard ids");
             return result;
+        }
+
+        if (createDescription.HasSchema()) {
+            if (auto checkResult = NOlap::CheckColumns(createDescription.GetSchema().GetColumns(), AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                return result;
+            }
         }
 
         TOlapStoreInfo::TPtr storeInfo;
@@ -674,7 +634,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .ShardsLimit(storeInfo ? 0 : shardsCount)
@@ -720,7 +680,6 @@ public:
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
-            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }
@@ -769,7 +728,7 @@ public:
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()
@@ -823,7 +782,7 @@ public:
 
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()
@@ -871,16 +830,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateColumnTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateColumnTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -922,3 +881,5 @@ ISubOperation::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState sta
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

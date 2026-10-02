@@ -10,9 +10,8 @@ namespace NKikimr::NSQS {
 class IEventsWriterWrapper : public TAtomicRefCount<IEventsWriterWrapper> {
 public:
     virtual void Write(const TString& data) = 0;
-    virtual ~IEventsWriterWrapper() {
-        Close();
-    };
+    // Do not call Close() here: CloseImpl() is virtual and derived members are already gone.
+    virtual ~IEventsWriterWrapper() = default;
 
     void Close();
 
@@ -23,10 +22,10 @@ private:
     bool Closed = false;
 };
 
-
 class IEventsWriterFactory {
 public:
-    virtual IEventsWriterWrapper::TPtr CreateEventsWriter(const NKikimrConfig::TSqsConfig& config,  const ::NMonitoring::TDynamicCounterPtr& counters) const = 0;
+    virtual IEventsWriterWrapper::TPtr CreateEventsWriter(const NKikimrConfig::TSqsConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) const = 0;
+    virtual IEventsWriterWrapper::TPtr CreateCloudEventsWriter(const NKikimrConfig::TSqsConfig& config, const NMonitoring::TDynamicCounterPtr& counters) const = 0;
     virtual ~IEventsWriterFactory()
     {}
 };

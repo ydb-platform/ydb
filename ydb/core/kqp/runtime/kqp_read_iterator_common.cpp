@@ -74,7 +74,7 @@ TDuration TIteratorReadBackoffSettings::CalcShardDelay(size_t attempt, bool allo
         delay = Min(delay, MaxRetryDelay);
     }
 
-    delay *= (1 - UnsertaintyRatio * RandomNumber<double>());
+    delay *= (1 - UncertaintyRatio * RandomNumber<double>());
 
     return delay;
 }
@@ -91,7 +91,7 @@ size_t MaxShardResolves() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardResolves;
 }
 
-size_t MaxShardRetries() {  
+size_t MaxShardRetries() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardAttempts;
 }
 
@@ -101,6 +101,26 @@ TMaybe<size_t> MaxTotalRetries() {
 
 TMaybe<TDuration> ShardTimeout() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->ReadResponseTimeout;
+}
+
+size_t MaxRowsProcessingStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxRowsProcessingStreamLookup;
+}
+
+ui64 MaxTotalBytesQuotaStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxTotalBytesQuotaStreamLookup;
+}
+
+ui64 MaxInFlightReadsStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightReadsStreamLookup;
+}
+
+ui64 MaxBytesPerFetchStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxBytesPerFetchStreamLookup;
+}
+
+ui64 MaxInFlightLocksStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightLocksStreamLookup;
 }
 
 } // namespace NKqp

@@ -2,17 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Common objects shared by __init__.py and _ps*.py modules."""
+"""Common objects shared by __init__.py and _ps*.py modules.
 
-# Note: this module is imported by setup.py so it should not import
-# psutil or third-party modules.
-
-from __future__ import division
-from __future__ import print_function
+Note: this module is imported by setup.py, so it should not import
+psutil or third-party modules.
+"""
 
 import collections
-import contextlib
-import errno
+import enum
 import functools
 import os
 import socket
@@ -20,11 +17,9 @@ import stat
 import sys
 import threading
 import warnings
-from collections import namedtuple
 from socket import AF_INET
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
-
 
 try:
     from socket import AF_INET6
@@ -34,14 +29,6 @@ try:
     from socket import AF_UNIX
 except ImportError:
     AF_UNIX = None
-
-
-# can't take it from _common.py as this script is imported by setup.py
-PY3 = sys.version_info[0] >= 3
-if PY3:
-    import enum
-else:
-    enum = None
 
 
 PSUTIL_DEBUG = bool(os.getenv('PSUTIL_DEBUG'))
@@ -57,7 +44,7 @@ __all__ = [
     'CONN_FIN_WAIT1', 'CONN_FIN_WAIT2', 'CONN_LAST_ACK', 'CONN_LISTEN',
     'CONN_NONE', 'CONN_SYN_RECV', 'CONN_SYN_SENT', 'CONN_TIME_WAIT',
     # net constants
-    'NIC_DUPLEX_FULL', 'NIC_DUPLEX_HALF', 'NIC_DUPLEX_UNKNOWN',
+    'NIC_DUPLEX_FULL', 'NIC_DUPLEX_HALF', 'NIC_DUPLEX_UNKNOWN',  # noqa: F822
     # process status constants
     'STATUS_DEAD', 'STATUS_DISK_SLEEP', 'STATUS_IDLE', 'STATUS_LOCKED',
     'STATUS_RUNNING', 'STATUS_SLEEPING', 'STATUS_STOPPED', 'STATUS_SUSPENDED',
@@ -65,10 +52,6 @@ __all__ = [
     'STATUS_WAKING', 'STATUS_ZOMBIE', 'STATUS_PARKED',
     # other constants
     'ENCODING', 'ENCODING_ERRS', 'AF_INET6',
-    # named tuples
-    'pconn', 'pcputimes', 'pctxsw', 'pgids', 'pio', 'pionice', 'popenfile',
-    'pthread', 'puids', 'sconn', 'scpustats', 'sdiskio', 'sdiskpart',
-    'sdiskusage', 'snetio', 'snicaddr', 'snicstats', 'sswap', 'suser',
     # utility functions
     'conn_tmap', 'deprecated_method', 'isfile_strict', 'memoize',
     'parse_environ_block', 'path_exists_strict', 'usage_percent',
@@ -134,121 +117,29 @@ CONN_LISTEN = "LISTEN"
 CONN_CLOSING = "CLOSING"
 CONN_NONE = "NONE"
 
+
 # net_if_stats()
-if enum is None:
+class NicDuplex(enum.IntEnum):
     NIC_DUPLEX_FULL = 2
     NIC_DUPLEX_HALF = 1
     NIC_DUPLEX_UNKNOWN = 0
-else:
 
-    class NicDuplex(enum.IntEnum):
-        NIC_DUPLEX_FULL = 2
-        NIC_DUPLEX_HALF = 1
-        NIC_DUPLEX_UNKNOWN = 0
 
-    globals().update(NicDuplex.__members__)
+globals().update(NicDuplex.__members__)
+
 
 # sensors_battery()
-if enum is None:
+class BatteryTime(enum.IntEnum):
     POWER_TIME_UNKNOWN = -1
     POWER_TIME_UNLIMITED = -2
-else:
 
-    class BatteryTime(enum.IntEnum):
-        POWER_TIME_UNKNOWN = -1
-        POWER_TIME_UNLIMITED = -2
 
-    globals().update(BatteryTime.__members__)
+globals().update(BatteryTime.__members__)
 
 # --- others
 
 ENCODING = sys.getfilesystemencoding()
-if not PY3:
-    ENCODING_ERRS = "replace"
-else:
-    try:
-        ENCODING_ERRS = sys.getfilesystemencodeerrors()  # py 3.6
-    except AttributeError:
-        ENCODING_ERRS = "surrogateescape" if POSIX else "replace"
-
-
-# ===================================================================
-# --- namedtuples
-# ===================================================================
-
-# --- for system functions
-
-# fmt: off
-# psutil.swap_memory()
-sswap = namedtuple('sswap', ['total', 'used', 'free', 'percent', 'sin',
-                             'sout'])
-# psutil.disk_usage()
-sdiskusage = namedtuple('sdiskusage', ['total', 'used', 'free', 'percent'])
-# psutil.disk_io_counters()
-sdiskio = namedtuple('sdiskio', ['read_count', 'write_count',
-                                 'read_bytes', 'write_bytes',
-                                 'read_time', 'write_time'])
-# psutil.disk_partitions()
-sdiskpart = namedtuple('sdiskpart', ['device', 'mountpoint', 'fstype', 'opts'])
-# psutil.net_io_counters()
-snetio = namedtuple('snetio', ['bytes_sent', 'bytes_recv',
-                               'packets_sent', 'packets_recv',
-                               'errin', 'errout',
-                               'dropin', 'dropout'])
-# psutil.users()
-suser = namedtuple('suser', ['name', 'terminal', 'host', 'started', 'pid'])
-# psutil.net_connections()
-sconn = namedtuple('sconn', ['fd', 'family', 'type', 'laddr', 'raddr',
-                             'status', 'pid'])
-# psutil.net_if_addrs()
-snicaddr = namedtuple('snicaddr',
-                      ['family', 'address', 'netmask', 'broadcast', 'ptp'])
-# psutil.net_if_stats()
-snicstats = namedtuple('snicstats',
-                       ['isup', 'duplex', 'speed', 'mtu', 'flags'])
-# psutil.cpu_stats()
-scpustats = namedtuple(
-    'scpustats', ['ctx_switches', 'interrupts', 'soft_interrupts', 'syscalls'])
-# psutil.cpu_freq()
-scpufreq = namedtuple('scpufreq', ['current', 'min', 'max'])
-# psutil.sensors_temperatures()
-shwtemp = namedtuple(
-    'shwtemp', ['label', 'current', 'high', 'critical'])
-# psutil.sensors_battery()
-sbattery = namedtuple('sbattery', ['percent', 'secsleft', 'power_plugged'])
-# psutil.sensors_fans()
-sfan = namedtuple('sfan', ['label', 'current'])
-# fmt: on
-
-# --- for Process methods
-
-# psutil.Process.cpu_times()
-pcputimes = namedtuple(
-    'pcputimes', ['user', 'system', 'children_user', 'children_system']
-)
-# psutil.Process.open_files()
-popenfile = namedtuple('popenfile', ['path', 'fd'])
-# psutil.Process.threads()
-pthread = namedtuple('pthread', ['id', 'user_time', 'system_time'])
-# psutil.Process.uids()
-puids = namedtuple('puids', ['real', 'effective', 'saved'])
-# psutil.Process.gids()
-pgids = namedtuple('pgids', ['real', 'effective', 'saved'])
-# psutil.Process.io_counters()
-pio = namedtuple(
-    'pio', ['read_count', 'write_count', 'read_bytes', 'write_bytes']
-)
-# psutil.Process.ionice()
-pionice = namedtuple('pionice', ['ioclass', 'value'])
-# psutil.Process.ctx_switches()
-pctxsw = namedtuple('pctxsw', ['voluntary', 'involuntary'])
-# psutil.Process.net_connections()
-pconn = namedtuple(
-    'pconn', ['fd', 'family', 'type', 'laddr', 'raddr', 'status']
-)
-
-# psutil.net_connections() and psutil.Process.net_connections()
-addr = namedtuple('addr', ['ip', 'port'])
+ENCODING_ERRS = sys.getfilesystemencodeerrors()
 
 
 # ===================================================================
@@ -273,7 +164,7 @@ if AF_INET6 is not None:
         "udp6": ([AF_INET6], [SOCK_DGRAM]),
     })
 
-if AF_UNIX is not None:
+if AF_UNIX is not None and not SUNOS:
     conn_tmap.update({"unix": ([AF_UNIX], [SOCK_STREAM, SOCK_DGRAM])})
 
 
@@ -293,9 +184,7 @@ class Error(Exception):
         info = collections.OrderedDict()
         for name in attrs:
             value = getattr(self, name, None)
-            if value:  # noqa
-                info[name] = value
-            elif name == "pid" and value == 0:
+            if value or (name == "pid" and value == 0):
                 info[name] = value
         return info
 
@@ -303,8 +192,8 @@ class Error(Exception):
         # invoked on `raise Error`
         info = self._infodict(("pid", "ppid", "name"))
         if info:
-            details = "(%s)" % ", ".join(
-                ["%s=%r" % (k, v) for k, v in info.items()]
+            details = "({})".format(
+                ", ".join([f"{k}={v!r}" for k, v in info.items()])
             )
         else:
             details = None
@@ -313,8 +202,8 @@ class Error(Exception):
     def __repr__(self):
         # invoked on `repr(Error)`
         info = self._infodict(("pid", "ppid", "name", "seconds", "msg"))
-        details = ", ".join(["%s=%r" % (k, v) for k, v in info.items()])
-        return "psutil.%s(%s)" % (self.__class__.__name__, details)
+        details = ", ".join([f"{k}={v!r}" for k, v in info.items()])
+        return f"psutil.{self.__class__.__name__}({details})"
 
 
 class NoSuchProcess(Error):
@@ -380,7 +269,7 @@ class TimeoutExpired(Error):
         self.seconds = seconds
         self.pid = pid
         self.name = name
-        self.msg = "timeout after %s seconds" % seconds
+        self.msg = f"timeout after {seconds} seconds"
 
     def __reduce__(self):
         return (self.__class__, (self.seconds, self.pid, self.name))
@@ -389,26 +278,6 @@ class TimeoutExpired(Error):
 # ===================================================================
 # --- utils
 # ===================================================================
-
-
-# This should be in _compat.py rather than here, but does not work well
-# with setup.py importing this module via a sys.path trick.
-if PY3:
-    if isinstance(__builtins__, dict):  # cpython
-        exec_ = __builtins__["exec"]
-    else:  # pypy
-        exec_ = getattr(__builtins__, "exec")  # noqa
-
-    exec_("""def raise_from(value, from_value):
-    try:
-        raise value from from_value
-    finally:
-        value = None
-    """)
-else:
-
-    def raise_from(value, from_value):
-        raise value
 
 
 def usage_percent(used, total, round_=None):
@@ -455,8 +324,8 @@ def memoize(fun):
         except KeyError:
             try:
                 ret = cache[key] = fun(*args, **kwargs)
-            except Exception as err:  # noqa: BLE001
-                raise raise_from(err, None)
+            except Exception as err:
+                raise err from None
             return ret
 
     def cache_clear():
@@ -504,15 +373,15 @@ def memoize_when_activated(fun):
             # case 2: we never entered oneshot() ctx
             try:
                 return fun(self)
-            except Exception as err:  # noqa: BLE001
-                raise raise_from(err, None)
+            except Exception as err:
+                raise err from None
         except KeyError:
             # case 3: we entered oneshot() ctx but there's no cache
             # for this entry yet
             try:
                 ret = fun(self)
-            except Exception as err:  # noqa: BLE001
-                raise raise_from(err, None)
+            except Exception as err:
+                raise err from None
             try:
                 self._cache[fun] = ret
             except AttributeError:
@@ -546,9 +415,9 @@ def isfile_strict(path):
     """
     try:
         st = os.stat(path)
-    except OSError as err:
-        if err.errno in {errno.EPERM, errno.EACCES}:
-            raise
+    except PermissionError:
+        raise
+    except OSError:
         return False
     else:
         return stat.S_ISREG(st.st_mode)
@@ -561,25 +430,23 @@ def path_exists_strict(path):
     """
     try:
         os.stat(path)
-    except OSError as err:
-        if err.errno in {errno.EPERM, errno.EACCES}:
-            raise
+    except PermissionError:
+        raise
+    except OSError:
         return False
     else:
         return True
 
 
-@memoize
 def supports_ipv6():
     """Return True if IPv6 is supported on this platform."""
     if not socket.has_ipv6 or AF_INET6 is None:
         return False
     try:
-        sock = socket.socket(AF_INET6, socket.SOCK_STREAM)
-        with contextlib.closing(sock):
+        with socket.socket(AF_INET6, socket.SOCK_STREAM) as sock:
             sock.bind(("::1", 0))
         return True
-    except socket.error:
+    except OSError:
         return False
 
 
@@ -615,35 +482,31 @@ def sockfam_to_enum(num):
     """Convert a numeric socket family value to an IntEnum member.
     If it's not a known member, return the numeric value itself.
     """
-    if enum is None:
+    try:
+        return socket.AddressFamily(num)
+    except ValueError:
         return num
-    else:  # pragma: no cover
-        try:
-            return socket.AddressFamily(num)
-        except ValueError:
-            return num
 
 
 def socktype_to_enum(num):
     """Convert a numeric socket type value to an IntEnum member.
     If it's not a known member, return the numeric value itself.
     """
-    if enum is None:
+    try:
+        return socket.SocketKind(num)
+    except ValueError:
         return num
-    else:  # pragma: no cover
-        try:
-            return socket.SocketKind(num)
-        except ValueError:
-            return num
 
 
 def conn_to_ntuple(fd, fam, type_, laddr, raddr, status, status_map, pid=None):
     """Convert a raw connection tuple to a proper ntuple."""
+    from . import _ntuples as ntp
+
     if fam in {socket.AF_INET, AF_INET6}:
         if laddr:
-            laddr = addr(*laddr)
+            laddr = ntp.addr(*laddr)
         if raddr:
-            raddr = addr(*raddr)
+            raddr = ntp.addr(*raddr)
     if type_ == socket.SOCK_STREAM and fam in {AF_INET, AF_INET6}:
         status = status_map.get(status, CONN_NONE)
     else:
@@ -651,9 +514,31 @@ def conn_to_ntuple(fd, fam, type_, laddr, raddr, status, status_map, pid=None):
     fam = sockfam_to_enum(fam)
     type_ = socktype_to_enum(type_)
     if pid is None:
-        return pconn(fd, fam, type_, laddr, raddr, status)
+        return ntp.pconn(fd, fam, type_, laddr, raddr, status)
     else:
-        return sconn(fd, fam, type_, laddr, raddr, status, pid)
+        return ntp.sconn(fd, fam, type_, laddr, raddr, status, pid)
+
+
+def broadcast_addr(addr):
+    """Given the address ntuple returned by ``net_if_addrs()``
+    calculates the broadcast address.
+    """
+    import ipaddress
+
+    if not addr.address or not addr.netmask:
+        return None
+    if addr.family == socket.AF_INET:
+        return str(
+            ipaddress.IPv4Network(
+                f"{addr.address}/{addr.netmask}", strict=False
+            ).broadcast_address
+        )
+    if addr.family == socket.AF_INET6:
+        return str(
+            ipaddress.IPv6Network(
+                f"{addr.address}/{addr.netmask}", strict=False
+            ).broadcast_address
+        )
 
 
 def deprecated_method(replacement):
@@ -662,9 +547,9 @@ def deprecated_method(replacement):
     """
 
     def outer(fun):
-        msg = "%s() is deprecated and will be removed; use %s() instead" % (
-            fun.__name__,
-            replacement,
+        msg = (
+            f"{fun.__name__}() is deprecated and will be removed; use"
+            f" {replacement}() instead"
         )
         if fun.__doc__ is None:
             fun.__doc__ = msg
@@ -789,8 +674,6 @@ wrap_numbers.cache_info = _wn.cache_info
 # is 8K. We use a bigger buffer (32K) in order to have more consistent
 # results when reading /proc pseudo files on Linux, see:
 # https://github.com/giampaolo/psutil/issues/2050
-# On Python 2 this also speeds up the reading of big files:
-# (namely /proc/{pid}/smaps and /proc/net/*):
 # https://github.com/giampaolo/psutil/issues/708
 FILE_READ_BUFFER_SIZE = 32 * 1024
 
@@ -800,17 +683,13 @@ def open_binary(fname):
 
 
 def open_text(fname):
-    """On Python 3 opens a file in text mode by using fs encoding and
-    a proper en/decoding errors handler.
-    On Python 2 this is just an alias for open(name, 'rt').
+    """Open a file in text mode by using the proper FS encoding and
+    en/decoding error handlers.
     """
-    if not PY3:
-        return open(fname, buffering=FILE_READ_BUFFER_SIZE)
-
     # See:
     # https://github.com/giampaolo/psutil/issues/675
     # https://github.com/giampaolo/psutil/pull/733
-    fobj = open(
+    fobj = open(  # noqa: SIM115
         fname,
         buffering=FILE_READ_BUFFER_SIZE,
         encoding=ENCODING,
@@ -842,7 +721,7 @@ def cat(fname, fallback=_DEFAULT, _open=open_text):
         try:
             with _open(fname) as f:
                 return f.read()
-        except (IOError, OSError):
+        except OSError:
             return fallback
 
 
@@ -852,7 +731,7 @@ def bcat(fname, fallback=_DEFAULT):
 
 
 def bytes2human(n, format="%(value).1f%(symbol)s"):
-    """Used by various scripts. See: http://goo.gl/zeJZl.
+    """Used by various scripts. See: https://code.activestate.com/recipes/578019-bytes-to-human-human-to-bytes-converter/?in=user-4178764.
 
     >>> bytes2human(10000)
     '9.8K'
@@ -875,15 +754,8 @@ def get_procfs_path():
     return sys.modules['psutil'].PROCFS_PATH
 
 
-if PY3:
-
-    def decode(s):
-        return s.decode(encoding=ENCODING, errors=ENCODING_ERRS)
-
-else:
-
-    def decode(s):
-        return s
+def decode(s):
+    return s.decode(encoding=ENCODING, errors=ENCODING_ERRS)
 
 
 # =====================================================================
@@ -893,18 +765,13 @@ else:
 
 @memoize
 def term_supports_colors(file=sys.stdout):  # pragma: no cover
-    if os.name == 'nt':
-        return True
+    if not hasattr(file, "isatty") or not file.isatty():
+        return False
     try:
-        import curses
-
-        assert file.isatty()
-        curses.setupterm()
-        assert curses.tigetnum("colors") > 0
+        file.fileno()
     except Exception:  # noqa: BLE001
         return False
-    else:
-        return True
+    return True
 
 
 def hilite(s, color=None, bold=False):  # pragma: no cover
@@ -927,13 +794,12 @@ def hilite(s, color=None, bold=False):  # pragma: no cover
     try:
         color = colors[color]
     except KeyError:
-        raise ValueError(
-            "invalid color %r; choose between %s" % (list(colors.keys()))
-        )
+        msg = f"invalid color {color!r}; choose amongst {list(colors.keys())}"
+        raise ValueError(msg) from None
     attr.append(color)
     if bold:
         attr.append('1')
-    return '\x1b[%sm%s\x1b[0m' % (';'.join(attr), s)
+    return f"\x1b[{';'.join(attr)}m{s}\x1b[0m"
 
 
 def print_color(
@@ -941,9 +807,9 @@ def print_color(
 ):  # pragma: no cover
     """Print a colorized version of string."""
     if not term_supports_colors():
-        print(s, file=file)  # NOQA
+        print(s, file=file)
     elif POSIX:
-        print(hilite(s, color, bold), file=file)  # NOQA
+        print(hilite(s, color, bold), file=file)
     else:
         import ctypes
 
@@ -958,10 +824,11 @@ def print_color(
         try:
             color = colors[color]
         except KeyError:
-            raise ValueError(
-                "invalid color %r; choose between %r"
-                % (color, list(colors.keys()))
+            msg = (
+                f"invalid color {color!r}; choose between"
+                f" {list(colors.keys())!r}"
             )
+            raise ValueError(msg) from None
         if bold and color <= 7:
             color += 8
 
@@ -970,7 +837,7 @@ def print_color(
         handle = GetStdHandle(handle_id)
         SetConsoleTextAttribute(handle, color)
         try:
-            print(s, file=file)  # NOQA
+            print(s, file=file)
         finally:
             SetConsoleTextAttribute(handle, DEFAULT_COLOR)
 
@@ -984,11 +851,11 @@ def debug(msg):
             inspect.currentframe().f_back
         )
         if isinstance(msg, Exception):
-            if isinstance(msg, (OSError, IOError, EnvironmentError)):
+            if isinstance(msg, OSError):
                 # ...because str(exc) may contain info about the file name
-                msg = "ignoring %s" % msg
+                msg = f"ignoring {msg}"
             else:
-                msg = "ignoring %r" % msg
-        print(  # noqa
-            "psutil-debug [%s:%s]> %s" % (fname, lineno, msg), file=sys.stderr
+                msg = f"ignoring {msg!r}"
+        print(  # noqa: T201
+            f"psutil-debug [{fname}:{lineno}]> {msg}", file=sys.stderr
         )

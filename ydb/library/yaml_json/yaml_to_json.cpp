@@ -1,6 +1,7 @@
 #include "yaml_to_json.h"
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/node/node.h>
 #include <library/cpp/yaml/as/tstring.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NYaml {
 
@@ -15,24 +16,29 @@ namespace NKikimr::NYaml {
         return false;
     }
 
-    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot) {
+    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot, TString currentPath, ui32 depthLimit) {
         Y_ENSURE_BT(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
+        Y_ENSURE_BT(depthLimit > 0, "Depth limit reached");
 
         NJson::TJsonValue json;
 
         if (yaml.IsMap()) {
             for (const auto& it : yaml) {
                 const auto& key = it.first.as<TString>();
+                TString childPath = currentPath ? (currentPath + "/" + key) : key;
 
-                Y_ENSURE_BT(!json.Has(key), "Duplicate key entry: " << key);
+                Y_ENSURE_BT(!json.Has(key), "duplicate key " << key.Quote() << " at path " << childPath.Quote());
 
-                json[key] = Yaml2Json(it.second, false);
+                json[key] = Yaml2Json(it.second, false, childPath, depthLimit - 1);
             }
             return json;
         } else if (yaml.IsSequence()) {
             json.SetType(NJson::EJsonValueType::JSON_ARRAY);
+            ui64 index = 0;
             for (const auto& it : yaml) {
-                json.AppendValue(Yaml2Json(it, false));
+                TString childPath = currentPath ? (currentPath + "/" + ToString(index)) : ToString(index);
+                json.AppendValue(Yaml2Json(it, false, childPath, depthLimit - 1));
+                ++index;
             }
             return json;
         } else if (yaml.IsScalar()) {
@@ -63,6 +69,7 @@ namespace NKikimr::NYaml {
             return json;
         }
 
-        ythrow yexception() << "Unknown type of YAML node: '" << yaml.as<TString>() << "'";
+        ythrow yexception() << "unknown type of YAML node: '" << yaml.as<TString>() << "'"
+            << (currentPath ? " at path " + currentPath.Quote() : "");
     }
 }

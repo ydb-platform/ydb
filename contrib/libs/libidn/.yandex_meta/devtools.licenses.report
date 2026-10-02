@@ -45,11 +45,12 @@ BELONGS dynamic/ya.make static/ya.make
         gl/cloexec.h [5:16]
         gl/fd-hook.c [5:16]
         gl/fd-hook.h [4:15]
-        gl/gettext.h [5:16]
+        gl/gettext.h [4:15]
         gl/malloca.c [5:16]
         gl/malloca.h [5:16]
         gl/stat-time.c [5:16]
         gl/stat-time.h [5:16]
+        gl/stdlib.c [5:16]
         gl/xalloc-oversized.h [5:16]
         lib/gl/attribute.h [5:16]
         lib/gl/c-ctype.c [5:16]
@@ -57,8 +58,9 @@ BELONGS dynamic/ya.make static/ya.make
         lib/gl/c-strcase.h [5:16]
         lib/gl/c-strcasecmp.c [4:15]
         lib/gl/c-strncasecmp.c [4:15]
-        lib/gl/gettext.h [5:16]
+        lib/gl/gettext.h [4:15]
         lib/gl/iconv.h [6:17]
+        lib/gl/stdlib.c [5:16]
         lib/gl/striconv.c [5:16]
         lib/gl/striconv.h [5:16]
         lib/gl/unistr.h [5:16]
@@ -90,26 +92,10 @@ BELONGS dynamic/ya.make static/ya.make
         Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
     Files with this license:
         AUTHORS [30:32]
-        CONTRIBUTING.md [109:111]
-        COPYING [31:33]
+        CONTRIBUTING.md [124:126]
         FAQ [44:46]
-        README [27:29]
+        README [72:74]
         THANKS [117:119]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
-
-KEEP     LGPL-2.0-or-later    2330ed0641c8ba5d8ced1ab2437b9dae
-BELONGS dynamic/ya.make static/ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.0-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
-    Files with this license:
-        lib/nfkc.c [63:76]
-        lib/nfkc.c [136:149]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -129,32 +115,25 @@ FILE_INCLUDE COPYING found in files: COPYING.LESSERv2 at line 116
         + dynamic/ya.make static/ya.make
         - ya.make
 
-SKIP     GPL-2.0-or-later AND LGPL-3.0-or-later AND GPL-3.0-or-later 295cc2cee0658b26889d41abb8480324
+KEEP     GFDL-1.2-only AND GFDL-1.3-or-later 29a0f73cd43c8ba5cf0d94af976f8f2d
 BELONGS dynamic/ya.make static/ya.make
     License text:
-        files, are licensed under the GNU General Public License version 3.0
-        or later.
+        The manual is licensed under the GNU Free Documentation License,
+        Version 1.3 or any later, see the file
     Scancode info:
-        Original SPDX id: GPL-2.0-or-later
-        Score           : 18.67
+        Original SPDX id: GFDL-1.2-only
+        Score           : 49.50
         Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+        Links           : http://www.gnu.org/licenses/fdl-1.2.txt, http://www.gnu.org/licenses/old-licenses/fdl-1.2.txt, https://spdx.org/licenses/GFDL-1.2-only
     Files with this license:
-        COPYING [19:20]
+        README [51:52]
     Scancode info:
-        Original SPDX id: LGPL-3.0-or-later
-        Score           : 18.67
+        Original SPDX id: GFDL-1.3-or-later
+        Score           : 68.75
         Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+        Links           : http://www.gnu.org/licenses/fdl-1.3.txt, https://spdx.org/licenses/GFDL-1.3-or-later
     Files with this license:
-        COPYING [19:20]
-    Scancode info:
-        Original SPDX id: GPL-3.0-or-later
-        Score           : 18.67
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
-    Files with this license:
-        COPYING [19:20]
+        README [51:52]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -173,6 +152,27 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
+KEEP     LGPL-3.0-or-later OR GPL-2.0-or-later 2da5bda6c590ad79ee8887f6902a8d36
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 72.55
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        README [42:45]
+    Scancode info:
+        Original SPDX id: LGPL-3.0-or-later
+        Score           : 72.55
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+    Files with this license:
+        README [42:45]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
 SKIP     GPL-3.0-only         38b7423ae852f8826f00c2d6bef63db8
 BELONGS dynamic/ya.make static/ya.make
 	# according to COPYING, GPLv3 only applies to the command line tool, self tests, examples, and other auxiliary files
@@ -183,12 +183,12 @@ BELONGS dynamic/ya.make static/ya.make
         Match type      : TEXT
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
     Files with this license:
-        COPYINGv3 [1:674]
+        COPYING [1:674]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
 
-SKIP     GPL-2.0-only         39bba7d2cf0ba1036f2a6e2be52fe3f0
+KEEP     LGPL-3.0-or-later OR GPL-2.0-or-later 39bba7d2cf0ba1036f2a6e2be52fe3f0
 BELONGS dynamic/ya.make static/ya.make
 FILE_INCLUDE COPYING found in files: COPYINGv2 at line 60
     Note: matched license text is too long. Read it in the source files.
@@ -218,6 +218,37 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
+SKIP     GPL-3.0-or-later     442ffc49640e2b32ae820ce7c7f14b77
+BELONGS dynamic/ya.make static/ya.make
+    # Regards command line tool, self tests, examples, and other auxiliary files
+    License text:
+        files, are licensed under the GNU General Public License version 3.0
+        or later, see the file [COPYING](COPYING).
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 18.67
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        README [56:57]
+    Scancode info:
+        Original SPDX id: LGPL-3.0-or-later
+        Score           : 18.67
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+    Files with this license:
+        README [56:57]
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 18.67
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        README [56:57]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
 KEEP     LGPL-2.0-or-later    4853cabf7c14851560885c245fcb52df
 BELONGS dynamic/ya.make static/ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -232,6 +263,22 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
+SKIP     Apache-2.0           48c91caf01fafb45461d4e3a73b0a1ca
+BELONGS dynamic/ya.make static/ya.make
+    # Regards the Java library
+    License text:
+        the Apache License Version 2.0, see the file
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README [48:48]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
 KEEP     LGPL-2.0-or-later    4de0e7ca9b0f43b37f85d707563f20ca
 BELONGS dynamic/ya.make static/ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -242,6 +289,27 @@ BELONGS dynamic/ya.make static/ya.make
         Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
     Files with this license:
         gl/getprogname.c [4:15]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later AND LGPL-2.1-or-later 4fe6133b1a4538f85c8bb1e8e5c7758c
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 97.56
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        lib/nfkc.c [63:71]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 98.78
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        lib/nfkc.c [126:134]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -337,21 +405,6 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
-SKIP     Apache-2.0           989b9c85beff1d27b790ce0bd68f9727
-BELONGS dynamic/ya.make static/ya.make
-    License text:
-        the Apache License Version 2.0 (see the file java/LICENSE-2.0).
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        COPYING [13:13]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
-
 SKIP     GPL-3.0-only         9f8bb4752c8b54c476ffe32f6baa2a0c
 BELONGS dynamic/ya.make static/ya.make
     License text:
@@ -364,37 +417,6 @@ BELONGS dynamic/ya.make static/ya.make
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
     Files with this license:
         FAQ [28:30]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
-
-KEEP     "(GPL-2.0-or-later OR LGPL-3.0-or-later OR GPL-3.0-or-later)" bb113642eb48e07afeb3ae40fbb07577
-BELONGS dynamic/ya.make static/ya.make
-FILE_INCLUDE COPYING.LESSERv3 found in files: COPYING at line 9
-FILE_INCLUDE COPYINGv2 found in files: COPYING at line 8
-	# COPYING specifies triple-licensing schema
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: GPL-2.0-or-later
-        Score           : 60.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
-    Files with this license:
-        COPYING [6:12]
-    Scancode info:
-        Original SPDX id: LGPL-3.0-or-later
-        Score           : 60.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
-    Files with this license:
-        COPYING [6:12]
-    Scancode info:
-        Original SPDX id: GPL-3.0-or-later
-        Score           : 60.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
-    Files with this license:
-        COPYING [6:12]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -413,25 +435,18 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
-SKIP     GFDL-1.2-only AND GFDL-1.3-or-later ca5dfc85d7c88292cdb5a046fd627499
+SKIP     LicenseRef-scancode-unknown-license-reference bd2b6bf836a5478e218ecca93fedd4da
 BELONGS dynamic/ya.make static/ya.make
+    # Not a license
     License text:
-        The manual is licensed under the GNU Free Documentation License,
-        Version 1.3 or any later.
+        Other files are licensed as indicated in each file.  There may be
     Scancode info:
-        Original SPDX id: GFDL-1.2-only
-        Score           : 49.50
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/fdl-1.2.txt, http://www.gnu.org/licenses/old-licenses/fdl-1.2.txt, https://spdx.org/licenses/GFDL-1.2-only
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        COPYING [15:16]
-    Scancode info:
-        Original SPDX id: GFDL-1.3-or-later
-        Score           : 68.75
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/fdl-1.3.txt, https://spdx.org/licenses/GFDL-1.3-or-later
-    Files with this license:
-        COPYING [15:16]
+        README [62:62]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -445,7 +460,7 @@ BELONGS dynamic/ya.make static/ya.make
         Match type      : TEXT
         Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
     Files with this license:
-        INSTALL [362:365]
+        INSTALL [365:368]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -460,8 +475,8 @@ BELONGS dynamic/ya.make static/ya.make
         Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
     Files with this license:
         lib/gl/iconv.h [41:52]
-        lib/gl/iconv.h [380:391]
-        lib/gl/iconv.h [408:419]
+        lib/gl/iconv.h [400:411]
+        lib/gl/iconv.h [428:439]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -498,17 +513,17 @@ BELONGS dynamic/ya.make static/ya.make
         + dynamic/ya.make static/ya.make
         - ya.make
 
-SKIP     LicenseRef-scancode-unknown-license-reference ded42b7926e09f8a0b3de85c961d3604
+KEEP     LGPL-2.1-or-later    f003bdb090157a79280bcfb03a7606b2
 BELONGS dynamic/ya.make static/ya.make
-    License text:
-        Other files are licensed as indicated in each file.
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-unknown-license-reference
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 96.34
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
     Files with this license:
-        COPYING [22:22]
+        lib/nfkc.c [93:101]
+        lib/nfkc.c [496:504]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make
@@ -526,21 +541,6 @@ BELONGS dynamic/ya.make static/ya.make
         gl/idx.h [5:17]
         lib/gl/cdefs.h [5:17]
         lib/gl/strverscmp.c [6:18]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
-
-KEEP     LGPL-2.1-or-later    fbb14adb0a4ce34c7e07ad037a6d2023
-BELONGS dynamic/ya.make static/ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 93.75
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        lib/nfkc.c [98:111]
-        lib/nfkc.c [511:524]
     Belongs difference:
         + dynamic/ya.make static/ya.make
         - ya.make

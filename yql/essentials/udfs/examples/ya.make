@@ -2,6 +2,7 @@ RECURSE(
     callables
     dicts
     dummylog
+    linear
     lists
     structs
     tagged

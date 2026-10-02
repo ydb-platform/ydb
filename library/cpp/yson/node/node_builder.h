@@ -40,7 +40,12 @@ private:
     TStack<TNode*> Stack_;
 
 private:
-    inline void AddNode(TNode node, bool pop);
+    template <typename T>
+    inline void AddNode(T value, bool pop) {
+        Stack_.top()->MoveWithoutAttributes(std::move(value));
+        if (pop)
+            Stack_.pop();
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

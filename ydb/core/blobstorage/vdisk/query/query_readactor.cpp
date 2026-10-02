@@ -5,6 +5,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_GET
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -30,8 +32,10 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
 
             TReplQuoter::TPtr quoter;
+            NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter;
             if (IsRepl) {
                 quoter = Ctx->VCtx->ReplPDiskReadQuoter;
+                quoterThrottledCounter = Ctx->ReplMonGroup.ReplPDiskReadThrottledMicrosecondsPtr();
             }
 
             // make read requests
@@ -41,25 +45,23 @@ namespace NKikimr {
 
                 // create request
                 std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
-                            Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
-                            Priority, cookie));
+                    Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
+                    Priority, cookie));
 
-                LOG_DEBUG(ctx, BS_VDISK_GET,
-                    VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
+                msg->BlobId = it->HugeBlobId;
+
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
+                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size, 0, quoterThrottledCounter);
 
                 Counter++;
             }
         }
 
         void Finish(const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_VDISK_GET,
-                VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32
-                    " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()),
-                    ui32(Result->DiskDataItemPtrs.size())));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32 " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()), ui32(Result->DiskDataItemPtrs.size())));
             ctx.Send(NotifyID, new TEvents::TEvCompleted);
             Span.EndOk();
             Die(ctx);

@@ -1,7 +1,9 @@
 #include "rate_accounting.h"
 
 #include "probes.h"
+#include "public_counters.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/metering/time_grid.h>
@@ -199,6 +201,39 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+class TPublicCounters {
+public:
+    void Configure(const NKikimrKesus::TAccountingConfig::TMetric& cfg, double limit, ::NMonitoring::TDynamicCounterPtr counters) {
+        if (!IsPublicMetric(cfg)) {
+            Limit.Reset();
+            Consumed.Reset();
+            Counters.Reset();
+            return;
+        }
+
+        auto category = GetMetricCategory(cfg);
+        Y_ABORT_UNLESS(category.has_value());
+        Counters = GetPublicCounters(cfg, counters)->GetSubgroup("category", *category);
+
+        Limit = Counters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
+        Consumed = Counters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);
+
+        *Limit = limit;
+    }
+
+    void Consume(double consumed) {
+        if (Consumed) {
+            *Consumed += consumed;
+        }
+    }
+
+private:
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 class TAccountingActor final: public TActor<TAccountingActor> {
 private:
     // Accounting (aggregate history intervals and split consumption into billing categories)
@@ -217,6 +252,8 @@ private:
 
     // Monitoring
     TRateAccountingCounters Counters;
+    TPublicCounters PublicCounters;
+
 public:
     explicit TAccountingActor(const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props, const TString& quoterPath)
         : TActor(&TThis::StateWork)
@@ -271,6 +308,9 @@ private:
         Provisioned.Configure(accCfg.GetProvisioned(), QuoterPath, props.GetResourcePath(), "provisioned", BillSink);
         OnDemand.Configure(accCfg.GetOnDemand(), QuoterPath, props.GetResourcePath(), "ondemand", BillSink);
         Overshoot.Configure(accCfg.GetOvershoot(), QuoterPath, props.GetResourcePath(), "overshoot", BillSink);
+
+        PublicCounters.Configure(accCfg.GetOnDemand(), resCfg.GetMaxUnitsPerSecond(), AppData()->Counters);
+
         LWPROBE(ResourceAccountConfigure,
             QuoterPath,
             ResourcePath,
@@ -316,6 +356,8 @@ private:
         Provisioned.Add(provisioned, t, ctx);
         OnDemand.Add(onDemand, t, ctx);
         Overshoot.Add(overshoot, t, ctx);
+
+        PublicCounters.Consume(consumed);
     }
 };
 
@@ -445,8 +487,8 @@ void TRateAccounting::RemoveOldClients() {
     }
 }
 
-bool TRateAccounting::RunAccounting() {
-    bool accountingRequired = RunAccountingNoClean();
+bool TRateAccounting::RunAccounting(double& accountedConsumed) {
+    bool accountingRequired = RunAccountingNoClean(accountedConsumed);
     RemoveOldClients();
     bool cleaningRequried = !SortedClients.empty();
     return accountingRequired || cleaningRequried;
@@ -458,7 +500,7 @@ void TRateAccounting::SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDy
         new TEvPrivate::TEvCounters(Counters)));
 }
 
-bool TRateAccounting::RunAccountingNoClean() {
+bool TRateAccounting::RunAccountingNoClean(double& accountedConsumed) {
     // Check if we have enough values for at least one account period
     TInstant accountTill = History.Align(TActivationContext::Now() - CollectPeriod());
     if (accountTill - Accounted < AccountPeriod()) {
@@ -472,11 +514,16 @@ bool TRateAccounting::RunAccountingNoClean() {
         return false;
     }
 
+    TConsumptionHistory accountedHistory(History, Accounted, accountTill);
+    for (TInstant t = accountedHistory.Begin(); t != accountedHistory.End(); t = accountedHistory.Next(t)) {
+        accountedConsumed += accountedHistory.Get(t);
+    }
+
     // Offload hard work into accounting actor
     TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvRunAccounting(
             accountTill - History.Interval(),
-            TConsumptionHistory(History, Accounted, accountTill))));
+            std::move(accountedHistory))));
     LWPROBE(ResourceAccountingSend, QuoterPath, Props.GetResourcePath(), accountTill, Accounted);
     Accounted = accountTill;
     return true;

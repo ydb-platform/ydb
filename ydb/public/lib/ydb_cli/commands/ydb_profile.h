@@ -6,12 +6,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandConfig : public TClientCommandTree {
-public:
-    TCommandConfig();
-    virtual void Config(TConfig& config) override;
-};
-
 class TCommandConnectionInfo : public TClientCommand {
 public:
     TCommandConnectionInfo();
@@ -27,6 +21,8 @@ private:
 class TCommandProfile : public TClientCommandTree {
 public:
     TCommandProfile();
+
+    virtual void Config(TConfig& config) override;
 };
 
 class TCommandProfileCommon : public TClientCommand {
@@ -43,14 +39,14 @@ protected:
                      TConfig& config, bool interactive, bool cmdLine);
 
     TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, YcTokenFile, SaKeyFile,
-            IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile;
+            IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile, ClientCertFile, ClientCertPrivateKeyFile, ClientCertPrivateKeyPasswordFile;
 
     bool UseMetadataCredentials = false;
     bool AnonymousAuth = false;
 
 private:
     void SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString &profileName,
-                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine);
+                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine, bool verbose);
     void SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
                                     TConfig& config, bool interactive, bool cmdLine);
     bool SetAuthFromCommandLine(std::shared_ptr<IProfile> profile);
@@ -141,6 +137,9 @@ private:
     bool NoAuth = false;
     bool NoIamEndpoint = false;
     bool NoCaCertsFile = false;
+    bool NoClientCertFile = false;
+    bool NoClientCertPrivateKeyFile = false;
+    bool NoClientCertPrivateKeyPasswordFile = false;
 };
 
 class TCommandReplaceProfile : public TCommandProfileCommon {

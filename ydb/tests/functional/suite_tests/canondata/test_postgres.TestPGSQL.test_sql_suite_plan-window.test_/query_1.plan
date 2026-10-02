@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "[Arg.depname,Arg.salary,Arg.empno]"
+                                                "TopSortBy": "[row.depname,row.salary,row.empno]"
                                             },
                                             {
                                                 "Inputs": [
@@ -48,12 +48,13 @@
                                                     }
                                                 ],
                                                 "Name": "Sort",
-                                                "SortBy": "row.nsum"
+                                                "SortBy": "[item.depname,item.nsum]"
                                             }
                                         ],
                                         "PlanNodeId": 6,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "depname"
                                                 ],
@@ -71,12 +72,13 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Sort",
-                                                                "SortBy": "row.salary"
+                                                                "SortBy": "[item.depname,item.salary]"
                                                             }
                                                         ],
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "depname"
                                                                 ],
@@ -96,12 +98,9 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_window.test_plan/empsalary",
                                                                                         "ReadColumns": [
+                                                                                            "empno (-\u221e, +\u221e)",
                                                                                             "depname",
-                                                                                            "empno",
                                                                                             "salary"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "empno (-\u221e, +\u221e)"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",

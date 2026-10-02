@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -14,10 +15,12 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 namespace NKikimr {
 
@@ -92,6 +95,8 @@ namespace NKikimr {
         void SetEnableDbCounters(bool value);
         void SetAwsRegion(const TString& value);
         void InitIcb(ui32 numNodes);
+        void InitDcb(ui32 numNodes);
+
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -103,6 +108,8 @@ namespace NKikimr {
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TColumnShardConfig ColumnShardConfig;
+        NKikimrConfig::TBlobCacheConfig BlobCacheConfig;
+        NKikimrConfig::TSmallBlobsQuotaConfig SmallBlobsQuotaConfig;
         NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;
@@ -111,7 +118,10 @@ namespace NKikimr {
         NKikimrConfig::TGraphConfig GraphConfig;
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
         NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
+        NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
+        NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+        std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> Dcb;
 
     private:
         TAutoPtr<TMine> Mine;

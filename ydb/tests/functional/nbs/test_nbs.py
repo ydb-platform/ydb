@@ -1,0 +1,296 @@
+# -*- coding: utf-8 -*-
+from common import DEFAULT_DISK_BLOCKS_COUNT, NbsTestBase
+from vhost_user_blk_client import (
+    VIRTIO_BLK_S_OK,
+    VhostUserBlkClient,
+    virtio_blk_status_name,
+)
+
+
+class TestNbs(NbsTestBase):
+    """
+    Test suite for NBS 2 basic operations
+    """
+
+    def test_nbs_disk_creation(self):
+        """
+        Create nbs disk and check basic IO operations
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = "vnfjkdnsfvjdfknsjknsdkjnvnjk"
+        self.write(actor_id, 0, test_data)
+        read_data = self.read(actor_id, 0)
+
+        # Verify the data matches (trimmed to the original length)
+        assert read_data[: len(test_data)] == test_data
+
+    def test_nbs_disk_creation_idempotent(self):
+        """
+        Repeating CreatePartition for the same disk is ALREADY_EXISTS.
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+
+        first = self.create_partition(disk_id)
+        assert first.get('status') == 'SUCCESS', first
+        assert first.get('tabletId'), first
+
+        second = self.create_partition(disk_id)
+        assert second.get('status') == 'ALREADY_EXISTS', second
+        assert second.get('tabletId'), second
+        assert second['tabletId'] == first['tabletId'], (first, second)
+
+    def test_nbs_disk_creation_conflict(self):
+        """
+        CreatePartition with a conflicting config for the same disk id is not success.
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+
+        first = self.create_partition(disk_id)
+        assert first.get('status') == 'SUCCESS', first
+        assert first.get('tabletId'), first
+
+        conflict = self.create_partition(
+            disk_id,
+            blocks_count=DEFAULT_DISK_BLOCKS_COUNT * 2,
+        )
+        assert conflict.get('status') not in ('SUCCESS', 'ALREADY_EXISTS'), conflict
+        assert conflict.get('status') == 'GENERIC_ERROR', conflict
+
+    def test_nbs_disk_deletion(self):
+        """
+        Create nbs disk, write data so PBuffers hold LSNs, delete it, then
+        verify the volume/tablet are gone and PBuffer tablet-LSN mon is empty.
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        tablet_id = self.create_disk(disk_id)
+        # Ensure the partition tablet is up before delete
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        # Populate PBuffers so the mon page shows this tablet's LSNs before wipe.
+        self.write(actor_id, 0, self.generate_random_data(4096))
+
+        dbg_html_before = self.fetch_partition_dbg_page(tablet_id)
+        dbg_indexes = self.parse_dbg_indexes(dbg_html_before)
+        assert dbg_indexes, (
+            f"expected active DBGs on tablet mon before delete; html={dbg_html_before[:1000]}"
+        )
+
+        # Sample a few DBG details for PBuffer service ids (enough to cover hosts).
+        sample_dbgs = dbg_indexes[: min(3, len(dbg_indexes))]
+        pb_ids = self.collect_pbuffer_service_ids(tablet_id, sample_dbgs)
+        assert pb_ids, (
+            f"expected PBuffer links on DBG detail pages; dbgs={sample_dbgs}"
+        )
+
+        pbuffer_html_before = self.fetch_pbuffer_page(pb_ids)
+        assert tablet_id in pbuffer_html_before, (
+            f"expected tablet {tablet_id} LSNs on PBuffer mon before delete; "
+            f"html={pbuffer_html_before[:1500]}"
+        )
+
+        deleted_disk_id = self.delete_disk(disk_id)
+        assert deleted_disk_id == disk_id
+
+        # DestroyVolume completes before the RPC replies, so a second delete
+        # is already NOT_FOUND.
+        self.delete_disk_expect_failure(disk_id)
+
+        # After wipe/deallocate SchemeShard drops the volume; Hive may also
+        # drop the tablet so the mon proxy returns non-200.
+        def tablet_dbg_cleared():
+            html = self.fetch_partition_dbg_page(tablet_id, allow_missing=True)
+            return html == '' or not self.parse_dbg_indexes(html)
+
+        self.wait_until(tablet_dbg_cleared, description='tablet DBG mon cleared')
+
+        def pbuffer_page_empty():
+            html = self.fetch_pbuffer_page(pb_ids)
+            # Deallocated PBuffers report "No response"; wiped ones keep the PB
+            # heading but must not list this tablet's LSN row.
+            assert tablet_id not in html, (
+                f"tablet {tablet_id} still listed on PBuffer mon after delete; "
+                f"html={html[:2000]}"
+            )
+            return True
+
+        self.wait_until(pbuffer_page_empty, description='empty PBuffer tablet LSN mon')
+
+    def test_nbs_disk_deletion_nonexistent(self):
+        """
+        Deleting a disk that does not exist must fail
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        # Ensure the partition tablet is up before delete
+        self.get_load_actor_adapter_actor_id(disk_id)
+
+        # Try to delete the disk that does not exist
+        self.delete_disk_expect_failure("invalid_disk_id")
+
+    def test_nbs_disk_creation_name_with_symbols(self):
+        """
+        Create nbs disk and check basic IO operations
+        """
+
+        disk_id = "disk%1"
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = "vnfjkdnsfvjdfknsjknsdkjnvnjk"
+        self.write(actor_id, 0, test_data)
+        read_data = self.read(actor_id, 0)
+
+        # Verify the data matches (trimmed to the original length)
+        assert read_data[: len(test_data)] == test_data
+
+    def test_nbs_500gb_disk_read_write(self):
+        """
+        Create a 500 GiB disk, write random data at chunk edges, and verify
+        reads. In-memory PDisks use 32 MiB chunks; first/middle/last block of
+        the first, middle, and last chunk exercise routing.
+        """
+        disk_id = self.generate_disk_id()
+        block_size = 4096
+        # 500 GiB = 131_072_000 blocks of 4096 bytes.
+        blocks_count = 131072000
+
+        # In-memory PDisks use 32 MiB chunks = 8192 blocks of 4096 bytes.
+        chunk_size_blocks = 8192
+        num_chunks = blocks_count // chunk_size_blocks
+
+        self.create_ddisk_pool()
+        self.create_disk(disk_id, blocks_count)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_locations = []
+        for chunk_idx in [0, num_chunks // 2, num_chunks - 1]:
+            chunk_start = chunk_idx * chunk_size_blocks
+            chunk_middle = chunk_start + (chunk_size_blocks // 2)
+            chunk_end = chunk_start + chunk_size_blocks - 1
+
+            test_locations.extend([chunk_start, chunk_middle, chunk_end])
+
+        # Store written data for verification
+        written_data = {}
+
+        block_data = self.generate_random_data(block_size)
+        # Write data to test locations
+        for idx, block_idx in enumerate(test_locations):
+            # Generate random data for one block
+            # block_data = self.generate_random_data(block_size)
+            written_data[block_idx] = block_data
+
+            # Write this block
+            self.write(actor_id, block_idx, block_data)
+
+        # Read back and verify all written data
+        for idx, (block_idx, expected_data) in enumerate(written_data.items()):
+            read_data = self.read(actor_id, block_idx, blocks_count=1)
+
+            # Verify the data matches
+            assert (
+                read_data[: len(expected_data)] == expected_data
+            ), f"Data mismatch at block {block_idx}: expected {len(expected_data)} bytes"
+
+    def test_nbs_vhost_unaligned_write(self):
+        """
+        Connect to the per-disk vhost-user-blk socket that the partition
+        actor creates at /tmp/<disk_id>.sock and issue unaligned virtio-blk
+        writes through it. This reproduces the scenario from the user-
+        reported fio failure:
+
+            fio --name=unaligned --filename=/dev/<dev> --direct=1 \\
+                --rw=write --ioengine=libaio --bs=4k --offset=1024 \\
+                --size=8k
+
+        which issues two 4 KiB writes at byte offsets 1024 and 5120 - both
+        unaligned with respect to the 4 KiB device block size. We verify
+        that the device handler returns success (VIRTIO_BLK_S_OK) for both
+        writes and that a subsequent unaligned read returns the data we
+        wrote.
+        """
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+
+        block_size = 4096
+        # Two 4 KiB writes whose byte offsets are not multiples of the 4
+        # KiB block size but are valid 512-byte virtio-blk sectors.
+        first_offset = 1024
+        second_offset = first_offset + block_size
+
+        first_payload = bytes([ord('a')] * block_size)
+        second_payload = bytes([ord('b')] * block_size)
+
+        socket_path = "/tmp/{}.sock".format(disk_id)
+
+        with VhostUserBlkClient(socket_path) as client:
+            # Sanity check: an aligned write through the same vhost
+            # endpoint must succeed. This establishes that the client
+            # and the endpoint are wired up correctly before we exercise
+            # the unaligned path.
+            aligned_payload = bytes([ord('z')] * block_size)
+            status = client.write(0, aligned_payload)
+            assert status == VIRTIO_BLK_S_OK, (
+                "aligned sanity write at offset 0 failed: {}".format(
+                    virtio_blk_status_name(status)))
+
+            for offset, payload in (
+                (first_offset, first_payload),
+                (second_offset, second_payload),
+            ):
+                status = client.write(offset, payload)
+                assert status == VIRTIO_BLK_S_OK, (
+                    "unaligned write at offset {} failed: {}".format(
+                        offset, virtio_blk_status_name(status)))
+
+            # Read the same unaligned region back through the vhost
+            # endpoint and verify the contents.
+            status, data = client.read(first_offset, 2 * block_size)
+            assert status == VIRTIO_BLK_S_OK, (
+                "unaligned read at offset {} failed: {}".format(
+                    first_offset, virtio_blk_status_name(status)))
+
+        assert data[:block_size] == first_payload, (
+            "first 4 KiB region readback mismatch")
+        assert data[block_size:2 * block_size] == second_payload, (
+            "second 4 KiB region readback mismatch")
+
+    def test_nbs_multiple_disks_creation(self):
+        """
+        Create multiple nbs disks and check basic IO operations
+        """
+
+        disk_id_1 = self.generate_disk_id()
+        disk_id_2 = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id_1)
+        self.create_disk(disk_id_2)
+        actor_id_1 = self.get_load_actor_adapter_actor_id(disk_id_1)
+        actor_id_2 = self.get_load_actor_adapter_actor_id(disk_id_2)
+
+        test_data_1 = self.generate_random_data(1024)
+        self.write(actor_id_1, 0, test_data_1)
+        read_data_1 = self.read(actor_id_1, 0)
+
+        test_data_2 = self.generate_random_data(1024)
+        self.write(actor_id_2, 0, test_data_2)
+        read_data_2 = self.read(actor_id_2, 0)
+
+        # Verify the data matches (trimmed to the original length)
+        assert read_data_1[: len(test_data_1)] == test_data_1
+        assert read_data_2[: len(test_data_2)] == test_data_2

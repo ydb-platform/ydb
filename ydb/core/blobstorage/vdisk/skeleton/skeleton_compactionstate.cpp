@@ -8,10 +8,12 @@
 namespace NKikimr {
 
     TVDiskCompactionState::TVDiskCompactionState(
+            const TString& logPrefix,
             TActorId logoBlobsActorId,
             TActorId blocksActorId,
             TActorId barriersActorId)
-        : LogoBlobsActorId(logoBlobsActorId)
+        : VDiskLogPrefix(logPrefix)
+        , LogoBlobsActorId(logoBlobsActorId)
         , BlocksActorId(blocksActorId)
         , BarriersActorId(barriersActorId)
     {}
@@ -19,23 +21,24 @@ namespace NKikimr {
     void TVDiskCompactionState::SendLocalCompactCmd(const TActorContext &ctx, TCompactionReq cReq) {
         ui64 requestId = ++RequestIdCounter;
         const auto mode = cReq.Mode;
+        const auto force = cReq.Force;
         auto insRes = Requests.insert({requestId, std::move(cReq)});
-        Y_ABORT_UNLESS(insRes.second);
+        Y_VERIFY_S(insRes.second, VDiskLogPrefix);
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
-            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact));
+            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact, force));
         }
         if (req.CompactBlocks) {
-            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact));
+            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact, force));
         }
         if (req.CompactBarriers) {
-            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact));
+            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact, force));
         }
     }
 
     void TVDiskCompactionState::Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cReq) {
-        Y_ABORT_UNLESS(!cReq.AllDone());
+        Y_VERIFY_S(!cReq.AllDone(), VDiskLogPrefix);
         if (!lsn && WaitQueue.empty()) {
             SendLocalCompactCmd(ctx, std::move(cReq));
         } else {
@@ -49,7 +52,7 @@ namespace NKikimr {
             EHullDbType dbType,
             const TIntrusivePtr<TVDiskContext>& vCtx) {
         auto it = Requests.find(reqId);
-        Y_ABORT_UNLESS(it != Requests.end());
+        Y_VERIFY_S(it != Requests.end(), VDiskLogPrefix);
         auto &req = it->second;
 
         switch (dbType) {
@@ -60,7 +63,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vCtx);
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vCtx, {});
             // delete req from Request, we handled it
             Requests.erase(it);
         }

@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <unordered_set>
+#include <utility>
 
 namespace NYql {
 
@@ -15,10 +16,10 @@ struct TCredential {
     const TString Subcategory;
     const TString Content;
 
-    TCredential(const TString& category, const TString& subcategory, const TString& content)
-        : Category(category)
-        , Subcategory(subcategory)
-        , Content(content)
+    TCredential(TString category, TString subcategory, TString content)
+        : Category(std::move(category))
+        , Subcategory(std::move(subcategory))
+        , Content(std::move(content))
     {
     }
 };
@@ -26,6 +27,7 @@ struct TCredential {
 struct TUserCredentials {
     TString OauthToken;
     TString BlackboxSessionIdCookie;
+    TString QueryIdentityToken;
 };
 
 class TCredentials: public TThrRefBase {
@@ -33,13 +35,13 @@ public:
     using TPtr = TIntrusivePtr<TCredentials>;
 
     TCredentials() = default;
-    ~TCredentials() = default;
+    ~TCredentials() override = default;
 
     void AddCredential(const TString& alias, const TCredential& cred);
     void SetUserCredentials(const TUserCredentials& userCredentials) {
         UserCredentials_ = userCredentials;
     }
-    
+
     void SetGroups(std::unordered_set<TString>&& groups) {
         Groups_ = std::move(groups);
     }
@@ -48,10 +50,18 @@ public:
         return Groups_;
     }
 
+    void SetIsRobot(bool isRobot) {
+        IsRobot_ = isRobot;
+    }
+
+    bool IsRobot() const {
+        return IsRobot_;
+    }
+
     const TCredential* FindCredential(const TStringBuf& name) const;
     TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
 
-    const TUserCredentials& GetUserCredentials() const  {
+    const TUserCredentials& GetUserCredentials() const {
         return UserCredentials_;
     }
     void ForEach(const std::function<void(const TString, const TCredential&)>& callback) const;
@@ -60,6 +70,7 @@ private:
     THashMap<TString, TCredential> CredentialTable_;
     TUserCredentials UserCredentials_;
     std::unordered_set<TString> Groups_;
+    bool IsRobot_ = false;
 };
 
 } // namespace NYql

@@ -1,3 +1,4 @@
+#include "appdata_fwd.h"
 #include "path.h"
 
 #include <util/string/builder.h>
@@ -157,6 +158,38 @@ TString CanonizePath(const TVector<TString>& path) {
     return TString("/") + JoinPath(path);
 }
 
+namespace {
+
+TString NormalizePathJoin(TStringBuf database, TStringBuf path) {
+    TStringBuilder joined;
+    joined.reserve(database.size() + path.size() + 2);
+    joined << database << '/' << path;
+    return CanonizePath(TString{std::move(joined)});
+}
+
+bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
+    return !database.empty()
+        && path.size() > database.size()
+        && path.StartsWith(database)
+        && path[database.size()] == '/';
+}
+
+} // namespace
+
+TString NormalizePath(TStringBuf database, TStringBuf path) {
+    if (database == path || IsPathUnderDatabase(database, path)) {
+        return TString{path};
+    }
+    return NormalizePathJoin(database, path);
+}
+
+TString NormalizePath(const TString& database, const TString& path) {
+    if (database == path || IsPathUnderDatabase(database, path)) {
+        return path;
+    }
+    return NormalizePathJoin(database, path);
+}
+
 ui32 CanonizedPathLen(const TVector<TString>& path) {
     ui32 ret = path.size();
     for (auto &x : path)
@@ -313,4 +346,17 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
     return true;
 }
 
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId) {
+    TString databasePath = CanonizePath(database);
+    TString tenantPath = CanonizePath(AppData()->TenantName);
+    if (databasePath.empty() || databasePath == tenantPath) {
+        return tenantPath;
+    }
+
+    if (serverless) {
+        databasePath = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << databasePath;
+    }
+    return databasePath;
 }
+
+} // namespace NKikimr

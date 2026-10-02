@@ -72,6 +72,7 @@
   - encdec.h
   - errhandlingapi.h
   - eventtoken.h
+  - evntcons.h
   - evntprov.h
   - evntrace.h
   - exdisp.h
@@ -93,6 +94,7 @@
   - guiddef.h
   - handleapi.h
   - heapapi.h
+  - hidsdi.h
   - htmlhelp.h
   - http.h
   - hvsocket.h
@@ -176,7 +178,6 @@
   - packon.h
   - packoff.h
   - pathcch.h
-  - p2p.h
   - pdh.h
   - pdhmsg.h
   - perflib.h
@@ -240,6 +241,7 @@
   - stringapiset.h
   - strsafe.h
   - suppress.h
+  - swdevice.h
   - synchapi.h
   - sys/locking.h
   - sys/utime.h
@@ -325,6 +327,11 @@
   - xaudio2.h
   - xinput.h
   - xmllite.h
+
+- case_sensitive: false
+  source_filter: "^(?!contrib/libs/nvidia/nccl/)"
+  includes:
+    - p2p.h
 
 # These headers are Microsoft Visual C specific.
 - case_sensitive: false

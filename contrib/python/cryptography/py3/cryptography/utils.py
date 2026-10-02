@@ -149,7 +149,7 @@ class _ModuleWithDeprecations(object):
         return ["_module"] + dir(self._module)
 
 
-def deprecated(value, module_name, message, warning_class):
+def deprecated(value, module_name, message, warning_class, name=None):
     module = sys.modules[module_name]
     if not isinstance(module, _ModuleWithDeprecations):
         sys.modules[module_name] = _ModuleWithDeprecations(module)

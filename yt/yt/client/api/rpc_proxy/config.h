@@ -15,14 +15,15 @@
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/config.h>
 
+#include <util/generic/hash.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionConfig
+struct TConnectionConfig
     : public NApi::TConnectionConfig
 {
-public:
     static TConnectionConfigPtr CreateFromClusterUrl(
         const std::string& clusterUrl,
         const std::optional<std::string>& proxyRole = {});
@@ -36,6 +37,7 @@ public:
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<std::string> ProxyUnixDomainSocket;
     bool EnableProxyDiscovery;
+    THashMap<std::string, std::string> ProxyUrlAliasingRules;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 
@@ -53,11 +55,17 @@ public:
     TDuration DefaultTransactionTimeout;
     TDuration DefaultLookupRowsTimeout;
     TDuration DefaultSelectRowsTimeout;
+
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
-    TDuration DefaultPingPeriod;
+    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
+    ///              If set use DefaultTotalStreamingTimeout for read requests until ping mechanism is designed in YT-26196.
+    bool UseTotalStreamingTimeoutForHeavyReads;
 
-    NBus::TBusConfigPtr BusClient;
+    TDuration DefaultPingPeriod;
+    TDuration DefaultChaosLeaseTimeout;
+
+    NBus::NTcp::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;
 
     NHttp::TClientConfigPtr HttpClient;
@@ -80,6 +88,17 @@ public:
 
     //! If |true| select query will be added to tracing tags of SelectRows span.
     bool EnableSelectQueryTracingTag;
+
+    // Old heuristic cause pure locks to be dropped. Option is introduced to roll fix back in case of problems.
+    bool DoNotDropPureExclusiveLocks;
+
+    //! Use a separate connection for lightweight control requests.
+    /**
+    *  If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
+    *  This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
+    *  However, using this option increases the number of open TCP connections.
+    */
+    bool EnableControlMultiplexingBand;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 

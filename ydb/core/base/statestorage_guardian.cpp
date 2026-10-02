@@ -10,9 +10,12 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
 
 namespace NKikimr {
 namespace NStateStorageGuardian {
@@ -62,16 +65,18 @@ struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
     {}
 };
 
-struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> {
+struct TFollowerInfo : public TAtomicRefCount<TFollowerInfo> {
     const ui64 TabletID;
     const TActorId Follower;
     const TActorId Tablet;
+    const ui32 FollowerId;
     const bool IsCandidate;
 
-    TFollowerInfo(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+    TFollowerInfo(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate)
         : TabletID(tabletId)
         , Follower(follower)
         , Tablet(tablet)
+        , FollowerId(followerId)
         , IsCandidate(isCandidate)
     {}
 };
@@ -81,25 +86,29 @@ class TBaseGuardian : public TActorBootstrapped<TDerived> {
 protected:
     const TActorId Replica;
     const TActorId Guard;
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
 
     TInstant DowntimeFrom = TInstant::Max();
     ui64 LastCookie = 0;
     bool ReplicaMissingReported = false;
     TMonotonic LastReplicaMissing = TMonotonic::Max();
 
-    TBaseGuardian(TActorId replica, TActorId guard)
+    TBaseGuardian(TActorId replica, TActorId guard, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         : Replica(replica)
         , Guard(guard)
+        , ClusterStateGeneration(clusterStateGeneration)
+        , ClusterStateGuid(clusterStateGuid)
     {}
 
     void Gone() {
-        TDerived::Send(Guard, new TEvents::TEvGone());
+        this->Send(Guard, new TEvents::TEvGone());
         PassAway();
     }
 
     void PassAway() override {
-        if (Replica.NodeId() != TDerived::SelfId().NodeId())
-            TDerived::Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe);
+        if (Replica.NodeId() != this->SelfId().NodeId())
+            this->Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe);
 
         TActorBootstrapped<TDerived>::PassAway();
     }
@@ -118,8 +127,8 @@ protected:
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {
-            TDerived::Send(Guard, new TEvPrivate::TEvReplicaMissing(value));
-            ReplicaMissingReported = true;
+            this->Send(Guard, new TEvPrivate::TEvReplicaMissing(value));
+            ReplicaMissingReported = value;
         }
     }
 
@@ -152,7 +161,27 @@ protected:
             return Gone();
         }
 
-        TDerived::Become(&TDerived::StateSleep, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
+        this->Become(&TDerived::StateSleep, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
+    }
+
+    void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
+        TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
+        ClusterStateGeneration = msg->ClusterStateGeneration;
+        ClusterStateGuid = msg->ClusterStateGuid;
+    }
+
+    void CheckConfigVersion(const TActorId &selfId, const TActorId &sender, const auto *msg) {
+        ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
+        ui64 msgGuid = msg->Record.GetClusterStateGuid();
+        if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
+            YDB_LOG_DEBUG("Guardian TEvNodeWardenNotifyConfigMismatch",
+                {"clusterStateGeneration", ClusterStateGeneration},
+                {"msgGeneration", msgGeneration},
+                {"clusterStateGuid", ClusterStateGuid},
+                {"msgGuid", msgGuid});
+            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()),
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
+        }
     }
 };
 
@@ -169,7 +198,7 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
 
     void MakeRequest() {
         ui64 cookie = ++LastCookie;
-        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
+        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie, ClusterStateGeneration, ClusterStateGuid), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateLookup);
     }
 
@@ -178,6 +207,8 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         TAutoPtr<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
         req->Record.SetTabletID(Info->TabletID);
         req->Record.SetCookie(cookie);
+        req->Record.SetClusterStateGeneration(ClusterStateGeneration);
+        req->Record.SetClusterStateGuid(ClusterStateGuid);
         ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
         ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
         req->Record.SetProposedGeneration(Info->Generation);
@@ -201,9 +232,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
             return;
         }
 
+        CheckConfigVersion(SelfId(), ev->Sender, ev->Get());
+
         const auto status = record.GetStatus();
         Signature = record.GetSignature();
-
         DowntimeFrom = TInstant::Max();
         ReplicaMissing(false);
 
@@ -239,8 +271,8 @@ public:
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
     }
 
-    TReplicaGuardian(TGuardedInfo *info, TActorId replica, TActorId guard)
-        : TBaseGuardian(replica, guard)
+    TReplicaGuardian(TGuardedInfo *info, TActorId replica, TActorId guard, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+        : TBaseGuardian(replica, guard, clusterStateGeneration, clusterStateGuid)
         , Info(info)
         , Signature(0)
     {}
@@ -256,6 +288,7 @@ public:
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 
@@ -266,6 +299,7 @@ public:
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenRequestInfo);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 
@@ -274,6 +308,7 @@ public:
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
             cFunc(TEvents::TEvWakeup::EventType, RequestInfo);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 
@@ -284,6 +319,7 @@ public:
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 };
@@ -308,14 +344,14 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
         ui64 cookie = ++LastCookie;
         Send(
             Replica,
-            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate),
+            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->FollowerId, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             cookie);
         Become(&TThis::StateCalm);
     }
 
     void PassAway() override {
-        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower));
+        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->FollowerId, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
         TBaseGuardian::PassAway();
     }
 
@@ -328,8 +364,8 @@ public:
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
     }
 
-    TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard)
-        : TBaseGuardian(replica, guard)
+    TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+        : TBaseGuardian(replica, guard, clusterStateGeneration, clusterStateGuid)
         , Info(info)
     {}
 
@@ -345,6 +381,7 @@ public:
             cFunc(TEvTablet::TEvPing::EventType, Ping);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 
@@ -356,6 +393,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, UpdateInfo);
 
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
+            hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
 };
@@ -388,48 +426,43 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
-        const TVector<TActorId> &replicasList = ev->Get()->Replicas;
+        const TVector<TActorId> &replicasList = ev->Get()->GetPlainReplicas();
+        ui64 clusterStateGeneration = ev->Get()->ClusterStateGeneration;
+        ui64 clusterStateGuid = ev->Get()->ClusterStateGuid;
         Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
-        Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
 
-        const bool inspectCurrent = (ReplicaGuardians.size() == replicaSz);
-        if (!inspectCurrent) {
-            for (const auto &xpair : ReplicaGuardians) {
-                if (xpair.second)
-                    Send(xpair.second, new TEvents::TEvPoison());
-            }
-            ReplicaGuardians.clear();
-        }
-
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
-
-            if (inspectCurrent && ReplicaGuardians[idx].first == replica && ReplicaGuardians[idx].second) {
-                updatedReplicaGuardians.emplace_back(ReplicaGuardians[idx]);
-                ReplicaGuardians[idx].second = TActorId();
-            } else {
+            bool found = false;
+            for (auto& p : ReplicaGuardians)
+                if (p.first == replica && p.second) {
+                    updatedReplicaGuardians.emplace_back(p);
+                    Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
+                    p.second = TActorId();
+                    found = true;
+                    break;
+                }
+            if (!found) {
                 if (Info)
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId())));
+                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid)));
                 else
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId())));
+                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid)));
             }
         }
-
         for (const auto &xpair : ReplicaGuardians) {
-            if (xpair.second)
+            if (xpair.second) {
                 Send(xpair.second, new TEvents::TEvPoison());
+            }
         }
-
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        if (!FollowerTracker || !inspectCurrent) // would notify on first change
-            FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        FollowerTracker.Reset(new TFollowerTracker(replicaSz));
 
         Become(&TThis::StateCalm);
     }
@@ -454,7 +487,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     bool ValidateOnlineReplicasOrDie() {
         ui32 replicasOnline = CountOnlineReplicas();
 
-        if (replicasOnline == ReplicasOnlineThreshold) {
+        if (replicasOnline <= ReplicasOnlineThreshold) {
             Send(Launcher(), new TEvTablet::TEvDemoted(true));
             HandlePoison();
             return false;
@@ -531,13 +564,27 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 continue;
 
             TVector<TActorId> reported;
-            reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
-            for (const auto &x : record.GetFollower()) {
-                reported.emplace_back(ActorIdFromProto(x));
-            }
 
-            for (const auto &x : record.GetFollowerCandidates()) {
-                reported.emplace_back(ActorIdFromProto(x));
+            // NOTE: The Follower, FollowerTablet and FollowerCandidate fields
+            //       are deprecated and will be removed from the API. The new code
+            //       should use the FollowerInfo field. For compatibility with older nodes,
+            //       the code here tries to use the both the new field and the old fields.
+            if (record.FollowerInfoSize() > 0) {
+                reported.reserve(record.FollowerInfoSize());
+
+                for (const auto& followerInfo : record.GetFollowerInfo()) {
+                    reported.emplace_back(ActorIdFromProto(followerInfo.GetFollower()));
+                }
+            } else {
+                // TODO: Remove the code, which handles the old fields
+                reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
+                for (const auto &x : record.GetFollower()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
+
+                for (const auto &x : record.GetFollowerCandidates()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
             }
 
             Sort(reported);
@@ -569,6 +616,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         if (hasChanges) {
             FollowerInfo = new TFollowerInfo(
                 tabletId,
+                FollowerInfo->FollowerId,
                 msg->FollowerActor,
                 msg->TabletActor,
                 msg->IsCandidate
@@ -641,8 +689,8 @@ IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, 
     return new NStateStorageGuardian::TTabletGuardian(info.Get());
 }
 
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower) {
-    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, follower, TActorId(), true);
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, ui32 followerId, const TActorId &follower) {
+    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, followerId, follower, TActorId(), true);
     return new NStateStorageGuardian::TTabletGuardian(followerInfo.Get());
 }
 

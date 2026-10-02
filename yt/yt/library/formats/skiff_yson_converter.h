@@ -3,8 +3,11 @@
 #include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/row_base.h>
 
-#include <yt/yt/library/decimal/decimal.h>
 #include <yt/yt/core/yson/public.h>
+
+#include <yt/yt/library/decimal/decimal.h>
+
+#include <yt/yt/library/skiff_ext/schema_match.h>
 
 #include <library/cpp/skiff/skiff.h>
 
@@ -46,7 +49,28 @@ TSkiffToYsonConverter CreateSkiffToYsonConverter(
 template <NSkiff::EWireType wireType>
 struct TSimpleSkiffParser
 {
-    Y_FORCE_INLINE auto operator () (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE auto operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType internalWireType>
+class TTzSkiffParser
+{
+public:
+    TTzSkiffParser();
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser);
+
+private:
+    std::string Buffer_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType internalWireType>
+struct TTzSkiffWriter
+{
+    Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,7 +80,7 @@ class TDecimalSkiffParser
 {
 public:
     explicit TDecimalSkiffParser(int precision);
-    Y_FORCE_INLINE TStringBuf operator() (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
 
 private:
     const int Precision_;
@@ -71,7 +95,7 @@ class TDecimalSkiffWriter
 public:
     explicit TDecimalSkiffWriter(int precision);
 
-    void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+    void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 
 private:
     const int Precision_;
@@ -82,7 +106,7 @@ private:
 class TUuidParser
 {
 public:
-    Y_FORCE_INLINE TStringBuf operator() (NSkiff::TCheckedInDebugSkiffParser* parser) const;
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
 
 private:
     mutable ui64 Buffer_[2];
@@ -93,20 +117,21 @@ private:
 class TUuidWriter
 {
 public:
-    Y_FORCE_INLINE void operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+    Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType);
 void CheckWireType(NSkiff::EWireType wireType, const std::initializer_list<NSkiff::EWireType>& expected);
+void CheckTzType(const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema, NTableClient::ESimpleLogicalValueType columnType);
 
 template <NSkiff::EWireType wireType, typename TValueType>
 Y_FORCE_INLINE void CheckIntSize(TValueType value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::Formats
+} // namespace NYT::NFormats
 
 #define SKIFF_YSON_CONVERTER_INL_H_
 #include "skiff_yson_converter-inl.h"

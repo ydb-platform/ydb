@@ -6,8 +6,8 @@ namespace NYql {
 
 class TFileStorageDecorator: public IFileStorage {
 public:
-    TFileStorageDecorator(TFileStoragePtr fs);
-    ~TFileStorageDecorator() = default;
+    explicit TFileStorageDecorator(TFileStoragePtr fs);
+    ~TFileStorageDecorator() override = default;
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName) override;
     TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5) override;
@@ -18,10 +18,11 @@ public:
     NThreading::TFuture<TFileLinkPtr> PutUrlAsync(const TString& url, const TString& token) override;
     TFsPath GetRoot() const override;
     TFsPath GetTemp() const override;
+    TFsPath GetLockFilePath(const TString& lockName) const override;
     const TFileStorageConfig& GetConfig() const override;
 
 protected:
     TFileStoragePtr Inner_;
 };
 
-} // NYql
+} // namespace NYql

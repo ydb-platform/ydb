@@ -2,15 +2,19 @@
 
 #include <gtest/gtest.h>
 
+#include <yt/yt/core/rpc/authenticator.h>
 #include <yt/yt/core/rpc/service_detail.h>
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <random>
 
@@ -19,11 +23,31 @@ namespace NYT::NRpc {
 using namespace NConcurrency;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
-static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFakeAutenticator
+    : public IAuthenticator
+{
+public:
+    bool CanAuthenticate(const TAuthenticationContext& /*context*/) override
+    {
+        return true;
+    }
+
+    TFuture<TAuthenticationResult> AsyncAuthenticate(const TAuthenticationContext& /*context*/) override
+    {
+        return MakeFuture(TAuthenticationResult{
+            .User = "authenticated-user",
+        });
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,13 +60,15 @@ public:
         IInvokerPtr invoker,
         bool secure,
         TTestCreateChannelCallback createChannel,
-        IMemoryUsageTrackerPtr memoryUsageTracker)
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        bool useAuthenticator)
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
             NLogging::TLogger("Main"),
             TServiceOptions{
                 .MemoryUsageTracker = std::move(memoryUsageTracker),
+                .Authenticator = useAuthenticator ? New<TFakeAutenticator>() : nullptr,
             })
         , Secure_(secure)
         , CreateChannel_(createChannel)
@@ -51,6 +77,9 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(PassCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(AllocationCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RegularAttachments));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DirectPlacementAttachments)
+            .SetRequestAttachmentsDptEnabled(true)
+            .SetResponseAttachmentsDptEnabled(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NullAndEmptyAttachments));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(Compression));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(DoNothing));
@@ -70,6 +99,7 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NoReply));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(FlakyCall));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DelayedCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequireCoolFeature));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingEcho)
             .SetStreamingEnabled(true)
@@ -83,9 +113,12 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(ServerNotWriting)
             .SetStreamingEnabled(true)
             .SetCancelable(true));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingStatistics)
+            .SetStreamingEnabled(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetTraceBaggage));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(CustomMetadata));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetChannelFailureError));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(ManuallyCanceledByServer));
         // NB: NotRegisteredCall is not registered intentionally
 
         DeclareServerFeature(ETestFeature::Great);
@@ -93,33 +126,56 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SomeCall)
     {
-        context->SetRequestInfo();
         int a = request->a();
+        context->AnnotateRequest()
+            .With("A", a);
         response->set_b(a + 100);
+        context->AnnotateResponse()
+            .With("B", response->b());
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, PassCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
         ToProto(response->mutable_mutation_id(), context->GetMutationId());
         response->set_retry(context->IsRetry());
+        if (const auto& header = context->GetRequestHeader(); header.has_start_time()) {
+            response->set_start_time(header.start_time());
+        }
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .With("Size", request->size())
+            .WithIf(request->wait_on_latch(), "WaitOnLatch", true);
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
-        response->set_allocated_string(TString("r", request->size()));
+        response->set_allocated_string(std::string("r", request->size()));
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RegularAttachments)
     {
+        for (const auto& attachment : request->Attachments()) {
+            auto data = TBlob();
+            data.Append(attachment);
+            data.Append("_", 1);
+            response->Attachments().push_back(TSharedRef::FromBlob(std::move(data)));
+        }
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DirectPlacementAttachments)
+    {
+        // Over a non-DPT-capable transport (e.g. TCP) the attachments are delivered
+        // inline even though the method supports direct placement transfer, so no
+        // transfer is handed to the service.
+        EXPECT_FALSE(context->TryGetRequestAttachmentsTransfer());
         for (const auto& attachment : request->Attachments()) {
             auto data = TBlob();
             data.Append(attachment);
@@ -163,26 +219,27 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, DoNothing)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, CustomMessageError)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Reply(TError(NYT::EErrorCode(42), "Some Error"));
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, LatchedCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .WithFormat("WaitOnLatch", "%v", request->wait_on_latch());
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
@@ -192,7 +249,7 @@ public:
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCanceledCall)
     {
         try {
-            context->SetRequestInfo();
+            context->AnnotateRequest();
             TDelayedExecutor::WaitForDuration(TDuration::Max());
             context->Reply();
         } catch (const TFiberCanceledException&) {
@@ -220,7 +277,8 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, StreamingEcho)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .With("Delayed", request->delayed());
 
         bool delayed = request->delayed();
         std::vector<TSharedRef> receivedData;
@@ -258,7 +316,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerStreamsAborted)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto promise = NewPromise<void>();
         context->SubscribeCanceled(BIND([=] (const TError&) mutable {
@@ -267,18 +325,18 @@ public:
 
         promise
             .ToFuture()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
 
         EXPECT_THROW({
             response->GetAttachmentsStream()->Write(TSharedMutableRef::Allocate(100))
-                .Get()
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 
         EXPECT_THROW({
             request->GetAttachmentsStream()->Read()
-                .Get()
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 
@@ -287,7 +345,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotReading)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         WaitFor(context->GetRequestAttachmentsStream()->Read())
             .ThrowOnError();
@@ -309,9 +367,9 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotWriting)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
-        auto data = TSharedRef::FromString("abacaba");
+        auto data = TSharedRef::FromString(std::string("abacaba"));
         WaitFor(context->GetResponseAttachmentsStream()->Write(data))
             .ThrowOnError();
 
@@ -330,11 +388,28 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, StreamingStatistics)
+    {
+        int remainingBlockCount = request->block_count();
+        HandleInputStreamingRequest(
+            context,
+            [&] {
+                if (remainingBlockCount == 0) {
+                    return TSharedRef();
+                }
+                --remainingBlockCount;
+                return TSharedRef::FromString(std::string("abacaba"));
+            },
+            [&] {
+                StreamingStatistics_.Set(*context->GetResponseAttachmentsStreamStatistics());
+            });
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, FlakyCall)
     {
         static std::atomic<int> callCount;
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         if (callCount.fetch_add(1) % 2) {
             context->Reply();
@@ -343,18 +418,24 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DelayedCall)
+    {
+        context->AnnotateRequest();
+        context->Reply();
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->ValidateClientFeature(ETestFeature::Cool);
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetTraceBaggage)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
-        response->set_baggage(NYson::ConvertToYsonString(traceContext->UnpackBaggage()).ToString());
+        response->set_baggage(ToProto(NYson::ConvertToYsonString(traceContext->UnpackBaggage())));
         context->Reply();
     }
 
@@ -369,7 +450,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetChannelFailureError)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         if (request->has_redirection_address()) {
             YT_VERIFY(CreateChannel_);
@@ -383,9 +464,20 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, ManuallyCanceledByServer)
+    {
+        context->AnnotateRequest();
+        context->Cancel();
+    }
+
     TFuture<void> GetServerStreamsAborted() const override
     {
         return ServerStreamsAborted_.ToFuture();
+    }
+
+    TFuture<TAttachmentsOutputStreamStatistics> GetStreamingStatistics() const override
+    {
+        return StreamingStatistics_.ToFuture();
     }
 
 private:
@@ -394,6 +486,7 @@ private:
 
     TPromise<void> SlowCallCanceled_ = NewPromise<void>();
     TPromise<void> ServerStreamsAborted_ = NewPromise<void>();
+    TPromise<TAttachmentsOutputStreamStatistics> StreamingStatistics_ = NewPromise<TAttachmentsOutputStreamStatistics>();
 
 
     void BeforeInvoke(IServiceContext* context) override
@@ -412,13 +505,15 @@ ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    bool useAuthenticator)
 {
     return New<TTestService>(
         invoker,
         secure,
         createChannel,
-        std::move(memoryUsageTracker));
+        std::move(memoryUsageTracker),
+        useAuthenticator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

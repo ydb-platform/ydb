@@ -1,25 +1,31 @@
 #pragma once
+
 #include "common.h"
 #include "table_record.h"
 
+#include <ydb/core/base/metadata.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/abstract/parsing.h>
 #include <ydb/services/metadata/manager/modification.h>
 
-#include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+
+#include <library/cpp/threading/future/core/future.h>
+
+#include <util/system/rwlock.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
+
+const TString& GetOldSecretCreationDisabledMessage();
 
 class TAlterOperationContext {
 private:
@@ -74,28 +80,44 @@ public:
     };
 
     class TExternalModificationContext {
-    private:
+        using TActorSystemPtr = TActorSystem*;
+
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
         YDB_ACCESSOR_DEF(TString, DatabaseId);
-        using TActorSystemPtr = TActorSystem*;
         YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
         YDB_ACCESSOR_DEF(NSQLTranslation::TTranslationSettings, TranslationSettings);
     };
 
     class TInternalModificationContext {
-    private:
         YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
         YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
-    public:
-        TInternalModificationContext(const TExternalModificationContext& externalData)
-            : ExternalData(externalData)
-        {
 
-        }
+    public:
+        TInternalModificationContext(TExternalModificationContext externalData)
+            : ExternalData(std::move(externalData))
+        {}
     };
+
+    class TOperationTrackContext {
+        YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
+        YDB_ACCESSOR_DEF(TPathId, PathId);
+        YDB_ACCESSOR_DEF(ui64, RequestGeneration);
+        YDB_ACCESSOR_DEF(ui64, ObjectGeneration);
+        YDB_ACCESSOR_DEF(NActors::TActorId, OperationOwner);
+        YDB_ACCESSOR_DEF(NProvider::TOperationProperties, Properties);
+        YDB_ACCESSOR_DEF(ui64, SchemeTxId);
+
+    public:
+        explicit TOperationTrackContext(TExternalModificationContext externalData)
+            : ExternalData(std::move(externalData))
+        {}
+    };
+
 private:
-    YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
+    std::optional<TTableSchema> ActualSchema;
+    TRWMutex Mutex;
+
 protected:
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const = 0;
@@ -136,10 +158,11 @@ public:
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
         const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
 
-    const TTableSchema& GetSchema() const {
-        Y_ABORT_UNLESS(!!ActualSchema);
-        return *ActualSchema;
-    }
+    virtual NThreading::TFuture<TYqlConclusionStatus> TrackObjectOperation(const TString& objectId, const TOperationTrackContext& context) const;
+
+    TTableSchema GetSchema() const;
+
+    void SetActualSchema(std::optional<TTableSchema>&& schema);
 };
 
 template <class TObject>
@@ -235,4 +258,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NMetadata::NModifications

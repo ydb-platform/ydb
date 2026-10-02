@@ -2,8 +2,8 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/object_factory/object_factory.h>
@@ -37,16 +37,16 @@ protected:
     void WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type);
     void PrintWindowStats(int windowIt);
 
-    std::unique_ptr<NYdb::TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
     size_t TotalSec;
     size_t Threads;
     ui64 Rate;
-    unsigned int ClientTimeoutMs;
-    unsigned int OperationTimeoutMs;
-    unsigned int CancelAfterTimeoutMs;
+    TString ClientTimeoutStr;
+    TString OperationTimeoutStr;
+    TString CancelAfterTimeoutStr;
     unsigned int WindowSec;
     bool Quiet;
     bool Verbose;
@@ -97,13 +97,16 @@ protected:
 
     NYdbWorkload::TWorkloadParams::ECommandType CommandType;
     NYdbWorkload::TWorkloadParams& Params;
-    THolder<NYdb::TDriver> Driver;
+    THolder<TScopedDriver> Driver;
     THolder<NTable::TTableClient> TableClient;
     THolder<NTopic::TTopicClient> TopicClient;
     THolder<NScheme::TSchemeClient> SchemeClient;
     THolder<NQuery::TQueryClient> QueryClient;
     int Type = 0;
     bool DryRun = false;
+
+private:
+    void RmParentIfEmpty(TStringBuf path, TConfig& config);
 };
 
 class TWorkloadCommandInit final: public TWorkloadCommandBase {
@@ -112,7 +115,6 @@ public:
     virtual void Config(TConfig& config) override;
 
 private:
-    NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     bool Clear = false;
 };

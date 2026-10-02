@@ -1,7 +1,6 @@
 // -*- mode: c++ -*-
 
-// Copyright (c) 2011, Google Inc.
-// All rights reserved.
+// Copyright 2011 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -13,7 +12,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -47,13 +46,16 @@ namespace google_breakpad {
 class Module;
 
 struct DumpOptions {
-  DumpOptions(SymbolData symbol_data, bool handle_inter_cu_refs)
+  DumpOptions(SymbolData symbol_data,
+              bool handle_inter_cu_refs,
+              bool enable_multiple_field)
       : symbol_data(symbol_data),
-        handle_inter_cu_refs(handle_inter_cu_refs) {
-  }
+        handle_inter_cu_refs(handle_inter_cu_refs),
+        enable_multiple_field(enable_multiple_field) {}
 
   SymbolData symbol_data;
   bool handle_inter_cu_refs;
+  bool enable_multiple_field;
 };
 
 // Find all the debugging information in OBJ_FILE, an ELF executable

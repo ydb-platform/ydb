@@ -235,9 +235,8 @@ int aws_mqtt_packet_connect_encode(struct aws_byte_buf *buf, const struct aws_mq
     }
 
     /* Write connect flags [MQTT-3.1.2.3] */
-    uint8_t connect_flags = (uint8_t)(
-        packet->clean_session << 1 | packet->has_will << 2 | packet->will_qos << 3 | packet->will_retain << 5 |
-        packet->has_password << 6 | packet->has_username << 7);
+    uint8_t connect_flags = (uint8_t)(packet->clean_session << 1 | packet->has_will << 2 | packet->will_qos << 3 |
+                                      packet->will_retain << 5 | packet->has_password << 6 | packet->has_username << 7);
 
     if (!aws_byte_buf_write_u8(buf, connect_flags)) {
         return aws_raise_error(AWS_ERROR_SHORT_BUFFER);
@@ -593,6 +592,10 @@ int aws_mqtt_packet_publish_decode(struct aws_byte_cursor *cur, struct aws_mqtt_
 
 bool aws_mqtt_packet_publish_get_dup(const struct aws_mqtt_packet_publish *packet) {
     return packet->fixed_header.flags & (1 << 3); /* bit 3 */
+}
+
+void aws_mqtt_packet_publish_set_dup(struct aws_mqtt_packet_publish *packet) {
+    packet->fixed_header.flags |= 0x08;
 }
 
 enum aws_mqtt_qos aws_mqtt_packet_publish_get_qos(const struct aws_mqtt_packet_publish *packet) {

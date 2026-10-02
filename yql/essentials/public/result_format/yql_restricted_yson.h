@@ -6,11 +6,10 @@
 #include <library/cpp/yson/public.h>
 
 namespace NYT {
-    class TNode;
-}
+class TNode;
+} // namespace NYT
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 void EncodeRestrictedYson(
     TYsonResultWriter& writer,
@@ -28,5 +27,4 @@ TString DecodeRestrictedYson(
     const NYT::TNode& node,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
 
-}
-}
+} // namespace NYql::NResult

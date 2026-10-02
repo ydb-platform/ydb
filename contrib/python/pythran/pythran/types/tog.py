@@ -5,6 +5,7 @@
 import gast as ast
 from copy import deepcopy
 
+import numpy
 from numpy import floating, integer, complexfloating
 
 from pythran.tables import MODULES, attributes
@@ -410,7 +411,7 @@ def tr(t):
         elif isinstance(t, NoneType_):
             return NoneType
 
-        elif t is bool:
+        elif t in (bool, getattr(numpy, 'bool', bool)):
             return Bool()
 
         elif issubclass(t, slice):
@@ -952,6 +953,18 @@ def analyse(node, env, non_generic=None):
                         target_type,
                         defn_type),
                     node)
+        return env
+    elif isinstance(node, ast.AnnAssign):
+        defn_type = analyse(node.value, env, non_generic)
+        target_type = analyse(node.target, env, non_generic)
+        try:
+            unify(target_type, defn_type)
+        except InferenceError:
+            raise PythranTypeError(
+                "Invalid assignment from type `{}` to type `{}`".format(
+                    target_type,
+                    defn_type),
+                node)
         return env
     elif isinstance(node, ast.AugAssign):
         # FIMXE: not optimal: evaluates type of node.value twice

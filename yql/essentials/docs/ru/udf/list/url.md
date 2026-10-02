@@ -12,7 +12,7 @@
 * нормализованный URL;
 * `NULL`, если переданный строковый аргумент не удалось распарсить как URL.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::Normalize("hTTp://wWw.yDb.TECH/"); -- "http://www.ydb.tech/"
@@ -30,7 +30,7 @@ SELECT Url::Normalize("http://ydb.tech#foo");      -- "http://ydb.tech/"
 * нормализованный URL;
 * исходный URL, если нормализация не удалась.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::NormalizeWithDefaultHttpScheme("wWw.yDb.TECH");    -- "http://www.ydb.tech/"
@@ -46,7 +46,7 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://yd
 * `Url::Encode(String?) -> String?`
 * `Url::Decode(String?) -> String?`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
@@ -63,7 +63,7 @@ SELECT Url::Encode("http://ydb.tech/страница");
 Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::Parse(
@@ -109,7 +109,7 @@ SELECT Url::Parse(
 * `Url::GetOwner(String{Flags:AutoMap}) -> String`
   Возвращает домен, которым с наибольшей вероятностью владеет отдельный человек или организация. В отличие от Url::GetSignificantDomain работает по специальному разрешительному списку, и помимо доменов из серии ***.co.uk возвращает домен третьего уровня для, например, бесплатных хостингов и блогов, например something.livejournal.com
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::GetScheme("https://ydb.tech");           -- "https://"
@@ -130,7 +130,7 @@ SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 * `Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String`
   Возращает копию переданного URL с удаленными всеми CGI параметрами и фрагментами ("?foo=bar" и/или "#baz").
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::CutScheme("http://www.ydb.tech"); -- "www.ydb.tech"
@@ -149,7 +149,7 @@ SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 * `Url::ForcePunycodeToHostName(String{Flag:AutoMap}) -> String`
 * `Url::CanBePunycodeHostName(String{Flag:AutoMap}) -> Bool`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "экзампл.ком"
@@ -185,7 +185,7 @@ Url::BuildQueryString(List<Tuple<String, String?>>{Flag:AutoMap}, [
 ]) -> String
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Url::QueryStringToList("a=1&b=2&a=3");                       -- [("a", "1"), ("b", "2"), ("a", "3")]

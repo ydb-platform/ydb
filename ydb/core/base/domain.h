@@ -3,8 +3,6 @@
 #include "tabletid.h"
 #include "localdb.h"
 
-#include <ydb/core/protos/blobstorage_config.pb.h>
-
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -58,7 +56,9 @@ struct TDomainsInfo : public TThrRefBase {
 
         using TVectorUi64 = TVector<ui64>;
         using TVectorUi32 = TVector<ui32>;
-        using TStoragePoolKinds = THashMap<TString, NKikimrBlobStorage::TDefineStoragePool>;
+
+        // Complete type lives in storage_pool_kinds.h (needs blobstorage_config.pb.h).
+        class TStoragePoolKinds;
 
         const ui32 DomainUid;
         const ui64 SchemeRoot;
@@ -68,7 +68,13 @@ struct TDomainsInfo : public TThrRefBase {
         const TVector<ui64> TxAllocators;
         const ui64 DomainPlanResolution;
         const ui32 TimecastBucketsPerMediator;
-        const TStoragePoolKinds StoragePoolTypes;
+
+    private:
+        struct TImpl;
+        const THolder<TImpl> Impl;
+
+    public:
+        const TStoragePoolKinds& StoragePoolTypes;
 
         static constexpr ui64 DefaultPlanResolution = 500;
         static constexpr ui32 DefaultTimecastBucketsPerMediator = 2;
@@ -83,13 +89,7 @@ struct TDomainsInfo : public TThrRefBase {
      public:
         ~TDomain();
 
-        //no any tablets setted
-        static TDomain::TPtr ConstructEmptyDomain(const TString &name, ui32 domainId = 0)
-        {
-            const ui64 schemeRoot = 0;
-            return new TDomain(name, domainId, schemeRoot, {}, {}, {},
-                    DefaultPlanResolution, DefaultTimecastBucketsPerMediator, nullptr);
-        }
+        static TDomain::TPtr ConstructEmptyDomain(const TString &name, ui32 domainId = 0);
 
         template <typename TUidsContainerUi64>
         static TDomain::TPtr ConstructDomainWithExplicitTabletIds(const TString &name, ui32 domainUid, ui64 schemeRoot,

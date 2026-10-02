@@ -1,9 +1,27 @@
-{% include [concepts/index/intro.md](_includes/index/intro.md) %}
+# Концепции {{ ydb-short-name }}
 
-{% include [concepts/index/when_use.md](_includes/index/when_use.md) %}
+Данный раздел документации охватывает фундаментальные концепции и архитектурные принципы {{ ydb-short-name }}. Эта информация поможет вам лучше понимать, что происходит при изучении более практического контента, который можно найти в [других разделах, предназначенных для конкретных ролей](#see-also).
 
-{% include [concepts/index/how_it_works.md](_includes/index/how_it_works.md) %}
+Следующие темы обеспечивают всестороннее освещение основной функциональности {{ ydb-short-name }}, от высокоуровневой архитектуры и модели данных до продвинутых возможностей, таких как транзакции, индексирование и федеративные запросы.
 
-## Что дальше?
+- [Глоссарий](glossary.md)
+- [Аналитические возможности](./analytics/index.md)
+- [Потоковая обработка](./streaming-query/index.md)
+- [Архитектура](architecture/index.md)
+- [Соединение с БД](connect.md)
+- [Схемные объекты](datamodel/index.md)
+- [Топология кластера](topology.md)
+- [Выполнение запросов](query_execution/index.md)
+- [Транзакции](transactions.md)
+- [Change Data Capture (CDC)](cdc.md)
+- [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
+- [Ограничения базы данных](limits-ydb.md)
+- [Асинхронная репликация](async-replication.md)
+- [Режим bridge](./bridge.md)
+- [Трансфер данных](./transfer.md)
 
-Если вас интересует более подробная информация о различных аспектах {{ ydb-short-name }}, ознакомьтесь с соседними статьями в данном разделе документации. Если вы готовы к более практическому контенту, вы можете перейти к [быстрому старту](../quickstart.md) или курсу по [YQL](../dev/yql-tutorial/index.md).
+## См. также {#see-also}
+
+- [{#T}](../devops/index.md)
+- [{#T}](../dev/index.md)
+- [{#T}](../security/index.md)

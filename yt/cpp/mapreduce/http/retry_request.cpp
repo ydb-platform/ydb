@@ -2,7 +2,6 @@
 
 #include "context.h"
 #include "helpers.h"
-#include "http_client.h"
 #include "requests.h"
 
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
@@ -12,6 +11,8 @@
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -41,6 +42,26 @@ static NHttpClient::IHttpResponsePtr Request(
     return context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
 }
 
+static NHttpClient::IHttpRequestPtr StartRequest(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TString& requestId,
+    const TRequestConfig& config)
+{
+    TString hostName;
+    if (config.IsHeavy) {
+        hostName = GetProxyForHeavyRequest(context);
+    } else {
+        hostName = context.ServerName;
+    }
+
+    UpdateHeaderForProxyIfNeed(hostName, context, header);
+
+    auto url = GetFullUrlForProxy(hostName, context, header);
+
+    return context.HttpClient->StartRequest(url, requestId, config.HttpConfig, header);
+}
+
 NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
@@ -48,6 +69,11 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     TMaybe<TStringBuf> body,
     const TRequestConfig& config)
 {
+    auto traceContext = context.Config->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent(header.GetMethod())
+        : nullptr;
+    NTracing::TCurrentTraceContextGuard traceContextGuard(traceContext);
+
     if (context.ServiceTicketAuth) {
         header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
     } else {
@@ -56,6 +82,11 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
 
     if (context.ImpersonationUser) {
         header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
+    if (traceContext) {
+        auto traceparent = FormatTraceParentHeader(traceContext->GetTraceId(), traceContext->GetSpanId());
+        header.SetTraceparent(traceparent);
     }
 
     if (header.HasMutationId()) {
@@ -69,6 +100,35 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     }
     auto requestId = CreateGuidAsString();
     return Request(context, header, body, requestId, config);
+}
+
+NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TRequestConfig& config)
+{
+    auto traceContext = context.Config->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent(header.GetMethod())
+        : nullptr;
+    NTracing::TCurrentTraceContextGuard traceContextGuard(traceContext);
+
+    if (context.ServiceTicketAuth) {
+        header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
+    } else {
+        header.SetToken(context.Token);
+    }
+
+    if (context.ImpersonationUser) {
+        header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
+    if (traceContext) {
+        auto traceparent = FormatTraceParentHeader(traceContext->GetTraceId(), traceContext->GetSpanId());
+        header.SetTraceparent(traceparent);
+    }
+
+    auto requestId = CreateGuidAsString();
+    return StartRequest(context, header, requestId, config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

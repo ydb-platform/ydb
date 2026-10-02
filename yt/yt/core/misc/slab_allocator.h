@@ -6,8 +6,6 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/memory/free_list.h>
-
 #include <array>
 
 namespace NYT {
@@ -34,6 +32,9 @@ public:
 
     bool ReallocateArenasIfNeeded();
 
+    i64 GetAliveByteSize() const;
+    i64 GetAliveItemCount() const;
+
     static constexpr size_t SegmentSize = 64_KB;
     static constexpr size_t AcquireMemoryGranularity = 500_KB;
 
@@ -42,7 +43,7 @@ private:
 
     struct TLargeArenaDeleter
     {
-        void operator() (TLargeArena* arena);
+        void operator()(TLargeArena* arena);
     };
 
     static constexpr int SmallRankCount = 23;

@@ -13,7 +13,7 @@ SRCDIR(
     yql/essentials/core/expr_nodes_gen
 )
 
-RUN_PROGRAM(
+RUN_PY3_PROGRAM(
     yql/essentials/core/expr_nodes_gen/gen
         yql_expr_nodes_gen.jnj
         yql_ytflow_expr_nodes.json

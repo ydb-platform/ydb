@@ -1,0 +1,9 @@
+items:
+  - name: Overview
+    href: index.md
+  - name: SCD1 with TRANSFER
+    href: scd1-transfer.md
+  - name: SCD2 with TRANSFER
+    href: scd2-transfer.md
+  - name: SCD2 with merge of changes
+    href: scd2-merge.md

@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -43,21 +45,21 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
                                                  const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserCtx())) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
-    Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
+    Y_ENSURE(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     // TODO: cancel tx in special execution unit.
     if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
@@ -66,7 +68,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
     try {
         auto &inReadSets = op->InReadSets();
         auto result = engine->PrepareIncomingReadsets();
-        Y_VERIFY_S(result == IEngineFlat::EResult::Ok,
+        Y_ENSURE(result == IEngineFlat::EResult::Ok,
                    "Cannot prepare input RS for " << *op << " at "
                    << DataShard.TabletID() << ": " << engine->GetErrors());
 
@@ -77,11 +79,11 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
                                              TVector<TRSData>()));
         }
     } catch (const TMemoryLimitExceededException &) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Operation " << *op << " at " << DataShard.TabletID()
-                    << " exceeded memory limit " << txc.GetMemoryLimit()
-                    << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
-                    << " more for the next try");
+        YDB_LOG_TRACE_CTX(ctx, "TPrepareDataTxInRSUnit::Execute: exceeded memory limit and requests more for the next try",
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
+            {"memoryLimit", txc.GetMemoryLimit()},
+            {"memoryLimitWithFactor", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
@@ -90,9 +92,9 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Tablet " << DataShard.TabletID() << " is not ready for " << *op
-                    << " execution");
+        YDB_LOG_TRACE_CTX(ctx, "TPrepareDataTxInRSUnit::Execute: tablet is not ready for execution",
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
 
         return EExecutionStatus::Restart;
     }
@@ -113,3 +115,7 @@ THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

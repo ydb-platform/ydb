@@ -22,6 +22,7 @@ END()
 RECURSE(
     jaeger
     example
+    baggage_manager
     unittests
 )
 

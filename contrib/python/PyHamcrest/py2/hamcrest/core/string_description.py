@@ -31,7 +31,13 @@ class StringDescription(BaseDescription):
 
     def __str__(self):
         """Returns the description."""
-        return ''.join(self.__out_list)
+        return ''.join(map(six.ensure_str, self.__out_list))
 
     def append(self, string):
-        self.__out_list.append(six.text_type(string))
+        if six.PY3:
+            self.out += str(string)
+        else:
+            if isinstance(string, unicode):
+                self.__out_list.append(string)
+            else:
+                self.__out_list.append(unicode(string, errors="ignore"))

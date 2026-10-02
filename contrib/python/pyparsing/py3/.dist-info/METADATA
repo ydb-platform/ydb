@@ -1,14 +1,14 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pyparsing
-Version: 3.2.1
-Summary: pyparsing module - Classes and methods to define and execute parsing grammars
+Version: 3.3.2
+Summary: pyparsing - Classes and methods to define and execute parsing grammars
 Author-email: Paul McGuire <ptmcg.gm+pyparsing@gmail.com>
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
+License-Expression: MIT
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Intended Audience :: Information Technology
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
@@ -17,15 +17,19 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development :: Compilers
 Classifier: Topic :: Text Processing
 Classifier: Typing :: Typed
+License-File: LICENSE
 Requires-Dist: railroad-diagrams ; extra == "diagrams"
 Requires-Dist: jinja2 ; extra == "diagrams"
+Project-URL: Documentation, https://pyparsing-docs.readthedocs.io/en/latest/
 Project-URL: Homepage, https://github.com/pyparsing/pyparsing/
+Project-URL: Source, https://github.com/pyparsing/pyparsing.git
 Provides-Extra: diagrams
 
 PyParsing -- A Python Parsing Module
@@ -56,7 +60,7 @@ Here is a program to parse ``"Hello, World!"`` (or any greeting of the form
     from pyparsing import Word, alphas
     greet = Word(alphas) + "," + Word(alphas) + "!"
     hello = "Hello, World!"
-    print(hello, "->", greet.parseString(hello))
+    print(hello, "->", greet.parse_string(hello))
 
 The program outputs the following::
 
@@ -66,7 +70,7 @@ The Python representation of the grammar is quite readable, owing to the
 self-explanatory class names, and the use of '+', '|' and '^' operator
 definitions.
 
-The parsed results returned from ``parseString()`` is a collection of type
+The parsed results returned from ``parse_string()`` is a collection of type
 ``ParseResults``, which can be accessed as a
 nested list, a dictionary, or an object with named attributes.
 
@@ -90,6 +94,16 @@ documentation resources and project info are listed in the online
 `GitHub wiki <https://github.com/pyparsing/pyparsing/wiki>`__. An
 entire directory of examples can be found `here <https://github.com/pyparsing/pyparsing/tree/master/examples>`__.
 
+AI Instructions
+===============
+
+There are also instructions for AI agents to use when helping you to create your parser. They can
+be pulled from the GitHub project repository, at pyparsing/ai/best_practices.md. You can also tell
+the AI to access them programmatically after installing pyparsing, either from the CLI with
+``python -m pyparsing.ai.show_best_practices`` or within python with
+``import pyparsing; pyparsing.show_best_practices()``.
+
+
 License
 =======
 
@@ -99,6 +113,13 @@ History
 =======
 
 See `CHANGES <https://github.com/pyparsing/pyparsing/blob/master/CHANGES>`__ file.
+
+
+Performance benchmarks
+======================
+
+For usage instructions and details on the performance benchmark suite, see
+``tests/README.md`` in this repository.
 
 .. |Build Status| image:: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml

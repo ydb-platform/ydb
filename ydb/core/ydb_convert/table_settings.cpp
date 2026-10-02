@@ -2,7 +2,9 @@
 #include "table_description.h"
 #include "table_settings.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <ydb/library/conclusion/status.h>
 
@@ -29,6 +31,34 @@ namespace {
             return proto.partition_at_keys().split_points().size() + 1;
         default:
             return defaultMinPartitions;
+        }
+    }
+
+    bool ConvertDetailedMetricsLevel(Ydb::Table::MetricsSettings::MetricsLevel level,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out,
+        Ydb::StatusIds::StatusCode& code, TString& error)
+    {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED:
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            // This internal value disables detailed metrics only, preserving
+            // ordinary database metrics and overriding the database default.
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "DISABLED metrics level is not supported; use DATABASE to disable detailed metrics";
+            return false;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown metrics level: " << static_cast<int>(level);
+            return false;
         }
     }
 }
@@ -237,7 +267,73 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
+    if (proto.has_metrics_settings()) {
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level;
+        if (!ConvertDetailedMetricsLevel(proto.metrics_settings().metrics_level(), level, code, error)) {
+            return false;
+        }
+        tableDesc.MutableDetailedMetricsSettings()->MutableConfigured()->SetMetricsLevel(level);
+    }
+
     tableDesc.SetTemporary(proto.Gettemporary());
+
+    return true;
+}
+
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+    const Ydb::Table::CreateTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
+    
+    // NOTICE: public Ydb::Table::CreateTableRequest doesn't have sharding setting
+    hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+
+    if (proto.has_partitioning_settings()) {
+        auto& partitioningSettings = proto.partitioning_settings();
+        hashSharding.MutableColumns()->CopyFrom(partitioningSettings.partition_by());
+        if (partitioningSettings.min_partitions_count()) {
+            tableDesc.SetColumnShardCount(partitioningSettings.min_partitions_count());
+        }
+    }
+    
+    if (proto.partitions_case() != Ydb::Table::CreateTableRequest::PARTITIONS_NOT_SET) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Partitions are not supported";
+        return false;
+    }
+
+    if (proto.key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Key bloom filter settings are not supported";
+        return false;
+    }
+    
+    if (proto.has_read_replicas_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Read replicas settings are not supported";
+        return false;
+    }
+
+    if (proto.has_ttl_settings()) {
+        if (!FillTtlSettings(*tableDesc.MutableTtlSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) {
+            return false;
+        }
+    }
+    
+    if (proto.has_storage_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Storage settings are not supported";
+        return false;
+    }
+
+    if (proto.has_metrics_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Metrics settings are not supported";
+        return false;
+    }
+
+    tableDesc.SetTemporary(proto.temporary());
 
     return true;
 }
@@ -389,6 +485,18 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->MutableDisabled();
     }
 
+    if (proto.has_set_metrics_settings()) {
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level;
+        if (!ConvertDetailedMetricsLevel(proto.set_metrics_settings().metrics_level(), level, code, error)) {
+            return false;
+        }
+        tableDesc.MutableDetailedMetricsSettings()->MutableConfigured()->SetMetricsLevel(level);
+        changed = true;
+    } else if (proto.has_drop_metrics_settings()) {
+        tableDesc.MutableDetailedMetricsSettings()->MutableNotConfigured();
+        changed = true;
+    }
+
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }
@@ -401,11 +509,11 @@ bool FillIndexTablePartitioning(
     const Ydb::Table::TableIndex& index,
     Ydb::StatusIds::StatusCode& code, TString& error
 ) {
-    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
-        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, NKikimrSchemeOp::TTableDescription& indexImplTableDescription) {
+        auto& partitionConfig = *indexImplTableDescription.MutablePartitionConfig();
 
         if (settings.has_partitioning_settings()) {
-            if (!FillPartitioningPolicy(*indexImplTableDescription.MutablePartitionConfig(), settings, code, error)) {
+            if (!FillPartitioningPolicy(partitionConfig, settings, code, error)) {
                 return false;
             }
         }
@@ -414,35 +522,104 @@ bool FillIndexTablePartitioning(
                 return false;
             }
         }
+        if (settings.has_read_replicas_settings()) {
+            const auto& readReplicasSettings = settings.read_replicas_settings();
+            switch (readReplicasSettings.settings_case()) {
+            case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
+            {
+                auto& followerGroup = *partitionConfig.AddFollowerGroups();
+                followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count());
+                followerGroup.SetRequireAllDataCenters(true);
+                followerGroup.SetFollowerCountPerDataCenter(true);
+                break;
+            }
+            case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
+            {
+                auto& followerGroup = *partitionConfig.AddFollowerGroups();
+                followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count());
+                followerGroup.SetRequireAllDataCenters(false);
+                break;
+            }
+            default:
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown read_replicas_settings type";
+                return false;
+            }
+        }
         return true;
     };
 
     switch (index.type_case()) {
     case Ydb::Table::TableIndex::kGlobalIndex:
-        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
-    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+        const bool prefixVectorIndex = index.index_columns().size() > 1;
+        indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::LevelTablePosition])) {
             return false;
         }
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PostingTablePosition])) {
             return false;
         }
+        if (prefixVectorIndex) {
+            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PrefixTablePosition])) {
+                return false;
+            }
+        }
+        break;
+    }
+    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        indexImplTableDescriptions.resize(4);
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().dict_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DictTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().docs_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DocsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().stats_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::StatsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::PostingTablePosition])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_json_index().settings(), indexImplTableDescriptions[0])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+    case Ydb::Table::TableIndex::kLocalMinMaxIndex:
         break;
 
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -538,6 +715,10 @@ bool FillPublicTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
                 outTier.mutable_evict_to_external_storage()->set_storage(inTier.GetEvictToExternalStorage().GetStorage());
+                if (inTier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+                    outTier.mutable_evict_to_external_storage()->set_object_key_prefix(inTier.GetEvictToExternalStorage().GetObjectKeyPrefix());
+                }
+
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                 return bad_request("Undefined tier action");
@@ -664,6 +845,10 @@ bool FillSchemeTtlSettingsImpl(TTtl& out, const Ydb::Table::TtlSettings& in, Ydb
                         break;
                     case Ydb::Table::TtlTier::kEvictToExternalStorage:
                         outTier->MutableEvictToExternalStorage()->SetStorage(inTier.evict_to_external_storage().storage());
+                        if (inTier.evict_to_external_storage().has_object_key_prefix()) {
+                            outTier->MutableEvictToExternalStorage()->SetObjectKeyPrefix(inTier.evict_to_external_storage().object_key_prefix());
+                        }
+
                         break;
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         return bad_request("Tier action is undefined");

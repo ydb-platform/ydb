@@ -6,6 +6,7 @@ namespace NKikimr::NOlap::NBackground {
 class TSessionsContainer {
 private:
     THashMap<TString, std::shared_ptr<TSession>> Sessions;
+
 public:
     std::vector<TSessionInfoReport> GetSessionsInfoForReport() const {
         std::vector<TSessionInfoReport> result;
@@ -22,6 +23,7 @@ public:
         }
         return TConclusionStatus::Success();
     }
+
     bool RemoveSession(const TString& identifier) {
         AFL_VERIFY(!!identifier);
         auto it = Sessions.find(identifier);
@@ -31,6 +33,7 @@ public:
         Sessions.erase(it);
         return true;
     }
+
     void Start(const std::shared_ptr<ITabletAdapter>& adapter) {
         for (auto&& [_, i] : Sessions) {
             if (i->GetLogicContainer()->IsReadyForStart() && !i->GetLogicContainer()->IsFinished()) {
@@ -55,7 +58,6 @@ public:
         }
         return it->second;
     }
-
 };
 
 class TSessionsStorage {
@@ -70,6 +72,7 @@ private:
         }
         return *it->second;
     }
+
 public:
     std::vector<TSessionInfoReport> GetSessionsInfoForReport() const {
         std::vector<TSessionInfoReport> result;
@@ -120,4 +123,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

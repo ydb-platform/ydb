@@ -20,7 +20,7 @@ void XorAVX512(void* destination, const void* a, const void* b, ui32 size) {
     ui8 *dst = (ui8*)destination;
     const ui8 *srcA = (const ui8*)a;
     const ui8 *srcB = (const ui8*)b;
-    
+
     // Process 64 bytes at a time with AVX-512
     size_t i;
     for (i = 0; i + 63 < size; i += 64) {

@@ -1,0 +1,375 @@
+#include "ddisk_actor_pdisk_common_ut.h"
+#include <ydb/library/pdisk_io/uring_test_support.h>
+
+namespace NKikimr {
+
+namespace {
+
+enum class EPayloadLayout {
+    Unaligned,
+    FragmentedUnaligned,
+    FragmentedAligned,
+};
+
+void TestShutdownReleasesReservations(NDDisk::TDDiskConfig config, bool abandonReservations = false) {
+    TTestContext ctx(config, NLog::PRI_ERROR, 1, std::nullopt, /*probeReservations=*/true, abandonReservations);
+    for (ui32 cycle = 0; cycle < 3; ++cycle) {
+        const auto creds = Connect(ctx, 701, 1);
+        ctx.WaitForReservationsSettled();
+        // The previous incarnation's unused reserve must not accumulate across restarts.
+        UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), cycle == 0 ? 4 : 0);
+        const auto readBack = [&](ui32 chunk) {
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(creds, {chunk, 0, MinBlockSize}, {true})),
+                MakeData('A' + chunk, MinBlockSize), config.EnableChecksums);
+        };
+        for (ui32 chunk = 0; chunk < cycle; ++chunk) {
+            readBack(chunk);
+        }
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(cycle, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A' + cycle, MinBlockSize)));
+        AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        readBack(cycle);
+        ctx.WaitForReservationsSettled();
+        UNIT_ASSERT_C(ctx.UncommittedChunks() > 0, "test requires unused live PDisk reservations");
+        const auto reserved = ctx.UncommittedChunks();
+        ctx.StopDDisk(0);
+        if (abandonReservations) {
+            UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), reserved);
+        } else {
+            ctx.WaitForReservationsReleased();
+            UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), 0);
+        }
+        ctx.StartDDisk(0);
+    }
+    const auto creds = Connect(ctx, 701, 1);
+    for (ui32 chunk = 0; chunk < 3; ++chunk) {
+        AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {chunk, 0, MinBlockSize}, {true})),
+            MakeData('A' + chunk, MinBlockSize), config.EnableChecksums);
+    }
+    ctx.WaitForReservationsSettled();
+    UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), 0);
+    ctx.StopDDisk(0);
+    if (!abandonReservations) {
+        ctx.WaitForReservationsReleased();
+    }
+}
+
+void TestWriteAndReadPayloadLayout(NDDisk::TDDiskConfig config, EPayloadLayout layout) {
+    config.CheckChecksumBeforeWrite = true;
+    TTestContext ctx(std::move(config), NLog::PRI_INFO);
+    const auto creds = Connect(ctx, 32, 1);
+    const TString expected = MakeData('A', MinBlockSize) + MakeData('B', MinBlockSize);
+    TRope payload;
+    if (layout == EPayloadLayout::Unaligned) {
+        payload = MakeAlignedRope(TString("!") + expected);
+        payload.EraseFront(1);
+        UNIT_ASSERT_VALUES_EQUAL(payload.Begin().ContiguousSize(), expected.size());
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(payload.Begin().ContiguousData()) % MinBlockSize, 1u);
+    } else {
+        // Split inside an integrity block to exercise streaming checksum validation as well as copying.
+        const ui32 split = layout == EPayloadLayout::FragmentedUnaligned ? MinBlockSize - 1 : MinBlockSize;
+        payload = MakeAlignedRope(expected.substr(0, split));
+        payload.Insert(payload.End(), MakeAlignedRope(expected.substr(split)));
+        UNIT_ASSERT_VALUES_EQUAL(payload.Begin().ContiguousSize(), split);
+        UNIT_ASSERT_C(payload.Begin().ContiguousSize() < payload.size(), "payload must remain fragmented");
+    }
+
+    // Exercise both initial allocation and an overwrite of an existing chunk.
+    for (ui32 attempt = 0; attempt < 2; ++attempt) {
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(7, MinBlockSize, expected.size()), NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(TRope(payload));
+        AssertStatus<NDDisk::TEvWriteResult>(
+            ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+
+        auto read = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {7, MinBlockSize, static_cast<ui32>(expected.size())}, {true}));
+        AssertReadResult(read, expected);
+    }
+}
+
+void TestDevNullWriteAndRead(bool checksums) {
+    NDDisk::TDDiskConfig config;
+    config.DevNullMode = true;
+    config.EnableChecksums = checksums;
+    config.CheckChecksumBeforeWrite = true;
+    config.CheckChecksumWhenRead = true;
+    TTestContext ctx(config);
+    const auto creds = Connect(ctx, 702, 1);
+    const TString zeros(2 * MinBlockSize, '\0');
+    // With checksums enabled, zero writes seed resident metadata for used blocks.
+    // Nonzero writes without checksums demonstrate that the payload is discarded.
+    const TString payload = checksums ? zeros : MakeData('D', zeros.size());
+    for (ui32 attempt = 0; attempt < 2; ++attempt) {
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(7, MinBlockSize, payload.size()), NDDisk::TWriteInstruction(0));
+        if (checksums) {
+            write->AddPayloadThenChecksum(MakeAlignedRope(payload));
+        } else {
+            write->AddPayload(MakeAlignedRope(payload));
+        }
+        AssertStatus<NDDisk::TEvWriteResult>(
+            ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        auto read = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {7, MinBlockSize, static_cast<ui32>(zeros.size())}, {true}));
+        AssertReadResult(read, zeros, checksums);
+    }
+    ctx.StopDDisk(0);
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
+    Y_UNIT_TEST(DevNullDiscardsNonzeroWritesWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestDevNullWriteAndRead(false);
+    }
+
+    Y_UNIT_TEST(DevNullVerifiesZeroWritesAndReadsWithChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestDevNullWriteAndRead(true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservations_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservationsWithoutChecksums_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true, .EnableChecksums = false}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservations_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservationsWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({.EnableChecksums = false}, true);
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservations_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservations_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservationsWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({.EnableChecksums = false});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservationsWithoutChecksums_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true, .EnableChecksums = false});
+    }
+    Y_UNIT_TEST(WriteAndReadUnalignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::Unaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadUnalignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::Unaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedUnalignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::FragmentedUnaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedUnalignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::FragmentedUnaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedAlignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::FragmentedAligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedAlignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::FragmentedAligned);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_4KiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestWriteAndRead({}, 4_KB);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_4KiB_PDiskFallback) {
+        TestWriteAndRead({.ForcePDiskFallback = true}, 4_KB);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_8KiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestWriteAndRead({}, 8_KB);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_8KiB_PDiskFallback) {
+        TestWriteAndRead({.ForcePDiskFallback = true}, 8_KB);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_1MiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestWriteAndRead({}, 1_MB);
+    }
+
+    Y_UNIT_TEST(WriteAndRead_1MiB_PDiskFallback) {
+        TestWriteAndRead({.ForcePDiskFallback = true}, 1_MB);
+    }
+
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestWriteAndReadWithoutChecksums({});
+    }
+
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_PDiskFallback) {
+        TestWriteAndReadWithoutChecksums({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(CheckVChunksArePerTablet_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestCheckVChunksArePerTablet({});
+    }
+
+    Y_UNIT_TEST(CheckVChunksArePerTablet_PDiskFallback) {
+        TestCheckVChunksArePerTablet({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(OverwriteSameOffset_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestOverwrite({});
+    }
+
+    Y_UNIT_TEST(OverwriteSameOffset_PDiskFallback) {
+        TestOverwrite({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ReadUnallocatedChunk_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestReadUnallocatedChunk({});
+    }
+
+    Y_UNIT_TEST(ReadUnallocatedChunk_PDiskFallback) {
+        TestReadUnallocatedChunk({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ManyVChunksPerTablet_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestManyVChunks({});
+    }
+
+    Y_UNIT_TEST(ManyVChunksPerTablet_PDiskFallback) {
+        TestManyVChunks({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(MultiTabletInterleavedWrites_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestMultiTabletInterleaved({});
+    }
+
+    Y_UNIT_TEST(MultiTabletInterleavedWrites_PDiskFallback) {
+        TestMultiTabletInterleaved({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(MultiTabletInterleavedWritesWithDDiskRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestMultiTabletInterleavedWritesWithDDiskRestart({});
+    }
+
+    Y_UNIT_TEST(MultiTabletInterleavedWritesWithDDiskRestart_PDiskFallback) {
+        TestMultiTabletInterleavedWritesWithDDiskRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(MultipleRestarts_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestMultipleRestarts({});
+    }
+
+    Y_UNIT_TEST(MultipleRestarts_PDiskFallback) {
+        TestMultipleRestarts({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(OverwriteAfterRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestOverwriteAfterRestart({});
+    }
+
+    Y_UNIT_TEST(OverwriteAfterRestart_PDiskFallback) {
+        TestOverwriteAfterRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(EmptyRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestEmptyRestart({});
+    }
+
+    Y_UNIT_TEST(EmptyRestart_PDiskFallback) {
+        TestEmptyRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ConnectionTokenAcrossRestart) {
+        TestConnectionTokenAcrossRestart();
+    }
+
+    Y_UNIT_TEST(RestartAfterCutLog_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestRestartAfterCutLog({});
+    }
+
+    Y_UNIT_TEST(RestartAfterCutLog_PDiskFallback) {
+        TestRestartAfterCutLog({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ReadWithoutConnect_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestReadWithoutConnect({});
+    }
+
+    Y_UNIT_TEST(ReadWithoutConnect_PDiskFallback) {
+        TestReadWithoutConnect({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/true);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/true);
+    }
+
+    Y_UNIT_TEST(Smoke_2Tablets_2VChunks_1Segment) {
+        TestSync(2, 2, 8, 1);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeFullChunkIo_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestPhysicalChunkSizeFullChunkIo({});
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeFullChunkIo_PDiskFallback) {
+        TestPhysicalChunkSizeFullChunkIo({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(DeleteTabletChunks_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestDeleteTabletChunks({});
+    }
+
+    Y_UNIT_TEST(DeleteTabletChunks_PDiskFallback) {
+        TestDeleteTabletChunks({.ForcePDiskFallback = true});
+    }
+}
+
+} // NKikimr

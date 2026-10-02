@@ -19,6 +19,8 @@ class TRecursiveSpinLock
     : public TSpinLockBase
 {
 public:
+    static constexpr bool Traced = true;
+
     using TSpinLockBase::TSpinLockBase;
 
     void Acquire() noexcept;
@@ -44,8 +46,6 @@ private:
     bool TryAndTryAcquire() noexcept;
     void AcquireSlow() noexcept;
 };
-
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TRecursiveSpinLock)
 
 ////////////////////////////////////////////////////////////////////////////////
 

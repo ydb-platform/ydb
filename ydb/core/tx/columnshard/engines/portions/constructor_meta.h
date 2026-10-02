@@ -10,14 +10,12 @@ namespace NKikimr::NOlap {
 class TPortionInfoConstructor;
 struct TIndexInfo;
 
-class TPortionMetaConstructor: public TPortionMetaBase {
+class TPortionMetaConstructor {
 private:
-    using TBase = TPortionMetaBase;
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
-    std::optional<NPortion::EProduced> Produced;
     std::optional<ui64> CompactionLevel;
 
     std::optional<ui32> RecordsCount;
@@ -25,6 +23,8 @@ private:
     std::optional<ui32> ColumnBlobBytes;
     std::optional<ui32> IndexRawBytes;
     std::optional<ui32> IndexBlobBytes;
+    std::optional<ui32> BsIndexBlobBytes;
+    std::optional<ui32> NumSlices;
 
     std::optional<ui32> DeletionsCount;
 
@@ -35,23 +35,22 @@ private:
 
 public:
     TPortionMetaConstructor() = default;
-    TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
+    TPortionMetaConstructor(const TPortionMeta& meta);
 
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+    const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
+        AFL_VERIFY(FirstAndLastPK);
+        return *FirstAndLastPK;
     }
 
-    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        BlobIds.emplace_back(blobId);
-        return idx;
+    ui64 GetTotalBlobBytes() const {
+        AFL_VERIFY(ColumnBlobBytes);
+        AFL_VERIFY(IndexBlobBytes);
+        return *ColumnBlobBytes + *IndexBlobBytes;
+    }
+
+    ui32 GetSlices() const {
+        AFL_VERIFY(NumSlices);
+        return *NumSlices;
     }
 
     void SetCompactionLevel(const ui64 level) {
@@ -59,13 +58,10 @@ public:
     }
 
     void SetTierName(const TString& tierName);
+
     void ResetTierName(const TString& tierName) {
         TierName.reset();
         SetTierName(tierName);
-    }
-
-    void UpdateRecordsMeta(const NPortion::EProduced prod) {
-        Produced = prod;
     }
 
     TPortionMeta Build();

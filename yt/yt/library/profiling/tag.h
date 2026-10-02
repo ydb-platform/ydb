@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 #include <vector>
 
 namespace NYT::NProfiling {
@@ -33,7 +35,9 @@ constexpr ui8 NoTagSentinel = 0xff;
 constexpr int NoParent = 0;
 
 struct TDynamicTag final
-{ };
+{
+    NThreading::TAtomicObject<std::pair<std::string, std::string>> Tag;
+};
 
 using TDynamicTagPtr = TIntrusivePtr<TDynamicTag>;
 
@@ -47,11 +51,6 @@ public:
     const TTagIndexList& Alternative() const;
 
     const std::vector<std::pair<TDynamicTagPtr, TTagIndex>>& DynamicTags() const;
-
-    template <class TFn>
-    void Range(
-        const TTagIdList& tags,
-        TFn fn) const;
 
     void Resize(int size);
     void SetEnabled(bool enabled);
@@ -91,11 +90,27 @@ public:
     void Append(const TTagSet& other);
 
     TDynamicTagPtr AddDynamicTag(int index);
+    void ApplyDynamicTag(const TDynamicTagPtr& dynamicTag);
 
     const TTagList& Tags() const;
 
 private:
     TTagList Tags_;
+};
+
+class TTagIdSet
+    : public TProjectionSet
+{
+public:
+    TTagIdSet(const TProjectionSet& projections, const TTagIdList& tagIds);
+
+    template <class TFn>
+    void Range(TFn fn) const;
+
+    void SetTagId(TTagIndex tagIndex, TTagId tag);
+
+private:
+    TTagIdList TagIds_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -111,7 +126,7 @@ void RangeSubsets(
     TFn fn);
 
 TTagIdList  operator +  (const TTagIdList& a, const TTagIdList& b);
-TTagIdList& operator += (TTagIdList& a, const TTagIdList& b);
+TTagIdList& operator+=(TTagIdList& a, const TTagIdList& b);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -125,7 +125,7 @@ protected:
     void ThrowMapExpected() const;
     void ThrowEntityExpected() const;
     void ThrowControlAttributesNotSupported() const;
-    void ThrowInvalidControlAttribute(const TString& whatsWrong) const;
+    void ThrowInvalidControlAttribute(const std::string& whatsWrong) const;
 
     void OnEndList() override;
     void OnEndAttributes() override;

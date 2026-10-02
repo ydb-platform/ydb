@@ -46,7 +46,7 @@ void OnPayload(const NYT::TSharedRef& block, size_t i, std::vector<TStreamSchema
     }
 }
 
-TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster, const TString& token, const NYT::TTransactionId& tx, const std::vector<TTableInferSchemaRequest>& requests, TAsyncQueue::TPtr queue) {
+TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster, const TString& token, const NYT::TTransactionId& tx, const std::vector<TTableInferSchemaRequest>& requests, TAsyncQueue::TWeakPtr queue) {
     const ui32 Timeout = 300'000;
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = cluster;
@@ -73,7 +73,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
     inferers.reserve(requests.size());
 
     std::function<void(size_t)> runRead = [&](size_t i) {
-        YT_UNUSED_FUTURE(inputs[i]->Read().ApplyUnique(BIND([queue, &inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
+        YT_UNUSED_FUTURE(inputs[i]->Read().AsUnique().Apply(BIND([queue, &inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
             if (res.IsOK() && !res.Value()) {
                 // EOS
                 promises[i].Set();
@@ -83,13 +83,13 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
                 promises[i].Set(res);
                 return;
             }
-            Y_UNUSED(queue->Async([&inferers, &promises, &runRead, i = i, block = std::move(res.Value())] {
+            Y_UNUSED(TAsyncQueue::Async(queue, [&inferers, &promises, &runRead, i = i, block = std::move(res.Value())] {
                 OnPayload(block, i, inferers, promises);
                 runRead(i);
             }));
         })));
     };
-    
+
     futures.reserve(requests.size());
     promises.reserve(requests.size());
 
@@ -121,9 +121,9 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
         request->set_format("<format=binary>yson");
         promises.push_back(NYT::NewPromise<void>());
         futures.push_back(promises.back().ToFuture());
-        YT_UNUSED_FUTURE(CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([&runRead, &inputs, i](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
+        YT_UNUSED_FUTURE(CreateRpcClientInputStream(std::move(request)).AsUnique().Apply(BIND([&runRead, &inputs, i](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
-            return stream->Read().ApplyUnique(BIND([&runRead, stream = std::move(stream), i, &inputs](NYT::TSharedRef&&) {
+            return stream->Read().AsUnique().Apply(BIND([&runRead, stream = std::move(stream), i, &inputs](NYT::TSharedRef&&) {
                 inputs[i] = std::move(stream);
                 runRead(i);
             }));

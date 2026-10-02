@@ -1,3 +1,5 @@
+#include "ydb_grpc_helpers.h"
+
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -12,11 +14,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -64,7 +64,7 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
@@ -75,7 +75,7 @@ public:
 
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_E("Request doesn't exist (SelfCheckResponse). Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [MonitoringGrpcClient]: Request doesn't exist (SelfCheckResponse). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;
@@ -90,8 +90,20 @@ public:
             return;
         }
 
+        const auto& operation = ev->Get()->Response.operation();
+        if (operation.status() != Ydb::StatusIds::SUCCESS) {
+            forwardResponse->Issues.AddIssue(TStringBuilder() << "YDB operation status: " << operation.status());
+
+            NYql::TIssues operationIssues;
+            NYql::IssuesFromMessage(operation.issues(), operationIssues);
+            forwardResponse->Issues.AddIssues(std::move(operationIssues));
+
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
         Ydb::Monitoring::SelfCheckResult response;
-        ev->Get()->Response.operation().result().UnpackTo(&response);
+        operation.result().UnpackTo(&response);
 
         double totalLoad = 0.0;
         double nodeCount = 0;

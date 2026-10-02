@@ -8,19 +8,18 @@ namespace NYql {
 
 namespace NProto {
 class TMetricsRegistrySnapshot;
-}
+} // namespace NProto
 
 struct IMetricsRegistry;
 using IMetricsRegistryPtr = TIntrusivePtr<IMetricsRegistry>;
 
 using TMetricsDecorator = std::function<IMetricsRegistryPtr(
-        const IMetricsRegistryPtr& old, const TString& username)>;
+    const IMetricsRegistryPtr& old, const TString& username)>;
 
 //////////////////////////////////////////////////////////////////////////////
 // IYqlMetricsRegistry
 //////////////////////////////////////////////////////////////////////////////
 struct IMetricsRegistry: public TThrRefBase {
-
     virtual void SetCounter(
         const TString& labelName,
         const TString& labelValue,
@@ -28,25 +27,25 @@ struct IMetricsRegistry: public TThrRefBase {
         bool derivative = false) = 0;
 
     virtual void IncCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            bool derivative = true) = 0;
+        const TString& labelName,
+        const TString& labelValue,
+        bool derivative = true) = 0;
 
     virtual void AddCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            i64 value,
-            bool derivative = true) = 0;
+        const TString& labelName,
+        const TString& labelValue,
+        i64 value,
+        bool derivative = true) = 0;
 
     // will invalidate all counters
     virtual bool TakeSnapshot(
-            NProto::TMetricsRegistrySnapshot* snapshot) const = 0;
+        NProto::TMetricsRegistrySnapshot* snapshot) const = 0;
 
     virtual void MergeSnapshot(
-            const NProto::TMetricsRegistrySnapshot& snapshot) = 0;
+        const NProto::TMetricsRegistrySnapshot& snapshot) = 0;
 
     virtual IMetricsRegistryPtr Personalized(
-            const TString& userName) const = 0;
+        const TString& userName) const = 0;
 
     virtual void Flush() = 0;
 
@@ -54,7 +53,6 @@ struct IMetricsRegistry: public TThrRefBase {
         ythrow yexception() << "Not implemented";
     }
 };
-
 
 IMetricsRegistryPtr CreateMetricsRegistry(TSensorsGroupPtr sensors);
 

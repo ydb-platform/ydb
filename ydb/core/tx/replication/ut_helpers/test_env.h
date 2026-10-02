@@ -1,10 +1,14 @@
 #pragma once
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -34,18 +38,34 @@ class TEnv {
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
 
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(Endpoint)
+            .SetDatabase(Database);
+        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-            Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...));
+            Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
-    void Login(ui64 schemeShardId, const TString& user, const TString& password) {
-        auto req = MakeHolder<NSchemeShard::TEvSchemeShard::TEvLogin>();
-        req->Record.SetUser(user);
-        req->Record.SetPassword(password);
-        auto resp = Send<NSchemeShard::TEvSchemeShard::TEvLoginResult>(schemeShardId, std::move(req));
-        UNIT_ASSERT(resp->Get()->Record.GetError().empty());
-        UNIT_ASSERT(!resp->Get()->Record.GetToken().empty());
+    void Login(const TString& database, const TString& user, const TString& password) {
+        Ydb::Auth::LoginRequest request;
+        request.set_user(user);
+        request.set_password(password);
+
+        using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
+            NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+
+        auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
+            std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
+        ).ExtractValueSync();
+
+        const auto& operation = result.operation();
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
+
+        Ydb::Auth::LoginResult loginResult;
+        operation.result().UnpackTo(&loginResult);
+        UNIT_ASSERT(!loginResult.token().empty());
     }
 
 public:
@@ -100,14 +120,7 @@ public:
         }
         // init security state
         {
-            auto resp = Client.Ls(db);
-
-            const auto& desc = resp->Record;
-            UNIT_ASSERT(desc.HasPathDescription());
-            UNIT_ASSERT(desc.GetPathDescription().HasDomainDescription());
-            UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasDomainKey());
-
-            Login(desc.GetPathDescription().GetDomainDescription().GetDomainKey().GetSchemeShard(), user, password);
+            Login(db, user, password);
         }
         // update security state
         {
@@ -157,9 +170,31 @@ public:
         return Client.CreateTable(std::forward<Args>(args)...);
     }
 
+    void ConfigureTableProfiles(const NKikimrConfig::TTableProfilesConfig& profiles) {
+        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
+        auto& item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
+        item.MutableConfig()->MutableTableProfilesConfig()->CopyFrom(profiles);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
+        const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
     template <typename... Args>
     auto CreateTableWithIndex(Args&&... args) {
         return Client.CreateTableWithUniformShardedIndex(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateColumnTable(Args&&... args) {
+        return Client.CreateColumnTable(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateTopic(Args&&... args) {
+        return Client.CreateTopic(std::forward<Args>(args)...);
     }
 
     template <typename... Args>
@@ -210,7 +245,7 @@ public:
     }
 
     const NYdb::TDriver& GetDriver() const {
-        return Server.GetDriver();
+        return *Driver;
     }
 
     const TString& GetEndpoint() const {
@@ -234,6 +269,7 @@ private:
     Tests::TServerSettings Settings;
     Tests::TServer Server;
     Tests::TClient Client;
+    THolder<NYdb::TDriver> Driver;
     TString Endpoint;
     TString Database;
     TActorId YdbProxy;

@@ -112,7 +112,7 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {
     Kill(sideEffects);
     // blocks PREVIOUS entry of tablet history
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
-    sideEffects.Register(x);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
@@ -126,13 +126,13 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects, ui32 gen
     }
     Y_ABORT_UNLESS(channel != nullptr && !channel->History.empty());
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
-    sideEffects.Register(x);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
 bool TLeaderTabletInfo::InitiateDeleteStorage(TSideEffects& sideEffects) {
     IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
-    sideEffects.Register(x);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "DeleteStorage"}, {"tabletId", Id}));
     return true;
 }
 
@@ -200,6 +200,15 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
     return previousOwner;
 }
 
+void TLeaderTabletInfo::RestoreLockedTabletMetrics() {
+    if (Hive.CurrentConfig.GetLockedTabletsSendMetrics()
+            && IsLockedToActor()
+            && !IsDeleting())
+    {
+        BecomeUnknown(&Hive.GetNode(LockedToActor.NodeId()));
+    }
+}
+
 void TLeaderTabletInfo::AcquireAllocationUnits() {
     for (const auto& channel : TabletStorageInfo->Channels) {
         if (!channel.History.empty()) {
@@ -237,7 +246,7 @@ bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
     return false;
 }
 
-const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
+const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
     TStoragePoolInfo* storagePool = Hive.FindStoragePool(GetChannelStoragePoolName(channelId));
     if (storagePool != nullptr) {
         auto params = Hive.BuildGroupParametersForChannel(*this, channelId);

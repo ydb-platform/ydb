@@ -100,6 +100,14 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
         case VT_TIMESTAMP64:
         case VT_INTERVAL64:
             return EWireType::Int64;
+
+        case VT_TZ_DATE:
+        case VT_TZ_DATETIME:
+        case VT_TZ_TIMESTAMP:
+        case VT_TZ_DATE32:
+        case VT_TZ_DATETIME64:
+        case VT_TZ_TIMESTAMP64:
+            return EWireType::String32;
     };
     ythrow yexception() << "Cannot convert EValueType '" << valueType << "' to NSkiff::EWireType";
 }
@@ -114,9 +122,6 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchema(
     TVector<TSkiffSchemaPtr> skiffColumns;
     for (const auto& column: schema.Columns()) {
         TSkiffSchemaPtr skiffColumn;
-        if (column.Deleted().Defined() && *column.Deleted()) {
-            continue;
-        }
         if (column.Type() == VT_ANY && *column.TypeV3() != *NTi::Optional(NTi::Yson())) {
             // We ignore all complex types until YT-12717 is done.
             return nullptr;
@@ -211,7 +216,10 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node)
             case EWireType::RepeatedVariant16:
                 return CreateRepeatedVariant16Schema(std::move(children));
             default:
-                return CreateSimpleTypeSchema(wireType);
+                if (GetSchemaKind(wireType) == ESchemaKind::Simple) {
+                    return CreateSimpleTypeSchema(wireType);
+                }
+                ythrow yexception() << "Wire type '" << wireType << "' is not yet supported in Skiff schema";
         }
     };
 
@@ -221,15 +229,18 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node)
     auto wireType = FromString<NSkiff::EWireType>(wireTypePtr->AsString());
 
     const auto* childrenPtr = map.FindPtr("children");
-    Y_ENSURE(NSkiff::IsSimpleType(wireType) || childrenPtr,
-        "'children' key is required for complex node '" << wireType << "'");
     TVector<TSkiffSchemaPtr> children;
     if (childrenPtr) {
+        Y_ENSURE(NSkiff::GetSchemaKind(wireType) == NSkiff::ESchemaKind::Complex,
+            "Non-complex wire type '" << wireType << "' must not have a 'children' key");
         for (const auto& childNode : childrenPtr->AsList()) {
             TSkiffSchemaPtr childSchema;
             Deserialize(childSchema, childNode);
             children.push_back(std::move(childSchema));
         }
+    } else {
+        Y_ENSURE(NSkiff::GetSchemaKind(wireType) != NSkiff::ESchemaKind::Complex,
+            "Complex wire type '" << wireType << "' must have a 'children' key");
     }
 
     schema = createSchema(wireType, std::move(children));
@@ -279,6 +290,7 @@ TFormat CreateSkiffFormat(const NSkiff::TSkiffSchemaPtr& schema) {
 
 NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     ENodeReaderFormat nodeReaderFormat,
     const TVector<TRichYPath>& tablePaths,
@@ -301,17 +313,23 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
         }
     }
 
-    auto nodes = NRawClient::BatchTransform(
+    auto nodes = RemoteClustersBatchTransform(
         rawClient,
-        NRawClient::CanonizeYPaths(rawClient, tablePaths),
+        context,
+        tablePaths,
         [&] (IRawBatchRequestPtr batch, const TRichYPath& path) {
             auto getOptions = TGetOptions()
                 .AttributeFilter(
                     TAttributeFilter()
                         .AddAttribute("schema")
                         .AddAttribute("dynamic")
-                        .AddAttribute("type")
-                );
+                        .AddAttribute("type"));
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (path.Cluster_ && !path.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), path.Path_, getOptions);
+            }
             return batch->Get(transactionId, path.Path_, getOptions);
         });
 
@@ -332,8 +350,8 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                 break;
             case ENodeReaderFormat::Auto:
                 if (dynamic || !strict) {
-                    YT_LOG_DEBUG("Cannot use skiff format for table '%v' as it is dynamic or has non-strict schema",
-                        tablePath);
+                    YT_TLOG_DEBUG("Cannot use skiff format; table is dynamic or has a non-strict schema")
+                        .With("Path", tablePath);
                     return nullptr;
                 }
                 break;

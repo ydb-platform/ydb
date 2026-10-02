@@ -11,6 +11,8 @@ import platform
 # This script changes test run classpath by unpacking tests.jar -> tests-dir. The goal
 # is to launch tests with the same classpath as maven does.
 
+PY3 = sys.version_info[0] == 3
+
 
 def parse_args():
     parser = optparse.OptionParser()
@@ -29,7 +31,12 @@ def fix_cmd(cmd):
     java = cmd[0]
     if not java.endswith('java') and not java.endswith('java.exe'):
         return cmd
-    p = subprocess.Popen([java, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = None
+    # FIXME: Remove after py3 migration
+    if PY3:
+        p = subprocess.Popen([java, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    else:
+        p = subprocess.Popen([java, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     out, err = out.strip(), err.strip()
     if (out or '').strip().startswith('java version "1.8') or (err or '').strip().startswith('java version "1.8'):
@@ -57,7 +64,10 @@ def dump_event(etype, data, filename):
     }
 
     with io.open(filename, 'a', encoding='utf8') as afile:
-        afile.write(unicode(json.dumps(event) + '\n'))
+        if PY3:
+            afile.write(json.dumps(event) + '\n')
+        else:
+            afile.write(unicode(json.dumps(event) + '\n'))
 
 
 def dump_chunk_event(data, filename):
@@ -65,12 +75,16 @@ def dump_chunk_event(data, filename):
 
 
 def extract_jars(dest, archive):
+    if os.path.exists(dest):
+        return
     os.makedirs(dest)
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(dest)
 
 
 def make_bfg_from_cp(class_path, out):
+    if os.path.exists(out):
+        return
     class_path = ' '.join(map(lambda path: ('file:/' + path.lstrip('/')) if os.path.isabs(path) else path, class_path))
     with zipfile.ZipFile(out, 'w') as zf:
         lines = []
@@ -82,6 +96,8 @@ def make_bfg_from_cp(class_path, out):
 
 
 def make_command_file_from_cp(class_path, out):
+    if os.path.exists(out):
+        return
     with open(out, 'w') as cp_file:
         cp_file.write(os.pathsep.join(class_path))
 

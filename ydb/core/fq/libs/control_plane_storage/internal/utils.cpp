@@ -3,6 +3,7 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
+#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
@@ -11,6 +12,9 @@
 namespace NFq {
 
 using NYdb::NFq::TScope;
+
+constexpr char ICEBERG_SOURCE[] = "IcebergGeneric";
+constexpr char LOGGING_SOURCE[] = "LoggingGeneric";
 
 NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl)
 {
@@ -112,6 +116,15 @@ NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, 
     return issues;
 }
 
+void ExcludeFromBilling(const NJson::TJsonValue& jsonTree, const TString& source, ui64& ingress) {
+    const auto path = TStringBuilder() << "TaskRunner.Source=" << source << ".Stage=Total.IngressBytes.sum";
+
+    if (auto* sourceIngressNode = jsonTree.GetValueByPath(path)) {
+        ui64 sourceIngress = sourceIngressNode->GetIntegerSafe();
+        ingress = ingress > sourceIngress ? (ingress - sourceIngress) : 0;
+    }
+}
+
 std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId) {
 
     std::vector<TString> result;
@@ -134,6 +147,9 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
                 ui64 pqIngress = pqIngressNode->GetIntegerSafe();
                 ingress = ingress > pqIngress ? (ingress - pqIngress) : 0;
             }
+
+            ExcludeFromBilling(graph.second, ICEBERG_SOURCE, ingress);
+            ExcludeFromBilling(graph.second, LOGGING_SOURCE, ingress);
         }
     }
 
@@ -143,15 +159,15 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
     }
 
     auto now = Now();
-    result.emplace_back(TBillRecord()
+    result.emplace_back(NKikimr::TBillRecord()
         .Id(jobId + "_i")
         .Schema("yq.ingress.v1")
         .FolderId(TScope(scope).ParseFolder())
         .SourceWt(now)
         .SourceId(sourceId)
-        .Usage(TBillRecord::TUsage()
-            .Type(TBillRecord::TUsage::EType::Delta)
-            .Unit(TBillRecord::TUsage::EUnit::MByte)
+        .Usage(NKikimr::TBillRecord::TUsage()
+            .Type(NKikimr::TBillRecord::TUsage::EType::Delta)
+            .Unit(NKikimr::TBillRecord::TUsage::EUnit::MByte)
             .Quantity(ingressMBytes)
             .Start(now)
             .Finish(now)
@@ -311,8 +327,8 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
     PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
-StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
-    StatsValuesList statPairs;
+TStatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
+    TStatsValuesList statPairs;
     statPairs.reserve(statsProto.size());
     for (const auto& stat : statsProto) {
         statPairs.emplace_back(stat.name(), stat.value());
@@ -320,7 +336,7 @@ StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPt
     return statPairs;
 }
 
-TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics) {
+TStringBuilder& operator<<(TStringBuilder& builder, const TStatistics& statistics) {
     bool first = true;
     builder << '{';
     for (const auto& [field, value] : statistics.Stats) {

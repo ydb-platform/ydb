@@ -26,7 +26,7 @@ TColumnSchema MakeOptionalSchema(const TColumnSchema& columnSchema)
     auto optionalType = New<TOptionalLogicalType>(columnSchema.LogicalType());
     auto resultSchema = TColumnSchema(
         columnSchema.Name(),
-        optionalType,
+        std::move(optionalType),
         columnSchema.SortOrder());
     resultSchema.SetStableName(columnSchema.StableName());
     return resultSchema;
@@ -77,10 +77,10 @@ TTableSchemaPtr MergeTableSchemas(
                 THROW_ERROR_EXCEPTION(
                     "Column %v first schema type is incompatible with second schema type",
                     firstSchemaColumn->GetDiagnosticNameString())
-                    << ex;
+                    .With(ex);
             }
 
-        } else if (!firstSchema->GetStrict()) {
+        } else if (!firstSchema->IsStrict()) {
             THROW_ERROR_EXCEPTION("Column %v is present in second schema and is missing in non-strict first schema",
                 secondSchemaColumn.GetDiagnosticNameString());
         } else {
@@ -90,7 +90,7 @@ TTableSchemaPtr MergeTableSchemas(
 
     for (const auto& firstSchemaColumn : firstSchema->Columns()) {
         if (!secondSchema->FindColumn(firstSchemaColumn.Name())) {
-            if (!secondSchema->GetStrict()) {
+            if (!secondSchema->IsStrict()) {
                 THROW_ERROR_EXCEPTION("Column %v is present in first schema and is missing in non-strict second schema",
                     firstSchemaColumn.GetDiagnosticNameString());
             }
@@ -113,18 +113,18 @@ TTableSchemaPtr MergeTableSchemas(
         // If the deleted columns completely match, then the table can be teleported.
         return {
             New<TTableSchema>(
-                resultColumns,
-                /*strict*/ firstSchema->GetStrict() && secondSchema->GetStrict(),
-                firstSchema->GetUniqueKeys() && secondSchema->GetUniqueKeys(),
+                std::move(resultColumns),
+                firstSchema->IsStrict() && secondSchema->IsStrict(),
+                firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys(),
                 ETableSchemaModification::None,
                 firstSchema->DeletedColumns())
         };
     } else {
         return {
             New<TTableSchema>(
-                resultColumns,
-                /*strict*/ firstSchema->GetStrict() && secondSchema->GetStrict(),
-                firstSchema->GetUniqueKeys() && secondSchema->GetUniqueKeys())
+                std::move(resultColumns),
+                firstSchema->IsStrict() && secondSchema->IsStrict(),
+                firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys())
         };
     }
 }

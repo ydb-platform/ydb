@@ -10,11 +10,15 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/anubis_osiris
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb/base
+    ydb/core/blobstorage/vdisk/hulldb/generic
+    ydb/core/control/lib
     ydb/core/driver_lib/version
 )
 
 SRCS(
     defs.h
+    blobstorage_syncer_broker.cpp
+    blobstorage_syncer_broker.h
     blobstorage_syncer_committer.cpp
     blobstorage_syncer_committer.h
     blobstorage_syncer.cpp
@@ -42,11 +46,14 @@ SRCS(
     guid_proxywrite.h
     guid_recovery.cpp
     guid_recovery.h
+    index_sst_writer.h
     syncer_context.h
     syncer_job_actor.cpp
     syncer_job_actor.h
     syncer_job_task.cpp
     syncer_job_task.h
+    syncer_merger.cpp
+    syncer_merger.h
 )
 
 END()

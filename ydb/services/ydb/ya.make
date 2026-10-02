@@ -10,8 +10,10 @@ SRCS(
     ydb_operation.cpp
     ydb_query.cpp
     ydb_scheme.cpp
+    ydb_secret.cpp
     ydb_scripting.cpp
     ydb_table.cpp
+    ydb_udf.cpp
     ydb_object_storage.cpp
 )
 
@@ -27,6 +29,7 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/udf_api
     ydb/library/aclib
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
@@ -39,8 +42,6 @@ END()
 
 RECURSE_FOR_TESTS(
     backup_ut
-    sdk_sessions_ut
-    sdk_sessions_pool_ut
     table_split_ut
     ut
 )

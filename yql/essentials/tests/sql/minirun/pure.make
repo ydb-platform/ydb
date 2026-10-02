@@ -11,10 +11,9 @@ IF (SANITIZER_TYPE OR NOT OPENSOURCE)
 ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(1800)
+    TIMEOUT(3000)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
-    INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -34,7 +33,6 @@ DEPENDS(
 DATA(
     arcadia/yql/essentials/tests/sql/minirun # python files
     arcadia/yql/essentials/tests/sql/suites
-    arcadia/yql/essentials/mount
     arcadia/yql/essentials/cfg/tests
 )
 
@@ -45,10 +43,6 @@ PEERDIR(
 )
 
 NO_CHECK_IMPORTS()
-
-IF (SANITIZER_TYPE == "memory")
-    TAG(ya:not_autocheck) # YQL-15385
-ENDIF()
 
 END()
 

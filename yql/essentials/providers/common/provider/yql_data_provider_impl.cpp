@@ -72,6 +72,12 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
+TString TPlanFormatterBase::GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) {
+    Y_UNUSED(source);
+    Y_UNUSED(dest);
+    return TString();
+}
+
 bool TPlanFormatterBase::WriteSchemaHeader(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;
@@ -82,12 +88,12 @@ void TPlanFormatterBase::WriteTypeDetails(NYson::TYsonWriter& writer, const TTyp
     Y_UNUSED(type);
 }
 
-void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
+void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) {
     Y_UNUSED(node);
     usedNodeIds.clear();
 }
 
-void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
+void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
     Y_UNUSED(node);
     Y_UNUSED(ctx);
     createdNodes.clear();
@@ -118,6 +124,32 @@ void TDataProviderBase::AddCluster(const TString& name, const THashMap<TString, 
 
 const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
     return nullptr;
+}
+
+TMaybe<TString> TDataProviderBase::ResolveClusterToken(const TString& cluster) {
+    if (auto* tokens = GetClusterTokens()) {
+        if (auto* token = tokens->FindPtr(cluster)) {
+            return *token;
+        }
+    }
+
+    return {};
+}
+
+// TODO: drop this compatibility implementation once all descendants
+// provide their own overloads
+const THashSet<TString>& TDataProviderBase::GetValidClusters() {
+    if (ValidClusters_) {
+        return ValidClusters_;
+    }
+
+    if (auto* tokens = GetClusterTokens()) {
+        for (const auto& [clusterName, _] : *tokens) {
+            ValidClusters_.emplace(clusterName);
+        }
+    }
+
+    return ValidClusters_;
 }
 
 IGraphTransformer& TDataProviderBase::GetIODiscoveryTransformer() {
@@ -272,13 +304,17 @@ TExprNode::TPtr TDataProviderBase::CleanupWorld(const TExprNode::TPtr& node, TEx
 }
 
 TExprNode::TPtr TDataProviderBase::OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings,
-    TExprContext& ctx, IOptimizationContext& optCtx)
+                                                TExprContext& ctx, IOptimizationContext& optCtx)
 {
     Y_UNUSED(fillSettings);
     Y_UNUSED(ctx);
     Y_UNUSED(optCtx);
     return source;
+}
 
+void TDataProviderBase::RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) {
+    Y_UNUSED(arg);
+    Y_UNUSED(world);
 }
 
 bool TDataProviderBase::CanExecute(const TExprNode& node) {
@@ -293,7 +329,7 @@ bool TDataProviderBase::ValidateExecution(const TExprNode& node, TExprContext& c
 }
 
 void TDataProviderBase::GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) {
-    GetDependencies(node, children, false);
+    GetDependencies(node, children, /*compact=*/false);
 }
 
 IGraphTransformer& TDataProviderBase::GetCallableExecutionTransformer() {
@@ -353,8 +389,18 @@ IYtflowOptimization* TDataProviderBase::GetYtflowOptimization() {
     return nullptr;
 }
 
+NLayers::ILayersIntegrationPtr TDataProviderBase::GetLayersIntegration() const {
+    return nullptr;
+}
+
+bool TDataProviderBase::IsFullCaptureReady() {
+    return true;
+}
+
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         Y_UNUSED(ctx);
         if (auto right = TMaybeNode<TCoRight>(node)) {
@@ -367,17 +413,20 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
                 const auto& read = right.Cast().Input().Ref();
                 return ctx.Builder(node->Pos())
                     .Callable("PgTableContent")
-                        .Add(0, read.Child(1)->TailPtr())
-                        .Add(1, read.ChildPtr(2))
-                        .Add(2, read.ChildPtr(3))
-                        .Add(3, read.ChildPtr(4))
+                    .Add(0, read.Child(1)->TailPtr())
+                    .Add(1, read.ChildPtr(2))
+                    .Add(2, read.ChildPtr(3))
+                    .Add(3, read.ChildPtr(4))
                     .Seal()
                     .Build();
             }
         }
+        if (node->IsCallable("WithWorld")) {
+            return node->HeadPtr();
+        }
 
         return node;
-    }, ctx, TOptimizeExprSettings(nullptr));
+    }, ctx, settings);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
     return root;
 }

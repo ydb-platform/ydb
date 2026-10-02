@@ -31,8 +31,6 @@ namespace NKikimr {
 
     namespace NSyncer {
 
-        class TSyncerJobTask;
-
         ////////////////////////////////////////////////////////////////////////
         // TPeerSyncState
         // This structure stores status of communication with other neighbor
@@ -98,6 +96,29 @@ namespace NKikimr {
 
     } // NSyncer
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvSyncerFullSyncFinished
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerFullSyncFinished :
+            public TEventLocal<TEvSyncerFullSyncFinished, TEvBlobStorage::EvSyncerFullSyncFinished>
+    {
+        std::unordered_map<TVDiskID, NSyncer::TPeerSyncState> PeerSyncStates;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvSyncerFullSyncCancelled
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerFullSyncDiskCancelled :
+            public TEventLocal<TEvSyncerFullSyncDiskCancelled, TEvBlobStorage::EvSyncerFullSyncDiskCancelled>
+    {
+        TVDiskID VDiskId;
+        NSyncer::TPeerSyncState PeerSyncState;
+
+        TEvSyncerFullSyncDiskCancelled(const TVDiskID& vdiskId, const NSyncer::TPeerSyncState& peerSyncState)
+            : VDiskId(vdiskId)
+            , PeerSyncState(peerSyncState)
+        {}
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // TSyncNeighbors
@@ -116,7 +137,7 @@ namespace NKikimr {
         ui64 DbBirthLsn = 0; // FIXME: remove after switching to the new sync
 
     private:
-        const TString LogPrefix;
+        const TString VDiskLogPrefix;
         const TActorId NotifyId;
         TNeighbors Neighbors;
         NSync::TQuorumTracker QuorumTracker;
@@ -159,9 +180,12 @@ namespace NKikimr {
         void Parse(IInputStream &str);
         void Parse(const TString &data);
         void Parse(const NKikimrVDiskData::TSyncerEntryPoint &pb);
-        void ApplyChanges(const TActorContext &ctx,
-                          const NSyncer::TSyncerJobTask *task,
-                          TDuration syncTimeInterval);
+
+        void ApplyChanges(
+            const TVDiskID& vDiskId,
+            const NSyncer::TPeerSyncState& peerSyncState,
+            TDuration syncTimeInterval);
+
         void RecoverLocally(const TVDiskIdShort &vdisk, const TSyncState &syncState);
     };
 
@@ -187,6 +211,7 @@ namespace NKikimr {
     // TSyncerData
     ////////////////////////////////////////////////////////////////////////////
     struct TSyncerData : public TThrRefBase {
+        const TString VDiskLogPrefix;
         TSyncNeighborsPtr Neighbors;
         NSyncer::TLocalSyncerState LocalSyncerState;
         const TActorId NotifyId;
@@ -233,11 +258,13 @@ namespace NKikimr {
 
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format
-        static TString Convert(const TVDiskIdShort &selfVDisk,
+        static TString Convert(const TString& logPrefix,
+                              const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TString &entryPoint);
 
-        static TString Convert(const TVDiskIdShort &selfVDisk,
+        static TString Convert(const TString& logPrefix,
+                              const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TContiguousSpan &entryPoint);
 

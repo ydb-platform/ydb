@@ -4,11 +4,15 @@ PEERDIR(
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
+    ydb/core/kqp/common/events
+    ydb/services/scheme_secret
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
+    ydb/core/tx/replication/controller/protos
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
     ydb/core/util
@@ -29,14 +33,18 @@ SRCS(
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
+    resource_id_resolver.cpp
+    dst_schema_changer.cpp
     secret_resolver.cpp
     session_info.cpp
+    stream_consumer_remover.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
     tx_assign_tx_id.cpp
@@ -53,8 +61,12 @@ SRCS(
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
     tx_init.cpp
+    tx_schema_change.cpp
     tx_init_schema.cpp
+    tx_resolve_database_result.cpp
+    tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
+    tx_run_worker.cpp
     tx_worker_error.cpp
 )
 
@@ -67,6 +79,8 @@ END()
 RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
+    ut_replication
+    ut_schema_change
     ut_stream_creator
     ut_target_discoverer
 )

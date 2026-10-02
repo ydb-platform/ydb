@@ -51,7 +51,7 @@ public:
         : TBase(std::move(traceId))
     {}
 
-    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TWhiteboardRequest(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
@@ -98,7 +98,6 @@ public:
                      RequestSettings.FilterNodeIds.end(),
                      (ui32)0,
                      TlsActivationContext->ActorSystem()->NodeId);
-
         TBase::InitConfig(RequestSettings);
         Request = BuildRequest();
         if (RequestSettings.FilterNodeIds.empty()) {
@@ -124,6 +123,8 @@ public:
             hFunc(TEvPrivate::TEvRetryNodeRequest, HandleRetryNode);
             hFunc(TEvWhiteboard::TEvNodeStateResponse, HandleBrowse);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -134,6 +135,8 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -154,7 +157,7 @@ public:
             }
         }
         SendNodeRequest(nodeIds);
-        if (TBase::Requests > 0) {
+        if (WaitingForResponse()) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
             ReplyAndPassAway();
@@ -190,7 +193,7 @@ public:
         }
         nodeIds.push_back(TBase::SelfId().NodeId());
         SendNodeRequest(nodeIds);
-        if (TBase::Requests > 0) {
+        if (WaitingForResponse() > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
             ReplyAndPassAway();
@@ -208,6 +211,9 @@ public:
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return TBase::Undelivered(ev);
+        }
         static const TString error = "Undelivered";
         TNodeId nodeId = ev.Get()->Cookie;
         if (NodeResponses[nodeId].Error(error)) {

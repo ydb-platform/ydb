@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.3.2)
+VERSION(1.4.0)
 
 LICENSE(Apache-2.0)
 
@@ -15,7 +15,6 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     aiosignal/__init__.py
-    aiosignal/__init__.pyi
 )
 
 RESOURCE_FILES(

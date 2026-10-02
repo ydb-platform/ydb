@@ -1,162 +1,158 @@
 {
-    "test.test[BlockFind]": [
+    "test.test[Find-Peephole]": [
         {
-            "uri": "file://test.test_BlockFind_/results.txt"
+            "checksum": "2503b67be2a8dbcdbc6be856f4eca7f3",
+            "size": 3953,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Find-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockIsCategory]": [
+    "test.test[Find-Results]": [
         {
-            "uri": "file://test.test_BlockIsCategory_/results.txt"
+            "uri": "file://test.test_Find-Results_/results.txt"
         }
     ],
-    "test.test[BlockNormalize]": [
+    "test.test[IsCategory-Peephole]": [
         {
-            "uri": "file://test.test_BlockNormalize_/results.txt"
+            "checksum": "bde64ec7d05be1ae958113c68b81ed0d",
+            "size": 2425,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_IsCategory-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockRemove]": [
+    "test.test[IsCategory-Results]": [
         {
-            "uri": "file://test.test_BlockRemove_/results.txt"
+            "uri": "file://test.test_IsCategory-Results_/results.txt"
         }
     ],
-    "test.test[BlockReplace]": [
+    "test.test[LevensteinDistanceCodePoints-Results]": [
         {
-            "uri": "file://test.test_BlockReplace_/results.txt"
+            "uri": "file://test.test_LevensteinDistanceCodePoints-Results_/results.txt"
         }
     ],
-    "test.test[BlockStrip]": [
+    "test.test[List-Results]": [
         {
-            "uri": "file://test.test_BlockStrip_/results.txt"
+            "uri": "file://test.test_List-Results_/results.txt"
         }
     ],
-    "test.test[BlockToUint64F0]": [
+    "test.test[Normalize-Peephole]": [
         {
-            "uri": "file://test.test_BlockToUint64F0_/extracted"
+            "checksum": "2120c3f2ef81cc6c3f4fb2b5240fb48e",
+            "size": 1551,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Normalize-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockToUint64F1]": [
+    "test.test[Normalize-Results]": [
         {
-            "uri": "file://test.test_BlockToUint64F1_/extracted"
+            "uri": "file://test.test_Normalize-Results_/results.txt"
         }
     ],
-    "test.test[BlockToUint64F2]": [
+    "test.test[Remove-Peephole]": [
         {
-            "uri": "file://test.test_BlockToUint64F2_/extracted"
+            "checksum": "31a40c15f3b43b74e897a8465f42d43f",
+            "size": 1755,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Remove-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockToUint64F3]": [
+    "test.test[Remove-Results]": [
         {
-            "uri": "file://test.test_BlockToUint64F3_/extracted"
+            "uri": "file://test.test_Remove-Results_/results.txt"
         }
     ],
-    "test.test[BlockToUint64]": [
+    "test.test[Replace-Peephole]": [
         {
-            "uri": "file://test.test_BlockToUint64_/results.txt"
+            "checksum": "73786d8ff6c15831f306b4ac0aeea39b",
+            "size": 2037,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Replace-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockTo]": [
+    "test.test[Replace-Results]": [
         {
-            "uri": "file://test.test_BlockTo_/results.txt"
+            "uri": "file://test.test_Replace-Results_/results.txt"
         }
     ],
-    "test.test[BlockTryToUint64]": [
+    "test.test[SplitToListNoCrash-Results]": [
         {
-            "uri": "file://test.test_BlockTryToUint64_/results.txt"
+            "uri": "file://test.test_SplitToListNoCrash-Results_/results.txt"
         }
     ],
-    "test.test[BlockUnicode]": [
+    "test.test[Strip-Peephole]": [
         {
-            "uri": "file://test.test_BlockUnicode_/results.txt"
+            "checksum": "b8b76fd58edf1f629f1046e60cfd1829",
+            "size": 1590,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Strip-Peephole_/opt.yql"
         }
     ],
-    "test.test[Find]": [
+    "test.test[Strip-Results]": [
         {
-            "uri": "file://test.test_Find_/results.txt"
+            "uri": "file://test.test_Strip-Results_/results.txt"
         }
     ],
-    "test.test[IsCategory]": [
+    "test.test[To-Peephole]": [
         {
-            "uri": "file://test.test_IsCategory_/results.txt"
+            "checksum": "bce9d17a9591e9d7373101af496729cd",
+            "size": 1477,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_To-Peephole_/opt.yql"
         }
     ],
-    "test.test[LevensteinDistanceCodePoints]": [
+    "test.test[To-Results]": [
         {
-            "uri": "file://test.test_LevensteinDistanceCodePoints_/results.txt"
+            "uri": "file://test.test_To-Results_/results.txt"
         }
     ],
-    "test.test[List]": [
+    "test.test[ToUint64-Peephole]": [
         {
-            "uri": "file://test.test_List_/results.txt"
+            "checksum": "05604bd2e09e0d5e8c28ca202e5ef99f",
+            "size": 3861,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_ToUint64-Peephole_/opt.yql"
         }
     ],
-    "test.test[Normalize]": [
+    "test.test[ToUint64-Results]": [
         {
-            "uri": "file://test.test_Normalize_/results.txt"
+            "uri": "file://test.test_ToUint64-Results_/results.txt"
         }
     ],
-    "test.test[Remove]": [
+    "test.test[ToUint64F0-Results]": [
+        "<tmp_path>/program.sql:<main>:15:14: Error: Input string is not a number\n\t    Unicode::ToUint64(value),\n\t             ^"
+    ],
+    "test.test[ToUint64F1-Results]": [
         {
-            "uri": "file://test.test_Remove_/results.txt"
+            "uri": "file://test.test_ToUint64F1-Results_/extracted"
         }
     ],
-    "test.test[Replace]": [
+    "test.test[ToUint64F2-Results]": [
         {
-            "uri": "file://test.test_Replace_/results.txt"
+            "uri": "file://test.test_ToUint64F2-Results_/extracted"
         }
     ],
-    "test.test[SplitToListNoCrash]": [
+    "test.test[ToUint64F3-Results]": [
+        "<tmp_path>/program.sql:<main>:15:14: Error: Incorrect base\n\t    Unicode::ToUint64(value, 1),\n\t             ^"
+    ],
+    "test.test[TryToUint64-Peephole]": [
         {
-            "uri": "file://test.test_SplitToListNoCrash_/results.txt"
+            "checksum": "51c82a34b12e541741b32f15f446d02c",
+            "size": 1629,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_TryToUint64-Peephole_/opt.yql"
         }
     ],
-    "test.test[Strip]": [
+    "test.test[TryToUint64-Results]": [
         {
-            "uri": "file://test.test_Strip_/results.txt"
+            "uri": "file://test.test_TryToUint64-Results_/results.txt"
         }
     ],
-    "test.test[ToUint64F0]": [
+    "test.test[Unicode-Peephole]": [
         {
-            "uri": "file://test.test_ToUint64F0_/extracted"
+            "checksum": "2cb2eccf559173aa988ba8496894d5cb",
+            "size": 4009,
+            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Unicode-Peephole_/opt.yql"
         }
     ],
-    "test.test[ToUint64F1]": [
+    "test.test[Unicode-Results]": [
         {
-            "uri": "file://test.test_ToUint64F1_/extracted"
+            "uri": "file://test.test_Unicode-Results_/results.txt"
         }
     ],
-    "test.test[ToUint64F2]": [
+    "test.test[UnicodeCodePoint-Results]": [
         {
-            "uri": "file://test.test_ToUint64F2_/extracted"
-        }
-    ],
-    "test.test[ToUint64F3]": [
-        {
-            "uri": "file://test.test_ToUint64F3_/extracted"
-        }
-    ],
-    "test.test[ToUint64]": [
-        {
-            "uri": "file://test.test_ToUint64_/results.txt"
-        }
-    ],
-    "test.test[To]": [
-        {
-            "uri": "file://test.test_To_/results.txt"
-        }
-    ],
-    "test.test[TryToUint64]": [
-        {
-            "uri": "file://test.test_TryToUint64_/results.txt"
-        }
-    ],
-    "test.test[UnicodeCodePoint]": [
-        {
-            "uri": "file://test.test_UnicodeCodePoint_/results.txt"
-        }
-    ],
-    "test.test[Unicode]": [
-        {
-            "uri": "file://test.test_Unicode_/results.txt"
+            "uri": "file://test.test_UnicodeCodePoint-Results_/results.txt"
         }
     ]
 }

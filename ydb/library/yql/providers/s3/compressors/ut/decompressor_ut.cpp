@@ -1,9 +1,10 @@
 #include <ydb/library/yql/providers/s3/compressors/lz4io.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 namespace NYql::NCompressors {
 
@@ -16,7 +17,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TCompressorTests) {
     Y_UNIT_TEST(SuccessLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.json.lz4"));
-        auto decompressorBuffer = std::make_unique<NLz4::TReadBuffer>(buffer);
+        auto decompressorBuffer = NLz4::MakeDecompressor(buffer);
 
         char str[256] = {};
         decompressorBuffer->read(str, 256);
@@ -31,12 +32,12 @@ Y_UNIT_TEST_SUITE(TCompressorTests) {
 
     Y_UNIT_TEST(WrongMagicLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.json"));
-        UNIT_ASSERT_EXCEPTION_CONTAINS(std::make_unique<NLz4::TReadBuffer>(buffer), yexception, "Wrong magic.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NLz4::MakeDecompressor(buffer), yexception, "Wrong magic.");
     }
 
     Y_UNIT_TEST(ErrorLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.broken.lz4"));
-        auto decompressorBuffer = std::make_unique<NLz4::TReadBuffer>(buffer);
+        auto decompressorBuffer = NLz4::MakeDecompressor(buffer);
         char str[256] = {};
         UNIT_ASSERT_EXCEPTION_CONTAINS(decompressorBuffer->read(str, 256), yexception, "Decompression error: ERROR_reservedFlag_set");
     }

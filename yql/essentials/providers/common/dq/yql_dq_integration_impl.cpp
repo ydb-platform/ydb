@@ -2,7 +2,7 @@
 
 namespace NYql {
 
-ui64 TDqIntegrationBase::Partition(const TExprNode&, TVector<TString>&, TString*, TExprContext&, const TPartitionSettings& ) {
+ui64 TDqIntegrationBase::Partition(const TExprNode&, TVector<TString>&, TString*, TExprContext&, const TPartitionSettings&) {
     return 0;
 }
 
@@ -17,11 +17,11 @@ bool TDqIntegrationBase::CanRead(const TExprNode&, TExprContext&, bool) {
     return false;
 }
 
-TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<const TExprNode*> &, TExprContext&) {
+TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<const TExprNode*>&, TExprContext&) {
     return Nothing();
 }
 
-TExprNode::TPtr TDqIntegrationBase::WrapRead(const TExprNode::TPtr& read, TExprContext&, const TWrapReadSettings& ) {
+TExprNode::TPtr TDqIntegrationBase::WrapRead(const TExprNode::TPtr& read, TExprContext&, const TWrapReadSettings&) {
     return read;
 }
 
@@ -48,7 +48,7 @@ TExprNode::TPtr TDqIntegrationBase::WrapWrite(const TExprNode::TPtr& write, TExp
     return write;
 }
 
-void TDqIntegrationBase::RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase&)  {
+void TDqIntegrationBase::RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase&) {
 }
 
 bool TDqIntegrationBase::CanFallback() {
@@ -56,6 +56,10 @@ bool TDqIntegrationBase::CanFallback() {
 }
 
 void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t, TExprContext&) {
+}
+
+TMaybe<IDqIntegration::TSourceWatermarksSettings> TDqIntegrationBase::ExtractSourceWatermarksSettings(const TExprNode& /*node*/, const ::google::protobuf::Any& /*settings*/, const TString& /*sourceType*/) {
+    return Nothing();
 }
 
 void TDqIntegrationBase::FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) {

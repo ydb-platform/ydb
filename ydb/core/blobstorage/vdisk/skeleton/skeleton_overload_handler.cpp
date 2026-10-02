@@ -2,7 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -16,7 +17,7 @@ namespace NKikimr {
         struct TItem {
             std::unique_ptr<IEventHandle> Ev;
             ui64 Size = 0;
-            NWilson::TSpan Span;
+            TLazyRetroSpan Span;
 
             TItem() = default;
 
@@ -39,8 +40,6 @@ namespace NKikimr {
         TVPatchStartHandler VPatchStartHandler;
         TVPutHandler VPutHandler;
         TVMultiPutHandler VMultiPutHandler;
-        TLocalSyncDataHandler LocalSyncDataHandler;
-        TAnubisOsirisPutHandler AnubisOsirisPutHandler;
 
     public:
         TEmergencyQueue(
@@ -48,22 +47,15 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut,
-                TLocalSyncDataHandler &&loc,
-                TAnubisOsirisPutHandler &&aoput)
+                TVMultiPutHandler &&vMultiPut)
             : Mon(mon)
             , VMovedPatchHandler(std::move(vMovedPatch))
             , VPatchStartHandler(std::move(vPatchStart))
             , VPutHandler(std::move(vput))
             , VMultiPutHandler(std::move(vMultiPut))
-            , LocalSyncDataHandler(std::move(loc))
-            , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
         ~TEmergencyQueue() {
-            while (Queue.Head()) {
-                Queue.Pop();
-            }
         }
 
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
@@ -91,20 +83,6 @@ namespace NKikimr {
             ++Mon.EmergencyMultiPutQueueItems();
             auto size = ev->GetSize();
             Mon.EmergencyMultiPutQueueBytes() += size;
-            Queue.Push(TItem(ev, size));
-        }
-
-        void Push(TEvLocalSyncData::TPtr ev) {
-            ++Mon.EmergencyLocalSyncDataQueueItems();
-            auto size = ev->Get()->ByteSize();
-            Mon.EmergencyLocalSyncDataQueueBytes() += size;
-            Queue.Push(TItem(ev, size));
-        }
-
-        void Push(TEvAnubisOsirisPut::TPtr ev) {
-            ++Mon.EmergencyAnubisOsirisPutQueueItems();
-            auto size = ev->Get()->ByteSize();
-            Mon.EmergencyAnubisOsirisPutQueueBytes() += size;
             Queue.Push(TItem(ev, size));
         }
 
@@ -151,20 +129,6 @@ namespace NKikimr {
                     --Mon.EmergencyMultiPutQueueItems();
                     Mon.EmergencyMultiPutQueueBytes() -= size;
                     VMultiPutHandler(ctx, *evMultiPut);
-                    break;
-                }
-                case TEvBlobStorage::EvLocalSyncData: {
-                    auto *evLocalSyncData = reinterpret_cast<TEvLocalSyncData::TPtr*>(&ev);
-                    --Mon.EmergencyLocalSyncDataQueueItems();
-                    Mon.EmergencyLocalSyncDataQueueBytes() -= size;
-                    LocalSyncDataHandler(ctx,*evLocalSyncData);
-                    break;
-                }
-                case TEvBlobStorage::EvAnubisOsirisPut: {
-                    auto *evAnubisOsirisPut = reinterpret_cast<TEvAnubisOsirisPut::TPtr*>(&ev);
-                    --Mon.EmergencyAnubisOsirisPutQueueItems();
-                    Mon.EmergencyAnubisOsirisPutQueueBytes() -= size;
-                    AnubisOsirisPutHandler(ctx, *evAnubisOsirisPut);
                     break;
                 }
                 default:
@@ -455,14 +419,12 @@ namespace NKikimr {
             TVMovedPatchHandler &&vMovedPatch,
             TVPatchStartHandler &&vPatchStart,
             TVPutHandler &&vput,
-            TVMultiPutHandler &&vMultiPut,
-            TLocalSyncDataHandler &&loc,
-            TAnubisOsirisPutHandler &&aoput)
+            TVMultiPutHandler &&vMultiPut)
         : VCtx(vctx)
         , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                std::move(vMultiPut), std::move(loc), std::move(aoput)))
+                std::move(vMultiPut)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
         , ThrottlingController(new TThrottlingController(vcfg, Mon, pdiskCtx))
     {}
@@ -617,7 +579,5 @@ namespace NKikimr {
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev);
-    template bool TOverloadHandler::PostponeEvent(TEvLocalSyncData::TPtr &ev);
-    template bool TOverloadHandler::PostponeEvent(TEvAnubisOsirisPut::TPtr &ev);
 
 } // NKikimr

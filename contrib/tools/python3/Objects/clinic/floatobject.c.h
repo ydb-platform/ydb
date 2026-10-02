@@ -2,11 +2,7 @@
 preserve
 [clinic start generated code]*/
 
-#if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
-#endif
-
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 PyDoc_STRVAR(float_is_integer__doc__,
 "is_integer($self, /)\n"
@@ -259,9 +255,9 @@ PyDoc_STRVAR(float___getformat____doc__,
 "\n"
 "It exists mainly to be used in Python\'s test suite.\n"
 "\n"
-"This function returns whichever of \'unknown\', \'IEEE, big-endian\' or \'IEEE,\n"
-"little-endian\' best describes the format of floating-point numbers used by the\n"
-"C type named by typestr.");
+"This function returns whichever of \'unknown\', \'IEEE, big-endian\' or\n"
+"\'IEEE, little-endian\' best describes the format of floating-point\n"
+"numbers used by the C type named by typestr.");
 
 #define FLOAT___GETFORMAT___METHODDEF    \
     {"__getformat__", (PyCFunction)float___getformat__, METH_O|METH_CLASS, float___getformat____doc__},
@@ -316,13 +312,10 @@ float___format__(PyObject *self, PyObject *arg)
         _PyArg_BadArgument("__format__", "argument", "str", arg);
         goto exit;
     }
-    if (PyUnicode_READY(arg) == -1) {
-        goto exit;
-    }
     format_spec = arg;
     return_value = float___format___impl(self, format_spec);
 
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=e6e3f5f833b37eba input=a9049054013a1b77]*/
+/*[clinic end generated code: output=87a117517a970173 input=a9049054013a1b77]*/

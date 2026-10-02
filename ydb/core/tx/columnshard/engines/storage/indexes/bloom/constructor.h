@@ -1,22 +1,40 @@
 #pragma once
+
+#include "const.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+
 namespace NKikimr::NOlap::NIndexes {
 
-class TBloomIndexConstructor: public IIndexMetaConstructor {
+class TBloomIndexConstructor: public TSkipBitmapIndexConstructor {
+private:
+    using TBase = TSkipBitmapIndexConstructor;
+
 public:
     static TString GetClassNameStatic() {
         return "BLOOM_FILTER";
     }
+
 private:
-    std::set<TString> ColumnNames;
-    double FalsePositiveProbability = 0.1;
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
+
 protected:
-    virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const override;
+    virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const override;
+
+    virtual std::shared_ptr<IIndexMeta> DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors, const IIndexMeta& existingMeta) const override;
 
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) override;
+
+private:
+    TConclusionStatus ValidateValues() const;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 
 public:

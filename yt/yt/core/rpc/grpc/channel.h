@@ -14,7 +14,6 @@ namespace NYT::NRpc::NGrpc {
 struct IGrpcChannel
     : public NRpc::IChannel
 {
-public:
     virtual grpc_connectivity_state CheckConnectivityState(bool tryToConnect) = 0;
 };
 
@@ -25,8 +24,13 @@ DEFINE_REFCOUNTED_TYPE(IGrpcChannel)
 //! Creates a channel implemented via GRPC.
 IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config);
 
-//! Returns the factory for creating GRPC channels.
-NRpc::IChannelFactoryPtr GetGrpcChannelFactory();
+//! Creates a factory for creating GRPC channels; #config provides the
+//! credentials and GRPC arguments shared by all channels (the address is supplied
+//! per channel).
+NRpc::IChannelFactoryPtr CreateGrpcChannelFactory(TChannelFactoryConfigPtr config);
+
+//! Returns the factory for creating GRPC channels with default settings.
+NRpc::IChannelFactoryPtr GetDefaultGrpcChannelFactory();
 
 ////////////////////////////////////////////////////////////////////////////////
 

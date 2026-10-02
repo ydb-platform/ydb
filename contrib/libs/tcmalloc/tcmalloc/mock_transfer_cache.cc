@@ -14,11 +14,17 @@
 
 #include "tcmalloc/mock_transfer_cache.h"
 
+#include "absl/base/attributes.h"
+
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
-int FakeTransferCacheManager::DetermineSizeClassToEvict() { return 3; }
-bool FakeTransferCacheManager::ShrinkCache(int) { return true; }
-
+ABSL_CONST_INIT bool
+    ArenaBasedFakeTransferCacheManager::partial_legacy_transfer_cache_(false);
+ABSL_CONST_INIT bool FakeShardedTransferCacheManager::enable_generic_cache_(
+    false);
+ABSL_CONST_INIT bool
+    FakeShardedTransferCacheManager::enable_cache_for_large_classes_only_(
+        false);
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc

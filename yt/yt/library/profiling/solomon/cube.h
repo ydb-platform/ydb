@@ -21,13 +21,15 @@ struct TReadOptions
 {
     TReadWindow Times;
 
-    std::function<bool(const std::string&)> SensorFilter;
+    std::function<bool(TStringBuf)> SensorFilter;
 
     bool ConvertCountersToRateGauge = false;
     bool ConvertCountersToDeltaGauge = false;
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
+    bool SplitRateHistogramIntoGauges = false;
+    bool ReportTimestampsForRateMetrics = true;
 
     bool EnableSolomonAggregationWorkaround = false;
 
@@ -35,6 +37,8 @@ struct TReadOptions
     ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool MarkAggregates = false;
+    bool EnableSolomonAggregates = false;
+    bool ExportGlobalsAsMemOnly = false;
 
     std::optional<std::string> Host;
 
@@ -44,6 +48,7 @@ struct TReadOptions
     bool Global = false;
     bool DisableSensorsRename = false;
     bool DisableDefault = false;
+    bool MemOnly = false;
 
     int LingerWindowSize = 0;
 
@@ -67,15 +72,22 @@ bool IsZeroValue(const T& value)
 }
 
 template <class T>
+bool IsZeroValue(const TSummarySnapshot<T>& value)
+{
+    T zeroValue{};
+    return value.Min() == zeroValue && value.Max() == zeroValue;
+}
+
+template <class T>
 class TCube
 {
 public:
     TCube(int windowSize, i64 nextIteration);
 
     void Add(TTagIdList tagIds);
-    void AddAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void AddAll(const TTagIdSet& tagSet);
     void Remove(TTagIdList tagIds);
-    void RemoveAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void RemoveAll(const TTagIdSet& tagSet);
 
     void Update(TTagIdList tagIds, T value);
     void StartIteration();
@@ -102,7 +114,7 @@ public:
     T Rollup(const TProjection& window, int index) const;
 
     int ReadSensors(
-        const std::string& name,
+        TStringBuf name,
         const TReadOptions& options,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
@@ -114,7 +126,9 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
+    // Each projection from `extraProjections` added to each inner projection of this cube.
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
+    void DumpCube(NProto::TCube* cube, const TTagIdList& extraTagIds = {}) const;
 
 private:
     const int WindowSize_;
@@ -125,6 +139,17 @@ private:
 
     THashMap<TTagIdList, TProjection> Projections_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TGaugeCube = TCube<double>;
+using TCounterCube = TCube<i64>;
+using TTimeCounterCube = TCube<TDuration>;
+using TSummaryCube = TCube<TSummarySnapshot<double>>;
+using TTimerCube = TCube<TSummarySnapshot<TDuration>>;
+using TTimeHistogramCube = TCube<TTimeHistogramSnapshot>;
+using TGaugeHistogramCube = TCube<TGaugeHistogramSnapshot>;
+using TRateHistogramCube = TCube<TRateHistogramSnapshot>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

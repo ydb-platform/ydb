@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/load_test/nbs_dbg_like_load_tablet.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mind/bscontroller/bsc.h>

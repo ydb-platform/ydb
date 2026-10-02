@@ -157,7 +157,7 @@ namespace orc {
                                                     footerLength_, memory_),
           blockSize_, memory_, metrics_);
       stripeFooter_ = std::make_unique<proto::StripeFooter>();
-      if (!stripeFooter_->ParseFromZeroCopyStream(pbStream.get())) {
+      if (!parseProtobufFromStream(stripeFooter_.get(), pbStream.get())) {
         throw ParseError("Failed to parse the stripe footer");
       }
     }
@@ -172,6 +172,11 @@ namespace orc {
     }
     return std::make_unique<StreamInformationImpl>(
         streamOffset, stripeFooter_->streams(static_cast<int>(streamId)));
+  }
+
+  std::shared_ptr<StringDictionary> StripeStreamsImpl::getSharedDictionary(
+      uint64_t columnId) const {
+    return reader_.getSharedDictionary(columnId);
   }
 
 }  // namespace orc

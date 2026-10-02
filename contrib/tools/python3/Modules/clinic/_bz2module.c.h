@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_modsupport.h"    // _PyArg_BadArgument()
 
 PyDoc_STRVAR(_bz2_BZ2Compressor_compress__doc__,
 "compress($self, data, /)\n"
@@ -32,10 +33,6 @@ _bz2_BZ2Compressor_compress(BZ2Compressor *self, PyObject *arg)
     Py_buffer data = {NULL, NULL};
 
     if (PyObject_GetBuffer(arg, &data, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&data, 'C')) {
-        _PyArg_BadArgument("compress", "argument", "contiguous buffer", arg);
         goto exit;
     }
     return_value = _bz2_BZ2Compressor_compress_impl(self, &data);
@@ -102,7 +99,7 @@ _bz2_BZ2Compressor(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     if (PyTuple_GET_SIZE(args) < 1) {
         goto skip_optional;
     }
-    compresslevel = _PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
+    compresslevel = PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
     if (compresslevel == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -119,18 +116,19 @@ PyDoc_STRVAR(_bz2_BZ2Decompressor_decompress__doc__,
 "\n"
 "Decompress *data*, returning uncompressed data as bytes.\n"
 "\n"
-"If *max_length* is nonnegative, returns at most *max_length* bytes of\n"
-"decompressed data. If this limit is reached and further output can be\n"
-"produced, *self.needs_input* will be set to ``False``. In this case, the next\n"
-"call to *decompress()* may provide *data* as b\'\' to obtain more of the output.\n"
+"If *max_length* is nonnegative, returns at most *max_length* bytes\n"
+"of decompressed data.  If this limit is reached and further output\n"
+"can be produced, *self.needs_input* will be set to ``False``.  In\n"
+"this case, the next call to *decompress()* may provide *data* as b\'\'\n"
+"to obtain more of the output.\n"
 "\n"
-"If all of the input data was decompressed and returned (either because this\n"
-"was less than *max_length* bytes, or because *max_length* was negative),\n"
-"*self.needs_input* will be set to True.\n"
+"If all of the input data was decompressed and returned (either\n"
+"because this was less than *max_length* bytes, or because\n"
+"*max_length* was negative), *self.needs_input* will be set to True.\n"
 "\n"
-"Attempting to decompress data after the end of stream is reached raises an\n"
-"EOFError.  Any data found after the end of the stream is ignored and saved in\n"
-"the unused_data attribute.");
+"Attempting to decompress data after the end of stream is reached\n"
+"raises an EOFError.  Any data found after the end of the stream is\n"
+"ignored and saved in the unused_data attribute.");
 
 #define _BZ2_BZ2DECOMPRESSOR_DECOMPRESS_METHODDEF    \
     {"decompress", _PyCFunction_CAST(_bz2_BZ2Decompressor_decompress), METH_FASTCALL|METH_KEYWORDS, _bz2_BZ2Decompressor_decompress__doc__},
@@ -178,10 +176,6 @@ _bz2_BZ2Decompressor_decompress(BZ2Decompressor *self, PyObject *const *args, Py
         goto exit;
     }
     if (PyObject_GetBuffer(args[0], &data, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&data, 'C')) {
-        _PyArg_BadArgument("decompress", "argument 'data'", "contiguous buffer", args[0]);
         goto exit;
     }
     if (!noptargs) {
@@ -241,4 +235,4 @@ _bz2_BZ2Decompressor(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=805400e4805098ec input=a9049054013a1b77]*/
+/*[clinic end generated code: output=3f17a58daa209221 input=a9049054013a1b77]*/

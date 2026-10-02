@@ -9,7 +9,6 @@
 #include "scheduler_queue.h"
 #include <memory>
 #include <ydb/library/actors/actor_type/indexes.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -29,8 +28,11 @@ namespace NActors {
     struct TPoolShortInfo {
         i16 PoolId = 0;
         i16 SharedThreadCount = 0;
+        i16 ForeignSlots = 0;
         bool InPriorityOrder = false;
         TString PoolName;
+        bool ForcedForeignSlots = false;
+        std::vector<i16> AdjacentPools;
     };
 
     struct TPoolThreadRange {
@@ -39,11 +41,12 @@ namespace NActors {
     };
 
     struct TPoolManager {
-        TStackVec<TPoolShortInfo, 8> PoolInfos;
+        std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
-    
-        TPoolManager(const TVector<TPoolShortInfo> &poolInfos);
+        std::vector<i16> AdjacentOwnerByPool;
+
+        TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
 
     class ISharedPool {
@@ -58,6 +61,7 @@ namespace NActors {
         virtual void FillOwnedThreads(std::vector<i16>& ownedThreads) const = 0;
         virtual i16 GetSharedThreadCount() const = 0;
         virtual void SetForeignThreadSlots(i16 poolId, i16 slots) = 0;
+        virtual bool IsUnited() const = 0;
     };
 
     class TSharedExecutorPool: public TExecutorPoolBaseMailboxed, public ISharedPool {
@@ -77,6 +81,7 @@ namespace NActors {
         const ui64 DefaultSpinThresholdCycles;
         const TString PoolName;
         const ui64 SoftProcessingDurationTs;
+        const bool United = false;
 
         char Barrier[64];
 
@@ -91,6 +96,21 @@ namespace NActors {
         alignas(64) std::atomic<ui64> SpinningTimeUs;
         alignas(64) NThreading::TPadded<std::atomic<ui64>> ThreadsState;
         alignas(64) std::atomic<bool> StopFlag;
+
+        // Set during pool registration, before any executor thread starts.
+        bool HasWakerPools = false;
+        // Only the shared waker changes sleep decisions and their accounting.
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) std::vector<bool> SleepingWorkers;
+        static constexpr i16 InvalidWakerWorkerId = -1;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
+
+        void RequestWaker(i16 workerId = InvalidWakerWorkerId);
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
+        void SetSleeping(TWorkerId workerId, bool sleeping);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingCounter);
 
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
@@ -115,10 +135,10 @@ namespace NActors {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
-        explicit TSharedExecutorPool(const TSharedExecutorPoolConfig& cfg, const TVector<TPoolShortInfo> &poolInfos);
+        explicit TSharedExecutorPool(const TSharedExecutorPoolConfig& cfg, const std::vector<TPoolShortInfo> &poolInfos);
         ~TSharedExecutorPool();
 
-        i16 SumThreads(const TVector<TPoolShortInfo> &poolInfos);
+        i16 SumThreads(const std::vector<TPoolShortInfo> &poolInfos);
         void Initialize() override;
         i16 FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingReadCounter);
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
@@ -141,19 +161,26 @@ namespace NActors {
         void GetSharedStatsForHarmonizer(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetSharedStats(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
 
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;
         }
+        bool IsUnited() const override {
+            return United;
+        }
 
         ui32 GetThreads() const override;
         float GetThreadCount() const override;
+        i16 GetMaxFullThreadCount() const override;
+        i16 GetMinFullThreadCount() const override;
         float GetDefaultThreadCount() const override;
         float GetMinThreadCount() const override;
         float GetMaxThreadCount() const override;
         i16 GetSharedThreadCount() const override;
 
         bool WakeUpLocalThreads(i16 poolId);
+        bool WakeUpAdjacentOwner(i16 poolId);
         bool WakeUpGlobalThreads(i16 poolId);
 
         void FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const override;
@@ -179,6 +206,10 @@ namespace NActors {
         // generic
         TAffinity* Affinity() const override {
             return nullptr;
+        }
+
+        const TPoolManager& GetPoolManager() const {
+            return PoolManager;
         }
     };
 }

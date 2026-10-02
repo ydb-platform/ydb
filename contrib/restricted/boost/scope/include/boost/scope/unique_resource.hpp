@@ -15,6 +15,7 @@
 #define BOOST_SCOPE_UNIQUE_RESOURCE_HPP_INCLUDED_
 
 #include <new> // for placement new
+#include <utility> // std::declval
 #include <type_traits>
 #include <boost/core/addressof.hpp>
 #include <boost/core/invoke_swap.hpp>
@@ -1104,7 +1105,7 @@ struct dereference_traits< T, true >
  * unallocated resource values, which will create \c unique_resource objects in
  * unallocated state (the deleter will not be called on unallocated resource
  * values).
- * 
+ *
  * \tparam Resource Resource type.
  * \tparam Deleter Resource deleter function object type.
  * \tparam Traits Optional resource traits type.
@@ -1365,7 +1366,7 @@ public:
      * \brief Returns \c true if the resource is allocated and to be reclaimed by the deleter, otherwise \c false.
      *
      * \note This method does not test the value of the resource.
-     * 
+     *
      * **Throws:** Nothing.
      */
     explicit operator bool () const noexcept
@@ -1553,6 +1554,7 @@ public:
      *
      * **Effects:** As if `left.swap(right)`.
      */
+#if !defined(BOOST_MSVC) || (BOOST_MSVC < 1910 || BOOST_MSVC >= 1920)
 #if !defined(BOOST_SCOPE_DOXYGEN)
     template< bool Requires = detail::is_swappable< data >::value >
     friend typename std::enable_if< Requires >::type
@@ -1564,6 +1566,15 @@ public:
     {
         left.swap(right);
     }
+#else // !defined(BOOST_MSVC) || (BOOST_MSVC < 1910 || BOOST_MSVC >= 1920)
+    // MSVC 14.1 has broken name lookup in the context of the noexcept specifier of a friend function.
+    // https://developercommunity.visualstudio.com/t/Incorrect-name-lookup-in-the-noexcept-sp/10922514
+    template< bool Requires = detail::is_swappable< data >::value, bool Noexcept = detail::is_nothrow_swappable< data >::value >
+    friend typename std::enable_if< Requires >::type swap(unique_resource& left, unique_resource& right) noexcept(Noexcept)
+    {
+        left.swap(right);
+    }
+#endif // !defined(BOOST_MSVC) || (BOOST_MSVC < 1910 || BOOST_MSVC >= 1920)
 
 //! \cond
 private:

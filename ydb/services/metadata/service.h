@@ -1,6 +1,9 @@
 #pragma once
-#include <ydb/services/metadata/abstract/common.h>
+
+#include <ydb/core/base/metadata.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/services/metadata/abstract/common.h>
+
 #include <shared_mutex>
 
 namespace NKikimr::NMetadata::NProvider {
@@ -66,7 +69,17 @@ public:
     }
 };
 
-NActors::TActorId MakeServiceId(const ui32 node);
+class TEvResetManagerRegistration : public TEventLocal<TEvResetManagerRegistration, EEvents::EvResetManagerRegistration> {
+private:
+    YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
+
+public:
+    explicit TEvResetManagerRegistration(IClassBehaviour::TPtr manager)
+        : Manager(std::move(manager))
+    {
+        Y_ABORT_UNLESS(!!Manager);
+    }
+};
 
 class TConfig;
 
@@ -82,4 +95,4 @@ public:
     static TString GetPath();
 };
 
-}
+} // namespace NKikimr::NMetadata::NProvider

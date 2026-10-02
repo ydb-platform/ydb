@@ -12,8 +12,8 @@ namespace numpy
 {
 
   template <class dtype>
-  types::ndarray<typename dtype::type, types::array_tuple<long, 2>>
-  eye(long N, long M, long k, dtype d)
+  types::ndarray<typename dtype::type, types::array_tuple<long, 2>> eye(long N, long M, long k,
+                                                                        dtype d)
   {
     types::ndarray<typename dtype::type, types::array_tuple<long, 2>> out =
         zeros(types::make_tuple(N, M), d);
@@ -27,8 +27,8 @@ namespace numpy
   }
 
   template <class dtype>
-  types::ndarray<typename dtype::type, types::array_tuple<long, 2>>
-  eye(long N, types::none_type M, long k, dtype d)
+  types::ndarray<typename dtype::type, types::array_tuple<long, 2>> eye(long N, types::none_type M,
+                                                                        long k, dtype d)
   {
     return eye(N, N, k, d);
   }

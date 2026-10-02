@@ -8,8 +8,12 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py)
+TEST_SRCS(
+    main.py
+)
 
-DEPENDS(library/cpp/string_utils/base64/bench)
+DEPENDS(
+    library/cpp/string_utils/base64/bench
+)
 
 END()

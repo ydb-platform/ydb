@@ -243,6 +243,8 @@ public:
         return ret;
     }
 
+    bool operator==(const TInteger128& a) const = default;
+
     explicit constexpr operator bool() const noexcept {
         return Low_ || High_;
     }
@@ -357,6 +359,8 @@ template <bool IsSigned>
 size_t MostSignificantBit(const TInteger128<IsSigned> v);
 
 namespace std {
+    Y_PRAGMA_DIAGNOSTIC_PUSH
+    Y_PRAGMA("GCC diagnostic ignored \"-Winvalid-specialization\"")
     //// type traits
     template <bool IsSigned>
     struct is_integral<TInteger128<IsSigned>> : public std::true_type{};
@@ -369,6 +373,7 @@ namespace std {
 
     template <>
     struct is_signed<i128> : public std::true_type{};
+    Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 template <bool IsSigned>
@@ -476,14 +481,6 @@ namespace std {
             return 0;
         }
     };
-}
-
-constexpr bool operator==(const ui128 lhs, const ui128 rhs) noexcept {
-    return GetLow(lhs) == GetLow(rhs) && GetHigh(lhs) == GetHigh(rhs);
-}
-
-constexpr bool operator==(const i128 lhs, const i128 rhs) noexcept {
-    return GetLow(lhs) == GetLow(rhs) && GetHigh(lhs) == GetHigh(rhs);
 }
 
 constexpr bool operator!=(const ui128 lhs, const ui128 rhs) noexcept {

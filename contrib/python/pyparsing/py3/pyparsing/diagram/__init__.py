@@ -112,15 +112,20 @@ T = TypeVar("T")
 class EachItem(railroad.Group):
     """
     Custom railroad item to compose a:
-    - Group containing a
-      - OneOrMore containing a
-        - Choice of the elements in the Each
+
+    - :class:`railroad.Group` containing a
+
+      - :class:`railroad.OneOrMore` containing a
+
+        - :class:`railroad.Choice` of the elements in the
+          :class:`railroad.Each`
+
     with the group label indicating that all must be matched
     """
 
     all_label = "[ALL]"
 
-    def __init__(self, *items):
+    def __init__(self, *items) -> None:
         choice_item = railroad.Choice(len(items) - 1, *items)
         one_or_more_item = railroad.OneOrMore(item=choice_item)
         super().__init__(one_or_more_item, label=self.all_label)
@@ -131,7 +136,7 @@ class AnnotatedItem(railroad.Group):
     Simple subclass of Group that creates an annotation label
     """
 
-    def __init__(self, label: str, item):
+    def __init__(self, label: str, item) -> None:
         super().__init__(item=item, label=f"[{label}]" if label else "")
 
 
@@ -144,7 +149,7 @@ class EditablePartial(Generic[T]):
     # We need this here because the railroad constructors actually transform the data, so can't be called until the
     # entire tree is assembled
 
-    def __init__(self, func: Callable[..., T], args: list, kwargs: dict):
+    def __init__(self, func: Callable[..., T], args: list, kwargs: dict) -> None:
         self.func = func
         self.args = args
         self.kwargs = kwargs
@@ -152,8 +157,9 @@ class EditablePartial(Generic[T]):
     @classmethod
     def from_call(cls, func: Callable[..., T], *args, **kwargs) -> EditablePartial[T]:
         """
-        If you call this function in the same way that you would call the constructor, it will store the arguments
-        as you expect. For example EditablePartial.from_call(Fraction, 1, 3)() == Fraction(1, 3)
+        If you call this function in the same way that you would call the constructor,
+        it will store the arguments as you expect. For example
+        ``EditablePartial.from_call(Fraction, 1, 3)() == Fraction(1, 3)``
         """
         return EditablePartial(func=func, args=list(args), kwargs=kwargs)
 
@@ -179,7 +185,9 @@ class EditablePartial(Generic[T]):
 
 def railroad_to_html(diagrams: list[NamedDiagram], embed=False, **kwargs) -> str:
     """
-    Given a list of NamedDiagram, produce a single HTML string that visualises those diagrams
+    Given a list of :class:`NamedDiagram`, produce a single HTML string
+    that visualises those diagrams.
+
     :params kwargs: kwargs to be passed in to the template
     """
     data = []
@@ -226,18 +234,27 @@ def to_railroad(
     vertical: int = 3,
     show_results_names: bool = False,
     show_groups: bool = False,
+    show_hidden: bool = False,
 ) -> list[NamedDiagram]:
     """
     Convert a pyparsing element tree into a list of diagrams. This is the recommended entrypoint to diagram
     creation if you want to access the Railroad tree before it is converted to HTML
+
     :param element: base element of the parser being diagrammed
-    :param diagram_kwargs: kwargs to pass to the Diagram() constructor
-    :param vertical: (optional) - int - limit at which number of alternatives should be
-       shown vertically instead of horizontally
-    :param show_results_names - bool to indicate whether results name annotations should be
-       included in the diagram
-    :param show_groups - bool to indicate whether groups should be highlighted with an unlabeled
-       surrounding box
+
+    :param diagram_kwargs: kwargs to pass to the :meth:`Diagram` constructor
+
+    :param vertical: (optional) int - limit at which number of alternatives
+        should be shown vertically instead of horizontally
+
+    :param show_results_names: bool to indicate whether results name
+        annotations should be included in the diagram
+
+    :param show_groups: bool to indicate whether groups should be highlighted
+        with an unlabeled surrounding box
+
+    :param show_hidden: bool to indicate whether internal elements that are
+        typically hidden should be shown
     """
     # Convert the whole tree underneath the root
     lookup = ConverterState(diagram_kwargs=diagram_kwargs or {})
@@ -248,6 +265,7 @@ def to_railroad(
         vertical=vertical,
         show_results_names=show_results_names,
         show_groups=show_groups,
+        show_hidden=show_hidden,
     )
 
     root_id = id(element)
@@ -347,14 +365,13 @@ class ConverterState:
     """
     Stores some state that persists between recursions into the element tree
     """
+    index_generator = itertools.count(start=1)
 
-    def __init__(self, diagram_kwargs: typing.Optional[dict] = None):
+    def __init__(self, diagram_kwargs: typing.Optional[dict] = None) -> None:
         #: A dictionary mapping ParserElements to state relating to them
         self._element_diagram_states: dict[int, ElementState] = {}
         #: A dictionary mapping ParserElement IDs to subdiagrams generated from them
         self.diagrams: dict[int, EditablePartial[NamedDiagram]] = {}
-        #: The index of the next unnamed element
-        self.unnamed_index: int = 1
         #: The index of the next element. This is used for sorting
         self.index: int = 0
         #: Shared kwargs that are used to customize the construction of diagrams
@@ -379,19 +396,11 @@ class ConverterState:
         except KeyError:
             return default
 
-    def generate_unnamed(self) -> int:
-        """
-        Generate a number used in the name of an otherwise unnamed diagram
-        """
-        self.unnamed_index += 1
-        return self.unnamed_index
-
     def generate_index(self) -> int:
         """
         Generate a number used to index a diagram
         """
-        self.index += 1
-        return self.index
+        return next(self.index_generator)
 
     def extract_into_diagram(self, el_id: int):
         """
@@ -453,6 +462,7 @@ def _apply_diagram_item_enhancements(fn):
         name_hint: str = None,
         show_results_names: bool = False,
         show_groups: bool = False,
+        show_hidden: bool = False,
     ) -> typing.Optional[EditablePartial]:
         ret = fn(
             element,
@@ -463,6 +473,7 @@ def _apply_diagram_item_enhancements(fn):
             name_hint,
             show_results_names,
             show_groups,
+            show_hidden,
         )
 
         # apply annotation for results name, if present
@@ -537,6 +548,8 @@ def _to_diagram_element(
                 # pyparsing.TokenConverter,
                 pyparsing.Forward,
                 pyparsing.Located,
+                pyparsing.AtStringStart,
+                pyparsing.AtLineStart,
             ),
         ):
             # However, if this element has a useful custom name, and its child does not, we can pass it on to the child
@@ -555,6 +568,7 @@ def _to_diagram_element(
                     name_hint=propagated_name,
                     show_results_names=show_results_names,
                     show_groups=show_groups,
+                    show_hidden=show_hidden,
                 )
 
     # If the element isn't worth extracting, we always treat it as the first time we say it
@@ -641,6 +655,7 @@ def _to_diagram_element(
                 name_hint,
                 show_results_names,
                 show_groups,
+                show_hidden,
             ]
             return _to_diagram_element(
                 (~element.not_ender.expr + element.expr)[1, ...].set_name(element.name),
@@ -657,6 +672,7 @@ def _to_diagram_element(
                 name_hint,
                 show_results_names,
                 show_groups,
+                show_hidden,
             ]
             return _to_diagram_element(
                 (~element.not_ender.expr + element.expr)[...].set_name(element.name),
@@ -707,6 +723,7 @@ def _to_diagram_element(
             index=i,
             show_results_names=show_results_names,
             show_groups=show_groups,
+            show_hidden=show_hidden,
         )
 
         # Some elements don't need to be shown in the diagram

@@ -10,38 +10,16 @@
 
 ### Пара ключей SSH {#ssh_key_pair}
 
-* Для подключения к GitHub вы можете использовать: ssh/token/ssh из yubikey/password и т.д. Рекомендуемый метод - ssh-ключи.
-* Если у вас еще нет созданных ключей (или yubikey), то просто создайте новые ключи. Полные инструкции находятся на [этой странице GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
-* Если у вас есть yubikey, вы можете использовать legacy ключ из yubikey:
+* Для подключения к GitHub вы можете использовать ssh или token. Рекомендуемый метод — ssh-ключи.
+* Если у вас ещё нет ключей, создайте новые. Полные инструкции находятся на [этой странице GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
 
-  * Предположим, что у вас уже есть настроенный yubikey (или вы настроили yubikey локально)
-  * На вашем ноутбуке: `skotty ssh keys`
-  * Загрузите ssh-ключ `legacy@yubikey` на GitHub ([через пользовательский интерфейс](https://github.com/settings/keys))
-  * Проверьте подключение на ноутбуке: `ssh -T git@github.com`
+{% include [ssh-key-pair-internal.md](_includes/suggest_change_overlay/ssh-key-pair-internal.md) %}
 
 #### Удаленная разработка
 
-Если вы разрабатываете на удаленном компьютере, вы можете использовать ключ со своего ноутбука (сгенерированный или ключ от yubikey). Вам необходимо настроить переадресацию ключей. (Полные инструкции находятся на [этой странице GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding)).
+Если вы разрабатываете на удалённом компьютере, вы можете использовать ключ со своего ноутбука. Настройте переадресацию SSH-агента по [инструкции GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding).
 
-Предположим, что ваш удаленный компьютер dev123456.search.yandex.net.
-
-* на вашем ноутбуке добавьте переадресацию по ssh (`~/.ssh/config`):
-
-```text
-Host dev123456.search.yandex.net
-    ForwardAgent yes
-```
-
-* на удаленном компьютере добавьте в `~/.bashrc`:
-
-```bash
-if [[ -S "$SSH_AUTH_SOCK" && ! -h "$SSH_AUTH_SOCK" ]]; then
-    ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock;
-fi
-export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock;
-```
-
-* проверьте подключение: `ssh -T git@github.com`
+{% include [remote-dev-internal.md](_includes/suggest_change_overlay/remote-dev-internal.md) %}
 
 ### Git CLI {#git_cli}
 
@@ -239,6 +217,22 @@ git push
 
 {% endlist %}
 
+### Заполните описание к Pull Request'у {#create_pr_desc}
+
+При создании Pull Request'а описание будет заполнено текстом из шаблона, который нужно отредактировать:
+
+1. **Changelog Entry.** В этот блок следует добавить описание изменения для конечных пользователей системы (см. [требования](#changelog_entry_req)). Содержимое этого блока будет опубликовано в [списке изменений](../changelog-server.md), если PR будет замержен.
+2. **Description for reviewers.** В этот блок можно добавить ссылку на задачу и любую дополнительную информацию, которая будет полезна для ревью вашего изменения. Содержимое этого блока не попадёт в список изменений.
+
+
+#### Требования к Changelog Entry {#changelog_entry_req}
+
+Сообщение в Changelog Entry должно отвечать следующим требованиям:
+
+- должно быть написано на английском языке;
+- опираться на термины, которые используются в [глоссарии](../concepts/glossary.md);
+- описывать, что в работе системы изменилось для конечного пользователя.
+
 ### Предварительные проверки {#precommit_checks}
 
 Перед мержем изменений выполняются прекоммитные проверки Pull Request'а.
@@ -304,3 +298,5 @@ git push fork
 ```bash
 gh pr create --title "Title" -B stable-24-1
 ```
+
+{% include [career](./_includes/career.md) %}

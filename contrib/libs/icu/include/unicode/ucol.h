@@ -426,8 +426,10 @@ ucol_open(const char *loc, UErrorCode *status);
  *             UCOL_OFF     (expect the text to not need normalization),
  *             UCOL_ON      (normalize), or
  *             UCOL_DEFAULT (set the mode according to the rules)
- * @param strength The default collation strength; one of UCOL_PRIMARY, UCOL_SECONDARY,
- * UCOL_TERTIARY, UCOL_IDENTICAL,UCOL_DEFAULT_STRENGTH - can be also set in the rules.
+ * @param strength The collation strength; one of UCOL_PRIMARY, UCOL_SECONDARY,
+ *                 UCOL_TERTIARY, UCOL_QUATERNARY, UCOL_IDENTICAL, UCOL_DEFAULT_STRENGTH.
+ *                 If you want to set the strength via the rules,
+ *                 then use UCOL_DEFAULT to not override that.
  * @param parseError  A pointer to UParseError to receive information about errors
  *                    occurred during parsing. This argument can currently be set
  *                    to NULL, but at users own risk. Please provide a real structure.
@@ -1526,12 +1528,9 @@ ucol_openBinary(const uint8_t *bin, int32_t length,
 #include <type_traits>
 
 #include "unicode/char16ptr.h"
-#include "unicode/stringpiece.h"
 #include "unicode/unistr.h"
 
 namespace U_HEADER_ONLY_NAMESPACE {
-
-#ifndef U_HIDE_DRAFT_API
 
 namespace collator {
 
@@ -1547,6 +1546,7 @@ class Predicate {
     /** @internal */
     explicit Predicate(const UCollator* ucol) : collator(ucol) {}
 
+#if U_SHOW_CPLUSPLUS_API
     /** @internal */
     template <
         typename T, typename U,
@@ -1554,6 +1554,28 @@ class Predicate {
     bool operator()(const T& lhs, const U& rhs) const {
         return match(UnicodeString::readOnlyAlias(lhs), UnicodeString::readOnlyAlias(rhs));
     }
+#else
+    /** @internal */
+    bool operator()(std::u16string_view lhs, std::u16string_view rhs) const {
+        return match(lhs, rhs);
+    }
+
+#if !U_CHAR16_IS_TYPEDEF && (!defined(_LIBCPP_VERSION) || _LIBCPP_VERSION < 180000)
+    /** @internal */
+    bool operator()(std::basic_string_view<uint16_t> lhs, std::basic_string_view<uint16_t> rhs) const {
+        return match({uprv_char16PtrFromUint16(lhs.data()), lhs.length()},
+                     {uprv_char16PtrFromUint16(rhs.data()), rhs.length()});
+    }
+#endif
+
+#if U_SIZEOF_WCHAR_T==2
+    /** @internal */
+    bool operator()(std::wstring_view lhs, std::wstring_view rhs) const {
+        return match({uprv_char16PtrFromWchar(lhs.data()), lhs.length()},
+                     {uprv_char16PtrFromWchar(rhs.data()), rhs.length()});
+    }
+#endif
+#endif
 
     /** @internal */
     bool operator()(std::string_view lhs, std::string_view rhs) const {
@@ -1563,27 +1585,28 @@ class Predicate {
 #if defined(__cpp_char8_t)
     /** @internal */
     bool operator()(std::u8string_view lhs, std::u8string_view rhs) const {
-        return match(lhs, rhs);
+        return match({reinterpret_cast<const char*>(lhs.data()), lhs.length()},
+                     {reinterpret_cast<const char*>(rhs.data()), rhs.length()});
     }
 #endif
 
   private:
-    bool match(UnicodeString lhs, UnicodeString rhs) const {
+    bool match(std::u16string_view lhs, std::u16string_view rhs) const {
         return compare(
             ucol_strcoll(
                 collator,
-                toUCharPtr(lhs.getBuffer()), lhs.length(),
-                toUCharPtr(rhs.getBuffer()), rhs.length()),
+                toUCharPtr(lhs.data()), static_cast<int32_t>(lhs.length()),
+                toUCharPtr(rhs.data()), static_cast<int32_t>(rhs.length())),
             result);
     }
 
-    bool match(StringPiece lhs, StringPiece rhs) const {
+    bool match(std::string_view lhs, std::string_view rhs) const {
         UErrorCode status = U_ZERO_ERROR;
         return compare(
             ucol_strcollUTF8(
                 collator,
-                lhs.data(), lhs.length(),
-                rhs.data(), rhs.length(),
+                lhs.data(), static_cast<int32_t>(lhs.length()),
+                rhs.data(), static_cast<int32_t>(rhs.length()),
                 &status),
             result);
     }
@@ -1597,48 +1620,46 @@ class Predicate {
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::equal_to</code> but uses the collator instead of <code>operator==</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using equal_to = internal::Predicate<std::equal_to, UCOL_EQUAL>;
 
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::greater</code> but uses the collator instead of <code>operator&gt;</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using greater = internal::Predicate<std::equal_to, UCOL_GREATER>;
 
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::less</code> but uses the collator instead of <code>operator&lt;</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using less = internal::Predicate<std::equal_to, UCOL_LESS>;
 
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::not_equal_to</code> but uses the collator instead of <code>operator!=</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using not_equal_to = internal::Predicate<std::not_equal_to, UCOL_EQUAL>;
 
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::greater_equal</code> but uses the collator instead of <code>operator&gt;=</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using greater_equal = internal::Predicate<std::not_equal_to, UCOL_LESS>;
 
 /**
  * Function object for performing comparisons using this collator.
  * Like <code>std::less_equal</code> but uses the collator instead of <code>operator&lt;=</code>.
- * @draft ICU 76
+ * @stable ICU 76
  */
 using less_equal = internal::Predicate<std::not_equal_to, UCOL_GREATER>;
 
 }  // namespace collator
-
-#endif  // U_HIDE_DRAFT_API
 
 }  // namespace U_HEADER_ONLY_NAMESPACE
 

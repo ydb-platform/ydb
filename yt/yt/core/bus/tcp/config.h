@@ -9,14 +9,13 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiplexingBandConfig
+struct TMultiplexingBandConfig
     : public NYTree::TYsonStruct
 {
-public:
     int TosLevel;
     THashMap<std::string, int> NetworkToTosLevel;
 
@@ -32,10 +31,9 @@ DEFINE_REFCOUNTED_TYPE(TMultiplexingBandConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
-public:
     int ThreadPoolSize;
 
     TDuration ThreadPoolPollingPeriod;
@@ -48,25 +46,24 @@ public:
     TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     bool EnableLocalBypass;
 
-    TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
+    REGISTER_YSON_STRUCT(TDispatcherConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcherDynamicConfig
+struct TDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<int> ThreadPoolSize;
 
     std::optional<TDuration> ThreadPoolPollingPeriod;
@@ -78,23 +75,23 @@ public:
     std::optional<TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     std::optional<bool> EnableLocalBypass;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherDynamicConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusConfig
+struct TBusConfig
     : public NNet::TDialerConfig
+    , public NCrypto::TSslContextConfig
 {
-public:
     bool EnableQuickAck;
 
     int BindRetryCount;
@@ -114,12 +111,9 @@ public:
     // Ssl options.
     EEncryptionMode EncryptionMode;
     EVerificationMode VerificationMode;
-    NCrypto::TPemBlobConfigPtr CA;
-    NCrypto::TPemBlobConfigPtr CertificateChain;
-    NCrypto::TPemBlobConfigPtr PrivateKey;
-    std::optional<TString> CipherList;
+    std::optional<std::string> CipherList;
     bool LoadCertsFromBusCertsDirectory;
-    std::optional<TString> PeerAlternativeHostName;
+    std::optional<std::string> PeerAlternativeHostName;
 
     REGISTER_YSON_STRUCT(TBusConfig);
 
@@ -130,11 +124,10 @@ DEFINE_REFCOUNTED_TYPE(TBusConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusDynamicConfig
+struct TBusDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
-    bool NeedRejectConnectionDueMemoryOvercommit;
+    bool RejectConnectionOnMemoryOvercommit;
 
     REGISTER_YSON_STRUCT(TBusDynamicConfig);
 
@@ -145,10 +138,9 @@ DEFINE_REFCOUNTED_TYPE(TBusDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusServerConfig
+struct TBusServerConfig
     : public TBusConfig
 {
-public:
     std::optional<int> Port;
     std::optional<std::string> UnixDomainSocketPath;
     int MaxBacklogSize;
@@ -166,10 +158,9 @@ DEFINE_REFCOUNTED_TYPE(TBusServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusServerDynamicConfig
+struct TBusServerDynamicConfig
     : public TBusDynamicConfig
 {
-public:
     REGISTER_YSON_STRUCT(TBusServerDynamicConfig);
 
     static void Register(TRegistrar registrar);
@@ -179,10 +170,9 @@ DEFINE_REFCOUNTED_TYPE(TBusServerDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusClientConfig
+struct TBusClientConfig
     : public TBusConfig
 {
-public:
     std::optional<std::string> Address;
     std::optional<std::string> UnixDomainSocketPath;
 
@@ -198,10 +188,9 @@ DEFINE_REFCOUNTED_TYPE(TBusClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusClientDynamicConfig
+struct TBusClientDynamicConfig
     : public TBusDynamicConfig
 {
-public:
     REGISTER_YSON_STRUCT(TBusClientDynamicConfig);
 
     static void Register(TRegistrar registrar);
@@ -211,5 +200,5 @@ DEFINE_REFCOUNTED_TYPE(TBusClientDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

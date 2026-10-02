@@ -39,6 +39,8 @@ DEFINE_ENUM(EAggregateIOTag,
     ((PoolPath)         (15))
     ((ErasureCodec)     (16))
     ((CompressionCodec) (17))
+    ((Bundle)           (18))
+    ((TabletCategory)   (19))
 );
 
 std::string FormatIOTag(ERawIOTag tag);

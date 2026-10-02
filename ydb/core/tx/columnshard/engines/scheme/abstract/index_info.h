@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -13,7 +13,7 @@ using TColumnSaver = NArrow::NAccessor::TColumnSaver;
 
 class IIndexInfo {
 public:
-    enum class ESpecialColumn : ui32 {
+    enum class ESpecialColumn: ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
         WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
@@ -22,7 +22,7 @@ public:
 
     using TSystemColumnsSet = ui64;
 
-    enum class ESystemColumnsSet : ui64 {
+    enum class ESystemColumnsSet: ui64 {
         Snapshot = 1,
         Deletion = 1 << 1,
     };
@@ -52,6 +52,12 @@ public:
         return result;
     }
 
+    static const std::set<std::string>& GetSnapshotColumnNamesSet() {
+        static const std::set<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_WRITE_ID) };
+        return result;
+    }
+
     static const std::vector<ui32>& GetSnapshotColumnIds() {
         static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
@@ -59,7 +65,7 @@ public:
 
     static ui32 CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch, const bool needExistsColumn);
 
-    std::shared_ptr<arrow::Schema> BuildSpecialFieldsSchema() const {
+    static std::shared_ptr<arrow::Schema> BuildSpecialFieldsSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         AddSpecialFields(fields);
         return std::make_shared<arrow::Schema>(std::move(fields));
@@ -139,7 +145,14 @@ public:
         return result;
     }
 
-    std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    static std::optional<ui32> GetColumnIdOptional(const std::string& name);
+
+    static ui32 GetColumnIdVerified(const std::string& name) {
+        auto result = GetColumnIdOptional(name);
+        AFL_VERIFY(!!result);
+        return *result;
+    }
+
     std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
     TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);
@@ -158,7 +171,8 @@ public:
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+        static std::shared_ptr<arrow::Schema> result =
+            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
                 arrow::field(SPEC_COL_TX_ID, arrow::uint64()), arrow::field(SPEC_COL_WRITE_ID, arrow::uint64()) });
         return result;
     }

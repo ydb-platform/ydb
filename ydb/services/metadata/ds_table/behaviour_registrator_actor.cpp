@@ -1,7 +1,8 @@
 #include "behaviour_registrator_actor.h"
 
-#include "accessor_snapshot_simple.h"
 #include <ydb/services/metadata/initializer/accessor_init.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -32,12 +33,14 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionSuccess::TPtr& ev) {
     Y_ABORT_UNLESS(it != RegistrationData->InRegistration.end());
     it->second->GetOperationsManager()->SetActualSchema(ev->Get()->GetSchema());
     RegistrationData->InitializationFinished(initId);
+    PassAway();
 }
 
 void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
     const TString& initId = Behaviour->GetTypeId();
     Y_ABORT_UNLESS(initId == ev->Get()->GetRequestId());
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service cannot receive table description for " << initId << Endl;
+    YDB_LOG_INFO("Metadata service cannot receive table description",
+        {"initId", initId});
     Schedule(TDuration::Seconds(1), new TEvStartRegistration());
 }
 
@@ -56,6 +59,7 @@ void TBehaviourRegistrator::Handle(NInitializer::TEvInitializationFinished::TPtr
         Register(new TSchemeDescriptionActor(InternalController, initId, it->second->GetStorageTablePath()));
     } else {
         RegistrationData->InitializationFinished(initId);
+        PassAway();
     }
 }
 
@@ -65,4 +69,4 @@ void TBehaviourRegistrator::Bootstrap() {
     TBase::Sender<TEvStartRegistration>().SendTo(SelfId());
 }
 
-}
+} // namespace NKikimr::NMetadata::NProvider

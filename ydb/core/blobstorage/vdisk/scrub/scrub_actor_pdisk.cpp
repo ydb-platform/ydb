@@ -2,11 +2,12 @@
 
 namespace NKikimr {
 
-    std::optional<TRcBuf> TScrubCoroImpl::Read(const TDiskPart& part) {
-        Y_ABORT_UNLESS(part.ChunkIdx);
-        Y_ABORT_UNLESS(part.Size);
+    std::optional<TRcBuf> TScrubCoroImpl::Read(const TDiskPart& part, TLogoBlobID hugeBlobId) {
+        Y_VERIFY_S(part.ChunkIdx, ScrubCtx->VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(part.Size, ScrubCtx->VCtx->VDiskLogPrefix);
         auto msg = std::make_unique<NPDisk::TEvChunkRead>(ScrubCtx->PDiskCtx->Dsk->Owner,
             ScrubCtx->PDiskCtx->Dsk->OwnerRound, part.ChunkIdx, part.Offset, part.Size, NPriRead::HullLow, nullptr);
+        msg->BlobId = hugeBlobId;
         ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "reading data from " << part.ToString();
@@ -20,13 +21,13 @@ namespace NKikimr {
         return m->Status == NKikimrProto::OK && m->Data.IsReadable() ? std::make_optional(m->Data.ToString()) : std::nullopt;
     }
 
-    bool TScrubCoroImpl::IsReadable(const TDiskPart& part) {
-        return Read(part).has_value();
+    bool TScrubCoroImpl::IsReadable(const TDiskPart& part, TLogoBlobID hugeBlobId) {
+        return Read(part, hugeBlobId).has_value();
     }
 
     void TScrubCoroImpl::Write(const TDiskPart& part, TString data) {
-        Y_ABORT_UNLESS(part.ChunkIdx);
-        Y_ABORT_UNLESS(part.Size);
+        Y_VERIFY_S(part.ChunkIdx, ScrubCtx->VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(part.Size, ScrubCtx->VCtx->VDiskLogPrefix);
         size_t alignedSize = data.size();
         if (const size_t offset = alignedSize % ScrubCtx->PDiskCtx->Dsk->AppendBlockSize) {
             alignedSize += ScrubCtx->PDiskCtx->Dsk->AppendBlockSize - offset;
@@ -39,7 +40,9 @@ namespace NKikimr {
             MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(data), alignedSize),
             nullptr,
             true,
-            NPriWrite::HullComp);
+            NPriWrite::HullComp,
+            TWriteSource::ScrubWrite,
+            true);
         ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "writing index to " << part.ToString();
@@ -47,7 +50,7 @@ namespace NKikimr {
         if (ScrubCtx->VCtx->CostTracker) {
             ScrubCtx->VCtx->CostTracker->CountPDiskResponse();
         }
-        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK); // FIXME: good logic
+        Y_VERIFY_S(res->Get()->Status == NKikimrProto::OK, ScrubCtx->VCtx->VDiskLogPrefix); // FIXME: good logic
     }
 
 } // NKikimr

@@ -67,6 +67,27 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             EFormat::PROMETHEUS);
     }
 
+    Y_UNIT_TEST(DisableContentEncodingForMonitoring) {
+        const THttpHeaders empty;
+        const THttpHeaders regularRequest({
+            {"Accept", "application/json"},
+        });
+        const THttpHeaders solomonRequest({
+            {"Accept", "application/json, application/x-solomon-spack"},
+        });
+        const THttpHeaders regularResponse({
+            {"Content-Type", "application/json"},
+        });
+        const THttpHeaders solomonResponse({
+            {"Content-Type", "Application/X-Solomon-Multi-Spack; version=1"},
+        });
+
+        UNIT_ASSERT(DisableContentEncoding(empty, regularResponse));
+        UNIT_ASSERT(DisableContentEncoding(regularRequest, regularResponse));
+        UNIT_ASSERT(!DisableContentEncoding(solomonRequest, regularResponse));
+        UNIT_ASSERT(!DisableContentEncoding(regularRequest, solomonResponse));
+    }
+
     Y_UNIT_TEST(FormatToStrFromStr) {
         const std::array<EFormat, 6> formats = {{
             EFormat::UNKNOWN,
@@ -119,6 +140,48 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
 
         UNIT_ASSERT_EQUAL(
             CompressionFromAcceptEncodingHeader("br, deflate,lz4, zlib"),
+            ECompression::LZ4);
+    }
+
+    Y_UNIT_TEST(FastestAcceptEncodingHeader) {
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader(""),
+            ECompression::UNKNOWN);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("br"),
+            ECompression::UNKNOWN);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("identity"),
+            ECompression::IDENTITY);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zlib"),
+            ECompression::ZLIB);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("lz4"),
+            ECompression::LZ4);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd, zlib"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader(" ,, , zstd , zlib"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("br, deflate,lz4, zlib"),
+            ECompression::LZ4);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd, zlib, lz4"),
             ECompression::LZ4);
     }
 

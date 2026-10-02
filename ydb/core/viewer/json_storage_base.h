@@ -159,7 +159,7 @@ public:
                 SendNodeRequests(nodeId);
             }
         }
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             ReplyAndPassAway();
             return;
         }
@@ -439,7 +439,7 @@ public:
                 }
             }
         }
-        return Requests != 0;
+        return WaitingForResponse();
     }
 
     void CollectDiskInfo(bool needDonors) {

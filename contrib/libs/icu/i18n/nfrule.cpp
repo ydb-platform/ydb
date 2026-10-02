@@ -19,7 +19,6 @@
 
 #if U_HAVE_RBNF
 
-#include <limits>
 #include "unicode/localpointer.h"
 #include "unicode/rbnf.h"
 #include "unicode/tblcoll.h"
@@ -65,6 +64,7 @@ NFRule::~NFRule()
 
 static const char16_t gLeftBracket = 0x005b;
 static const char16_t gRightBracket = 0x005d;
+static const char16_t gVerticalLine = 0x007C;
 static const char16_t gColon = 0x003a;
 static const char16_t gZero = 0x0030;
 static const char16_t gNine = 0x0039;
@@ -113,11 +113,17 @@ NFRule::makeRules(UnicodeString& description,
                   NFRuleList& rules,
                   UErrorCode& status)
 {
+    if (U_FAILURE(status)) {
+        return;
+    }
     // we know we're making at least one rule, so go ahead and
     // new it up and initialize its basevalue and divisor
     // (this also strips the rule descriptor, if any, off the
     // description string)
     LocalPointer<NFRule> rule1(new NFRule(rbnf, description, status));
+    if (U_FAILURE(status)) {
+        return;
+    }
     /* test for nullptr */
     if (rule1.isNull()) {
         status = U_MEMORY_ALLOCATION_ERROR;
@@ -141,18 +147,28 @@ NFRule::makeRules(UnicodeString& description,
         || rule1->getType() == kNaNRule)
     {
         rule1->extractSubstitutions(owner, description, predecessor, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
     }
     else {
         // if the description does contain a matched pair of brackets,
         // then it's really shorthand for two rules (with one exception)
         LocalPointer<NFRule> rule2;
         UnicodeString sbuf;
+        int32_t orElseOp = description.indexOf(gVerticalLine);
 
+        uint64_t mod = util64_pow(rule1->radix, rule1->exponent);
         // we'll actually only split the rule into two rules if its
         // base value is an even multiple of its divisor (or it's one
         // of the special rules)
+        if (rule1->baseValue > 0 && rule1->radix != 0 && mod == 0) {
+            status = U_NUMBER_ARG_OUTOFBOUNDS_ERROR;
+            return;
+        }
         if ((rule1->baseValue > 0
-            && (rule1->baseValue % util64_pow(rule1->radix, rule1->exponent)) == 0)
+            && (rule1->radix != 0) // ICU-23109 Ensure next line won't "% 0"
+            && (rule1->baseValue % mod == 0))
             || rule1->getType() == kImproperFractionRule
             || rule1->getType() == kDefaultRule) {
 
@@ -162,6 +178,9 @@ NFRule::makeRules(UnicodeString& description,
             // increment the original rule's base value ("rule1" actually
             // goes SECOND in the rule set's rule list)
             rule2.adoptInstead(new NFRule(rbnf, UnicodeString(), status));
+            if (U_FAILURE(status)) {
+                return;
+            }
             /* test for nullptr */
             if (rule2.isNull()) {
                 status = U_MEMORY_ALLOCATION_ERROR;
@@ -194,24 +213,39 @@ NFRule::makeRules(UnicodeString& description,
             rule2->radix = rule1->radix;
             rule2->exponent = rule1->exponent;
 
-            // rule2's rule text omits the stuff in brackets: initialize
-            // its rule text and substitutions accordingly
+            // By default, rule2's rule text omits the stuff in brackets,
+            // unless it contains a | between the brackets.
+            // Initialize its rule text and substitutions accordingly.
             sbuf.append(description, 0, brack1);
+            if (orElseOp >= 0) {
+                sbuf.append(description, orElseOp + 1, brack2 - orElseOp - 1);
+            }
             if (brack2 + 1 < description.length()) {
                 sbuf.append(description, brack2 + 1, description.length() - brack2 - 1);
             }
             rule2->extractSubstitutions(owner, sbuf, predecessor, status);
+            if (U_FAILURE(status)) {
+                return;
+            }
         }
 
         // rule1's text includes the text in the brackets but omits
         // the brackets themselves: initialize _its_ rule text and
         // substitutions accordingly
         sbuf.setTo(description, 0, brack1);
-        sbuf.append(description, brack1 + 1, brack2 - brack1 - 1);
+        if (orElseOp >= 0) {
+            sbuf.append(description, brack1 + 1, orElseOp - brack1 - 1);
+        }
+        else {
+            sbuf.append(description, brack1 + 1, brack2 - brack1 - 1);
+        }
         if (brack2 + 1 < description.length()) {
             sbuf.append(description, brack2 + 1, description.length() - brack2 - 1);
         }
         rule1->extractSubstitutions(owner, sbuf, predecessor, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
 
         // if we only have one rule, return it; if we have two, return
         // a two-element array containing them (notice that rule2 goes
@@ -286,18 +320,17 @@ NFRule::parseRuleDescriptor(UnicodeString& description, UErrorCode& status)
             // into "tempValue", skip periods, commas, and spaces,
             // stop on a slash or > sign (or at the end of the string),
             // and throw an exception on any other character
-            int64_t ll_10 = 10;
             while (p < descriptorLength) {
                 c = descriptor.charAt(p);
                 if (c >= gZero && c <= gNine) {
-                    int32_t single_digit = static_cast<int32_t>(c - gZero);
-                    if ((val > 0 && val > (std::numeric_limits<int64_t>::max() - single_digit) / 10) ||
-                        (val < 0 && val < (std::numeric_limits<int64_t>::min() - single_digit) / 10)) {
+                    int64_t digit = static_cast<int64_t>(c - gZero);
+                    if ((val > 0 && val > (INT64_MAX - digit) / 10) ||
+                        (val < 0 && val < (INT64_MIN - digit) / 10)) {
                         // out of int64_t range
                         status = U_PARSE_ERROR;
                         return;
                     }
-                    val = val * ll_10 + single_digit;
+                    val = val * 10 + digit;
                 }
                 else if (c == gSlash || c == gGreaterThan) {
                     break;
@@ -322,11 +355,17 @@ NFRule::parseRuleDescriptor(UnicodeString& description, UErrorCode& status)
             if (c == gSlash) {
                 val = 0;
                 ++p;
-                ll_10 = 10;
                 while (p < descriptorLength) {
                     c = descriptor.charAt(p);
                     if (c >= gZero && c <= gNine) {
-                        val = val * ll_10 + static_cast<int32_t>(c - gZero);
+                        int64_t digit = static_cast<int64_t>(c - gZero);
+                        if ((val > 0 && val > (INT64_MAX - digit) / 10) ||
+                            (val < 0 && val < (INT64_MIN - digit) / 10)) {
+                            // out of int64_t range
+                            status = U_PARSE_ERROR;
+                            return;
+                        }
+                        val = val * 10 + digit;
                     }
                     else if (c == gGreaterThan) {
                         break;
@@ -400,7 +439,7 @@ NFRule::parseRuleDescriptor(UnicodeString& description, UErrorCode& status)
     // finally, if the rule body begins with an apostrophe, strip it off
     // (this is generally used to put whitespace at the beginning of
     // a rule's rule text)
-    if (description.length() > 0 && description.charAt(0) == gTick) {
+    if (!description.isEmpty() && description.charAt(0) == gTick) {
         description.removeBetween(0, 1);
     }
 

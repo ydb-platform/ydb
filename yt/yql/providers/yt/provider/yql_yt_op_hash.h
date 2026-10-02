@@ -12,6 +12,8 @@ public:
 
     static TString MakeSalt(const TYtSettings::TConstPtr& config, const TString& cluster);
 
+    TMaybe<TString> GetParentOutputHash(const TExprNode& node) const;
+
 private:
     TString GetOutputHash(const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) const;
     TString GetOutTableHash(const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) const;

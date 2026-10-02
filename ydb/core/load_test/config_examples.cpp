@@ -67,7 +67,55 @@ TVector<TConfigTemplate> BuildExamples() {
     BlockSize: 1048576
     IntervalUs: 9000000
 })_"
+        },
+        TConfigTemplate{
+            .LoadName = "InterconnectLoad",
+            .Template = R"_(InterconnectLoad: {
+    DurationSeconds: 101
+    InFlyMax: 3
+    NodeHops: [1, 50000]
+    SizeMin: 0
+    SizeMax: 0
+    IntervalMinUs: 0
+    IntervalMaxUs: 0
+    SoftLoad: false
+    UseProtobufWithPayload: false
+})_"
         }
+#ifdef __linux__
+        ,TConfigTemplate{
+            .LoadName = "NBS2Load",
+            .Template = R"_(NBS2Load: {
+    DurationSeconds: 20
+    DirectPartitionId: ""
+    RangeTest {
+        Start: 0
+        End: 32767
+        RequestsCount: 1000
+        ReadRate: 100
+        WriteRate: 0
+        LoadType: LOAD_TYPE_RANDOM
+        IoDepth: 1
+    }
+})_"
+        }
+        ,TConfigTemplate{
+            .LoadName = "PersistentBufferWriteLoad",
+            .Template = R"_(PersistentBufferWriteLoad: {
+    DurationSeconds: 60
+    DDiskId: {
+        NodeId: 1
+        PDiskId: 1
+        DDiskSlotId: 1
+    }
+    WriteInfos: [
+        { Size: 4096 Weight: 5 }
+        { Size: 8192 Weight: 5 }
+        { Size: 32768 Weight: 1 }
+    ]
+})_"
+        }
+#endif
     };
     return result;
 }

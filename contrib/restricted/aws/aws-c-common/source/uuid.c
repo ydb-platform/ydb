@@ -17,6 +17,10 @@
         "-" HEX_CHAR_FMT HEX_CHAR_FMT "-" HEX_CHAR_FMT HEX_CHAR_FMT "-" HEX_CHAR_FMT HEX_CHAR_FMT                      \
         "-" HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT
 
+#define UUID_FORMAT_COMPACT                                                                                            \
+    HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT            \
+        HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT HEX_CHAR_FMT
+
 #include <stdio.h>
 
 #ifdef _MSC_VER
@@ -66,14 +70,18 @@ int aws_uuid_init_from_str(struct aws_uuid *uuid, const struct aws_byte_cursor *
     return AWS_OP_SUCCESS;
 }
 
-int aws_uuid_to_str(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
+static int s_uuid_to_str(
+    const struct aws_uuid *uuid,
+    struct aws_byte_buf *output,
+    const char *format_string,
+    size_t padded_formatted_length) {
     size_t space_remaining = output->capacity - output->len;
-    AWS_ERROR_PRECONDITION(space_remaining >= AWS_UUID_STR_LEN, AWS_ERROR_SHORT_BUFFER);
+    AWS_ERROR_PRECONDITION(space_remaining >= padded_formatted_length, AWS_ERROR_SHORT_BUFFER);
 
     snprintf(
         (char *)(output->buffer + output->len),
         space_remaining,
-        UUID_FORMAT,
+        format_string,
         uuid->uuid_data[0],
         uuid->uuid_data[1],
         uuid->uuid_data[2],
@@ -91,9 +99,17 @@ int aws_uuid_to_str(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
         uuid->uuid_data[14],
         uuid->uuid_data[15]);
 
-    output->len += AWS_UUID_STR_LEN - 1;
+    output->len += padded_formatted_length - 1;
 
     return AWS_OP_SUCCESS;
+}
+
+int aws_uuid_to_str(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
+    return s_uuid_to_str(uuid, output, UUID_FORMAT, AWS_UUID_STR_LEN);
+}
+
+int aws_uuid_to_str_compact(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
+    return s_uuid_to_str(uuid, output, UUID_FORMAT_COMPACT, AWS_UUID_STR_COMPACT_LEN);
 }
 
 bool aws_uuid_equals(const struct aws_uuid *a, const struct aws_uuid *b) {

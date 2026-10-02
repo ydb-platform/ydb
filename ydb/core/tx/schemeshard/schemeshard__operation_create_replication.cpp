@@ -1,15 +1,13 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/library/actors/core/log.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,7 +15,8 @@ namespace {
 
 struct IStrategy {
     virtual TPathElement::EPathType GetPathType() const = 0;
-    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
+    virtual void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -25,7 +24,11 @@ struct TReplicationStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeReplication;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (!AppData()->FeatureFlags.GetEnableReplication()) {
+            result.SetError(NKikimrScheme::StatusPreconditionFailed, "Asynchronous replication is disabled");
+            return true;
+        }
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -37,6 +40,9 @@ struct TReplicationStrategy : public IStrategy {
 
         return false;
     }
+
+    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    }
 };
 
 struct TTransferStrategy : public IStrategy {
@@ -44,11 +50,7 @@ struct TTransferStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeTransfer;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
-        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
-            return true;
-        }
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
@@ -58,7 +60,49 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
+        const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
+            return true;
+        }
+
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
+            return true;
+        }
+
         return false;
+    }
+
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const override {
+        config.MutableTransferSpecific()->SetRunAsUser(owner);
     }
 };
 
@@ -66,23 +110,19 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TConfigureParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TConfigureParts"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
 
 public:
     explicit TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
         });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -102,8 +142,9 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             if (tabletId == InvalidTabletId) {
-                LOG_D(DebugHint() << "Shard is not created yet"
-                    << ": shardIdx# " << shard.Idx);
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Shard is not created yet",
+                    {"shardIdx", shard.Idx},
+                );
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
@@ -111,10 +152,28 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
 
-                LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
-                    << ": tabletId# " << tabletId
-                    << ", ev# " << ev->ToString());
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+                    location.SetYcCloudId(it->second);
+                }
+                if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+                    location.SetYcFolderId(it->second);
+                }
+                if (auto it = attrs.find("database_id"); it != attrs.end()) {
+                    location.SetYcResourceId(it->second);
+                }
+                if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
+                    location.SetMonitoringProjectId(it->second);
+                }
+
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvCreateReplication to controller",
+                    {"tabletId", tabletId},
+                    {"message", ev->ToString()},
+                );
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
 
@@ -125,7 +184,7 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -135,9 +194,10 @@ public:
         case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
-                << " tabletId# " << tabletId
-                << " status# " << static_cast<int>(status));
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvCreateReplicationResult",
+                {"tabletId", tabletId},
+                {"status", static_cast<int>(status)},
+            );
             return false;
         }
 
@@ -148,7 +208,7 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvCreateReplicationResult");
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvCreateReplicationResult");
             return false;
         }
 
@@ -171,24 +231,20 @@ private:
 }; // TConfigureParts
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TPropose"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
             NReplication::TEvController::TEvCreateReplicationResult::EventType,
         });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -201,8 +257,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -223,7 +280,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.Set(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -286,6 +343,8 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    virtual const char* Name() const override final { return "TCreateReplication"; }
+
     explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, const IStrategy* strategy)
         : TSubOperation(id, state)
         , Strategy(strategy)
@@ -298,16 +357,16 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
         const auto& name = desc.GetName();
         const auto& acl = Transaction.GetModifyACL().GetDiffACL();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TCreateReplication Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", workingDir + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -331,11 +390,11 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result, desc)) {
+        if (Strategy->Validate(*result, desc, context)) {
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks
@@ -345,7 +404,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                    .FailOnExist(Strategy->GetPathType(), acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -354,7 +413,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -373,10 +432,6 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result.Get(), desc)) {
-            return result;
-        }
-
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -390,6 +445,12 @@ public:
             return result;
         }
 
+        const auto& connectionParams = desc.GetConfig().GetSrcConnectionParams();
+        if (connectionParams.HasCaCert() && !connectionParams.GetEnableSsl()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "CA_CERT has no effect in non-secure mode");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
@@ -397,11 +458,10 @@ public:
         path->PathType = Strategy->GetPathType();
         result->SetPathId(path->PathId.LocalPathId);
 
-        context.SS->IncrementPathDbRefCount(path->PathId);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
-        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+        if (connectionParams.GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 
@@ -409,9 +469,11 @@ public:
             desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
         }
 
+        Strategy->Proccess(*desc.MutableConfig(), owner);
+
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
+        context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
@@ -474,14 +536,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateReplication");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateReplication AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", txId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -492,17 +556,29 @@ private:
 
 } // anonymous
 
-using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TReplicationTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TTransferTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
 
 namespace NOperation {
 
 template <>
-std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+std::optional<TString> GetTargetName<TReplicationTag>(TReplicationTag, const TTxTransaction& tx) {
     return tx.GetReplication().GetName();
 }
 
 template <>
-bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+bool SetName<TReplicationTag>(TReplicationTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+template <>
+std::optional<TString> GetTargetName<TTransferTag>(TTransferTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
     tx.MutableReplication()->SetName(name);
     return true;
 }
@@ -526,3 +602,5 @@ ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state)
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

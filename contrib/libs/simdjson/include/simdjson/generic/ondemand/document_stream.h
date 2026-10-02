@@ -81,7 +81,7 @@ public:
   /**
    * Construct an uninitialized document_stream.
    *
-   *  ```c++
+   *  ```cpp
    *  document_stream docs;
    *  auto error = parser.iterate_many(json).get(docs);
    *  ```
@@ -116,6 +116,18 @@ public:
    *   }
    *   size_t truncated = stream.truncated_bytes();
    *
+   * IMPORTANT: this value is only meaningful under the conditions below. It is
+   * computed from stage-1 bookkeeping, and outside these conditions it is not
+   * merely imprecise, it is arbitrary -- it can exceed size_in_bytes() or wrap
+   * around to a huge value. Check it only when both of the following hold:
+   *
+   *   - you iterated all the way to the end of the stream;
+   *   - no document reported an error. Iteration stops at the first failed
+   *     document, which can leave the bookkeeping from a mid-stream batch.
+   *
+   * If you need to know about a truncated tail outside those conditions, track
+   * it yourself from the last successful document (see iterator::current_index()
+   * and iterator::source()).
    */
   inline size_t truncated_bytes() const noexcept;
 
@@ -131,6 +143,7 @@ public:
      * Default constructor.
      */
     simdjson_inline iterator() noexcept;
+    simdjson_inline iterator(const iterator &other) noexcept = default;
     /**
      * Get the current document (or error).
      */
@@ -144,6 +157,7 @@ public:
      * @param other the end iterator to compare to.
      */
     simdjson_inline bool operator!=(const iterator &other) const noexcept;
+    simdjson_inline bool operator==(const iterator &other) const noexcept;
     /**
      * @private
      *
@@ -187,6 +201,11 @@ public:
      */
      inline error_code error() const noexcept;
 
+     /**
+      * Returns whether the iterator is at the end.
+      */
+     inline bool at_end() const noexcept;
+
   private:
     simdjson_inline iterator(document_stream *s, bool finished) noexcept;
     /** The document_stream we're iterating through. */
@@ -198,6 +217,7 @@ public:
     friend class document_stream;
     friend class json_iterator;
   };
+  using iterator = document_stream::iterator;
 
   /**
    * Start iterating the documents in the stream.

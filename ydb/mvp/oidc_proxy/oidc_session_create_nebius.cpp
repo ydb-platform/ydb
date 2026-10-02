@@ -1,7 +1,11 @@
+#include "oidc_session_create_nebius.h"
+#include "openid_connect.h"
+
+#include <ydb/mvp/core/mvp_tokens.h>
+
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/security/util.h>
-#include "openid_connect.h"
-#include "oidc_session_create_nebius.h"
+
 #include <library/cpp/string_utils/base64/base64.h>
 
 namespace NMVP::NOIDC {
@@ -18,7 +22,8 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
 
     TCgiParameters params;
     params.emplace("code", code);
-    params.emplace("client_id", code);
+    params.emplace("client_id", Settings.ClientId);
+    params.emplace("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:access_token_bearer");
     params.emplace("grant_type", "authorization_code");
     params.emplace("redirect_uri", TStringBuilder() << (Request->Endpoint->Secure ? "https://" : "http://")
                                                           << host
@@ -26,7 +31,13 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
 
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
-    httpRequest->Set("Authorization", Settings.GetAuthorizationString());
+
+    TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+    TString token = "";
+    if (tokenator) {
+        token = tokenator->GetToken(Settings.SessionServiceTokenName);
+    }
+    httpRequest->Set("Authorization", token); // Bearer included
     httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
     Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
@@ -57,6 +68,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& j
 
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue, expiresIn));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Cookie set", responseHeaders));

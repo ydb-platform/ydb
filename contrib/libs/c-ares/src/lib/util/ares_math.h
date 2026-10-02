@@ -26,13 +26,21 @@
 #ifndef __ARES_MATH_H
 #define __ARES_MATH_H
 
-#ifdef _MSC_VER
-typedef __int64          ares_int64_t;
-typedef unsigned __int64 ares_uint64_t;
-#else
-typedef long long          ares_int64_t;
-typedef unsigned long long ares_uint64_t;
-#endif
+#include "ares_setup.h"
+
+#ifdef HAVE_STDINT_H
+#  include <stdint.h>
+   typedef int64_t  ares_int64_t;
+   typedef uint64_t ares_uint64_t;
+#else /* HAVE_STDINT_H */
+#  ifdef _MSC_VER
+     typedef __int64          ares_int64_t;
+     typedef unsigned __int64 ares_uint64_t;
+#  else
+     typedef long long          ares_int64_t;
+     typedef unsigned long long ares_uint64_t;
+#  endif /* _MSC_VER */
+#endif   /* HAVE_STDINT_H */
 
 ares_bool_t   ares_is_64bit(void);
 size_t        ares_round_up_pow2(size_t n);
@@ -41,5 +49,10 @@ size_t        ares_pow(size_t x, size_t y);
 size_t        ares_count_digits(size_t n);
 size_t        ares_count_hexdigits(size_t n);
 unsigned char ares_count_bits_u8(unsigned char x);
+
+/*! Multiply two size_t values, checking for overflow.  On success writes the
+ *  product to *res and returns ARES_FALSE.  On overflow returns ARES_TRUE and
+ *  leaves *res untouched. */
+ares_bool_t ares_size_t_mul_overflow(size_t a, size_t b, size_t *res);
 
 #endif

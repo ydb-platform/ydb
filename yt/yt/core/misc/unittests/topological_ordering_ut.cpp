@@ -73,6 +73,37 @@ TEST_F(TTopologicalOrderingTest, Simple)
     EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(2, 1, 0, 3));
 }
 
+TEST_F(TTopologicalOrderingTest, WithAddVertex)
+{
+    IncrementalOrdering_.AddVertex(0);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(0));
+
+    AddEdgeAndValidate(2, 0);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(2, 0));
+
+    // Adding duplicating edge doesn't change anything.
+    IncrementalOrdering_.AddVertex(2);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(2, 0));
+
+    AddEdgeAndValidate(0, 3);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(2, 0, 3));
+
+    IncrementalOrdering_.AddVertex(4);
+    // We can't be sure if topological ordering is {4, 2, 0, 3}, {2, 4, 0, 3} now.
+
+    AddEdgeAndValidate(4, 2);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(4, 2, 0, 3));
+
+    IncrementalOrdering_.AddVertex(1);
+    // We can't be sure if topological ordering is {1, 4, 2, 0, 3}, {4, 1, 2, 0, 3} now.
+
+    AddEdgeAndValidate(4, 1);
+    // We can't be sure if topological ordering is {4, 2, 1, 0, 3}, {4, 1, 2, 0, 3} now.
+
+    AddEdgeAndValidate(1, 2);
+    EXPECT_THAT(IncrementalOrdering_.GetOrdering(), ElementsAre(4, 1, 2, 0, 3));
+}
+
 TEST_F(TTopologicalOrderingTest, RandomizedTest)
 {
     const int iterationCount = 1000;

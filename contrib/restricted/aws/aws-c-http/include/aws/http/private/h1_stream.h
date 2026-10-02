@@ -117,6 +117,7 @@ struct aws_h1_stream *aws_h1_stream_new_request(
 struct aws_h1_stream *aws_h1_stream_new_request_handler(const struct aws_http_request_handler_options *options);
 
 int aws_h1_stream_activate(struct aws_http_stream *stream);
+void aws_h1_stream_cancel(struct aws_http_stream *stream, int error_code);
 
 int aws_h1_stream_send_response(struct aws_h1_stream *stream, struct aws_http_message *response);
 

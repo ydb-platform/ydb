@@ -1,12 +1,12 @@
 pkgs: attrs: with pkgs; with attrs; rec {
   name = "liburing";
-  version = "2.8";
+  version = "2.15";
 
   src = fetchFromGitHub {
     owner = "axboe";
     repo = "liburing";
     rev    = "liburing-${version}";
-    hash = "sha256-10zmoMDzO41oNRVXE/6FzDGPVRVJTJTARVUmc1b7f+o=";
+    hash = "sha256-oBNu5DI2RMk0BPm6NT8qaYuyhk7+KIpFSsBsVwI7BO8=";
   };
 
   buildPhase = ''

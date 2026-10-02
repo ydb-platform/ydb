@@ -1,6 +1,5 @@
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
-#include "helpers/aggregation.h"
+#include "helpers/test_case.h"
 
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/defs.h>
@@ -13,8 +12,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -109,9 +107,11 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
-        auto tableClient = kikimr.GetTableClient();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -131,6 +131,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         {
             TString query = R"(
                 --!syntax_v1
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -145,17 +147,12 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
-#endif
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -189,12 +186,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { AGG_OPERATOR_NAMES }, "Aggregate-TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
-#endif
         }
     }
 
@@ -236,9 +229,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             auto plan = CollectStreamResult(res);
 
-            const auto expectedAggregateNodeName = AllowSpilling ? "WideCombiner" : "BlockMergeFinalizeHashed";
+            const auto expectedAggregateNodeNames = AllowSpilling ? AGG_OPERATOR_NAMES : "BlockMergeFinalizeHashed";
 
-            bool hasExpectedAggregateNode = plan.QueryStats->Getquery_ast().Contains(expectedAggregateNodeName);
+            bool hasExpectedAggregateNode = CheckOperatorPresentInAst(plan.QueryStats->Getquery_ast(), expectedAggregateNodeNames);
             UNIT_ASSERT_C(hasExpectedAggregateNode, plan.QueryStats->Getquery_ast());
         }
     }
@@ -278,6 +271,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             auto plan = CollectStreamResult(res);
 
             UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("BlockMergeFinalizeHashed"), plan.QueryStats->Getquery_ast());
+            UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("DqPhyHashCombine"), plan.QueryStats->Getquery_ast());
             UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideCombiner"), plan.QueryStats->Getquery_ast());
         }
 
@@ -305,6 +299,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             TString query = fmt::format(R"(
                 --!syntax_v1
                 PRAGMA ydb.UseLlvm = "{}";
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
 
                 SELECT
                     COUNT(*)
@@ -318,11 +313,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
-#endif
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
@@ -348,6 +339,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             TString query = fmt::format(R"(
                 --!syntax_v1
                 PRAGMA Kikimr.EnableLlvm = "{}";
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
 
                 SELECT
                     COUNT(*)
@@ -361,11 +353,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-#if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
-#else
-            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
-#endif
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
@@ -402,21 +390,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
     }
 
-    Y_UNIT_TEST(Filter_NotAllUsedFieldsInResultSet) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, resource_id FROM `/Root/tableWithNulls`
-                WHERE
-                    level = 5;
-            )")
-            .SetExpectedReply("[[5;#]]")
-            .AddExpectedPlanOptions("KqpOlapFilter");
-
-        TestTableWithNulls({ testCase });
-    }
-
     Y_UNIT_TEST(Aggregation_ResultDistinctCountRI_GroupByL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, COUNT(DISTINCT resource_id)
@@ -428,12 +403,14 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             ;
         testCase.FillExpectedAggregationGroupByPlanOptions();
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountAll_FilterL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                     SELECT
                         COUNT(*)
                     FROM `/Root/olapStore/olapTable`
@@ -441,20 +418,18 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(2)
-#else
-            .AddExpectedPlanOptions("Condense")
-#endif
             ;
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountL_FilterL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -462,21 +437,19 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             // See https://github.com/ydb-platform/ydb/issues/7299 for explanation, why resultCount = 3
             .MutableLimitChecker().SetExpectedResultCount(3)
-#else
-            .AddExpectedPlanOptions("CombineCore")
-#endif
             ;
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountT_FilterL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(timestamp)
                 FROM `/Root/olapStore/olapTable`
@@ -484,99 +457,16 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(2)
-#else
-            .AddExpectedPlanOptions("CombineCore")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-#endif
             ;
 
-        TestAggregations({ testCase });
-    }
-
-    Y_UNIT_TEST(Aggregation_ResultTL_FilterL_Limit2) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    timestamp, level
-                FROM `/Root/olapStore/olapTable`
-                WHERE level = 2
-                LIMIT 2
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
-        TestAggregations({ testCase });
-    }
-
-    Y_UNIT_TEST(Aggregation_ResultTL_FilterL_OrderT_Limit2) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    timestamp, level
-                FROM `/Root/olapStore/olapTable`
-                WHERE level = 2
-                ORDER BY timestamp
-                LIMIT 2
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
-        TestAggregations({ testCase });
-    }
-
-    Y_UNIT_TEST(Aggregation_ResultT_FilterL_Limit2) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    timestamp
-                FROM `/Root/olapStore/olapTable`
-                WHERE level = 2
-                LIMIT 2
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
-        TestAggregations({ testCase });
-    }
-
-    Y_UNIT_TEST(Aggregation_ResultT_FilterL_OrderT_Limit2) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    timestamp
-                FROM `/Root/olapStore/olapTable`
-                WHERE level = 2
-                ORDER BY timestamp
-                LIMIT 2
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
-        TestAggregations({ testCase });
-    }
-
-    Y_UNIT_TEST(Aggregation_ResultL_FilterL_OrderL_Limit2) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    timestamp, level
-                FROM `/Root/olapStore/olapTable`
-                WHERE level > 1
-                ORDER BY level
-                LIMIT 2
-            )")
-            .AddExpectedPlanOptions("KqpOlapFilter");
-
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountExpr) {
         auto g = NColumnShard::TLimits::MaxBlobSizeGuard(10000);
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                     SELECT
                         COUNT(level + 2)
@@ -585,46 +475,42 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[23000u;]]")
             .AddExpectedPlanOptions("Condense1");
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Count_Null) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(level)
                 FROM `/Root/tableWithNulls`
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[0u]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Count_NullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(level)
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[5u]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Count_GroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, COUNT(level)
@@ -640,7 +526,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_NullGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, COUNT(level)
@@ -656,7 +542,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_NullMixGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, COUNT(level)
@@ -674,7 +560,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation_Count_GroupByNull) {
         // Wait for KIKIMR-16940 fix
         return;
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, COUNT(id), COUNT(level), COUNT(*)
@@ -692,7 +578,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation_Count_GroupByNullMix) {
         // Wait for KIKIMR-16940 fix
         return;
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, COUNT(id), COUNT(level), COUNT(*)
@@ -708,7 +594,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_NoPushdownOnDisabledEmitAggApply) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                     PRAGMA DisableEmitAggApply;
                     SELECT
@@ -718,82 +604,74 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[23000u;]]")
             .AddExpectedPlanOptions("Condense1");
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(AggregationAndFilterPushdownOnDiffCols) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     COUNT(`timestamp`)
                 FROM `/Root/olapStore/olapTable`
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-#else
-            .AddExpectedPlanOptions("CombineCore")
-#endif
             .AddExpectedPlanOptions("KqpOlapFilter");
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Avg) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     AVG(level), MIN(level)
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[2.];[0]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Avg_Null) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     AVG(level)
                 FROM `/Root/tableWithNulls`
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Avg_NullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     AVG(level)
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[[3.]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Avg_GroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, AVG(level)
@@ -809,7 +687,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_NullGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, AVG(level)
@@ -825,7 +703,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_NullMixGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, AVG(level)
@@ -841,7 +719,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_GroupByNull) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, AVG(id), AVG(level)
@@ -857,7 +735,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_GroupByNullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, AVG(id), AVG(level)
@@ -873,59 +751,69 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     SUM(level)
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[46000;]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Sum_Null) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     SUM(level)
                 FROM `/Root/tableWithNulls`
                 WHERE id > 5;
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Sum_Null_Count) {
+        TOlapTestCase testCase;
+        testCase
+            .SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
+                SELECT
+                    SUM(level), COUNT(*), AVG(level)
+                FROM `/Root/tableWithNulls`
+            )")
+            .SetExpectedReply("[[[15];10u;[3.]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Sum_NullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     SUM(level)
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[[15]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Sum_GroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SUM(level)
@@ -941,7 +829,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_NullGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SUM(level)
@@ -957,7 +845,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_NullMixGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SUM(level)
@@ -973,7 +861,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_GroupByNull) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, SUM(id), SUM(level)
@@ -989,7 +877,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_GroupByNullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, SUM(id), SUM(level)
@@ -1005,7 +893,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_SumL_GroupL_OrderL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, SUM(level)
@@ -1016,45 +904,41 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[[0];[0]];[[1];[4600]];[[2];[9200]];[[3];[13800]];[[4];[18400]]]");
         testCase.FillExpectedAggregationGroupByPlanOptions();
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_MinL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     MIN(level)
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[0]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_MaxL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT
                     MAX(level)
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[4]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_MinR_GroupL_OrderL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, MIN(resource_id)
@@ -1065,11 +949,11 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[[0];[\"10000\"]];[[1];[\"10001\"]];[[2];[\"10002\"]];[[3];[\"10003\"]];[[4];[\"10004\"]]]");
         testCase.FillExpectedAggregationGroupByPlanOptions();
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_MaxR_GroupL_OrderL) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, MAX(resource_id)
@@ -1080,11 +964,11 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]");
         testCase.FillExpectedAggregationGroupByPlanOptions();
 
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ProjectionOrder) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     resource_id, level, count(*) as c
@@ -1093,41 +977,37 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 ORDER BY c, resource_id DESC LIMIT 3
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         testCase.FillExpectedAggregationGroupByPlanOptions();
-        TestAggregations({ testCase });
+        TestOlapTable({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Some) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id=1
             )")
             .SetExpectedReply("[[[1]]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Some_Null) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+
                 SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id > 5
             )")
             .SetExpectedReply("[[#]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
         TestTableWithNulls({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_Some_GroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SOME(level)
@@ -1143,7 +1023,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_NullGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SOME(level)
@@ -1159,7 +1039,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_NullMixGroupBy) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     id, SOME(level)
@@ -1175,7 +1055,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_GroupByNullMix) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, SOME(id), SOME(level)
@@ -1191,7 +1071,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_GroupByNull) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, SOME(id), SOME(level)
@@ -1206,39 +1086,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({ testCase });
     }
 
-    Y_UNIT_TEST(NoErrorOnLegacyPragma) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "false";
-                SELECT id, resource_id FROM `/Root/tableWithNulls`
-                WHERE
-                    level = 5;
-            )")
-            .SetExpectedReply("[[5;#]]")
-            .AddExpectedPlanOptions("KqpOlapFilter");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(BlocksRead) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                PRAGMA UseBlocks;
-                PRAGMA Kikimr.OptEnableOlapPushdown = "false";
-
-                SELECT
-                    id, resource_id
-                FROM `/Root/tableWithNulls`
-                WHERE
-                    level = 5;
-            )")
-            .SetExpectedReply("[[5;#]]");
-
-        TestTableWithNulls({ testCase });
-    }
-
     Y_UNIT_TEST(Blocks_NoAggPushdown) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 PRAGMA UseBlocks;
                 SELECT
@@ -1250,187 +1099,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({ testCase });
     }
 
-    Y_UNIT_TEST(Json_GetValue) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[1;["val1"];#]])");
-
-        TestTableWithNulls({testCase});
-    }
-
-    Y_UNIT_TEST(Json_GetValue_Minus) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[1;["val-abc"];#]])");
-
-        TestTableWithNulls({testCase});
-    }
-
-    Y_UNIT_TEST(Json_GetValue_ToString) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsonval, "$.col1" RETURNING String) = "val1" AND id = 1;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[1;["val1"];#]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(Json_GetValue_ToInt) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 1;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[1;[16];#]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(JsonDoc_GetValue) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsondoc, "$.col1") = "val1" AND id = 6;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[6;#;["val1"]]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(JsonDoc_GetValue_ToString) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[6;#;["val1"]]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(JsonDoc_GetValue_ToInt) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int"), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
-                WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 6;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[6;#;[16]]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(Json_Exists) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE
-                    JSON_EXISTS(jsonval, "$.col1") AND level = 1;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonExists")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[1;[%true];#]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(JsonDoc_Exists) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE
-                    JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
-            )")
-#if SSA_RUNTIME_VERSION >= 5U
-            .AddExpectedPlanOptions("KqpOlapApply")
-#elif SSA_RUNTIME_VERSION >= 3U
-            .AddExpectedPlanOptions("KqpOlapJsonExists")
-#else
-            .AddExpectedPlanOptions("Udf")
-#endif
-            .SetExpectedReply(R"([[6;#;[%true]]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
-    Y_UNIT_TEST(Json_Query) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT id, JSON_QUERY(jsonval, "$.col1" WITH UNCONDITIONAL WRAPPER),
-                    JSON_QUERY(jsondoc, "$.col1" WITH UNCONDITIONAL WRAPPER)
-                FROM `/Root/tableWithNulls`
-                WHERE
-                    level = 1;
-            )")
-            .AddExpectedPlanOptions("Udf")
-            .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
-
-        TestTableWithNulls({ testCase });
-    }
-
     Y_UNIT_TEST(BlockGenericWithDistinct) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     COUNT(DISTINCT id)
@@ -1444,7 +1114,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(BlockGenericSimpleAggregation) {
-        TAggregationTestCase testCase;
+        TOlapTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
                     level, COUNT(*), SUM(id)
@@ -1460,20 +1130,50 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({ testCase }, /* generic */ true);
     }
 
-    Y_UNIT_TEST(BlockGenericSelectAll) {
-        TAggregationTestCase testCase;
-        testCase.SetQuery(R"(
-                SELECT
-                    id, resource_id, level
-                FROM `/Root/tableWithNulls`
-                WHERE level != 5 OR level IS NULL
-                ORDER BY id, resource_id, level;
-            )")
-            .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")
-            .AddExpectedPlanOptions("WideFromBlocks")
-            .SetExpectedReply(R"([[1;#;[1]];[2;#;[2]];[3;#;[3]];[4;#;[4]];[6;["6"];#];[7;["7"];#];[8;["8"];#];[9;["9"];#];[10;["10"];#]])");
+    Y_UNIT_TEST(FloatSum) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
 
-        TestTableWithNulls({ testCase }, /* generic */ true);
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `olap_table` (
+                        id Uint64 NOT NULL,
+                        value Float,
+                        PRIMARY KEY (id)
+                    ) WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                    R"(
+                        INSERT INTO `olap_table` (id, value) VALUES (1u, 0.4f);
+                        INSERT INTO `olap_table` (id, value) VALUES (2u, 0.85f);
+                        INSERT INTO `olap_table` (id, value) VALUES (3u, 11.3f);
+                        INSERT INTO `olap_table` (id, value) VALUES (4u, 7.15f);
+                        INSERT INTO `olap_table` (id, value) VALUES (5u, 0.3f);
+                    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+                ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                --!syntax_v1
+                SELECT SUM(value) FROM `olap_table`
+                WHERE id = 1
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+            CompareYson(result, R"([[[0.400000006;]]])");
+        }
     }
 }
 

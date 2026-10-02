@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     Apache-2.0           0e8699c5f5ea602534a6558430df2b8d
-BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/utility/ya.make ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -38,16 +38,24 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        absl/base/casts.cc [3:13]
+        absl/base/internal/cpu_detect.cc [3:13]
+        absl/base/internal/cpu_detect.h [3:13]
         absl/base/internal/cycleclock_config.h [3:13]
+        absl/base/internal/iterator_traits.h [3:13]
+        absl/base/internal/iterator_traits_test_helper.h [3:13]
+        absl/base/internal/nullability_traits.h [3:13]
         absl/base/internal/poison.cc [3:13]
         absl/base/internal/poison.h [3:13]
+        absl/base/internal/tracing.cc [3:13]
+        absl/base/internal/tracing.h [3:13]
         absl/base/internal/unscaledcycleclock_config.h [3:13]
         absl/base/prefetch.h [3:13]
         absl/container/hash_container_defaults.h [3:13]
+        absl/container/internal/hashtable_control_bytes.h [3:13]
+        absl/container/internal/raw_hash_set_resize_impl.h [3:13]
         absl/crc/crc32c.cc [3:13]
         absl/crc/crc32c.h [3:13]
-        absl/crc/internal/cpu_detect.cc [3:13]
-        absl/crc/internal/cpu_detect.h [3:13]
         absl/crc/internal/crc32c.h [3:13]
         absl/crc/internal/crc_cord_state.cc [3:13]
         absl/crc/internal/crc_cord_state.h [3:13]
@@ -57,6 +65,7 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/crc/internal/crc_non_temporal_memcpy.cc [3:13]
         absl/crc/internal/non_temporal_arm_intrinsics.h [3:13]
         absl/crc/internal/non_temporal_memcpy.h [3:13]
+        absl/debugging/internal/addresses.h [3:13]
         absl/debugging/internal/bounded_utf8_length_sequence.h [3:13]
         absl/debugging/internal/decode_rust_punycode.cc [3:13]
         absl/debugging/internal/decode_rust_punycode.h [3:13]
@@ -65,8 +74,8 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/debugging/internal/stacktrace_riscv-inl.inc [3:13]
         absl/debugging/internal/utf8_for_code_point.cc [3:13]
         absl/debugging/internal/utf8_for_code_point.h [3:13]
-        absl/hash/internal/low_level_hash.cc [3:13]
-        absl/hash/internal/low_level_hash.h [3:13]
+        absl/functional/bind_back.h [3:13]
+        absl/hash/internal/weakly_mixed_integer.h [3:13]
         absl/log/internal/append_truncated.h [3:13]
         absl/log/internal/fnmatch.cc [3:13]
         absl/log/internal/fnmatch.h [3:13]
@@ -74,23 +83,26 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/log/internal/nullguard.cc [3:13]
         absl/log/internal/vlog_config.cc [3:13]
         absl/log/internal/vlog_config.h [3:13]
+        absl/log/log_entry.cc [3:13]
         absl/log/log_sink.cc [3:13]
         absl/numeric/bits.h [3:13]
         absl/numeric/internal/bits.h [3:13]
         absl/numeric/internal/representation.h [3:13]
+        absl/profiling/hashtable.h [3:13]
         absl/profiling/internal/exponential_biased.cc [3:13]
         absl/profiling/internal/exponential_biased.h [3:13]
         absl/random/internal/mock_validators.h [3:13]
         absl/random/internal/nanobenchmark.h [3:13]
         absl/status/internal/status_internal.cc [3:13]
         absl/status/internal/status_matchers.h [3:13]
+        absl/status/status_builder.cc [3:13]
         absl/strings/cord_analysis.cc [3:13]
         absl/strings/cord_analysis.h [3:13]
-        absl/strings/cord_buffer.cc [3:13]
         absl/strings/cord_buffer.h [3:13]
         absl/strings/cordz_test_helpers.h [3:13]
         absl/strings/has_absl_stringify.h [3:13]
         absl/strings/has_ostream_operator.h [3:13]
+        absl/strings/internal/append_and_overwrite.h [3:13]
         absl/strings/internal/cord_data_edge.h [3:13]
         absl/strings/internal/cord_rep_btree.cc [3:13]
         absl/strings/internal/cord_rep_btree.h [3:13]
@@ -111,13 +123,12 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/strings/internal/str_format/constexpr_parser.h [3:13]
         absl/strings/internal/stringify_sink.cc [3:13]
         absl/strings/internal/stringify_sink.h [3:13]
+        absl/strings/resize_and_overwrite.h [3:13]
         absl/synchronization/internal/kernel_timeout.cc [3:13]
-        absl/utility/internal/if_constexpr.h [3:13]
-    Belongs difference:
-        - absl/container/ya.make absl/status/ya.make
+        absl/types/source_location.cc [3:13]
 
 KEEP     Apache-2.0           0f66a26c8211d9f8c21369fcb6702370
-BELONGS absl/time/ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -142,6 +153,8 @@ BELONGS absl/time/ya.make
         absl/time/internal/cctz/src/time_zone_libc.cc [3:13]
         absl/time/internal/cctz/src/time_zone_libc.h [3:13]
         absl/time/internal/cctz/src/time_zone_lookup.cc [3:13]
+        absl/time/internal/cctz/src/time_zone_name_win.cc [3:13]
+        absl/time/internal/cctz/src/time_zone_name_win.h [3:13]
         absl/time/internal/cctz/src/time_zone_posix.cc [3:13]
         absl/time/internal/cctz/src/time_zone_posix.h [3:13]
         absl/time/internal/cctz/src/zone_info_source.cc [3:13]
@@ -158,10 +171,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [145:148]
+        README.md [143:146]
 
 KEEP     Public-Domain        3a682fe6def1cddc889298ee2a043f6f
-BELONGS absl/time/ya.make
+BELONGS ya.make
     License text:
         ** This file is in the public domain, so clarified as of
     Scancode info:
@@ -173,7 +186,7 @@ BELONGS absl/time/ya.make
         absl/time/internal/cctz/src/tzfile.h [8:8]
 
 KEEP     Apache-2.0           3ea5060c4f08f5769674fbf0c0fb3992
-BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/debugging/ya.make absl/flags/ya.make absl/functional/ya.make absl/hash/ya.make absl/log/ya.make absl/memory/ya.make absl/meta/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/status/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/time/ya.make absl/types/ya.make absl/utility/ya.make ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -189,6 +202,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/config.h [4:14]
         absl/base/const_init.h [3:13]
         absl/base/dynamic_annotations.h [3:13]
+        absl/base/fast_type_id.h [3:13]
         absl/base/internal/atomic_hook.h [3:13]
         absl/base/internal/atomic_hook_test_helper.h [3:13]
         absl/base/internal/cycleclock.cc [3:13]
@@ -199,16 +213,12 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/internal/errno_saver.h [3:13]
         absl/base/internal/exception_safety_testing.h [3:13]
         absl/base/internal/exception_testing.h [3:13]
-        absl/base/internal/fast_type_id.h [4:14]
+        absl/base/internal/hardening.cc [4:14]
+        absl/base/internal/hardening.h [4:14]
         absl/base/internal/hide_ptr.h [3:13]
-        absl/base/internal/identity.h [3:13]
-        absl/base/internal/inline_variable.h [3:13]
-        absl/base/internal/inline_variable_testing.h [3:13]
-        absl/base/internal/invoke.h [3:13]
         absl/base/internal/low_level_alloc.cc [3:13]
         absl/base/internal/low_level_alloc.h [3:13]
         absl/base/internal/low_level_scheduling.h [3:13]
-        absl/base/internal/nullability_impl.h [3:13]
         absl/base/internal/per_thread_tls.h [3:13]
         absl/base/internal/pretty_function.h [3:13]
         absl/base/internal/raw_logging.cc [3:13]
@@ -230,8 +240,6 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/internal/sysinfo.h [3:13]
         absl/base/internal/thread_identity.cc [3:13]
         absl/base/internal/thread_identity.h [3:13]
-        absl/base/internal/throw_delegate.cc [3:13]
-        absl/base/internal/throw_delegate.h [4:14]
         absl/base/internal/tsan_mutex_interface.h [3:13]
         absl/base/internal/unaligned_access.h [4:14]
         absl/base/internal/unscaledcycleclock.cc [3:13]
@@ -246,17 +254,21 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/policy_checks.h [3:13]
         absl/base/port.h [3:13]
         absl/base/thread_annotations.h [3:13]
+        absl/base/throw_delegate.cc [3:13]
+        absl/base/throw_delegate.h [3:13]
         absl/cleanup/cleanup.h [3:13]
         absl/cleanup/internal/cleanup.h [3:13]
         absl/container/btree_map.h [3:13]
         absl/container/btree_set.h [3:13]
         absl/container/btree_test.h [3:13]
+        absl/container/chunked_queue.h [3:13]
         absl/container/fixed_array.h [3:13]
         absl/container/flat_hash_map.h [3:13]
         absl/container/flat_hash_set.h [3:13]
         absl/container/inlined_vector.h [3:13]
         absl/container/internal/btree.h [3:13]
         absl/container/internal/btree_container.h [3:13]
+        absl/container/internal/chunked_queue.h [3:13]
         absl/container/internal/common.h [3:13]
         absl/container/internal/common_policy_traits.h [3:13]
         absl/container/internal/compressed_tuple.h [3:13]
@@ -270,6 +282,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/container/internal/hashtablez_sampler.cc [3:13]
         absl/container/internal/hashtablez_sampler.h [3:13]
         absl/container/internal/hashtablez_sampler_force_weak_definition.cc [3:13]
+        absl/container/internal/heterogeneous_lookup_testing.h [3:13]
         absl/container/internal/inlined_vector.h [3:13]
         absl/container/internal/layout.h [3:13]
         absl/container/internal/node_slot_policy.h [3:13]
@@ -287,6 +300,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/container/internal/unordered_set_lookup_test.h [3:13]
         absl/container/internal/unordered_set_members_test.h [3:13]
         absl/container/internal/unordered_set_modifiers_test.h [3:13]
+        absl/container/linked_hash_map.h [3:13]
+        absl/container/linked_hash_set.h [3:13]
         absl/container/node_hash_map.h [3:13]
         absl/container/node_hash_set.h [3:13]
         absl/crc/internal/crc.cc [3:13]
@@ -355,9 +370,11 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/flags/usage_config.cc [4:14]
         absl/flags/usage_config.h [4:14]
         absl/functional/any_invocable.h [3:13]
+        absl/functional/any_invocable_test.h [3:13]
         absl/functional/bind_front.h [3:13]
         absl/functional/function_ref.h [3:13]
         absl/functional/internal/any_invocable.h [3:13]
+        absl/functional/internal/back_binder.h [3:13]
         absl/functional/internal/front_binder.h [3:13]
         absl/functional/internal/function_ref.h [3:13]
         absl/functional/overload.h [3:13]
@@ -387,6 +404,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/log/internal/conditions.cc [3:13]
         absl/log/internal/conditions.h [3:13]
         absl/log/internal/config.h [3:13]
+        absl/log/internal/container.h [3:13]
         absl/log/internal/flags.h [3:13]
         absl/log/internal/globals.cc [3:13]
         absl/log/internal/globals.h [3:13]
@@ -402,12 +420,13 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/log/internal/proto.h [3:13]
         absl/log/internal/strip.h [3:13]
         absl/log/internal/structured.h [3:13]
+        absl/log/internal/structured_proto.cc [4:14]
+        absl/log/internal/structured_proto.h [3:13]
         absl/log/internal/test_actions.h [3:13]
         absl/log/internal/test_helpers.h [3:13]
         absl/log/internal/test_matchers.h [3:13]
         absl/log/internal/voidify.h [3:13]
         absl/log/log.h [3:13]
-        absl/log/log_entry.cc [4:14]
         absl/log/log_entry.h [3:13]
         absl/log/log_sink.h [3:13]
         absl/log/log_sink_registry.h [3:13]
@@ -416,6 +435,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/log/structured.h [3:13]
         absl/log/vlog_is_on.h [3:13]
         absl/memory/memory.h [3:13]
+        absl/meta/internal/constexpr_testing.h [3:13]
+        absl/meta/internal/requires.h [3:13]
         absl/meta/type_traits.h [4:14]
         absl/numeric/int128.cc [3:13]
         absl/numeric/int128.h [4:14]
@@ -437,6 +458,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/random/internal/distribution_caller.h [4:14]
         absl/random/internal/distribution_test_util.cc [3:13]
         absl/random/internal/distribution_test_util.h [3:13]
+        absl/random/internal/entropy_pool.cc [3:13]
+        absl/random/internal/entropy_pool.h [3:13]
         absl/random/internal/explicit_seed_seq.h [3:13]
         absl/random/internal/fast_uniform_bits.h [3:13]
         absl/random/internal/fastmath.h [3:13]
@@ -447,8 +470,6 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/random/internal/nonsecure_base.h [3:13]
         absl/random/internal/pcg_engine.h [3:13]
         absl/random/internal/platform.h [3:13]
-        absl/random/internal/pool_urbg.cc [3:13]
-        absl/random/internal/pool_urbg.h [3:13]
         absl/random/internal/randen.cc [3:13]
         absl/random/internal/randen.h [3:13]
         absl/random/internal/randen_detect.cc [3:13]
@@ -469,6 +490,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/random/internal/wide_multiply.h [3:13]
         absl/random/log_uniform_int_distribution.h [3:13]
         absl/random/mock_distributions.h [3:13]
+        absl/random/mocking_access.h [3:13]
         absl/random/mocking_bit_gen.h [3:13]
         absl/random/poisson_distribution.h [3:13]
         absl/random/random.h [3:13]
@@ -483,6 +505,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/status/internal/statusor_internal.h [3:13]
         absl/status/status.cc [3:13]
         absl/status/status.h [3:13]
+        absl/status/status_builder.h [3:13]
+        absl/status/status_macros.h [3:13]
         absl/status/status_payload_printer.cc [3:13]
         absl/status/status_payload_printer.h [3:13]
         absl/status/statusor.cc [3:13]
@@ -515,6 +539,9 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/strings/internal/escaping.cc [3:13]
         absl/strings/internal/escaping.h [3:13]
         absl/strings/internal/escaping_test_common.h [3:13]
+        absl/strings/internal/generic_printer.cc [3:13]
+        absl/strings/internal/generic_printer.h [3:13]
+        absl/strings/internal/generic_printer_internal.h [3:13]
         absl/strings/internal/memutil.cc [3:13]
         absl/strings/internal/memutil.h [4:14]
         absl/strings/internal/numbers_test_common.h [3:13]
@@ -522,7 +549,6 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/strings/internal/ostringstream.h [3:13]
         absl/strings/internal/pow10_helper.h [4:14]
         absl/strings/internal/resize_uninitialized.h [4:14]
-        absl/strings/internal/stl_type_traits.h [3:13]
         absl/strings/internal/str_format/arg.cc [3:13]
         absl/strings/internal/str_format/arg.h [3:13]
         absl/strings/internal/str_format/bind.cc [3:13]
@@ -539,6 +565,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/strings/internal/str_join_internal.h [4:14]
         absl/strings/internal/str_split_internal.h [3:13]
         absl/strings/internal/string_constant.h [3:13]
+        absl/strings/internal/stringify_stream.h [3:13]
         absl/strings/internal/utf8.cc [3:13]
         absl/strings/internal/utf8.h [3:13]
         absl/strings/match.cc [3:13]
@@ -553,8 +580,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/strings/str_replace.h [4:14]
         absl/strings/str_split.cc [3:13]
         absl/strings/str_split.h [4:14]
-        absl/strings/string_view.cc [3:13]
-        absl/strings/string_view.h [4:14]
+        absl/strings/string_view.h [3:13]
         absl/strings/strip.h [4:14]
         absl/strings/substitute.cc [3:13]
         absl/strings/substitute.h [4:14]
@@ -591,30 +617,42 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/time/civil_time.h [3:13]
         absl/time/clock.cc [3:13]
         absl/time/clock.h [3:13]
+        absl/time/clock_interface.cc [3:13]
+        absl/time/clock_interface.h [3:13]
         absl/time/duration.cc [3:13]
         absl/time/format.cc [3:13]
         absl/time/internal/get_current_time_chrono.inc [3:13]
         absl/time/internal/test_util.h [3:13]
+        absl/time/simulated_clock.h [3:13]
         absl/time/time.cc [3:13]
         absl/time/time.h [3:13]
         absl/types/any.h [4:14]
-        absl/types/bad_any_cast.cc [3:13]
-        absl/types/bad_any_cast.h [3:13]
-        absl/types/bad_optional_access.cc [3:13]
-        absl/types/bad_optional_access.h [3:13]
-        absl/types/bad_variant_access.cc [3:13]
-        absl/types/bad_variant_access.h [3:13]
+        absl/types/any_span.h [3:13]
         absl/types/compare.h [3:13]
-        absl/types/internal/optional.h [3:13]
+        absl/types/internal/any_span.h [3:13]
         absl/types/internal/span.h [4:14]
-        absl/types/internal/variant.h [3:13]
         absl/types/optional.h [3:13]
+        absl/types/optional_ref.h [3:13]
+        absl/types/source_location.h [3:13]
         absl/types/span.h [4:14]
         absl/types/variant.h [3:13]
         absl/utility/utility.h [3:13]
 
+KEEP     Apache-2.0           504cec32e5f5e837a345cb36cdffbdeb
+BELONGS ya.make
+    License text:
+        The Abseil C++ library is licensed under the terms of the Apache
+        license. See [LICENSE](LICENSE) for more information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [145:146]
+
 SKIP     LicenseRef-scancode-warranty-disclaimer 5ba761db85e57267704f71a6bcf20c2a
-BELONGS absl/container/ya.make absl/profiling/ya.make
+BELONGS ya.make
     License text:
         // This utility is internal-only. Use at your own risk.
     Scancode info:
@@ -648,10 +686,10 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README.md [148:148]
+        README.md [146:146]
 
 SKIP     LicenseRef-scancode-generic-exception 99cf00730bf3973359b67cfa5b7ac051
-BELONGS absl/synchronization/ya.make
+BELONGS ya.make
     License text:
           // logging; as a special exception, the function may acquire other mutexes
     Scancode info:
@@ -660,7 +698,20 @@ BELONGS absl/synchronization/ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
     Files with this license:
-        absl/synchronization/mutex.h [317:317]
+        absl/synchronization/mutex.h [352:352]
+
+KEEP     Apache-2.0           af4e5af4263ce9dd5e3b09d15d50a801
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        absl/profiling/hashtable.cc [3:14]
+        absl/profiling/internal/profile_builder.cc [3:14]
+        absl/profiling/internal/profile_builder.h [3:14]
 
 KEEP     Apache-2.0           cac6cbe8ed5a3da569f7c01e4e486688
 BELONGS ya.make
@@ -674,7 +725,7 @@ BELONGS ya.make
         LICENSE [2:202]
 
 KEEP     Apache-2.0           d4afbfe97ca1f27103271d24e8af5b32
-BELONGS absl/debugging/ya.make absl/synchronization/ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -700,7 +751,7 @@ BELONGS ya.make
         CONTRIBUTING.md [11:12]
 
 SKIP     BSD-2-Clause AND GPL-2.0-only e12cf8844c9d92dd647ddf4320b73d06
-BELONGS absl/strings/ya.make
+BELONGS ya.make
 # not a license
     License text:
         // input unless explicitly stated otherwise. All functions returning a CordRep*

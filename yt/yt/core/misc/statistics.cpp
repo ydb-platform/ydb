@@ -1,5 +1,7 @@
 #include "statistics.h"
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include "statistic_path.h"
 
 #include <yt/yt/core/ypath/token.h>
@@ -58,16 +60,16 @@ void TSummary::Reset()
     Last_ = std::nullopt;
 }
 
-void TSummary::Persist(const TStreamPersistenceContext& context)
+void TSummary::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Sum_);
-    Persist(context, Count_);
-    Persist(context, Min_);
-    Persist(context, Max_);
-    Persist(context, Last_);
+    PHOENIX_REGISTER_FIELD(1, Sum_);
+    PHOENIX_REGISTER_FIELD(2, Count_);
+    PHOENIX_REGISTER_FIELD(3, Min_);
+    PHOENIX_REGISTER_FIELD(4, Max_);
+    PHOENIX_REGISTER_FIELD(5, Last_);
 }
+
+PHOENIX_DEFINE_TYPE(TSummary);
 
 void Serialize(const TSummary& summary, IYsonConsumer* consumer)
 {
@@ -81,7 +83,7 @@ void Serialize(const TSummary& summary, IYsonConsumer* consumer)
         .EndMap();
 }
 
-bool TSummary::operator ==(const TSummary& other) const
+bool TSummary::operator==(const TSummary& other) const
 {
     return
         Sum_ == other.Sum_ &&
@@ -139,7 +141,7 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
 
         case ENodeType::Map:
             for (const auto& [key, child] : sample->AsMap()->GetChildren()) {
-                callback(path / TStatisticPathLiteral(TString(key)), child);
+                callback(path / TStatisticPathLiteral(std::string(key)), child);
             }
             break;
 
@@ -147,7 +149,7 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
             THROW_ERROR_EXCEPTION(
                 "Invalid statistics type: expected map or integral type but found sample of type %Qlv",
                 sample->GetType())
-                << TErrorAttribute("sample", sample);
+                .With("sample", sample);
     }
 }
 
@@ -170,7 +172,7 @@ TStatistics::TSummaryRange TStatistics::GetRangeByPrefix(const TStatisticPath& p
     // lower_bound is equivalent to upper_bound in this case, but upper_bound is semantically better.
     auto begin = Data().upper_bound(prefix);
     // This will effectively return an iterator to the first path not starting with "`prefix`/".
-    auto end = Data().lower_bound(ParseStatisticPath(prefix.Path() + TString(TChar(Delimiter + 1))).ValueOrThrow());
+    auto end = Data().lower_bound(ParseStatisticPath(prefix.Path() + std::string(1, TChar(Delimiter + 1))).ValueOrThrow());
     return TSummaryRange(begin, end);
 }
 
@@ -180,12 +182,13 @@ void TStatistics::RemoveRangeByPrefix(const TStatisticPath& prefixPath)
     Data_.erase(range.begin(), range.end());
 }
 
-void TStatistics::Persist(const TStreamPersistenceContext& context)
+// NB: Timestamp_ is not registered; it is only used by the YSON representation.
+void TStatistics::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Data_);
+    PHOENIX_REGISTER_FIELD(1, Data_);
 }
+
+PHOENIX_DEFINE_TYPE(TStatistics);
 
 void Serialize(const TStatistics& statistics, IYsonConsumer* consumer)
 {
@@ -217,7 +220,7 @@ i64 GetNumericValue(const TStatistics& statistics, const TStatisticPath& path)
     auto value = FindNumericValue(statistics, path);
     if (!value) {
         THROW_ERROR_EXCEPTION("Statistics is not present")
-            << TErrorAttribute("requested_path", path);
+            .With("requested_path", path);
     } else {
         return *value;
     }
@@ -236,8 +239,8 @@ std::optional<TSummary> FindSummary(const TStatistics& statistics, const TStatis
     if (iterator != data.end() && iterator->first != path &&
         iterator->first.StartsWith(path))
     {
-        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map") <<
-            TErrorAttribute("requested_path", path);
+        THROW_ERROR_EXCEPTION("Invalid statistics type: cannot get summary since it is a map")
+            .With("requested_path", path);
     } else if (iterator == data.end() || iterator->first != path) {
         return std::nullopt;
     } else {
@@ -405,7 +408,7 @@ private:
     i64 FilledSummaryFields_ = 0;
     bool LastFound_ = false;
 
-    TString LastKey_;
+    std::string LastKey_;
 
     bool FirstMapOpen_ = false;
     bool AtSummaryMap_ = false;

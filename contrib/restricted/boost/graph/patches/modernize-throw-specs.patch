@@ -1,0 +1,26 @@
+--- a/include/boost/graph/bipartite.hpp	(working tree)
++++ b/include/boost/graph/bipartite.hpp	(working tree)
+@@ -42,1 +42,1 @@ namespace boost {
+-        const char* what() const throw() { return "Graph is not bipartite."; }
++        const char* what() const noexcept { return "Graph is not bipartite."; }
+--- a/include/boost/graph/graphml.hpp	(index)
++++ b/include/boost/graph/graphml.hpp	(working tree)
+@@ -37,2 +37,2 @@ namespace boost
+-    ~parse_error() throw() BOOST_OVERRIDE {}
+-    const char* what() const throw() BOOST_OVERRIDE { return statement.c_str(); }
++    ~parse_error() BOOST_OVERRIDE {}
++    const char* what() const noexcept BOOST_OVERRIDE { return statement.c_str(); }
+--- a/include/boost/graph/graphviz.hpp	(index)
++++ b/include/boost/graph/graphviz.hpp	(working tree)
+@@ -661,2 +661,2 @@ struct bad_graphviz_syntax: public graph_exception {
+-    const char* what() const throw() BOOST_OVERRIDE { return errmsg.c_str(); }
+-    ~bad_graphviz_syntax() throw() BOOST_OVERRIDE {}
++    const char* what() const noexcept BOOST_OVERRIDE { return errmsg.c_str(); }
++    ~bad_graphviz_syntax() BOOST_OVERRIDE {}
+--- a/include/boost/graph/loop_erased_random_walk.hpp	(index)
++++ b/include/boost/graph/loop_erased_random_walk.hpp	(working tree)
+@@ -20,2 +20,2 @@
+-    virtual ~loop_erased_random_walk_stuck() throw() {}
+-    inline virtual const char* what() const throw()
++    ~loop_erased_random_walk_stuck() BOOST_OVERRIDE {}
++    const char* what() const noexcept BOOST_OVERRIDE

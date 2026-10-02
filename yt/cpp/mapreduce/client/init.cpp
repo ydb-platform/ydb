@@ -2,6 +2,7 @@
 
 #include "abortable_registry.h"
 #include "job_profiler.h"
+#include "pack_jobstate.h"
 
 #include <yt/cpp/mapreduce/http/requests.h>
 
@@ -10,6 +11,7 @@
 #include <yt/cpp/mapreduce/interface/operation.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+#include <yt/cpp/mapreduce/interface/logging/structured.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
@@ -41,8 +43,8 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_INFO("Wrapper version: %v",
-        TProcessState::Get()->ClientVersion);
+    YT_TLOG_DEBUG("Wrapper version")
+        .With("Version", TProcessState::Get()->ClientVersion);
 }
 
 static TNode SecureVaultContents; // safe
@@ -99,8 +101,7 @@ private:
         const TString& logMessage)
     {
         std::function<void()> threadFun = [=] {
-            YT_LOG_INFO("%v",
-                logMessage);
+            YT_TLOG_INFO(logMessage);
             NDetail::TAbortableRegistry::Get()->AbortAllAndBlockForever();
         };
         TThread thread(TThread::TParams(Invoke, &threadFun).SetName("aborter"));
@@ -180,15 +181,37 @@ void CommonInitialize(TGuard<TMutex>& g)
     auto logPath = TConfig::Get()->LogPath;
     if (logPath.empty()) {
         if (TConfig::Get()->LogUseCore) {
-            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
-            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
             SetUseCoreLog();
+            if (!NLogging::TLogManager::Get()->IsDefaultConfigured()) {
+                return;
+            }
+
+            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            for (const auto& rule : coreLoggingConfig->Rules) {
+                rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
+            }
+
+            if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+                InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+                RegisterStructuredLogWriterFactory();
+            }
+
+            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
         } else {
             auto logger = CreateStdErrLogger(logLevel);
             SetLogger(logger);
         }
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
+        }
+
+        if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
+            InitializeStructuredLogging(coreLoggingConfig, structuredLogPath);
+            RegisterStructuredLogWriterFactory();
+        }
+
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
         SetUseCoreLog();
     }
@@ -220,10 +243,12 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
         NDetail::OutputTableCount = static_cast<i64>(outputTableCount);
 
         std::unique_ptr<IInputStream> jobStateStream;
-        if (hasState) {
-            jobStateStream = std::make_unique<TIFStream>("jobstate");
-        } else {
+        if (!hasState) {
             jobStateStream = std::make_unique<TBufferStream>(0);
+        } else if (auto jobState = TryGetEnv("YT_JOB_STATE")) {
+            jobStateStream = std::make_unique<TStringStream>(UnpackJobState(*jobState));
+        } else {
+            jobStateStream = std::make_unique<TIFStream>("jobstate");
         }
 
         int ret = 1;

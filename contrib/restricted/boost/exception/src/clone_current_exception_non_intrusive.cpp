@@ -260,7 +260,7 @@ namespace
     bool
     is_cpp_exception( EXCEPTION_RECORD const * record )
         {
-        return record && 
+        return record &&
             (record->ExceptionCode==cpp_exception_code) &&
             (record->NumberParameters==cpp_exception_parameter_count) &&
             (record->ExceptionInformation[0]==cpp_exception_magic_flag);

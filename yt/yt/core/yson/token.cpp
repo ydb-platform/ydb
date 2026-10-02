@@ -50,9 +50,9 @@ char TokenTypeToChar(ETokenType type)
     }
 }
 
-TString TokenTypeToString(ETokenType type)
+std::string TokenTypeToString(ETokenType type)
 {
-    return TString(1, TokenTypeToChar(type));
+    return std::string(1, TokenTypeToChar(type));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,11 +103,6 @@ TToken::TToken(bool booleanValue)
     : Type_(ETokenType::Boolean)
     , BooleanValue_(booleanValue)
 { }
-
-bool TToken::IsEmpty() const
-{
-    return Type_ == ETokenType::EndOfStream;
-}
 
 TStringBuf TToken::GetStringValue() const
 {
@@ -236,6 +231,7 @@ void FormatValue(TStringBuilderBase* builder, const TToken& token, TStringBuf sp
 
         default:
             FormatValue(builder, TokenTypeToString(token.GetType()), spec);
+            break;
     }
 }
 

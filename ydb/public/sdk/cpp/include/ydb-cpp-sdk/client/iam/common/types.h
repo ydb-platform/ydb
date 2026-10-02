@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/library/jwt/jwt.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
 #include <util/datetime/base.h>
 
 #include <fstream>
 #include <string>
 
-namespace NYdb {
+namespace NYdb::inline Dev {
 namespace NIam {
 
 constexpr std::string_view DEFAULT_ENDPOINT = "iam.api.cloud.yandex.net";
@@ -33,6 +33,7 @@ struct TIamEndpoint {
     TDuration RefreshPeriod = NIam::DEFAULT_REFRESH_PERIOD;
     TDuration RequestTimeout = NIam::DEFAULT_REQUEST_TIMEOUT;
     bool EnableSsl = NIam::DEFAULT_ENABLE_SSL;
+    std::string CaCerts = "";
 };
 
 struct TIamJwtFilename : TIamEndpoint { std::string JwtFilename; };

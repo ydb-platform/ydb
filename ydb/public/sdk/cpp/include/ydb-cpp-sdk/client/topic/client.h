@@ -3,8 +3,9 @@
 #include "control_plane.h"
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TTopicClientSettings : public TCommonClientSettingsBase<TTopicClientSettings> {
     using TSelf = TTopicClientSettings;
@@ -48,11 +49,28 @@ public:
 
     //! Create write session.
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings);
+
+    //! Create producer. Experimental feature. DO NOT USE IN PRODUCTION.
+    std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
+
+    //! Create typed producer.
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        return std::make_shared<TTypedProducer<T>>(CreateProducer(settings));
+    }
+
+    //! Create write session.
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     // Commit offset
     TAsyncStatus CommitOffset(const std::string& path, uint64_t partitionId, const std::string& consumerName, uint64_t offset,
         const TCommitOffsetSettings& settings = {});
+
+    // Reset committed offsets for a consumer on all topic partitions
+    // (including inactive). Not atomic across partitions; drops any active
+    // read session for this consumer.
+    TAsyncStatus ResetOffset(const std::string& path, const std::string& consumerName,
+        const TResetOffsetSettings& settings);
 
 protected:
     void OverrideCodec(ECodec codecId, std::unique_ptr<ICodec>&& codecImpl);
@@ -61,4 +79,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NTopic
+} // namespace NYdb::NTopic

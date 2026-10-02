@@ -2,6 +2,10 @@
 
 #include "skiff_validator.h"
 
+#include <library/cpp/yt/coding/varint.h>
+
+#include <library/cpp/yt/exception/exception.h>
+
 #include <util/stream/buffered.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
@@ -127,6 +131,55 @@ TUint256 TUncheckedSkiffParser::ParseUint256()
     return result;
 }
 
+i32 TUncheckedSkiffParser::ParseVarInt32()
+{
+    i32 value;
+    try {
+        if (RemainingBytes() >= NYT::MaxVarInt32Size) {
+            // In this branch, GetData (and its Underlying_->Next) are never called.
+            auto size = NYT::ReadVarInt32(Position_, End_, &value);
+            Advance(size);
+        } else {
+            NYT::ReadVarInt32(
+                [this] {
+                    auto* data = GetData(1);
+                    return *static_cast<const char*>(data);
+                },
+                &value);
+        }
+    } catch (const NYT::TSimpleException& ex) {
+        ythrow TSkiffException() << "Error parsing \"" << ToString(EWireType::VarInt32) << "\": " << ex.what();
+    }
+    return value;
+}
+
+i64 TUncheckedSkiffParser::ParseVarInt64()
+{
+    i64 value;
+    try {
+        if (RemainingBytes() >= NYT::MaxVarInt64Size) {
+            // In this branch, GetData (and its Underlying_->Next) are never called.
+            auto size = NYT::ReadVarInt64(Position_, End_, &value);
+            Advance(size);
+        } else {
+            NYT::ReadVarInt64(
+                [this] {
+                    auto* data = GetData(1);
+                    return *static_cast<const char*>(data);
+                },
+                &value);
+        }
+    } catch (const NYT::TSimpleException& ex) {
+        ythrow TSkiffException() << "Error parsing \"" << ToString(EWireType::VarInt64) << "\": " << ex.what();
+    }
+    return value;
+}
+
+float TUncheckedSkiffParser::ParseFloat()
+{
+    return ParseSimple<float>();
+}
+
 double TUncheckedSkiffParser::ParseDouble()
 {
     return ParseSimple<double>();
@@ -141,16 +194,48 @@ bool TUncheckedSkiffParser::ParseBoolean()
     return result;
 }
 
+namespace {
+
+void ValidateStringLength(EWireType wireType, i64 length)
+{
+    if (length < 0 || length > MaxStringLength) {
+        ythrow TSkiffException()
+            << "\"" << ToString(wireType) << "\" length " << length
+            << " is out of range [0, " << MaxStringLength << "]";
+    }
+}
+
+} // namespace
+
+template <typename TFunction>
+TStringBuf TUncheckedSkiffParser::ParseString(EWireType wireType, TFunction&& parseLength)
+{
+    auto length = std::invoke(parseLength, this);
+    ValidateStringLength(wireType, length);
+    const void* data = GetData(length);
+    return TStringBuf(static_cast<const char*>(data), length);
+}
+
 TStringBuf TUncheckedSkiffParser::ParseString32()
 {
-    ui32 len = ParseSimple<ui32>();
-    const void* data = GetData(len);
-    return TStringBuf(static_cast<const char*>(data), len);
+    return ParseString(EWireType::String32, &TUncheckedSkiffParser::ParseUint32);
+}
+
+TStringBuf TUncheckedSkiffParser::ParseStringVar()
+{
+    return ParseString(EWireType::StringVar, &TUncheckedSkiffParser::ParseVarInt64);
 }
 
 TStringBuf TUncheckedSkiffParser::ParseYson32()
 {
-    return ParseString32();
+    return ParseString(EWireType::Yson32, &TUncheckedSkiffParser::ParseUint32);
+}
+
+TStringBuf TUncheckedSkiffParser::ParseStringFixed(i64 size)
+{
+    Y_ABORT_UNLESS(0 <= size && size <= MaxStringLength);
+    const void* data = GetData(size);
+    return TStringBuf(static_cast<const char*>(data), size);
 }
 
 ui8 TUncheckedSkiffParser::ParseVariant8Tag()
@@ -161,6 +246,25 @@ ui8 TUncheckedSkiffParser::ParseVariant8Tag()
 ui16 TUncheckedSkiffParser::ParseVariant16Tag()
 {
     return ParseSimple<ui16>();
+}
+
+i32 TUncheckedSkiffParser::ParseVariantVarTag()
+{
+    return ParseVarInt32();
+}
+
+TBlockVarHeader TUncheckedSkiffParser::ParseBlockVarHeader()
+{
+    auto count = ParseVarInt64();
+    if (count == std::numeric_limits<i64>::min()) {
+        ythrow TSkiffException() << "Invalid BlockVarHeader: count value INT64_MIN is not allowed";
+    }
+
+    if (count < 0) {
+        return TBlockVarHeader{.Count = -count, .ByteSize = ParseVarInt64()};
+    } else {
+        return TBlockVarHeader{.Count = count};
+    }
 }
 
 template <typename T>
@@ -318,6 +422,24 @@ TUint256 TCheckedSkiffParser::ParseUint256()
     return Parser_.ParseUint256();
 }
 
+i32 TCheckedSkiffParser::ParseVarInt32()
+{
+    Validator_->OnSimpleType(EWireType::VarInt32);
+    return Parser_.ParseVarInt32();
+}
+
+i64 TCheckedSkiffParser::ParseVarInt64()
+{
+    Validator_->OnSimpleType(EWireType::VarInt64);
+    return Parser_.ParseVarInt64();
+}
+
+float TCheckedSkiffParser::ParseFloat()
+{
+    Validator_->OnSimpleType(EWireType::Float);
+    return Parser_.ParseFloat();
+}
+
 double TCheckedSkiffParser::ParseDouble()
 {
     Validator_->OnSimpleType(EWireType::Double);
@@ -334,6 +456,18 @@ TStringBuf TCheckedSkiffParser::ParseString32()
 {
     Validator_->OnSimpleType(EWireType::String32);
     return Parser_.ParseString32();
+}
+
+TStringBuf TCheckedSkiffParser::ParseStringVar()
+{
+    Validator_->OnSimpleType(EWireType::StringVar);
+    return Parser_.ParseStringVar();
+}
+
+TStringBuf TCheckedSkiffParser::ParseStringFixed(i64 size)
+{
+    Validator_->OnStringFixed(size);
+    return Parser_.ParseStringFixed(size);
 }
 
 TStringBuf TCheckedSkiffParser::ParseYson32()
@@ -358,6 +492,22 @@ ui16 TCheckedSkiffParser::ParseVariant16Tag()
     return result;
 }
 
+i32 TCheckedSkiffParser::ParseVariantVarTag()
+{
+    Validator_->BeforeVariantVarTag();
+    auto result = Parser_.ParseVariantVarTag();
+    Validator_->OnVariantVarTag(result);
+    return result;
+}
+
+TBlockVarHeader TCheckedSkiffParser::ParseBlockVarHeader()
+{
+    Validator_->BeforeBlockVarHeader();
+    auto blockHeader = Parser_.ParseBlockVarHeader();
+    Validator_->OnBlockVarHeader(blockHeader);
+    return blockHeader;
+}
+
 bool TCheckedSkiffParser::HasMoreData()
 {
     return Parser_.HasMoreData();
@@ -377,12 +527,14 @@ ui64 TCheckedSkiffParser::GetReadBytesCount() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(IZeroCopyOutput* underlying)
-    : Underlying_(underlying)
+    : UnderlyingOutputWriter_(underlying)
+    , CurrentOutputWriter_(&UnderlyingOutputWriter_)
 { }
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(IOutputStream* underlying)
     : BufferedOutput_(MakeHolder<TBufferedOutput>(underlying))
-    , Underlying_(BufferedOutput_.Get())
+    , UnderlyingOutputWriter_(BufferedOutput_.Get())
+    , CurrentOutputWriter_(&UnderlyingOutputWriter_)
 { }
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(const std::shared_ptr<TSkiffSchema>& /*schema*/, IZeroCopyOutput* underlying)
@@ -447,6 +599,20 @@ void TUncheckedSkiffWriter::WriteUint256(const TUint256& value)
     }
 }
 
+void TUncheckedSkiffWriter::WriteVarInt32(i32 value)
+{
+    std::array<char, NYT::MaxVarInt32Size> buffer;
+    auto size = NYT::WriteVarInt32(buffer.data(), value);
+    CurrentOutputWriter_->Write(buffer.data(), size);
+}
+
+void TUncheckedSkiffWriter::WriteVarInt64(i64 value)
+{
+    std::array<char, NYT::MaxVarInt64Size> buffer;
+    auto size = NYT::WriteVarInt64(buffer.data(), value);
+    CurrentOutputWriter_->Write(buffer.data(), size);
+}
+
 void TUncheckedSkiffWriter::WriteUint8(ui8 value)
 {
     WriteSimple<ui8>(value);
@@ -467,6 +633,11 @@ void TUncheckedSkiffWriter::WriteUint64(ui64 value)
     WriteSimple<ui64>(value);
 }
 
+void TUncheckedSkiffWriter::WriteFloat(float value)
+{
+    return WriteSimple<float>(value);
+}
+
 void TUncheckedSkiffWriter::WriteDouble(double value)
 {
     return WriteSimple<double>(value);
@@ -480,13 +651,24 @@ void TUncheckedSkiffWriter::WriteBoolean(bool value)
 void TUncheckedSkiffWriter::WriteString32(TStringBuf value)
 {
     WriteSimple<ui32>(value.size());
-    Underlying_.Write(value.data(), value.size());
+    CurrentOutputWriter_->Write(value.data(), value.size());
+}
+
+void TUncheckedSkiffWriter::WriteStringVar(TStringBuf value)
+{
+    WriteVarInt64(std::ssize(value));
+    CurrentOutputWriter_->Write(value.data(), value.size());
 }
 
 void TUncheckedSkiffWriter::WriteYson32(TStringBuf value)
 {
     WriteSimple<ui32>(value.size());
-    Underlying_.Write(value.data(), value.size());
+    CurrentOutputWriter_->Write(value.data(), value.size());
+}
+
+void TUncheckedSkiffWriter::WriteStringFixed(TStringBuf value)
+{
+    CurrentOutputWriter_->Write(value.data(), value.size());
 }
 
 void TUncheckedSkiffWriter::WriteVariant8Tag(ui8 tag)
@@ -499,9 +681,55 @@ void TUncheckedSkiffWriter::WriteVariant16Tag(ui16 tag)
     WriteSimple<ui16>(tag);
 }
 
+void TUncheckedSkiffWriter::WriteVariantVarTag(i32 tag)
+{
+    WriteVarInt32(tag);
+}
+
+void TUncheckedSkiffWriter::WriteBlockVarHeader(const TBlockVarHeader& blockHeader)
+{
+    if (blockHeader.ByteSize) {
+        if (blockHeader.Count == std::numeric_limits<i64>::min()) {
+            ythrow TSkiffException() << "Invalid BlockVarHeader: count value INT64_MIN is not allowed";
+        }
+        WriteVarInt64(-blockHeader.Count);
+        WriteVarInt64(*blockHeader.ByteSize);
+    } else {
+        WriteVarInt64(blockHeader.Count);
+    }
+}
+
+void TUncheckedSkiffWriter::StartBlob()
+{
+    if (BlobOutputWriter_) {
+        throw TSkiffException() << "Blob start called before previous blob was finished";
+    }
+    BlobOutput_.emplace(Blob_);
+    BlobOutputWriter_.emplace(&*BlobOutput_);
+
+    CurrentOutputWriter_ = &*BlobOutputWriter_;
+}
+
+void TUncheckedSkiffWriter::FinishBlob()
+{
+    if (!BlobOutput_) {
+        throw TSkiffException() << "Blob finish called before blob was started";
+    }
+
+    BlobOutputWriter_->UndoRemaining();
+
+    BlobOutput_.reset();
+    BlobOutputWriter_.reset();
+
+    CurrentOutputWriter_ = &UnderlyingOutputWriter_;
+
+    WriteString32(Blob_);
+    Blob_.clear();
+}
+
 void TUncheckedSkiffWriter::Flush()
 {
-    Underlying_.UndoRemaining();
+    UnderlyingOutputWriter_.UndoRemaining();
     if (BufferedOutput_) {
         BufferedOutput_->Flush();
     }
@@ -512,9 +740,9 @@ Y_FORCE_INLINE void TUncheckedSkiffWriter::WriteSimple(T value)
 {
     if constexpr (std::is_integral_v<T>) {
         value = HostToLittle(value);
-        Underlying_.Write(&value, sizeof(T));
+        CurrentOutputWriter_->Write(&value, sizeof(T));
     } else {
-        Underlying_.Write(&value, sizeof(T));
+        CurrentOutputWriter_->Write(&value, sizeof(T));
     }
 }
 
@@ -541,6 +769,12 @@ void TCheckedSkiffWriter::WriteDouble(double value)
 {
     Validator_->OnSimpleType(EWireType::Double);
     Writer_.WriteDouble(value);
+}
+
+void TCheckedSkiffWriter::WriteFloat(float value)
+{
+    Validator_->OnSimpleType(EWireType::Float);
+    Writer_.WriteFloat(value);
 }
 
 void TCheckedSkiffWriter::WriteBoolean(bool value)
@@ -609,28 +843,55 @@ void TCheckedSkiffWriter::WriteUint128(TUint128 value)
     Writer_.WriteUint128(value);
 }
 
-void TCheckedSkiffWriter::WriteInt256(TInt256 value)
+void TCheckedSkiffWriter::WriteInt256(const TInt256& value)
 {
     Validator_->OnSimpleType(EWireType::Int256);
-    Writer_.WriteInt256(std::move(value));
+    Writer_.WriteInt256(value);
 }
 
-void TCheckedSkiffWriter::WriteUint256(TUint256 value)
+void TCheckedSkiffWriter::WriteUint256(const TUint256& value)
 {
     Validator_->OnSimpleType(EWireType::Uint256);
-    Writer_.WriteUint256(std::move(value));
+    Writer_.WriteUint256(value);
+}
+
+void TCheckedSkiffWriter::WriteVarInt32(i32 value)
+{
+    Validator_->OnSimpleType(EWireType::VarInt32);
+    Writer_.WriteVarInt32(value);
+}
+
+void TCheckedSkiffWriter::WriteVarInt64(i64 value)
+{
+    Validator_->OnSimpleType(EWireType::VarInt64);
+    Writer_.WriteVarInt64(value);
 }
 
 void TCheckedSkiffWriter::WriteString32(TStringBuf value)
 {
     Validator_->OnSimpleType(EWireType::String32);
+    ValidateStringLength(EWireType::String32, std::ssize(value));
     Writer_.WriteString32(value);
+}
+
+void TCheckedSkiffWriter::WriteStringVar(TStringBuf value)
+{
+    Validator_->OnSimpleType(EWireType::StringVar);
+    ValidateStringLength(EWireType::StringVar, std::ssize(value));
+    Writer_.WriteStringVar(value);
 }
 
 void TCheckedSkiffWriter::WriteYson32(TStringBuf value)
 {
     Validator_->OnSimpleType(EWireType::Yson32);
+    ValidateStringLength(EWireType::Yson32, std::ssize(value));
     Writer_.WriteYson32(value);
+}
+
+void TCheckedSkiffWriter::WriteStringFixed(TStringBuf value)
+{
+    Validator_->OnStringFixed(std::ssize(value));
+    Writer_.WriteStringFixed(value);
 }
 
 void TCheckedSkiffWriter::WriteVariant8Tag(ui8 tag)
@@ -643,6 +904,29 @@ void TCheckedSkiffWriter::WriteVariant16Tag(ui16 tag)
 {
     Validator_->OnVariant16Tag(tag);
     Writer_.WriteVariant16Tag(tag);
+}
+
+void TCheckedSkiffWriter::WriteVariantVarTag(i32 tag)
+{
+    Validator_->OnVariantVarTag(tag);
+    Writer_.WriteVariantVarTag(tag);
+}
+
+void TCheckedSkiffWriter::WriteBlockVarHeader(const TBlockVarHeader& blockHeader)
+{
+    Validator_->OnBlockVarHeader(blockHeader);
+    Writer_.WriteBlockVarHeader(blockHeader);
+}
+
+void TCheckedSkiffWriter::StartBlob()
+{
+    Validator_->OnSimpleType(EWireType::Int32);
+    Writer_.StartBlob();
+}
+
+void TCheckedSkiffWriter::FinishBlob()
+{
+    Writer_.FinishBlob();
 }
 
 void TCheckedSkiffWriter::Flush()

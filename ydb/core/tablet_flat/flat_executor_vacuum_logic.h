@@ -1,0 +1,76 @@
+#pragma once
+
+#include "tablet_flat_executor.h"
+#include "flat_executor_gclogic.h"
+#include "util_fmt_logger.h"
+
+namespace NKikimr::NTabletFlatExecutor {
+
+class TVacuumLogic {
+    struct TVacuumTableInfo {
+        ui32 TableId = Max<ui32>();
+        ui64 CompactionId = 0;
+    };
+
+public:
+    enum class EVacuumState {
+        Idle,
+        PendingCompaction,
+        WaitCompaction,
+        PendingFirstSnapshot,
+        WaitFirstSnapshot,
+        PendingSecondSnapshot,
+        WaitSecondSnapshot,
+        WaitAllGCs,
+        WaitTabletGC,
+        WaitLogGC,
+    };
+
+public:
+    using IOps = NActors::IActorOps;
+    using IExecutor = NFlatExecutorSetup::IExecutor;
+    using ITablet = NFlatExecutorSetup::ITablet;
+    using ELnLev = NUtil::ELnLev;
+
+    TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
+
+    bool TryStartVacuum(TVacuumTag tag, const TActorContext& ctx);
+    void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
+    void WaitCompaction();
+    void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
+    bool NeedLogSnaphot();
+    void OnMakeLogSnapshot(ui32 generation, ui32 step);
+    void OnSnapshotCommited(ui32 generation, ui32 step);
+    void OnCollectedGarbage(const TActorContext& ctx);
+    void OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx);
+    bool NeedGC();
+
+private:
+    void CompleteVacuum(const TActorContext& ctx);
+    void ChangeState(EVacuumState to);
+    bool UpdateMaxGeneration(TVacuumTag tag);
+
+private:
+    IOps* Ops;
+    IExecutor* Executor;
+    ITablet* Owner;
+    NUtil::ILogger* const Logger;
+    TExecutorGCLogic* const GcLogic;
+
+    /**
+     * There are 2 types of requests - requests with generation tag and requests with no tag.
+     * A request with generation is only processed if there wasn't already a request with a greater generation.
+     * A request with no tag is always processed.
+     */
+    TVacuumGeneration MaxVacuumGeneration = 0; // maximum seen generation, including past, current and planned vacuum runs
+    TVacuumTag CurrentVacuumTag; // tag of the current run, only stored for logging
+    std::optional<TVacuumTag> NextVacuumTag; // nullopt if there is no next run scheduled
+    EVacuumState State = EVacuumState::Idle;
+    THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
+
+    // two subsequent are snapshots required to force GC
+    TGCTime FirstLogSnaphotStep;
+    TGCTime SecondLogSnaphotStep;
+};
+
+} // NKikimr::NTabletFlatExecutor

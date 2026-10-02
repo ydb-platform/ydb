@@ -10,9 +10,9 @@ namespace NWriter {
 
     class ICone {
     public:
-        virtual NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept = 0;
-        virtual void Put(NPageCollection::TGlob&&) noexcept = 0;
-        virtual NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept = 0;
+        virtual NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) = 0;
+        virtual void Put(NPageCollection::TGlob&&) = 0;
+        virtual NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) = 0;
     };
 
     class TBanks {

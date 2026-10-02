@@ -23,8 +23,8 @@ public:
         EAccessControlObjectNamespace accessControlObjectNamespace,
         EAccessControlObject accessControlObject);
 
-    TString GetPath() const;
-    TString GetPrincipalPath() const;
+    NYPath::TYPath GetPath() const;
+    NYPath::TYPath GetPrincipalPath() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,34 +32,37 @@ public:
 #define ACCESS_CONTROL_ENTRY(namespace, name) \
     {(name), TAccessControlObjectDescriptor((namespace), (name))}
 
-const std::vector<EAccessControlObjectNamespace> AccessControlObjectNamespaces = {
+inline const std::vector<EAccessControlObjectNamespace> AccessControlObjectNamespaces = {
     EAccessControlObjectNamespace::AdminCommands
 };
 
-const THashMap<EAccessControlObject, TAccessControlObjectDescriptor> AccessControlObjects = {
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::DisableChunkLocations),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::DestroyChunkLocations),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ResurrectChunkLocations),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::BuildSnapshot),
+inline const THashMap<EAccessControlObject, TAccessControlObjectDescriptor> AccessControlObjects = {
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::BuildMasterSnapshot),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::GetMasterConsistentState),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ExitReadOnly),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::MasterExitReadOnly),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::BuildSnapshot),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::CollectCoverage),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::DestroyChunkLocations),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::DisableChunkLocations),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::DiscombobulateNonvotingPeers),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::SwitchLeader),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ExitReadOnly),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::GetMasterConsistentState),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::MasterExitReadOnly),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ResetDynamicallyPropagatedMasterCells),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::RequestRestart),
-    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::CollectCoverage)
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ResurrectChunkLocations),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::SwitchLeader),
 };
+
+#undef ACCESS_CONTROL_ENTRY
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TAccessControlObjectDescriptor GetAccessControlObjectDescriptor(EAccessControlObject accessControlObjectName);
 
-TString GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace);
+NYPath::TYPath GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace);
 
-TString GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace);
+std::string GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace);
 
-TString GetAccessControlObjectName(EAccessControlObject accessControlObject);
+std::string GetAccessControlObjectName(EAccessControlObject accessControlObject);
 
 ////////////////////////////////////////////////////////////////////////////////
 

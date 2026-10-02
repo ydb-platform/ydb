@@ -1,38 +1,56 @@
 #include "export_reboots_common.h"
 
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/core/protos/msgbus_kv.pb.h>
 
 using namespace NKikimrSchemeOp;
 
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
+void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
+    using TTestCreateFunc = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&,
+        const TVector<TExpectedResult>&, const TApplyIf&);
+
+    static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
+        {EPathTypeTable, &TestSimpleCreateTable},
+        {EPathTypeColumnTable, &TestCreateColumnTable},
+        {EPathTypeView, &TestCreateView},
+        {EPathTypeCdcStream, &TestCreateCdcStream},
+        {EPathTypePersQueueGroup, &TestCreatePQGroup},
+        {EPathTypeTableIndex, &TestCreateIndexedTable},
+        {EPathTypeReplication, &TestCreateReplication},
+        {EPathTypeTransfer, &TestCreateTransfer},
+        {EPathTypeExternalDataSource, &TestCreateExternalDataSource},
+        {EPathTypeExternalTable, &TestCreateExternalTable},
+    };
+
+    auto it = functions.find(pathType);
+    if (it != functions.end()) {
+        it->second(runtime, txId, "/MyRoot", scheme, {NKikimrScheme::StatusAccepted}, {});
+    } else {
+        UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
+    }
+}
+
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
-    for (const auto& [type, scheme] : schemeObjects) {
-        switch (type) {
-            case EPathTypeTable:
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            case EPathTypeView:
-                TestCreateView(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            default:
-                UNIT_FAIL("export is not implemented for the scheme object type: " << type);
-                return;
-        }
+    for (const auto& [type, scheme, _] : schemeObjects) {
+        TestCreate(runtime, ++t.TxId, scheme, type);
         toWait.insert(t.TxId);
     }
     t.TestEnv->TestWaitNotification(runtime, toWait);
 }
 
-void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -64,9 +82,16 @@ void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTe
     });
 }
 
-void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+    Run(schemeObjects, request, t, {});
+}
+
+void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -103,9 +128,16 @@ void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
     });
 }
 
-void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+    Cancel(schemeObjects, request, t, {});
+}
+
+void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -127,6 +159,10 @@ void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
             TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         }
     });
+}
+
+void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
+    Forget(schemeObjects, request, t, {});
 }
 
 } // NExportReboots

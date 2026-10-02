@@ -3,10 +3,9 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-enum class ESqueezeState : ui8 {
+enum class ESqueezeState: ui8 {
     Idle = 0,
     Work,
     Finished,
@@ -19,13 +18,12 @@ struct TSqueezeState {
         IComputationExternalNode* state,
         IComputationNode* outSwitch,
         IComputationNode* initState,
-        IComputationNode* newState,
+        IComputationNode* updateState,
         IComputationExternalNode* inSave,
         IComputationNode* outSave,
         IComputationExternalNode* inLoad,
         IComputationNode* outLoad,
-        const TType* stateType
-    );
+        const TType* stateType);
 
     TSqueezeState(const TSqueezeState& state);
 
@@ -49,12 +47,12 @@ struct TSqueezeState {
 private:
     const TValuePacker& GetPacker() const;
 
-    const TType* StateType;
+    const TType* StateType_;
 
-    mutable THolder<TValuePacker> Packer;
+    mutable THolder<TValuePacker> Packer_;
 };
 
-class TSqueezeCodegenValue : public TComputationValue<TSqueezeCodegenValue> {
+class TSqueezeCodegenValue: public TComputationValue<TSqueezeCodegenValue> {
 public:
     using TBase = TComputationValue<TSqueezeCodegenValue>;
 
@@ -73,11 +71,10 @@ private:
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final;
 
-    const TFetchPtr FetchFunc;
-    const NUdf::TUnboxedValue Stream;
-    TComputationContext& Ctx;
-    TSqueezeState State;
+    const TFetchPtr FetchFunc_;
+    const NUdf::TUnboxedValue Stream_;
+    TComputationContext& Ctx_;
+    TSqueezeState State_;
 };
 
-}
-}
+} // namespace NKikimr::NMiniKQL

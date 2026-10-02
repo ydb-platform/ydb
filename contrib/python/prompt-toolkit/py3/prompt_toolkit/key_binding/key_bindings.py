@@ -37,16 +37,12 @@ been assigned, through the `key_binding` decorator.::
 
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
+from collections.abc import Callable, Coroutine, Hashable, Sequence
 from inspect import isawaitable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Coroutine,
-    Hashable,
-    Sequence,
-    Tuple,
     TypeVar,
     Union,
     cast,
@@ -147,7 +143,7 @@ class Binding:
 
 
 # Sequence of keys presses.
-KeysTuple = Tuple[Union[Keys, str], ...]
+KeysTuple = tuple[Keys | str, ...]
 
 
 class KeyBindingsBase(metaclass=ABCMeta):
@@ -155,7 +151,8 @@ class KeyBindingsBase(metaclass=ABCMeta):
     Interface for a KeyBindings.
     """
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def _version(self) -> Hashable:
         """
         For cache invalidation. - This should increase every time that
@@ -186,7 +183,8 @@ class KeyBindingsBase(metaclass=ABCMeta):
         """
         return []
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def bindings(self) -> list[Binding]:
         """
         List of `Binding` objects.
@@ -198,7 +196,7 @@ class KeyBindingsBase(metaclass=ABCMeta):
     # `add` and `remove` don't have to be part of this interface.
 
 
-T = TypeVar("T", bound=Union[KeyHandlerCallable, Binding])
+T = TypeVar("T", bound=KeyHandlerCallable | Binding)
 
 
 class KeyBindings(KeyBindingsBase):
@@ -346,7 +344,7 @@ class KeyBindings(KeyBindingsBase):
 
         else:
             assert len(args) > 0
-            args = cast(Tuple[Union[Keys, str]], args)
+            args = cast(tuple[Keys | str], args)
 
             # Remove this sequence of key bindings.
             keys = tuple(_parse_key(k) for k in args)

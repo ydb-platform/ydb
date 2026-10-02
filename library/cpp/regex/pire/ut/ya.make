@@ -2,30 +2,24 @@
 
 UNITTEST()
 
-SET(PIRETESTSDIR contrib/libs/pire/ut)
-
-CFLAGS(-DPIRE_NO_CONFIG)
-
 PEERDIR(
     library/cpp/regex/pire
 )
 
-SRCDIR(
-    ${PIRETESTSDIR}
-)
-
 ADDINCL(
-    contrib/libs/pire/pire
-    contrib/libs/pire/ut
+    library/cpp/regex/pire/pire
+    library/cpp/regex/pire/ut
 )
 
 SRCS(
+    operation_budget_ut.cpp
     pire_ut.cpp
     capture_ut.cpp
     count_ut.cpp
     glyph_ut.cpp
     easy_ut.cpp
     read_unicode_ut.cpp
+    re_lexer_ut.cpp
     regexp_ut.cpp
     approx_matching_ut.cpp
 )

@@ -1,4 +1,6 @@
+#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
@@ -13,6 +15,11 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NDq;
+
+template<>
+void Out<NYql::NDq::EDqFillLevel>(IOutputStream& os, const NYql::NDq::EDqFillLevel l) {
+    os << static_cast<ui32>(l);
+}
 
 namespace {
 
@@ -51,7 +58,7 @@ struct TTestContext {
         , Vb(HolderFactory)
         , TransportVersion(transportVersion)
         , IsWide(width == WIDE_CHANNEL)
-        , Ds(TypeEnv, HolderFactory, TransportVersion)
+        , Ds(TypeEnv, HolderFactory, TransportVersion, EValuePackerVersion::V0, DefaultDatumTestValidationMode)
     {
         //TMultiType::Create(ui32 elementsCount, TType *const *elements, const TTypeEnvironment &env)
         if (bigRows) {
@@ -101,6 +108,21 @@ struct TTestContext {
         return result;
     }
 
+    TUnboxedValueBatch CreateVariantRow(ui32 value, ui32 varIndex) {
+        UNIT_ASSERT(!IsWide);
+        NUdf::TUnboxedValue* items;
+        auto row = Vb.NewArray(OutputType->GetMembersCount(), items);
+        items[0] = NUdf::TUnboxedValuePod(value);
+        items[1] = NUdf::TUnboxedValuePod((ui64) (value * value));
+        if (OutputType->GetMembersCount() == 3) {
+            items[2] = NMiniKQL::MakeString("***");
+        }
+        UNIT_ASSERT(row.TryMakeVariant(varIndex));
+        TUnboxedValueBatch result(OutputType);
+        result.emplace_back(std::move(row));
+        return result;
+    }
+
     TUnboxedValueBatch CreateBigRow(ui32 value, ui32 size) {
         if (IsWide) {
             TUnboxedValueBatch result(WideOutputType);
@@ -121,6 +143,21 @@ struct TTestContext {
         if (OutputType->GetMembersCount() == 3) {
             items[2] = NMiniKQL::MakeString(std::string(size, '*'));
         }
+        TUnboxedValueBatch result(OutputType);
+        result.emplace_back(std::move(row));
+        return result;
+    }
+
+    TUnboxedValueBatch CreateBigVariantRow(ui32 value, ui32 size, ui32 varIndex) {
+        UNIT_ASSERT(!IsWide);
+        NUdf::TUnboxedValue* items;
+        auto row = Vb.NewArray(OutputType->GetMembersCount(), items);
+        items[0] = NUdf::TUnboxedValuePod(value);
+        items[1] = NUdf::TUnboxedValuePod((ui64) (value * value));
+        if (OutputType->GetMembersCount() == 3) {
+            items[2] = NMiniKQL::MakeString(std::string(size, '*'));
+        }
+        UNIT_ASSERT(row.TryMakeVariant(varIndex));
         TUnboxedValueBatch result(OutputType);
         result.emplace_back(std::move(row));
         return result;
@@ -172,18 +209,32 @@ void PushRow(const TTestContext& ctx, TUnboxedValueBatch&& row, const IDqOutputC
     }
 }
 
-void TestSingleRead(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 200;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+void ConsumeRow(const TTestContext& ctx, TUnboxedValueBatch&& row, const IDqOutputConsumer::TPtr& consumer) {
+    auto* values = row.Head();
+    if (ctx.IsWide) {
+        consumer->WideConsume(values, *row.Width());
+    } else {
+        consumer->Consume(std::move(*values));
+    }
+}
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+void TestSingleRead(TTestContext& ctx) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 200
+    };
+
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -211,17 +262,22 @@ void TestSingleRead(TTestContext& ctx) {
 }
 
 void TestPartialRead(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 17;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 17
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 9; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -259,45 +315,51 @@ void TestPartialRead(TTestContext& ctx) {
 }
 
 void TestOverflow(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 30;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 30,
+        .MaxChunkBytes = 10
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 8; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
     UNIT_ASSERT_VALUES_EQUAL(8, ch->GetPushStats().Rows);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
-    UNIT_ASSERT(ch->IsFull());
-    try {
-        auto row = ctx.CreateRow(100'500);
-        PushRow(ctx, std::move(row), ch);
-        UNIT_FAIL("");
-    } catch (yexception& e) {
-        UNIT_ASSERT(TString(e.what()).Contains("requirement !IsFull() failed"));
-    }
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
+    auto row = ctx.CreateRow(100'500);
+    PushRow(ctx, std::move(row), ch);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
 }
 
 void TestPopAll(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 10
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 50; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -318,23 +380,28 @@ void TestPopAll(TTestContext& ctx) {
 }
 
 void TestBigRow(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = std::numeric_limits<ui32>::max();
-    settings.MaxChunkBytes = 2_MB;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = std::numeric_limits<ui32>::max(),
+        .MaxChunkBytes = 2_MB
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     {
         auto row = ctx.CreateRow(1);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
     {
         for (ui32 i = 2; i < 10; ++i) {
             auto row = ctx.CreateBigRow(i, 10_MB);
-            UNIT_ASSERT(!ch->IsFull());
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
             PushRow(ctx, std::move(row), ch);
         }
     }
@@ -405,20 +472,23 @@ void TestBigRow(TTestContext& ctx) {
 }
 
 void TestSpillWithMockStorage(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 20;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 20,
+        .ChannelStorage = MakeIntrusive<TMockChannelStorage>(100'500ul)
+    };
 
-    auto storage = MakeIntrusive<TMockChannelStorage>(100'500ul);
-    settings.ChannelStorage = storage;
-
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 35; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_UNEQUAL(HardLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -449,7 +519,7 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
         for (i32 i = 100; i < 105; ++i) {
             auto row = ctx.CreateRow(i);
-            UNIT_ASSERT(!ch->IsFull());
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
             PushRow(ctx, std::move(row), ch);
         }
 
@@ -469,20 +539,23 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 }
 
 void TestOverflowWithMockStorage(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 500;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 10,
+        .ChannelStorage = MakeIntrusive<TMockChannelStorage>(500ul)
+    };
 
-    auto storage = MakeIntrusive<TMockChannelStorage>(500ul);
-    settings.ChannelStorage = storage;
-
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 42; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -499,18 +572,23 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
 }
 
 void TestChunkSizeLimit(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 500;
-    settings.MaxChunkBytes = 100;
-    settings.ChunkSizeLimit = 100000;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 100,
+        .ChunkSizeLimit = 100000
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->UpdateFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -620,6 +698,394 @@ Y_UNIT_TEST(Spill) {
 Y_UNIT_TEST(Overflow) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestOverflowWithMockStorage(ctx);
+}
+
+}
+
+void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        settings.ChannelId = i;
+        auto channel = CreateDqOutputChannel(settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    if (multi) {
+        TVector<IDqOutputConsumer::TPtr> consumers;
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = 0; i < CHANNEL_COUNT / 2; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = CHANNEL_COUNT / 2; i < CHANNEL_COUNT; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        consumer = CreateOutputMultiConsumer(std::move(consumers));
+    } else {
+        TVector<IDqOutput::TPtr> outputs;
+        for (auto c : channels) {
+            outputs.emplace_back(c);
+        }
+        TVector<TColumnInfo> keyColumns;
+        keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    }
+
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    for (ui32 i = 0; i < CHANNEL_COUNT * MSG_PER_CHANNEL; ++i) {
+        auto row = multi ? ctx.CreateVariantRow(i, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+    }
+
+    for (auto c : channels) {
+        UNIT_ASSERT_VALUES_EQUAL(MSG_PER_CHANNEL, c->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, c->UpdateFillLevel());
+    }
+
+    ui32 channel0 = 0;
+
+    {
+        auto row = multi ? ctx.CreateBigVariantRow(0, 10000, 0) : ctx.CreateBigRow(0, 10000);
+        ConsumeRow(ctx, std::move(row), consumer);
+
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+
+        for (ui32 i = 0; i < CHANNEL_COUNT; i ++) {
+            if (channels[i]->GetValuesCount() == MSG_PER_CHANNEL + 1) {
+                channel0 = i;
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, channels[channel0]->UpdateFillLevel());
+    }
+
+    {
+        TDqSerializedBatch data;
+        UNIT_ASSERT(channels[channel0]->PopAll(data));
+
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, channels[channel0]->UpdateFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(0, channels[channel0]->GetValuesCount());
+    }
+}
+
+void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        // separate Storage for each channel is required
+        settings.ChannelId = i;
+        settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
+        auto channel = CreateDqOutputChannel(settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    if (multi) {
+        TVector<IDqOutputConsumer::TPtr> consumers;
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = 0; i < CHANNEL_COUNT / 2; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        {
+            TVector<IDqOutput::TPtr> outputs;
+            for (ui32 i = CHANNEL_COUNT / 2; i < CHANNEL_COUNT; i++) {
+                outputs.emplace_back(channels[i]);
+            }
+            TVector<TColumnInfo> keyColumns;
+            keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "x"));
+            consumers.emplace_back(CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr));
+        }
+        consumer = CreateOutputMultiConsumer(std::move(consumers));
+    } else {
+        TVector<IDqOutput::TPtr> outputs;
+        for (auto c : channels) {
+            outputs.emplace_back(c);
+        }
+        TVector<TColumnInfo> keyColumns;
+        keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+        consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    for (ui32 i = 0; i < CHANNEL_COUNT * MSG_PER_CHANNEL; ++i) {
+        auto row = multi ? ctx.CreateVariantRow(i, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+    }
+
+    for (auto c : channels) {
+        UNIT_ASSERT_VALUES_EQUAL(MSG_PER_CHANNEL, c->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, c->UpdateFillLevel());
+    }
+
+    ui32 channel0 = 0;
+
+    {
+        auto row = multi ? ctx.CreateBigVariantRow(0, 10000, 0) : ctx.CreateBigRow(0, 10000);
+        ConsumeRow(ctx, std::move(row), consumer);
+
+        for (auto i = 0; i < 4; i ++) {
+            if (channels[i]->GetValuesCount() == 5) {
+                channel0 = i;
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(SoftLimit, channels[channel0]->UpdateFillLevel());
+
+        for (ui32 i = 1; i < CHANNEL_COUNT; i ++) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            auto row = multi ? ctx.CreateBigVariantRow(i, 10000, (i >> (CHANNEL_BITS - 1)) & 1) : ctx.CreateBigRow(i, 10000);
+            ConsumeRow(ctx, std::move(row), consumer);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(SoftLimit, consumer->GetFillLevel());
+    }
+
+    {
+        TDqSerializedBatch data;
+        UNIT_ASSERT(channels[channel0]->PopAll(data));
+
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, channels[channel0]->UpdateFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(0, channels[channel0]->GetValuesCount());
+    }
+}
+
+void TestBackPressureInMemoryLoad(TTestContext& ctx) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    // constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        settings.ChannelId = i;
+        auto channel = CreateDqOutputChannel(settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    TVector<TColumnInfo> keyColumns;
+    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    ui32 lastPopAll = 0;
+    ui32 channelIndex = 0;
+    ui32 blockCount = 0;
+    ui32 emptyPops = 0;
+
+    for (ui32 i = 0; i < 10000000; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        if (consumer->GetFillLevel() != NoLimit) {
+            blockCount++;
+            if (i > lastPopAll + 1000) {
+                for (ui32 c = 0; c < CHANNEL_COUNT; c++) {
+                    TDqSerializedBatch data;
+                    if(!channels[c]->PopAll(data)) {
+                        emptyPops++;
+                    }
+                }
+                lastPopAll = i;
+                UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            } else {
+                while (true) {
+                    channelIndex = ((channelIndex * 1103515245) + 12345) % CHANNEL_COUNT;
+                    TDqSerializedBatch data;
+                    if (channels[channelIndex]->Pop(data)) {
+                        if (consumer->GetFillLevel() == NoLimit) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
+}
+
+void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    // constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        // separate Storage for each channel is required
+        settings.ChannelId = i;
+        settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
+        auto channel = CreateDqOutputChannel(settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    TVector<TColumnInfo> keyColumns;
+    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    ui32 lastPopAll = 0;
+    ui32 channelIndex = 0;
+    ui32 blockCount = 0;
+    ui32 emptyPops = 0;
+
+    for (ui32 i = 0; i < 100000; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        if (consumer->GetFillLevel() != NoLimit) {
+            blockCount++;
+            if (i > lastPopAll + 1000) {
+                for (ui32 c = 0; c < CHANNEL_COUNT; c++) {
+                    TDqSerializedBatch data;
+                    if(!channels[c]->PopAll(data)) {
+                        emptyPops++;
+                    }
+                }
+                lastPopAll = i;
+                UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            } else {
+                while (true) {
+                    channelIndex = ((channelIndex * 1103515245) + 12345) % CHANNEL_COUNT;
+                    TDqSerializedBatch data;
+                    if (channels[channelIndex]->Pop(data)) {
+                        if (consumer->GetFillLevel() == NoLimit) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    UNIT_ASSERT(blockCount > 0);
+    Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
+}
+
+Y_UNIT_TEST_SUITE(HashShuffle) {
+
+Y_UNIT_TEST(BackPressureInMemory) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureInMemory(ctx, false);
+}
+
+Y_UNIT_TEST(BackPressureInMemoryMulti) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureInMemory(ctx, true);
+}
+
+Y_UNIT_TEST(BackPressureInMemoryLoad) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureInMemoryLoad(ctx);
+}
+
+Y_UNIT_TEST(BackPressureWithSpilling) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureWithSpilling(ctx, false);
+}
+
+Y_UNIT_TEST(BackPressureWithSpillingMulti) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureWithSpilling(ctx, true);
+}
+
+Y_UNIT_TEST(BackPressureWithSpillingLoad) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureWithSpillingLoad(ctx);
 }
 
 }

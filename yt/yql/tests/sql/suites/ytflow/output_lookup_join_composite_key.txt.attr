@@ -1,0 +1,51 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key_b";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ];
+                ];
+                [
+                    "key_a";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "value";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "sum_value";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+            ]
+        ]
+    };
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_read" = %true;
+}

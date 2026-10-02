@@ -1,43 +1,3 @@
-#include <util/system/platform.h>
-#if defined(_linux_) || defined(_darwin_)
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDateTime64.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesDecimal.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNothing.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNullable.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeString.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeTuple.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeUUID.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesNumber.h>
-
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/ColumnsWithTypeAndName.h>
-
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/InputStreamFromInputFormat.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/ArrowBufferedStreams.h>
-
-#include <arrow/api.h>
-#include <arrow/io/api.h>
-#include <arrow/compute/cast.h>
-#include <arrow/status.h>
-#include <arrow/util/future.h>
-#include <parquet/arrow/reader.h>
-#include <parquet/file_reader.h>
-
-#include <library/cpp/protobuf/util/pb_io.h>
-#include <google/protobuf/text_format.h>
-
-#endif
-
-#include "yql_arrow_column_converters.h"
-#include "yql_s3_actors_util.h"
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_queue.h"
 
@@ -87,13 +47,53 @@
 #include <util/system/fstat.h>
 
 #include <algorithm>
-#include <queue>
 
 #ifdef THROW
 #undef THROW
 #endif
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/xml/document/xml-document.h>
+
+#include <util/system/platform.h>
+#if defined(_linux_) || defined(_darwin_)
+
+#include <arrow/api.h>
+#include <arrow/io/api.h>
+#include <arrow/compute/cast.h>
+#include <arrow/status.h>
+#include <arrow/util/future.h>
+#include <parquet/arrow/reader.h>
+#include <parquet/file_reader.h>
+
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <google/protobuf/text_format.h>
+
+#undef NO_SANITIZE_THREAD
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDateTime64.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesDecimal.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNothing.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNullable.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeString.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeTuple.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeUUID.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesNumber.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/ColumnsWithTypeAndName.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/InputStreamFromInputFormat.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/ArrowBufferedStreams.h>
+
+#endif
 
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
@@ -177,7 +177,8 @@ public:
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles)
+        bool allowLocalFiles,
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
@@ -196,6 +197,9 @@ public:
         , PatternVariant(patternVariant)
         , PatternType(patternType)
         , AllowLocalFiles(allowLocalFiles) {
+        if (workFactory) {
+            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(workFactory->GetWorkScope());
+        }
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -229,6 +233,13 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvS3Provider::TEvAck, HandleAck);
                 hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
@@ -246,6 +257,10 @@ public:
     }
 
     void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
             TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -338,6 +353,13 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvS3Provider::TEvAck, HandleAck);
                 hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
@@ -353,6 +375,10 @@ public:
     }
 
     void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         LOG_T(
             "TS3FileQueueActor",
             "HandleGetNextBatchForEmptyState Giving away rest of Objects");
@@ -363,6 +389,13 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvS3Provider::TEvAck, HandleAck);
                 hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
@@ -376,14 +409,163 @@ public:
     }
 
     void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, ev->Get()->Record.GetTransportMeta()));
+        GetConsumerQueue(ev->Sender).Send(new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
+    struct TConsumerQueue {
+        ui64 Id = 0;
+        TRetryEventsQueue Events;
+    };
+
+    TRetryEventsQueue& GetConsumerQueue(const NActors::TActorId& consumer) {
+        auto [it, inserted] = ConsumerQueues.try_emplace(consumer);
+        if (inserted) {
+            auto& queue = it->second;
+            queue.Id = NextConsumerQueueId++;
+            ConsumerByQueueId.emplace(queue.Id, consumer);
+            queue.Events.Init(TxId, SelfId(), SelfId(), queue.Id, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+            queue.Events.OnNewRecipientId(consumer, /* unsubscribe */ false);
+        }
+        return it->second.Events;
+    }
+
+    template <class T>
+    bool CheckConsumerEvent(const T& ev) {
+        if (!ConsumerQueues.contains(ev->Sender) && FinishedConsumers.contains(ev->Sender)) {
+            return false;
+        }
+        if (!GetConsumerQueue(ev->Sender).OnEventReceived(ev)) {
+            // Duplicate requests can still acknowledge retained responses.
+            MaybeFinish();
+            return false;
+        }
+        return true;
+    }
+
+    void HandleRetry(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
+            ConsumerQueues.at(it->second).Events.Retry();
+        }
+    }
+
+    void HandleHeartbeat(TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
+        if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
+            auto& queue = ConsumerQueues.at(it->second).Events;
+            if (queue.Heartbeat()) {
+                queue.Send(new TEvS3Provider::TEvAck());
+            }
+        }
+    }
+
+    void HandleConnected(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        DisconnectTimers.erase(ev->Get()->NodeId);
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.HandleNodeConnected(ev->Get()->NodeId);
+        }
+    }
+
+    void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.HandleNodeDisconnected(ev->Get()->NodeId);
+            if (consumer.NodeId() == ev->Get()->NodeId) {
+                StartDisconnectDeadline(consumer.NodeId());
+            }
+        }
+    }
+
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        auto it = ConsumerQueues.find(ev->Sender);
+        if (it == ConsumerQueues.end()) {
+            return;
+        }
+        const auto state = it->second.Events.HandleUndelivered(ev);
+        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
+            StartDisconnectDeadline(ev->Sender.NodeId());
+        }
+        if (state == TRetryEventsQueue::ESessionState::SessionClosed) {
+            // Interconnect subscriptions belong to the actor, so readers on the same node share one.
+            const bool lastConsumerOnNode = std::none_of(ConsumerQueues.begin(), ConsumerQueues.end(), [&](const auto& entry) {
+                return entry.first != ev->Sender && entry.first.NodeId() == ev->Sender.NodeId();
+            });
+            if (lastConsumerOnNode) {
+                DisconnectTimers.erase(ev->Sender.NodeId());
+                it->second.Events.Unsubscribe();
+            }
+            ConsumerByQueueId.erase(it->second.Id);
+            ConsumerQueues.erase(it);
+            PendingRequests.erase(ev->Sender);
+            FinishedConsumers.insert(ev->Sender);
+            MaybeFinish();
+        }
+    }
+
+    // A retry interval is not a lifetime bound. Keep one deadline per node,
+    // starting at its first disconnect; repeated failures must not postpone it.
+    static constexpr TDuration ConsumerDisconnectTimeout = TDuration::Minutes(2);
+    THashMap<ui32, ui64> DisconnectTimers;
+    ui64 NextDisconnectTimer = 0;
+
+    void StartDisconnectDeadline(ui32 nodeId) {
+        if (!DisconnectTimers.contains(nodeId)) {
+            const ui64 tag = ++NextDisconnectTimer;
+            DisconnectTimers.emplace(nodeId, tag);
+            Schedule(ConsumerDisconnectTimeout, new NActors::TEvents::TEvWakeup(tag));
+        }
+    }
+
+    void HandleDisconnectDeadline(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        for (const auto& [nodeId, tag] : DisconnectTimers) {
+            if (tag != ev->Get()->Tag) {
+                continue;
+            }
+            const TString message = TStringBuilder()
+                << "Source queue consumer node " << nodeId << " disconnected for "
+                << ConsumerDisconnectTimeout << "; query cannot complete without losing data";
+            // Fail the entire queue: never redistribute or silently discard an
+            // unacknowledged batch and let the remaining consumers succeed.
+            // Connected consumers receive an error. Disconnected consumers get
+            // ActorUnknown on return, which their readers treat as queue loss
+            // whenever they still need a response. Actor death stops all retries.
+            for (auto& [consumer, queue] : ConsumerQueues) {
+                queue.Events.Send(new TEvS3Provider::TEvObjectPathReadError(TIssues{TIssue{message}}, NDqProto::StatusIds::UNAVAILABLE, {}));
+            }
+            PassAway();
+            return;
+        }
+        // A reconnect or session removal invalidated this timer.
+    }
+
+    void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
+        if (CheckConsumerEvent(ev)) {
+            MaybeFinish();
+        }
+    }
+
+    void MaybeFinish() {
+        if (FinishedConsumers.size() < ConsumersCount) {
+            return;
+        }
+        for (const auto& [consumer, queue] : ConsumerQueues) {
+            if (queue.Events.HasPendingEvents()) {
+                return;
+            }
+        }
+        PassAway();
+    }
+
     void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
                 "TS3FileQueueActor",
@@ -391,7 +573,7 @@ public:
             UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }
-        Send(ev->Sender, new TEvS3Provider::TEvAck(ev->Get()->Record.GetTransportMeta()));
+        GetConsumerQueue(ev->Sender).Send(new TEvS3Provider::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }
 
     void HandleRoundRobinStageTimeout() {
@@ -403,11 +585,23 @@ public:
     }
 
     void HandlePoison() {
+        // PoisonTimeout is a safety net for the case where some read actors are never
+        // bootstrapped (e.g. node failure during query startup).  Once we know that all
+        // consumers are alive, we can safely ignore the timeout and let the normal
+        // shutdown path run.
+        if (ConnectedConsumers.size() >= ConsumersCount) {
+            LOG_D("TS3FileQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+            return;
+        }
+        LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }
 
     void PassAway() override {
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.Unsubscribe();
+        }
         LOG_D("TS3FileQueueActor", "PassAway");
         TBase::PassAway();
     }
@@ -435,7 +629,7 @@ private:
         }
 
         LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
-        Send(consumer, new TEvS3Provider::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
+        GetConsumerQueue(consumer).Send(new TEvS3Provider::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
 
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
@@ -505,7 +699,9 @@ private:
                     object.GetPath()},
                 Nothing(),
                 AllowLocalFiles,
-                NActors::TActivationContext::ActorSystem());
+                NActors::TActivationContext::ActorSystem(),
+                nullptr,
+                HttpRequestContext);
             Fetch();
             return true;
         }
@@ -560,7 +756,7 @@ private:
                     if (!MaybeIssues.Defined()) {
                         SendObjects(consumer, requests.front());
                     } else {
-                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, requests.front()));
+                        GetConsumerQueue(consumer).Send(new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, requests.front()));
                         TryFinish(consumer, requests.front().GetSeqNo());
                     }
                     requests.pop_front();
@@ -582,9 +778,7 @@ private:
             LOG_T("TS3FileQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
             if (FinishingConsumerToLastSeqNo[consumer] < seqNo || SelfId().NodeId() == consumer.NodeId()) {
                 FinishedConsumers.insert(consumer);
-                if (FinishedConsumers.size() == ConsumersCount) {
-                    PassAway();
-                }
+                MaybeFinish();
             }
         } else {
             FinishingConsumerToLastSeqNo[consumer] = seqNo;
@@ -603,6 +797,9 @@ private:
     TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
     TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
     size_t CurrentDirectoryPathIndex = 0;
+    ui64 NextConsumerQueueId = 1;
+    THashMap<NActors::TActorId, TConsumerQueue> ConsumerQueues;
+    THashMap<ui64, NActors::TActorId> ConsumerByQueueId;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     TMaybe<TIssues> MaybeIssues;
     NYql::NDqProto::StatusIds::StatusCode FatalCode;
@@ -618,6 +815,7 @@ private:
     bool HasPendingRequests = false;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
+    THashSet<NActors::TActorId> ConnectedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -627,8 +825,9 @@ private:
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
+    IHttpRequestContext::TPtr HttpRequestContext;
 
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
+    static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
 
@@ -649,7 +848,8 @@ NActors::IActor* CreateS3FileQueueActor(
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles) {
+        bool allowLocalFiles,
+        IDqSchedulableWorkFactoryPtr workFactory) {
     return new TS3FileQueueActor(
         txId,
         paths,
@@ -667,7 +867,8 @@ NActors::IActor* CreateS3FileQueueActor(
         pattern,
         patternVariant,
         patternType,
-        allowLocalFiles
+        allowLocalFiles,
+        std::move(workFactory)
     );
 }
 

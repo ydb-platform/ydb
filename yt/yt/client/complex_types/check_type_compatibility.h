@@ -1,10 +1,29 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/client/table_client/public.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
 namespace NYT::NComplexTypes {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTypeCompatibilityOptions
+{
+    bool AllowStructFieldRenaming = false;
+    bool AllowStructFieldRemoval = false;
+
+    // Do not deem types incompatible when new type contains unknown removed field names.
+    // Without this option, type compatibility relation is not transitive, for example
+    // in the following transformation chain
+    //   1. [A, B], removed: []
+    //   2. [A, B, C], removed: []
+    //   3. [A, B], removed: [C]
+    // types 1 and 2 are compatible, and so are types 2 and 3, but types 1 and 3 are not.
+    bool IgnoreUnknownRemovedFieldNames = true;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,7 +38,8 @@ std::pair<NTableClient::TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagge
 //   2. If types are NOT FullyCompatible, error contains description of incompatibility.
 std::pair<NTableClient::ESchemaCompatibility, TError> CheckTypeCompatibility(
     const NTableClient::TLogicalTypePtr& oldType,
-    const NTableClient::TLogicalTypePtr& newType);
+    const NTableClient::TLogicalTypePtr& newType,
+    const TTypeCompatibilityOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

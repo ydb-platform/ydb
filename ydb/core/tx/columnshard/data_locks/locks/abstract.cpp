@@ -1,5 +1,3 @@
 #include "abstract.h"
 
-namespace NKikimr::NOlap::NDataLocks {
-
-}
+namespace NKikimr::NOlap::NDataLocks {}

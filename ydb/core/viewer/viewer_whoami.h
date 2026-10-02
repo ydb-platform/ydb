@@ -1,5 +1,6 @@
 #pragma once
 #include "json_handlers.h"
+#include "json_pipe_req.h"
 #include "viewer.h"
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/auth.h>
@@ -12,27 +13,27 @@ namespace NKikimr::NViewer {
 
 using namespace NActors;
 
-class TJsonWhoAmI : public TActorBootstrapped<TJsonWhoAmI> {
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-
+class TJsonWhoAmI : public TViewerPipeClient {
+    using TBase = TViewerPipeClient;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhoAmI(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonWhoAmI(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
-        ReplyAndDie(ctx);
+    void Bootstrap() {
+        if (NeedToRedirect()) {
+            return;
+        }
+        ReplyAndPassAway();
     }
 
-    void ReplyAndDie(const  TActorContext &ctx) {
+    void ReplyAndPassAway() {
         NACLibProto::TUserToken userToken;
-        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
+        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(GetRequest().GetUserTokenObject());
         NJson::TJsonValue json(NJson::JSON_MAP);
         if (userToken.HasUserSID()) {
             json["UserSID"] = userToken.GetUserSID();
@@ -46,24 +47,21 @@ public:
                 }
             }
         }
-        if (userToken.HasOriginalUserToken()) {
-            json["OriginalUserToken"] = userToken.GetOriginalUserToken();
-        }
         if (userToken.HasAuthType()) {
             json["AuthType"] = userToken.GetAuthType();
         }
 
         NACLib::TUserToken token(std::move(userToken));
-        json["IsViewerAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-        json["IsMonitoringAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-        json["IsAdministrationAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
-    }
-
-    void HandleTimeout(const TActorContext &ctx) {
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
+        json["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
+        bool isAdministrationAllowed = IsAdministrator(AppData(), &token);
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        json["IsAdministrationAllowed"] = isAdministrationAllowed;
+        json["IsMonitoringAllowed"] = isMonitoringAllowed;
+        json["IsViewerAllowed"] = isViewerAllowed;
+        json["IsDatabaseAllowed"] = isDatabaseAllowed;
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwaggerSchema() {
@@ -79,9 +77,6 @@ public:
                     items:
                         type: string
                     description: User groups
-                OriginalUserToken:
-                    type: string
-                    description: User's token used to authenticate
                 AuthType:
                     type: string
                     description: Authentication type

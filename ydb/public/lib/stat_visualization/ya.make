@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-
+    ydb/public/lib/ydb_cli/common
 )
 
 END()

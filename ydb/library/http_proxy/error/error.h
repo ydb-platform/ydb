@@ -80,6 +80,10 @@ extern const TErrorClass OVER_LIMIT;
 // https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_CreateQueue.html
 extern const TErrorClass QUEUE_DELETED_RECENTLY;
 
+// DeleteQueue errors
+// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_DeleteQueue.html
+extern const TErrorClass UNSUPPORTED_OPERATION;
+
 // ChangeMessageVisibility errors
 // https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
 extern const TErrorClass MESSAGE_NOT_INFLIGHT;

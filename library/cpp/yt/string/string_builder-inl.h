@@ -81,20 +81,14 @@ inline void TStringBuilderBase::Reset()
 }
 
 template <class... TArgs>
-void TStringBuilderBase::AppendFormat(TStringBuf format, TArgs&& ... args)
+void TStringBuilderBase::AppendFormat(TFormatString<TArgs...> format, TArgs&&... args)
 {
-    Format(this, TRuntimeFormat{format}, std::forward<TArgs>(args)...);
-}
-
-template <size_t Length, class... TArgs>
-void TStringBuilderBase::AppendFormat(const char (&format)[Length], TArgs&& ... args)
-{
-    Format(this, TRuntimeFormat{format}, std::forward<TArgs>(args)...);
+    Format(this, format, std::forward<TArgs>(args)...);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline TString TStringBuilder::Flush()
+inline std::string TStringBuilder::Flush()
 {
     Buffer_.resize(GetLength());
     auto result = std::move(Buffer_);
@@ -104,14 +98,14 @@ inline TString TStringBuilder::Flush()
 
 inline void TStringBuilder::DoReset()
 {
-    Buffer_ = {};
+    Buffer_.clear();
 }
 
 inline void TStringBuilder::DoReserve(size_t newLength)
 {
-    Buffer_.ReserveAndResize(newLength);
+    ResizeUninitialized(Buffer_, newLength);
     auto capacity = Buffer_.capacity();
-    Buffer_.ReserveAndResize(capacity);
+    ResizeUninitialized(Buffer_, capacity);
     Begin_ = &*Buffer_.begin();
     End_ = Begin_ + capacity;
 }

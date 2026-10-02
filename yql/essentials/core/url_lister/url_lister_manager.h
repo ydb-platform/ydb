@@ -6,11 +6,9 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
-
 namespace NYql {
 
 IUrlListerManagerPtr MakeUrlListerManager(
-    TVector<IUrlListerPtr> urlListers
-);
+    TVector<IUrlListerPtr> urlListers);
 
-}
+} // namespace NYql

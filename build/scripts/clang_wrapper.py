@@ -31,6 +31,20 @@ def fix_path(p):
     return p
 
 
+def drop_stl(s):
+    if s.startswith('-I') and 'contrib/libs/cxxsupp/libcxx/include' in s:
+        return None
+
+    return s
+
+
+def remove_additional_target(args, bpf_position):
+    for i in range(bpf_position):
+        if args[i] == '--target=aarch64-linux-gnu' and args[i + 1].startswith('-march=armv'):
+            return args[:i] + args[i + 2 :]
+    return args
+
+
 if __name__ == '__main__':
     is_on_win = sys.argv[1] == 'yes'
     path = sys.argv[2]
@@ -43,6 +57,15 @@ if __name__ == '__main__':
         except ValueError:
             pass
         args.append('-fms-compatibility-version=19')
+
+    for i in range(len(args) - 1):
+        if args[i] == '-target' and args[i + 1] == 'bpf':
+            # ymake add flags '--target=aarch64-linux-gnu -march=armv8-a' for linux-aarch
+            args = remove_additional_target(args, i)
+
+            # bpf should not be able to include stl headers
+            args = list(filter(None, [drop_stl(s) for s in args]))
+            break
 
     cmd = [path] + args
 

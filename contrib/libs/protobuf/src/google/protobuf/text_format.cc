@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "y_absl/container/btree_set.h"
+#include "y_absl/memory/memory.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/numbers.h"
@@ -1484,7 +1485,7 @@ class TextFormat::Printer::TextGenerator
   // True if any write to the underlying stream failed.  (We don't just
   // crash in this case because this is an I/O failure, not a programming
   // error.)
-  bool failed() const { return failed_; }
+  bool failed() const override { return failed_; }
 
   void PrintMaybeWithMarker(MarkerToken, y_absl::string_view text) override {
     Print(text.data(), text.size());
@@ -2250,7 +2251,7 @@ void TextFormat::Printer::Print(const Message& message,
 
 void TextFormat::Printer::PrintMessage(const Message& message,
                                        BaseTextGenerator* generator) const {
-  if (generator == nullptr) {
+  if (generator == nullptr || generator->failed()) {
     return;
   }
   const Descriptor* descriptor = message.GetDescriptor();
@@ -2341,32 +2342,38 @@ class MapEntryMessageComparator {
 };
 
 namespace internal {
+
+struct MapEntries {
+  std::vector<std::unique_ptr<const Message>> owned_entries;
+  std::vector<const Message*> all_entries;
+};
+
 class MapFieldPrinterHelper {
  public:
   // DynamicMapSorter::Sort cannot be used because it enforces syncing with
   // repeated field.
-  static bool SortMap(const Message& message, const Reflection* reflection,
-                      const FieldDescriptor* field,
-                      std::vector<const Message*>* sorted_map_field);
+  static MapEntries SortMap(const Message& message,
+                            const Reflection* reflection,
+                            const FieldDescriptor* field);
   static void CopyKey(const MapKey& key, Message* message,
                       const FieldDescriptor* field_desc);
   static void CopyValue(const MapValueRef& value, Message* message,
                         const FieldDescriptor* field_desc);
 };
 
-// Returns true if elements contained in sorted_map_field need to be released.
-bool MapFieldPrinterHelper::SortMap(
-    const Message& message, const Reflection* reflection,
-    const FieldDescriptor* field,
-    std::vector<const Message*>* sorted_map_field) {
-  bool need_release = false;
+MapEntries MapFieldPrinterHelper::SortMap(const Message& message,
+                                          const Reflection* reflection,
+                                          const FieldDescriptor* field) {
   const MapFieldBase& base = *reflection->GetMapData(message, field);
 
+  std::vector<const Message*> all_entries;
+  std::vector<std::unique_ptr<const Message>> owned_entries;
   if (base.IsRepeatedFieldValid()) {
     const RepeatedPtrField<Message>& map_field =
         reflection->GetRepeatedPtrFieldInternal<Message>(message, field);
+    all_entries.reserve(map_field.size());
     for (int i = 0; i < map_field.size(); ++i) {
-      sorted_map_field->push_back(
+      all_entries.push_back(
           const_cast<RepeatedPtrField<Message>*>(&map_field)->Mutable(i));
     }
   } else {
@@ -2375,23 +2382,25 @@ bool MapFieldPrinterHelper::SortMap(
     const Descriptor* map_entry_desc = field->message_type();
     const Message* prototype =
         reflection->GetMessageFactory()->GetPrototype(map_entry_desc);
+    all_entries.reserve(reflection->MapSize(message, field));
+    owned_entries.reserve(reflection->MapSize(message, field));
     for (MapIterator iter =
              reflection->MapBegin(const_cast<Message*>(&message), field);
          iter != reflection->MapEnd(const_cast<Message*>(&message), field);
          ++iter) {
-      Message* map_entry_message = prototype->New();
-      CopyKey(iter.GetKey(), map_entry_message, map_entry_desc->field(0));
-      CopyValue(iter.GetValueRef(), map_entry_message,
+      std::unique_ptr<Message> map_entry_message =
+          y_absl::WrapUnique(prototype->New());
+      CopyKey(iter.GetKey(), map_entry_message.get(), map_entry_desc->field(0));
+      CopyValue(iter.GetValueRef(), map_entry_message.get(),
                 map_entry_desc->field(1));
-      sorted_map_field->push_back(map_entry_message);
+      all_entries.push_back(map_entry_message.get());
+      owned_entries.push_back(std::move(map_entry_message));
     }
-    need_release = true;
   }
 
-  MapEntryMessageComparator comparator(field->message_type());
-  std::stable_sort(sorted_map_field->begin(), sorted_map_field->end(),
-                   comparator);
-  return need_release;
+  std::stable_sort(all_entries.begin(), all_entries.end(),
+                   MapEntryMessageComparator(field->message_type()));
+  return {std::move(owned_entries), std::move(all_entries)};
 }
 
 void MapFieldPrinterHelper::CopyKey(const MapKey& key, Message* message,
@@ -2487,24 +2496,28 @@ void TextFormat::Printer::PrintField(const Message& message,
     count = 1;
   }
 
-  std::vector<const Message*> sorted_map_field;
-  bool need_release = false;
+  if (generator->failed()) return;
   bool is_map = field->is_map();
-  if (is_map) {
-    need_release = internal::MapFieldPrinterHelper::SortMap(
-        message, reflection, field, &sorted_map_field);
-  }
+  const internal::MapEntries map_entries =
+      is_map
+          ? internal::MapFieldPrinterHelper::SortMap(message, reflection, field)
+          : internal::MapEntries();
 
   for (int j = 0; j < count; ++j) {
+    if (generator->failed()) return;
     const int field_index = field->is_repeated() ? j : -1;
 
     PrintFieldName(message, field_index, count, reflection, field, generator);
 
     if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+      if (TryRedactFieldValue(message, field, generator,
+                              /*insert_value_separator=*/true)) {
+        break;
+      }
       const FastFieldValuePrinter* printer = GetFieldPrinter(field);
       const Message& sub_message =
           field->is_repeated()
-              ? (is_map ? *sorted_map_field[j]
+              ? (is_map ? *map_entries.all_entries[j]
                         : reflection->GetRepeatedMessage(message, field, j))
               : reflection->GetMessage(message, field);
       printer->PrintMessageStart(sub_message, field_index, count,
@@ -2528,12 +2541,6 @@ void TextFormat::Printer::PrintField(const Message& message,
       }
     }
   }
-
-  if (need_release) {
-    for (const Message* message_to_delete : sorted_map_field) {
-      delete message_to_delete;
-    }
-  }
 }
 
 void TextFormat::Printer::PrintShortRepeatedField(
@@ -2545,6 +2552,7 @@ void TextFormat::Printer::PrintShortRepeatedField(
                  field, generator);
   generator->PrintMaybeWithMarker(MarkerToken(), ": ", "[");
   for (int i = 0; i < size; i++) {
+    if (generator->failed()) return;
     if (i > 0) generator->PrintLiteral(", ");
     PrintFieldValue(message, reflection, field, i, generator);
   }
@@ -2581,9 +2589,8 @@ void TextFormat::Printer::PrintFieldValue(const Message& message,
       << "Index must be -1 for non-repeated fields";
 
   const FastFieldValuePrinter* printer = GetFieldPrinter(field);
-  if (redact_debug_string_ && field->options().debug_redact()) {
-    // TODO(b/258975650): Create OSS redaction documentation
-    generator->PrintString("[REDACTED]");
+  if (TryRedactFieldValue(message, field, generator,
+                          /*insert_value_separator=*/false)) {
     return;
   }
 
@@ -2796,6 +2803,30 @@ void TextFormat::Printer::PrintUnknownFields(
         break;
     }
   }
+}
+
+bool TextFormat::Printer::TryRedactFieldValue(
+    const Message& message, const FieldDescriptor* field,
+    BaseTextGenerator* generator, bool insert_value_separator) const {
+  auto do_redact = [&](const TProtoStringType& replacement) {
+    if (insert_value_separator) {
+      generator->PrintMaybeWithMarker(MarkerToken(), ": ");
+    }
+    generator->PrintString(replacement);
+    if (insert_value_separator) {
+      if (single_line_mode_) {
+        generator->PrintLiteral(" ");
+      } else {
+        generator->PrintLiteral("\n");
+      }
+    }
+  };
+
+  if (redact_debug_string_ && field->options().debug_redact()) {
+    do_redact("[REDACTED]");
+    return true;
+  }
+  return false;
 }
 
 }  // namespace protobuf

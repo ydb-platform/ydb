@@ -8,7 +8,8 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, SchedulerLogger, "Scheduler");
+// TODO(eshcherbin): Move to public.
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, SchedulerLogger, "Scheduler");
 
 ////////////////////////////////////////////////////////////////////////////////
 

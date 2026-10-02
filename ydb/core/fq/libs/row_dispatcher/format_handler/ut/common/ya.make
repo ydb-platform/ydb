@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
 
+    ydb/library/testlib/common
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
 

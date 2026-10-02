@@ -1,6 +1,8 @@
-#include "yql_dq_state.h"
+#include "yql_dq_datasource_constraints.h"
 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/ast/yql_constraint.h>
@@ -16,9 +18,9 @@ public:
     TDqDataSourceConstraintTransformer()
         : TVisitorTransformerBase(true)
     {
+        AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqDataSourceConstraintTransformer::CopyFromFirst));
         AddHandler({
             TCoConfigure::CallableName(),
-            TDqReadWrap::CallableName(),
             TDqReadWideWrap::CallableName(),
             TDqReadBlockWideWrap::CallableName(),
             TDqSource::CallableName(),
@@ -33,12 +35,17 @@ public:
     TStatus HandleDefault(TExprBase, TExprContext&) {
         return TStatus::Ok;
     }
+
+    TStatus CopyFromFirst(TExprBase node, TExprContext&) {
+        node.MutableRaw()->CopyConstraints(node.Raw()->Head());
+        return TStatus::Ok;
+    }
 };
 
-}
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreateDqDataSourceConstraintTransformer() {
     return THolder<IGraphTransformer>(new TDqDataSourceConstraintTransformer());
 }
 
-}
+} // namespace NYql

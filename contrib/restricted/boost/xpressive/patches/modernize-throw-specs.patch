@@ -1,0 +1,11 @@
+--- a/include/boost/xpressive/regex_error.hpp	(index)
++++ b/include/boost/xpressive/regex_error.hpp	(working tree)
+@@ -70,7 +70,7 @@ struct regex_error
+ 
+     /// Destructor for class regex_error
+     /// \throw nothrow
+-    virtual ~regex_error() throw()
++    virtual ~regex_error()
+     {}
+ 
+ private:

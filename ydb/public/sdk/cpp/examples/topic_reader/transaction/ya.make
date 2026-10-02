@@ -1,7 +1,5 @@
 PROGRAM(read_from_topic_in_transaction)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     application.cpp
     main.cpp
@@ -10,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/query
     library/cpp/getopt
 )
 

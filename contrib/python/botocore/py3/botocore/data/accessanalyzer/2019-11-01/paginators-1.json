@@ -47,6 +47,24 @@
       "output_token": "nextToken",
       "limit_key": "maxResults",
       "result_key": "policyGenerations"
+    },
+    "GetFindingV2": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "findingDetails"
+    },
+    "ListFindingsV2": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "findings"
+    },
+    "GetFindingRecommendation": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "recommendedSteps"
     }
   }
 }

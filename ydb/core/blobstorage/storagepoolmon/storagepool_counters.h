@@ -9,6 +9,7 @@
 
 #include <util/generic/bitops.h>
 #include <util/generic/ptr.h>
+#include <ydb/core/util/max_tracker.h>
 
 namespace NKikimr {
 
@@ -21,6 +22,7 @@ struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
+    TMaxTracker ResponseTimeMax;
 
     void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
@@ -31,6 +33,7 @@ struct TRequestMonItem {
 
         ResponseTime = counters->GetHistogram("responseTimeMs",
             NMonitoring::ExplicitHistogram(std::move(bounds)));
+        ResponseTimeMax.Init(counters->GetCounter("responseTimeMsMax", false));
     }
 
     void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
@@ -38,6 +41,11 @@ struct TRequestMonItem {
         *GeneratedSubrequests += generatedSubrequests;
         *GeneratedSubrequestBytes += generatedSubrequestBytes;
         ResponseTime->Collect(durationSeconds * 1000.0);
+        ResponseTimeMax.Collect((i64)(durationSeconds * 1000.0));
+    }
+
+    void Update() {
+        ResponseTimeMax.Update();
     }
 };
 
@@ -190,6 +198,16 @@ public:
         DSProxyDiskCostCounter = PoolGroup->GetCounter("DSProxyDiskCostNs", true);
     }
 
+    void Update() {
+        for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
+            ui32 maxIdx = IsReducedHandleClass((EHandleClass)handleClass) ? MaxReducedSizeClassBucketIdx
+                                                                            : MaxSizeClassBucketIdx;
+            for (ui32 sizeClassIdx = 0; sizeClassIdx <= maxIdx; ++sizeClassIdx) {
+                RequestMon[handleClass][sizeClassIdx].Update();
+            }
+        }
+    }
+
 public:
     // request cost counters
     ::NMonitoring::TDynamicCounters::TCounterPtr DSProxyDiskCostCounter;
@@ -215,6 +233,12 @@ public:
         TIntrusivePtr<TStoragePoolCounters> spc = MakeIntrusive<TStoragePoolCounters>(Counters, storagePoolName, type);
         StoragePoolCounters.emplace(storagePoolName, spc);
         return spc;
+    }
+
+    void UpdateAll() {
+        for (auto &kv : StoragePoolCounters) {
+            kv.second->Update();
+        }
     }
 };
 

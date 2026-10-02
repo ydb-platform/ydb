@@ -14,8 +14,8 @@ namespace numpy
   namespace wrapper
   {
     template <class T0, class T1>
-    bool isclose(T0 const &u, T1 const &v, double rtol = 1e-5,
-                 double atol = 1e-8, bool equal_nan = false);
+    bool isclose(T0 const &u, T1 const &v, double rtol = 1e-5, double atol = 1e-8,
+                 bool equal_nan = false);
   }
 #define NUMPY_NARY_FUNC_NAME isclose
 #define NUMPY_NARY_FUNC_SYM wrapper::isclose

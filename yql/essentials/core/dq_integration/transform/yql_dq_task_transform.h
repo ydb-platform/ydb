@@ -10,7 +10,12 @@
 
 namespace NYql {
 
-using TTaskTransformFactory = std::function<NKikimr::NMiniKQL::TCallableVisitFuncProvider(const THashMap<TString, TString>&, const NKikimr::NMiniKQL::IFunctionRegistry*)>;
+struct TTaskTransformArguments {
+    THashMap<TString, TString> TaskParams;
+    TVector<TString> ReadRanges;
+};
+
+using TTaskTransformFactory = std::function<NKikimr::NMiniKQL::TCallableVisitFuncProvider(const TTaskTransformArguments&, const NKikimr::NMiniKQL::IFunctionRegistry*)>;
 
 TTaskTransformFactory CreateCompositeTaskTransformFactory(TVector<TTaskTransformFactory> factories);
 

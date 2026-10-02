@@ -1,6 +1,6 @@
 RECURSE(
+    async
     core
-    cppcoro
     dnsresolver
     examples
     helpers
@@ -8,7 +8,10 @@ RECURSE(
     interconnect
     log_backend
     memory_log
+    metrics
     prof
+    subsystems
+    struct_log
     testlib
     util
     wilson

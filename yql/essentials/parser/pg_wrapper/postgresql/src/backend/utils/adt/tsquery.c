@@ -120,7 +120,7 @@ get_modifiers(char *buf, int16 *weight, bool *prefix)
 		return buf;
 
 	buf++;
-	while (*buf && pg_mblen(buf) == 1)
+	while (*buf && pg_mblen_cstr(buf) == 1)
 	{
 		switch (*buf)
 		{
@@ -197,7 +197,7 @@ parse_phrase_operator(TSQueryParserState pstate, int16 *distance)
 					continue;
 				}
 
-				if (!t_isdigit(ptr))
+				if (!t_isdigit_cstr(ptr))
 					return false;
 
 				errno = 0;
@@ -259,12 +259,12 @@ parse_or_operator(TSQueryParserState pstate)
 		return false;
 
 	/* it shouldn't be a part of any word */
-	if (t_iseq(ptr, '-') || t_iseq(ptr, '_') || t_isalnum(ptr))
+	if (t_iseq(ptr, '-') || t_iseq(ptr, '_') || t_isalnum_cstr(ptr))
 		return false;
 
 	for (;;)
 	{
-		ptr += pg_mblen(ptr);
+		ptr += pg_mblen_cstr(ptr);
 
 		if (*ptr == '\0')		/* got end of string without operand */
 			return false;
@@ -274,7 +274,7 @@ parse_or_operator(TSQueryParserState pstate)
 		 * So we still treat OR literal as operation with possibly incorrect
 		 * operand and will not search it as lexeme
 		 */
-		if (!t_isspace(ptr))
+		if (!t_isspace_cstr(ptr))
 			break;
 	}
 
@@ -315,7 +315,7 @@ gettoken_query_standard(TSQueryParserState state, int8 *operator,
 					/* generic syntax error message is fine */
 					return PT_ERR;
 				}
-				else if (!t_isspace(state->buf))
+				else if (!t_isspace_cstr(state->buf))
 				{
 					/*
 					 * We rely on the tsvector parser to parse the value for
@@ -383,14 +383,14 @@ gettoken_query_standard(TSQueryParserState state, int8 *operator,
 				{
 					return (state->count) ? PT_ERR : PT_END;
 				}
-				else if (!t_isspace(state->buf))
+				else if (!t_isspace_cstr(state->buf))
 				{
 					return PT_ERR;
 				}
 				break;
 		}
 
-		state->buf += pg_mblen(state->buf);
+		state->buf += pg_mblen_cstr(state->buf);
 	}
 }
 
@@ -439,12 +439,12 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 				}
 				else if (ISOPERATOR(state->buf))
 				{
-					/* or else gettoken_tsvector() will raise an error */
+					/* ignore, else gettoken_tsvector() will raise an error */
 					state->buf++;
 					state->state = WAITOPERAND;
 					continue;
 				}
-				else if (!t_isspace(state->buf))
+				else if (!t_isspace_cstr(state->buf))
 				{
 					/*
 					 * We rely on the tsvector parser to parse the value for
@@ -476,15 +476,9 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 				break;
 
 			case WAITOPERATOR:
-				if (t_iseq(state->buf, '"'))
+				if (*state->buf == '\0')
 				{
-					/*
-					 * put implicit AND after an operand and handle this quote
-					 * in WAITOPERAND
-					 */
-					state->state = WAITOPERAND;
-					*operator = OP_AND;
-					return PT_OPR;
+					return PT_END;
 				}
 				else if (parse_or_operator(state))
 				{
@@ -492,21 +486,23 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 					*operator = OP_OR;
 					return PT_OPR;
 				}
-				else if (*state->buf == '\0')
+				else if (ISOPERATOR(state->buf))
 				{
-					return PT_END;
+					/* ignore other operators in this state too */
+					state->buf++;
+					continue;
 				}
-				else if (!t_isspace(state->buf))
+				else if (!t_isspace_cstr(state->buf))
 				{
-					/* put implicit AND after an operand */
-					*operator = OP_AND;
+					/* insert implicit AND between operands */
 					state->state = WAITOPERAND;
+					*operator = OP_AND;
 					return PT_OPR;
 				}
 				break;
 		}
 
-		state->buf += pg_mblen(state->buf);
+		state->buf += pg_mblen_cstr(state->buf);
 	}
 }
 
@@ -1018,9 +1014,8 @@ infix(INFIX *in, int parentPriority, bool rightPhraseOp)
 				*(in->cur) = '\\';
 				in->cur++;
 			}
-			COPYCHAR(in->cur, op);
 
-			clen = pg_mblen(op);
+			clen = ts_copychar_cstr(in->cur, op);
 			op += clen;
 			in->cur += clen;
 		}
@@ -1180,10 +1175,11 @@ tsqueryout(PG_FUNCTION_ARGS)
  *
  * uint8	type, QI_VAL
  * uint8	weight
- *			operand text in client encoding, null-terminated
  * uint8	prefix
+ *			operand text in client encoding, null-terminated
  *
  * For each operator:
+ *
  * uint8	type, QI_OPR
  * uint8	operator, one of OP_AND, OP_PHRASE OP_OR, OP_NOT.
  * uint16	distance (only for OP_PHRASE)

@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include <ydb/library/backup/proto/proto.h>
+
 #include <util/generic/map.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
@@ -26,6 +28,13 @@ void SetLog(const std::shared_ptr<::TLog>& log) {
 
 const std::shared_ptr<::TLog>& GetLog() {
     return Singleton<TLog>()->Log;
+}
+
+TString ProtoToString(const google::protobuf::Message& message) {
+    TString result;
+    Y_ENSURE(PrintProto(message, result));
+
+    return result;
 }
 
 } // NBackup

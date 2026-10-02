@@ -22,8 +22,7 @@ namespace scipy
       double yvp(T0 x, T1 y)
       {
         using namespace boost::math::policies;
-        return boost::math::cyl_neumann_prime(
-            x, y, make_policy(promote_double<true>()));
+        return boost::math::cyl_neumann_prime(x, y, make_policy(promote_double<true>()));
       }
     } // namespace details
 

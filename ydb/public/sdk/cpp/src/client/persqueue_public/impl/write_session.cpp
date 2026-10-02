@@ -1,6 +1,6 @@
 #include "write_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -8,7 +8,7 @@
 #include <util/generic/utility.h>
 #include <util/stream/buffer.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
@@ -86,7 +86,7 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         subSettings.EventHandlers_.CommonHandler({});
     }
     Writer = std::make_shared<TWriteSession>(subSettings, client, connections, dbDriverState);
-    Writer->Start(TDuration::Max());
+    Writer->Start(TDuration::Zero());
 }
 
 ui64 TSimpleBlockingWriteSession::GetInitSeqNo() {
@@ -110,16 +110,16 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
 
     std::optional<TContinuationToken> token = std::nullopt;
 
-    while (IsAlive() && remainingTime > TDuration::Zero()) {
+    do {
         Writer->WaitEvent().Wait(remainingTime);
 
         for (auto event : Writer->GetEvents()) {
             if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
                 Y_ABORT_UNLESS(!token.has_value());
                 token = std::move(readyEvent->ContinuationToken);
-            } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+            } else if (std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
                 // discard
-            } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&event)) {
+            } else if (std::get_if<TSessionClosedEvent>(&event)) {
                 Closed.store(true);
                 return std::nullopt;
             }
@@ -130,7 +130,7 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
         }
 
         remainingTime = timeout - (TInstant::Now() - startTime);
-    }
+    } while (IsAlive() && remainingTime > TDuration::Zero());
 
     return std::nullopt;
 }

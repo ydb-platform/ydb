@@ -2,12 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(5.0.0)
+VERSION(6.0.5)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/Flask
+    contrib/python/Werkzeug
 )
 
 NO_LINT()
@@ -18,13 +19,13 @@ PY_SRCS(
     flask_cors/core.py
     flask_cors/decorator.py
     flask_cors/extension.py
-    flask_cors/version.py
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/Flask-Cors/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    flask_cors/py.typed
 )
 
 END()

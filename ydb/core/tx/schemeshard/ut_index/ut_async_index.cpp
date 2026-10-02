@@ -1,11 +1,11 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -32,11 +32,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
-            {NLs::PathExist,
-             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-             NLs::IndexKeys({"indexed"})});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),{
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
+        });
     }
 
     Y_UNIT_TEST(OnlineBuild) {
@@ -53,7 +54,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
-            "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}
+            "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}, {}
         });
         env.TestWaitNotification(runtime, txId);
     }
@@ -119,28 +120,6 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return mainTabletIds;
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns)
-    {
-        TStringBuilder keyFmt;
-        for (const auto& k : pk) {
-            keyFmt << "'('" << k << " (Null) (Void)) ";
-        }
-        const auto columnsFmt = "'" + JoinSeq(" '", columns);
-
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
-            (let range '(%s))
-            (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
-            (return (AsList (SetResult 'Result result) ))
-        ))", keyFmt.data(), columnsFmt.data(), table.data()), result, error);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-
-        return result;
-    }
-
     struct TTableTraits {
         TString Path;
         TVector<TString> Key;
@@ -148,37 +127,15 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         ui32 ExpectedRecords;
     };
 
-    template <typename C>
-    ui32 CountRows(TTestActorRuntime& runtime, const TTableTraits& table, const C& partitions) {
-        ui32 rows = 0;
-
-        for (const auto& x : partitions) {
-            auto result = ReadTable(runtime, x.GetDatashardId(), SplitPath(table.Path).back(), table.Key, table.Columns);
-            auto value = NClient::TValue::Create(result);
-            rows += value["Result"]["List"].Size();
-        }
-
-        return rows;
-    }
-
     bool CheckWrittenToIndex(TTestActorRuntime& runtime, const TTableTraits& mainTable, const TTableTraits& indexTable) {
-        bool writtenToMainTable = false;
-        {
-            auto tableDesc = DescribePath(runtime, mainTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-            writtenToMainTable = mainTable.ExpectedRecords == CountRows(runtime, mainTable, tablePartitions);
-        }
+        auto mainTableRows = CountRows(runtime, mainTable.Path);
+        bool writtenToMainTable = (mainTable.ExpectedRecords == mainTableRows);
 
         if (writtenToMainTable) {
-            auto tableDesc = DescribePrivatePath(runtime, indexTable.Path, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-            UNIT_ASSERT(!tablePartitions.empty());
-
             int i = 0;
             while (++i < 10) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable, tablePartitions)) {
+                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable.Path)) {
                     break;
                 }
             }
@@ -195,12 +152,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         SPLIT_OP_BOTH = 0x03,
     };
 
-    template <typename T>
-    void SplitWithReboots(ESplitOp op,
-            const std::function<void(T&, TTestActorRuntime&)>& init,
-            const std::function<ui64(T&, TTestActorRuntime&, const TString&, const TVector<ui64>&)>& split)
+    void SplitWithReboots(TTestWithReboots& t, ESplitOp op,
+            const std::function<void(TTestActorRuntime&)>& init,
+            const std::function<ui64(TTestActorRuntime&, const TString&, const TVector<ui64>&)>& split)
     {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
             TVector<ui64> indexTabletIds;
@@ -209,7 +164,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                 TInactiveZone inactive(activeZone);
                 runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NActors::NLog::PRI_DEBUG);
 
-                init(t, runtime);
+                init(runtime);
 
                 auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable", true, true);
                 indexTabletIds = MakeTabletIds(indexDesc.GetPathDescription().GetTablePartitions());
@@ -218,10 +173,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
 
             TVector<ui64> txIds;
             if (op & SPLIT_OP_MAIN) {
-                txIds.push_back(split(t, runtime, "/MyRoot/Table", mainTabletIds));
+                txIds.push_back(split(runtime, "/MyRoot/Table", mainTabletIds));
             }
             if (op & SPLIT_OP_INDEX) {
-                txIds.push_back(split(t, runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable", indexTabletIds));
+                txIds.push_back(split(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable", indexTabletIds));
             }
             t.TestEnv->TestWaitNotification(runtime, txIds);
 
@@ -244,9 +199,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    template <typename T>
-    void SplitWithReboots(ESplitOp op, const std::function<void(T&, TTestActorRuntime&)>& init) {
-        SplitWithReboots<T>(op, init, [](T& t, TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
+    void SplitWithReboots(TTestWithReboots& t, ESplitOp op, const std::function<void(TTestActorRuntime&)>& init) {
+        SplitWithReboots(t, op, init, [&](TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
             TestSplitTable(runtime, ++t.TxId, path, Sprintf(R"(
                 SourceTabletId: %lu
@@ -260,8 +214,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitMainWithReboots) {
-        SplitWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMainWithReboots, 2, 1, false) {
+        SplitWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -279,8 +233,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitIndexWithReboots) {
-        SplitWithReboots<T>(SPLIT_OP_INDEX, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitIndexWithReboots, 2, 1, false) {
+        SplitWithReboots(t, SPLIT_OP_INDEX, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -298,8 +252,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitBothWithReboots) {
-        SplitWithReboots<T>(SPLIT_OP_BOTH, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitBothWithReboots, 2, 1, false) {
+        SplitWithReboots(t, SPLIT_OP_BOTH, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -317,8 +271,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CdcAndSplitWithReboots) {
-        SplitWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CdcAndSplitWithReboots, 2, 1, false) {
+        SplitWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -346,9 +300,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    template <typename T>
-    void MergeWithReboots(ESplitOp op, const std::function<void(T&, TTestActorRuntime&)>& init) {
-        SplitWithReboots<T>(op, init, [](T& t, TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
+    void MergeWithReboots(TTestWithReboots& t, ESplitOp op, const std::function<void(TTestActorRuntime&)>& init) {
+        SplitWithReboots(t, op, init, [&](TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
             TestSplitTable(runtime, ++t.TxId, path, Sprintf(R"(
                 SourceTabletId: %lu
@@ -358,8 +311,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeMainWithReboots) {
-        MergeWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMainWithReboots, 2, 1, false) {
+        MergeWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -387,8 +340,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeIndexWithReboots) {
-        MergeWithReboots<T>(SPLIT_OP_INDEX, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeIndexWithReboots, 2, 1, false) {
+        MergeWithReboots(t, SPLIT_OP_INDEX, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -418,8 +371,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeBothWithReboots) {
-        MergeWithReboots<T>(SPLIT_OP_BOTH, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeBothWithReboots, 2, 1, false) {
+        MergeWithReboots(t, SPLIT_OP_BOTH, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -459,8 +412,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CdcAndMergeWithReboots) {
-        MergeWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CdcAndMergeWithReboots, 2, 1, false) {
+        MergeWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -498,8 +451,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropTableWithInflightChanges) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropTableWithInflightChanges, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 return TTestActorRuntime::DefaultObserverFunc(ev);
@@ -570,10 +522,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
-      NLs::PathExist,
-      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-      NLs::IndexKeys({"indexed"}),
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
         });
     }
 }

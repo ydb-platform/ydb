@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TBinaryFunctionArgsDesc {
     NUdf::TDataTypeId SchemeType;
@@ -11,7 +10,6 @@ struct TBinaryFunctionArgsDesc {
 };
 
 TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(TType* left, TType* right,
-    bool allowOptionalInput, bool requiresBooleanArgs);
+                                                bool allowOptionalInput, bool requiresBooleanArgs);
 
-}
-}
+} // namespace NKikimr::NMiniKQL

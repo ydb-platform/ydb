@@ -39,33 +39,26 @@ namespace numpy
     } // namespace details
 
     template <class T, class pS, class N, class Norm>
-    types::ndarray<
-        typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array_tuple<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis,
-        Norm const &norm)
+    types::ndarray<std::enable_if_t<types::is_complex<T>::value, T>,
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
+    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis, Norm const &norm)
     {
-      return c2c(in_array, details::normalize_n(n), axis,
-                 details::normalize_norm(norm), true);
+      return c2c(in_array, details::normalize_n(n), axis, details::normalize_norm(norm), true);
     }
 
     template <class T, class pS, class N, class Norm>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis,
-        Norm const &norm)
+    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis, Norm const &norm)
     {
-      return r2c(in_array, details::normalize_n(n), axis,
-                 details::normalize_norm(norm), true, true);
+      return r2c(in_array, details::normalize_n(n), axis, details::normalize_norm(norm), true,
+                 true);
     }
 
     template <class T, class pS, class N, class Norm>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis,
-        Norm const &norm)
+    fft(types::ndarray<T, pS> const &in_array, N const &n, long axis, Norm const &norm)
     {
       auto tmp_array = _copy_to_double(in_array);
       return fft(tmp_array, n, axis, norm);

@@ -31,9 +31,10 @@ protected:
 
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TBackupRestoreUnitBase::Abort: aborting operation",
+            {"errorMessage", error});
 
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, error);
         ResetWaiting(op);
@@ -57,7 +58,7 @@ private:
 
     void PersistResult(TOperation::TPtr op, TTransactionContext& txc) {
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
-        Y_ABORT_UNLESS(schemeOp);
+        Y_ENSURE(schemeOp);
 
         NIceDb::TNiceDb db(txc.DB);
         DataShard.PersistSchemeTxResult(db, *schemeOp);
@@ -87,15 +88,16 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override final {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (!IsRelevant(tx)) {
             return EExecutionStatus::Executed;
         }
 
         if (!IsWaiting(op)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Starting a " << GetKind() << " operation"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Starting a operation",
+                {"kind", GetKind()},
+                {"tabletId", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
                 return EExecutionStatus::Executed;
@@ -106,8 +108,9 @@ public:
         }
 
         if (HasResult(op)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "" << GetKind() << " complete"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Complete",
+                {"kind", GetKind()},
+                {"tabletId", DataShard.TabletID()});
 
             ResetWaiting(op);
             if (ProcessResult(op, ctx)) {

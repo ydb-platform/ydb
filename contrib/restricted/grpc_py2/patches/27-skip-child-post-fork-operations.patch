@@ -1,0 +1,42 @@
+--- a/src/core/lib/event_engine/forkable.cc	(index)
++++ b/src/core/lib/event_engine/forkable.cc	(working tree)
+@@ -62,8 +62,17 @@ void PostforkParent() {
+   }
+ }
+ 
++bool skip_postfork_child = false;
++
++void SetSkipPostForkChild() {
++  skip_postfork_child = true;
++}
++
+ void PostforkChild() {
+   y_absl::ResetDeadlockGraphMu();
++  if (skip_postfork_child) {
++    return;
++  }
+   grpc_core::MutexLock lock(g_mu.get());
+   for (auto* forkable : *g_forkables) {
+     forkable->PostforkChild();
+--- a/src/core/lib/event_engine/forkable.h	(index)
++++ b/src/core/lib/event_engine/forkable.h	(working tree)
+@@ -28,6 +28,19 @@ namespace experimental {
+ // This should be called once upon grpc_initialization.
+ void RegisterForkHandlers();
+ 
++// We've faced flickering crash in grpc during fork.
++// Crash is observed in different places before 'execv' is called.
++// It is mentioned in https://man7.org/linux/man-pages/man2/fork.2.html
++// that in multithreading application not all function could be called
++// after fork, so we think that we deal with 'undefined behaviour'.
++// In original grpc code the threads are created during postfork operations,
++// but thread creation is not safe in accordance to the fork documentation.
++//
++// So, if threads in child process are not required, user could
++// skip threads recovery after fork for child process in order
++// to exclude issues with possible UB.
++void SetSkipPostForkChild();
++
+ // Global callback for pthread_atfork's *prepare argument
+ void PrepareFork();
+ // Global callback for pthread_atfork's *parent argument

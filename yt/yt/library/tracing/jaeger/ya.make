@@ -11,6 +11,7 @@ PEERDIR(
 SRCS(
     model.proto
 
+    config.cpp
     sampler.cpp
     tracer.cpp
     GLOBAL configure_tracer.cpp

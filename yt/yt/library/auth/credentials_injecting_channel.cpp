@@ -84,8 +84,8 @@ protected:
     }
 
 private:
-    const std::optional<TString> User_;
-    const std::optional<TString> UserTag_;
+    const std::optional<std::string> User_;
+    const std::optional<std::string> UserTag_;
 };
 
 IChannelPtr CreateUserInjectingChannel(
@@ -119,7 +119,7 @@ protected:
     }
 
 private:
-    const TString Token_;
+    const std::string Token_;
 };
 
 IChannelPtr CreateTokenInjectingChannel(
@@ -143,8 +143,8 @@ public:
         IChannelPtr underlyingChannel,
         const TAuthenticationOptions& options)
         : TUserInjectingChannel(std::move(underlyingChannel), options)
-        , SessionId_(options.SessionId.value_or(TString()))
-        , SslSessionId_(options.SslSessionId.value_or(TString()))
+        , SessionId_(options.SessionId.value_or(std::string()))
+        , SslSessionId_(options.SslSessionId.value_or(std::string()))
     { }
 
 protected:
@@ -158,8 +158,8 @@ protected:
     }
 
 private:
-    const TString SessionId_;
-    const TString SslSessionId_;
+    const std::string SessionId_;
+    const std::string SslSessionId_;
 };
 
 IChannelPtr CreateCookieInjectingChannel(
@@ -233,7 +233,7 @@ protected:
     }
 
 private:
-    const TString UserTicket_;
+    const std::string UserTicket_;
 };
 
 NRpc::IChannelPtr CreateUserTicketInjectingChannel(
@@ -241,7 +241,7 @@ NRpc::IChannelPtr CreateUserTicketInjectingChannel(
     const TAuthenticationOptions& options)
 {
     YT_VERIFY(underlyingChannel);
-    YT_VERIFY(options.UserTicket && *options.UserTicket);
+    YT_VERIFY(options.UserTicket && !options.UserTicket->empty());
     return New<TUserTicketInjectingChannel>(
         std::move(underlyingChannel),
         options);
@@ -268,12 +268,12 @@ public:
         }
         return CreateServiceTicketInjectingChannel(
             std::move(channel),
-            TAuthenticationOptions::FromServiceTicketAuth(ServiceTicketAuth_));
+            {.ServiceTicketAuth = ServiceTicketAuth_});
     }
 
 private:
-    IChannelFactoryPtr UnderlyingFactory_;
-    IServiceTicketAuthPtr ServiceTicketAuth_;
+    const IChannelFactoryPtr UnderlyingFactory_;
+    const IServiceTicketAuthPtr ServiceTicketAuth_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

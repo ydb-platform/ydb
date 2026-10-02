@@ -3,6 +3,7 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    abortable_stream.cpp
     batch_request.cpp
     client.cpp
     client_method_options.cpp
@@ -16,6 +17,7 @@ SRCS(
     job_statistics.cpp
     io.cpp
     operation.cpp
+    patchable_field.cpp
     protobuf_format.cpp
     serialize.cpp
     skiff_row.cpp

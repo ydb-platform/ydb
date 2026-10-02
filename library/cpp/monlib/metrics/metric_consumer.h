@@ -16,6 +16,9 @@ namespace NMonitoring {
         virtual void OnStreamEnd() = 0;
 
         virtual void OnCommonTime(TInstant time) = 0;
+        virtual void OnCommonStartTimeSeconds(ui32 startTimeSeconds) {
+            Y_UNUSED(startTimeSeconds);
+        }
 
         virtual void OnMetricBegin(EMetricType type) = 0;
         virtual void OnMetricEnd() = 0;
@@ -33,6 +36,14 @@ namespace NMonitoring {
         virtual void OnHistogram(TInstant time, IHistogramSnapshotPtr snapshot) = 0;
         virtual void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) = 0;
         virtual void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) = 0;
+
+        virtual void OnMemOnly(bool isMemOnly) {
+            Y_UNUSED(isMemOnly);
+        }
+
+        virtual void OnStartTimeSeconds(ui32 startTimeSeconds) {
+            Y_UNUSED(startTimeSeconds);
+        }
     };
 
     using IMetricConsumerPtr = THolder<IMetricConsumer>;

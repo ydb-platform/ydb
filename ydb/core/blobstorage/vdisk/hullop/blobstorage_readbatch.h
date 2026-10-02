@@ -83,6 +83,7 @@ namespace NKikimr {
             ui64 Serial;
             NKikimrProto::EReplyStatus Status;
             TRcBuf Content;
+            TLogoBlobID HugeBlobId;
         };
         using TReadQueue = TDeque<TReadItem>;
         TReadQueue ReadQueue;
@@ -103,29 +104,31 @@ namespace NKikimr {
 
         bool Started = false;
 
+        const TString VDiskLogPrefix;
         const ui32 MaxReadBlockSize;
         const ui32 SeekCostInBytes;
         const double EfficiencyThreshold;
 
     public:
-        TCompactReadBatcher(ui32 maxReadBlockSize, ui32 seekCostInBytes, double efficiencyThreshold)
-            : MaxReadBlockSize(maxReadBlockSize)
+        TCompactReadBatcher(const TString& prefix, ui32 maxReadBlockSize, ui32 seekCostInBytes, double efficiencyThreshold)
+            : VDiskLogPrefix(prefix)
+            , MaxReadBlockSize(maxReadBlockSize)
             , SeekCostInBytes(seekCostInBytes)
             , EfficiencyThreshold(efficiencyThreshold)
         {}
 
         // enqueue read item -- a read from specific chunk at desired position and length; function returns serial
         // number of this request; all results are then reported sequently in ascending order of returned serial
-        ui64 AddReadItem(TDiskPart location, TPayload&& payload) {
+        ui64 AddReadItem(TDiskPart location, TPayload&& payload, TLogoBlobID hugeBlobId) {
             const ui64 serial = NextSerial++;
             ReadQueue.push_back(TReadItem{location.ChunkIdx, location.Offset, location.Size, std::move(payload), serial,
-                NKikimrProto::UNKNOWN, {}});
+                NKikimrProto::UNKNOWN, {}, hugeBlobId});
             return serial;
         }
 
         // start batcher operation; no AddReadItem requests allowed beyond this point
         void Start() {
-            Y_ABORT_UNLESS(!Started);
+            Y_VERIFY_S(!Started, VDiskLogPrefix);
             Started = true;
             Iterator = ReadQueue.begin();
         }
@@ -156,10 +159,13 @@ namespace NKikimr {
             // total number of bytes we are going to read
             ui32 totalBytes = 0;
 
+            // logo blob id for huge blob we are reading
+            TLogoBlobID hugeBlobId;
+
             // current position
             typename TReadQueue::iterator it;
             for (it = Iterator; it != ReadQueue.end(); ++it) {
-                if (it->ChunkIdx == chunkIdx) {
+                if (it->ChunkIdx == chunkIdx && !hugeBlobId) {
                     // try to add this item to range and calculate parameters
                     range.Set(it->Offset, it->Offset + it->Size);
                     const std::pair<ui32, ui32> newEnclosingRange = range.GetEnclosingRange();
@@ -167,7 +173,7 @@ namespace NKikimr {
                     // calculate new number of bytes we are going to read in single request; if this value exceeds
                     // maximum block size, stop generating request (unless read queue is totally empty)
                     const ui32 newTotalBytes = newEnclosingRange.second - newEnclosingRange.first;
-                    Y_ABORT_UNLESS(newTotalBytes);
+                    Y_VERIFY_S(newTotalBytes, VDiskLogPrefix);
                     if (newTotalBytes > MaxReadBlockSize && outIt != Iterator) {
                         break;
                     }
@@ -178,7 +184,7 @@ namespace NKikimr {
                     double efficiency = (double)effectiveBytes / newTotalBytes;
                     if (efficiency < EfficiencyThreshold) {
                         // this can't be the first item -- as the efficiency for single item is 1.0
-                        Y_ABORT_UNLESS(outIt != Iterator);
+                        Y_VERIFY_S(outIt != Iterator, VDiskLogPrefix);
                         break;
                     }
 
@@ -187,9 +193,12 @@ namespace NKikimr {
                     const i32 addedUselessBytes = newTotalBytes - (totalBytes + it->Size);
                     if (addedUselessBytes > 0 && (ui32)addedUselessBytes > SeekCostInBytes) {
                         // this can't be the first item too for the same reason as above
-                        Y_ABORT_UNLESS(outIt != Iterator);
+                        Y_VERIFY_S(outIt != Iterator, VDiskLogPrefix);
                         break;
                     }
+
+                    // store huge blob id
+                    hugeBlobId = it->HugeBlobId;
 
                     // move item in place
                     *outIt++ = std::move(*it);
@@ -207,6 +216,7 @@ namespace NKikimr {
             const ui32 size = enclosingRange.second - enclosingRange.first;
             auto msg = std::make_unique<NPDisk::TEvChunkRead>(owner, ownerRound, chunkIdx, offset, size, priorityClass,
                     reinterpret_cast<void *>(NextRequestCookie));
+            msg->BlobId = hugeBlobId;
             ++NextRequestCookie;
 
             // move stored items to their place and advance Iterator
@@ -222,7 +232,7 @@ namespace NKikimr {
             auto& data = msg->Data;
 
             auto it = ActiveRequests.find(msg->Cookie);
-            Y_ABORT_UNLESS(it != ActiveRequests.end());
+            Y_VERIFY_S(it != ActiveRequests.end(), VDiskLogPrefix);
 
             for (auto reqIt = it->second.first; reqIt != it->second.second; ++reqIt) {
                 TReadItem& item = *reqIt;
@@ -230,14 +240,15 @@ namespace NKikimr {
                 item.Status = msg->Status;
                 if (msg->Status == NKikimrProto::OK) {
                     // ensure returned area covers this item
-                    Y_ABORT_UNLESS(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size());
+                    Y_VERIFY_S(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size(),
+                        VDiskLogPrefix);
 
                     // calculate offset of item inside response
                     const ui32 offset = item.Offset - msg->Offset;
 
-                    // if item is not readable at this point, we return ERROR
+                    // if item is not readable at this point, we return CORRUPTED, so the blob can be restored through scrubbing mechanism
                     if (!data.IsReadable(offset, item.Size)) {
-                        item.Status = NKikimrProto::ERROR;
+                        item.Status = NKikimrProto::CORRUPTED;
                     } else {
                         item.Content = data.Substr(offset, item.Size);
                     }
@@ -277,7 +288,7 @@ namespace NKikimr {
 
         void Finish() {
             Started = false;
-            Y_ABORT_UNLESS(NextSerial == NextReadySerial);
+            Y_VERIFY_S(NextSerial == NextReadySerial, VDiskLogPrefix);
         }
     };
 

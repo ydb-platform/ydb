@@ -1,0 +1,23 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "fdate";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "finterval";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+            ]
+        ]
+    }
+}

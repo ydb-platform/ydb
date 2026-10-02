@@ -52,6 +52,7 @@ struct Schema : NIceDb::Schema {
         struct IsExternalStatisticsAggregator : Column<28, NScheme::NTypeIds::Bool> {};
         struct IsExternalBackupController : Column<29, NScheme::NTypeIds::Bool> {};
         struct ScaleRecommenderPolicies : Column<30, NScheme::NTypeIds::String> {};
+        struct PeerName : Column<31, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
@@ -59,7 +60,7 @@ struct Schema : NIceDb::Schema {
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator,
-            IsExternalBackupController, ScaleRecommenderPolicies>;
+            IsExternalBackupController, ScaleRecommenderPolicies, PeerName>;
     };
 
     struct TenantPools : Table<3> {
@@ -116,6 +117,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Timestamp, UserSID, Data>;
     };
 
+    struct DecommittedGroups : Table<8> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct DecommitTime : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, DecommitTime>;
+    };
+
     struct ConfigItems : Table<100> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Generation : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -159,9 +168,11 @@ struct Schema : NIceDb::Schema {
         struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> {};
         struct Dropped : Column<3, NScheme::NTypeIds::Bool> {};
+        // serialized NKikimrConsole::TYamlConfigUnknownFields snapshot taken at upload time
+        struct UnknownFields : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Version>;
-        using TColumns = TableColumns<Version, Config, Dropped>;
+        using TColumns = TableColumns<Version, Config, Dropped, UnknownFields>;
     };
 
     struct DatabaseYamlConfigs : Table<104> {
@@ -175,7 +186,7 @@ struct Schema : NIceDb::Schema {
 
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
-                                 YamlConfig, DatabaseYamlConfigs>;
+                                 YamlConfig, DatabaseYamlConfigs, DecommittedGroups>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

@@ -215,7 +215,7 @@ public:
    * Return the number of days in the given Indian year
    * @internal
    */
-  virtual int32_t handleGetYearLength(int32_t extendedYear) const override;
+  virtual int32_t handleGetYearLength(int32_t extendedYear, UErrorCode& status) const override;
 
   //-------------------------------------------------------------------------
   // Functions for converting from field values to milliseconds....
@@ -284,27 +284,16 @@ public:
    */
   virtual const char * getType() const override;
 
-  /**
-   * @return      The related Gregorian year; will be obtained by modifying the value
-   *              obtained by get from UCAL_EXTENDED_YEAR field
-   * @internal
-   */
-  virtual int32_t getRelatedYear(UErrorCode &status) const override;
-
-  /**
-   * @param year  The related Gregorian year to set; will be modified as necessary then
-   *              set in UCAL_EXTENDED_YEAR field
-   * @internal
-   */
-  virtual void setRelatedYear(int32_t year) override;
-
-
 private:
   IndianCalendar() = delete; // default constructor not implemented
 
-  // Default century.
 protected:
+  /**
+   * @internal
+   */
+  int32_t getRelatedYearDifference() const override;
 
+  // Default century.
   DECLARE_OVERRIDE_SYSTEM_DEFAULT_CENTURY
 };
 

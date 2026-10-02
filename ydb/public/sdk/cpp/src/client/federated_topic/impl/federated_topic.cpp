@@ -1,19 +1,19 @@
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/federated_topic/impl/federated_topic_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 // TFederatedReadSessionSettings
 // Read policy settings
 
 using TReadOriginalSettings = TFederatedReadSessionSettings::TReadOriginalSettings;
 TReadOriginalSettings& TReadOriginalSettings::AddDatabase(const std::string& database) {
-    Databases.insert(std::move(database));
+    Databases.insert(database);
     return *this;
 }
 
 TReadOriginalSettings& TReadOriginalSettings::AddDatabases(const std::vector<std::string>& databases) {
-    std::move(std::begin(databases), std::end(databases), std::inserter(Databases, Databases.end()));
+    Databases.insert(databases.begin(), databases.end());
     return *this;
 }
 
@@ -33,7 +33,7 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(const
         ythrow TContractViolation("Reading from local database not supported, use specific database");
     }
     DatabasesToReadFrom.clear();
-    DatabasesToReadFrom.insert(std::move(database));
+    DatabasesToReadFrom.insert(database);
     ReadMirroredEnabled = true;
     return *this;
 }
@@ -73,10 +73,10 @@ std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(
     return Impl_->CreateReadSession(settings);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
-//     const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateSimpleBlockingWriteSession(settings);
-// }
+std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
+    const TFederatedWriteSessionSettings& settings) {
+    return Impl_->CreateSimpleBlockingWriteSession(settings);
+}
 
 std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
@@ -86,4 +86,33 @@ void TFederatedTopicClient::OverrideCodec(NTopic::ECodec codecId, std::unique_pt
     return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
-} // namespace NYdb::V3::NFederatedTopic
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::GetAllClusterInfo() {
+    return Impl_->GetAllClusterInfo();
+}
+
+void TFederatedTopicClient::TClusterInfo::AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const {
+    if (Name.empty()) {
+        return;
+    }
+    settings.DiscoveryEndpoint(Endpoint);
+    settings.Database(Path);
+}
+
+void TFederatedTopicClient::TClusterInfo::AdjustTopicPath(std::string& path) const {
+    if (Name.empty()) {
+        return;
+    }
+    if (path.empty() || path[0] != '/') {
+        path = Path + '/' + path;
+    }
+}
+
+bool TFederatedTopicClient::TClusterInfo::IsAvailableForRead() const {
+    return Status == TClusterInfo::EStatus::AVAILABLE || Status == TClusterInfo::EStatus::READ_ONLY;
+}
+
+bool TFederatedTopicClient::TClusterInfo::IsAvailableForWrite() const {
+    return Status == TClusterInfo::EStatus::AVAILABLE;
+}
+
+} // namespace NYdb::NFederatedTopic

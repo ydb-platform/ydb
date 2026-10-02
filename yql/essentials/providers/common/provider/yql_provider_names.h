@@ -5,6 +5,7 @@
 
 namespace NYql {
 
+constexpr TStringBuf UnknownProviderName = "unknown";
 constexpr TStringBuf ConfigProviderName = "config";
 constexpr TStringBuf KikimrProviderName = "kikimr";
 constexpr TStringBuf ResultProviderName = "result";
@@ -27,7 +28,6 @@ constexpr std::array<const TStringBuf, 16> Providers = {
     {ConfigProviderName, YtProviderName, KikimrProviderName, RtmrProviderName, S3ProviderName,
      StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName,
      PqProviderName, FunctionProviderName, GenericProviderName, PgProviderName, PureProviderName,
-     YtflowProviderName}
-};
+     YtflowProviderName}};
 
 } // namespace NYql

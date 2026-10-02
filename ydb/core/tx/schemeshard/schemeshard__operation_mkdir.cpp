@@ -1,7 +1,11 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
+
+#include <ydb/core/sys_view/common/path.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -9,14 +13,10 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "MkDir::TPropose"
-            << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
@@ -25,12 +25,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        const TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
-                       << ", step: " << step
-                       << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -56,11 +54,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -101,18 +95,18 @@ class TMkDir: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    virtual const char* Name() const override final { return "TMkDir"; }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetMkDir().GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -150,6 +144,7 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
+        const bool isSystemDir = name == NSysView::SysPathName;
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -172,15 +167,19 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsValidACL(acl);
             }
 
             if (checks && !context.SS->SystemBackupSIDs.contains(owner)) {
                 checks
                     .DepthLimit()
-                    .PathsLimit()
                     .DirChildrenLimit();
+
+                if (!isSystemDir) {
+                    checks
+                        .PathsLimit();
+                }
             }
 
             if (!checks) {
@@ -250,16 +249,24 @@ public:
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         if (Transaction.HasTempDirOwnerActorId()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing create temp directory with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
-                    << ", PathId: " << newDir->PathId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Processing create temp directory",
+                {"name", name},
+                {"workingDir", parentPathStr},
+                {"tempDirOwnerActorId", newDir->TempDirOwnerActorId},
+                {"pathId", newDir->PathId},
+            );
             context.OnComplete.UpdateTempDirsToMakeState(
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        EPathCategory pathCategory;
+        if (isSystemDir) {
+            pathCategory = EPathCategory::System;
+        } else {
+            pathCategory = EPathCategory::Regular;
+        }
+
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
@@ -268,19 +275,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                  "MkDir AbortPropose"
-                       << ", opId: " << OperationId
-                       << ", at schemeshard: " << context.SS->TabletID());
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMkDir AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -324,3 +328,5 @@ ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

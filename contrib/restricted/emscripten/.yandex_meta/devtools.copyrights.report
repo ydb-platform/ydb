@@ -1,0 +1,761 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09676743cf85a147d4ef65e931e5557b
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c494bb9f7291d2a9275452e36060030
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 1994 David Burren
+         * Copyright (c) 2000,2002,2010,2012 Solar Designer
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_des.c [21:23]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 104bcd2cbaba9c509d4f4c7fa2d64640
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2003 Poul-Henning Kamp
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_md5.c [156:157]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 17c1b84151e0d69dd07f84b1e46f612a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2018 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/dom_pk_codes.h [2:2]
+        system/include/emscripten/em_js.h [2:2]
+        system/include/emscripten/websocket.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 17f674c3a8ff0b3c589a15c7c17bc63c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Copyright © 1999-2019, Arm Limited.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [135:135]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f896c608258094104b0e636e815dcc8
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2017 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/em_asm.h [2:2]
+        system/include/emscripten/key_codes.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 216a27a2009c456d562b221422fd86d8
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2014 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/html5.h [2:2]
+        system/include/emscripten/trace.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 25c1ba94d8618533f5086e2e3309d612
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2008 Stephen L. Moshier <steve@moshier.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/complex/catan.c [3:3]
+        system/lib/libc/musl/src/complex/catanf.c [3:3]
+        system/lib/libc/musl/src/complex/catanl.c [3:3]
+        system/lib/libc/musl/src/math/__polevll.c [3:3]
+        system/lib/libc/musl/src/math/erfl.c [13:13]
+        system/lib/libc/musl/src/math/expl.c [3:3]
+        system/lib/libc/musl/src/math/expm1l.c [3:3]
+        system/lib/libc/musl/src/math/lgammal.c [13:13]
+        system/lib/libc/musl/src/math/log10l.c [3:3]
+        system/lib/libc/musl/src/math/log1pl.c [3:3]
+        system/lib/libc/musl/src/math/log2l.c [3:3]
+        system/lib/libc/musl/src/math/logl.c [3:3]
+        system/lib/libc/musl/src/math/powl.c [3:3]
+        system/lib/libc/musl/src/math/tgammal.c [3:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2830734acffbbb6c547e73b590f5cfa5
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c683a057f0f7701dae7255b98feb7ee
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d3d058e3ffdc3d85a2c64c172360b45
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+                Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [76:76]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35a5fd2c80d40e062c84f4fca205e5a2
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2007 David Schultz <das@FreeBSD.ORG>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/complex/csqrt.c [3:4]
+        system/lib/libc/musl/src/complex/csqrtf.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39a3b145287249b836eab70736ef8101
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e35ff369438cb3d4559b9c09f19a370
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2019 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/fiber.h [2:2]
+        system/include/wasi/wasi-helpers.h [2:2]
+        system/lib/libc/sbrk.c [2:2]
+        system/lib/libc/wasi-helpers.c [2:2]
+        system/lib/pthread/library_pthread_stub.c [2:2]
+        system/lib/standalone/__main_void.c [2:2]
+        system/lib/standalone/standalone.c [2:2]
+        system/lib/standalone/standalone_wasm_stdio.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 416c740f1cf59391452ce50b8bf2a53c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2016 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/fetch.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43239d697626e7d429740c17d6a5efe2
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2005-2011 David Schultz <das@FreeBSD.ORG>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/fmaf.c [3:4]
+        system/lib/libc/musl/src/math/fmal.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4688aeecb0efacea4ad3feed0d3d13c9
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 468ca192c87c06aa62d05a11d6b0c757
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/__cos.c [4:4]
+        system/lib/libc/musl/src/math/__cosdf.c [8:8]
+        system/lib/libc/musl/src/math/__cosl.c [5:5]
+        system/lib/libc/musl/src/math/__rem_pio2.c [4:4]
+        system/lib/libc/musl/src/math/__rem_pio2_large.c [4:4]
+        system/lib/libc/musl/src/math/__rem_pio2f.c [8:8]
+        system/lib/libc/musl/src/math/__rem_pio2l.c [4:4]
+        system/lib/libc/musl/src/math/__sin.c [4:4]
+        system/lib/libc/musl/src/math/__sindf.c [8:8]
+        system/lib/libc/musl/src/math/__sinl.c [5:5]
+        system/lib/libc/musl/src/math/acos.c [4:4]
+        system/lib/libc/musl/src/math/acosf.c [7:7]
+        system/lib/libc/musl/src/math/acosl.c [4:4]
+        system/lib/libc/musl/src/math/asin.c [4:4]
+        system/lib/libc/musl/src/math/asinf.c [7:7]
+        system/lib/libc/musl/src/math/asinl.c [4:4]
+        system/lib/libc/musl/src/math/atan.c [4:4]
+        system/lib/libc/musl/src/math/atan2.c [4:4]
+        system/lib/libc/musl/src/math/atan2f.c [7:7]
+        system/lib/libc/musl/src/math/atan2l.c [4:4]
+        system/lib/libc/musl/src/math/atanf.c [7:7]
+        system/lib/libc/musl/src/math/atanl.c [4:4]
+        system/lib/libc/musl/src/math/cbrt.c [4:4]
+        system/lib/libc/musl/src/math/cbrtf.c [8:8]
+        system/lib/libc/musl/src/math/cbrtl.c [4:4]
+        system/lib/libc/musl/src/math/cos.c [4:4]
+        system/lib/libc/musl/src/math/cosf.c [8:8]
+        system/lib/libc/musl/src/math/erf.c [4:4]
+        system/lib/libc/musl/src/math/erff.c [7:7]
+        system/lib/libc/musl/src/math/erfl.c [4:4]
+        system/lib/libc/musl/src/math/expm1.c [4:4]
+        system/lib/libc/musl/src/math/expm1f.c [7:7]
+        system/lib/libc/musl/src/math/j0.c [4:4]
+        system/lib/libc/musl/src/math/j0f.c [7:7]
+        system/lib/libc/musl/src/math/j1.c [4:4]
+        system/lib/libc/musl/src/math/j1f.c [7:7]
+        system/lib/libc/musl/src/math/jn.c [4:4]
+        system/lib/libc/musl/src/math/jnf.c [7:7]
+        system/lib/libc/musl/src/math/lgamma_r.c [4:4]
+        system/lib/libc/musl/src/math/lgammaf_r.c [7:7]
+        system/lib/libc/musl/src/math/lgammal.c [4:4]
+        system/lib/libc/musl/src/math/log10.c [4:4]
+        system/lib/libc/musl/src/math/log10f.c [4:4]
+        system/lib/libc/musl/src/math/log1p.c [4:4]
+        system/lib/libc/musl/src/math/log1pf.c [4:4]
+        system/lib/libc/musl/src/math/scalb.c [4:4]
+        system/lib/libc/musl/src/math/scalbf.c [7:7]
+        system/lib/libc/musl/src/math/sin.c [4:4]
+        system/lib/libc/musl/src/math/sincos.c [4:4]
+        system/lib/libc/musl/src/math/sincosf.c [8:8]
+        system/lib/libc/musl/src/math/sinf.c [8:8]
+        system/lib/libc/musl/src/math/tan.c [4:4]
+        system/lib/libc/musl/src/math/tanf.c [8:8]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 529b83d6e32fcf2efbe2fb69d0f6d9f4
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2012 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/bind.h [2:2]
+        system/include/emscripten/em_types.h [2:2]
+        system/include/emscripten/emscripten.h [2:2]
+        system/include/emscripten/exports.h [2:2]
+        system/include/emscripten/val.h [2:2]
+        system/include/emscripten/wget.h [2:2]
+        system/include/emscripten/wire.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54db26fc72711070963323810eea814f
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2020 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/em_macros.h [2:2]
+        system/include/emscripten/em_math.h [2:2]
+        system/include/emscripten/heap.h [2:2]
+        system/include/emscripten/html5_webgl.h [2:2]
+        system/include/emscripten/html5_webgpu.h [2:2]
+        system/include/emscripten/stack.h [2:2]
+        system/lib/libc/crt1_reactor.c [2:2]
+        system/lib/libc/emscripten_scan_stack.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57bba0fe0f42623ea4485fcd4fbb089d
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2004 Sun Microsystems, Inc.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/__tan.c [4:4]
+        system/lib/libc/musl/src/math/__tandf.c [8:8]
+        system/lib/libc/musl/src/math/__tanl.c [5:5]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f56355b54ba75cbb05ebe9a8bfddb35
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2023 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/promise.h [2:2]
+        system/lib/libc/emscripten_internal.h [2:2]
+        system/lib/libc/mktime.c [2:2]
+        system/lib/pthread/thread_mailbox.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6fd31d0e6e257bf6974e354fe478fa6b
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2005-2008 David Schultz <das@FreeBSD.ORG>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/exp2l.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7059c33fb27f09491be695bd349f569c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 16, LICENSE at line 38
+    License text:
+        Copyright (c) 2010-2014 Emscripten authors, see AUTHORS file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [16:16]
+        LICENSE [38:39]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77268c337278ca63e08c4e2c9d8021c4
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The ARM memcpy code (src/string/arm/memcpy.S) is Copyright © 2008
+        The Android Open Source Project and is licensed under a two-clause BSD
+        license. It was taken from Bionic libc, used on Android.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [130:132]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 80770b6b0e950d772589350fbbd29930
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Copyright © 1994 David Burren. It is licensed under a BSD license.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [138:138]
+        system/lib/libc/musl/src/crypt/crypt_des.c [21:23]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86748eafcece6232d45148c0bdb0f4d4
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2008 Steven G. Kargl, David Schultz, Bruce D. Evans.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/__cosl.c [6:6]
+        system/lib/libc/musl/src/math/__rem_pio2l.c [5:5]
+        system/lib/libc/musl/src/math/__sinl.c [6:6]
+        system/lib/libc/musl/src/math/__tanl.c [6:6]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a0cc24f130999af25d83e711cbf586c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Copyright © 2005-2020 Rich Felker, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [4:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 951edb3001664c43bf66c4a885a3271d
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2011 David Schultz <das@FreeBSD.ORG>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/complex/__cexp.c [3:4]
+        system/lib/libc/musl/src/complex/__cexpf.c [3:4]
+        system/lib/libc/musl/src/complex/cexp.c [3:4]
+        system/lib/libc/musl/src/complex/cexpf.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb824713228eedbd79d7e9854568382a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2005 Bruce D. Evans and Steven G. Kargl
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/complex/ccosh.c [3:4]
+        system/lib/libc/musl/src/complex/ccoshf.c [3:4]
+        system/lib/libc/musl/src/complex/csinh.c [3:4]
+        system/lib/libc/musl/src/complex/csinhf.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc2104a895230937e9f2764bbc6372fc
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_blowfish.c [14:19]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c35a1893bc812f787d6bbc2a0a062584
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [121:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6560292fd75826339848ff48d2162d5
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2017-2018, Arm Limited.
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/exp2f.c [4:5]
+        system/lib/libc/musl/src/math/exp2f_data.c [4:5]
+        system/lib/libc/musl/src/math/exp2f_data.h [2:3]
+        system/lib/libc/musl/src/math/expf.c [4:5]
+        system/lib/libc/musl/src/math/log2f.c [4:5]
+        system/lib/libc/musl/src/math/log2f_data.c [4:5]
+        system/lib/libc/musl/src/math/log2f_data.h [2:3]
+        system/lib/libc/musl/src/math/logf.c [4:5]
+        system/lib/libc/musl/src/math/logf_data.c [4:5]
+        system/lib/libc/musl/src/math/logf_data.h [2:3]
+        system/lib/libc/musl/src/math/powf.c [2:3]
+        system/lib/libc/musl/src/math/powf_data.c [4:5]
+        system/lib/libc/musl/src/math/powf_data.h [2:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9e10a102f5d49f13a12bd7be9df9484
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2009-2011, Bruce D. Evans, Steven G. Kargl, David Schultz.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/cbrtl.c [5:5]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf8bea9e99eec9c10680b266bc9dcb0c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2018, Arm Limited.
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/math/exp.c [4:5]
+        system/lib/libc/musl/src/math/exp2.c [4:5]
+        system/lib/libc/musl/src/math/exp_data.c [4:5]
+        system/lib/libc/musl/src/math/exp_data.h [2:3]
+        system/lib/libc/musl/src/math/log.c [4:5]
+        system/lib/libc/musl/src/math/log2.c [4:5]
+        system/lib/libc/musl/src/math/log2_data.c [4:5]
+        system/lib/libc/musl/src/math/log2_data.h [2:3]
+        system/lib/libc/musl/src/math/log_data.c [4:5]
+        system/lib/libc/musl/src/math/log_data.h [2:3]
+        system/lib/libc/musl/src/math/pow.c [4:5]
+        system/lib/libc/musl/src/math/pow_data.c [4:5]
+        system/lib/libc/musl/src/math/pow_data.h [2:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5a68e661eb7ab48dba4450a4c361956
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The smoothsort implementation (src/stdlib/qsort.c) is Copyright © 2011
+        Valentin Ochs and is licensed under an MIT-style license.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [145:146]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5bcd6e49c0bba4b64d5df1dd18ae5f0
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright (c) 2011 David Schultz
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/complex/ctanh.c [3:4]
+        system/lib/libc/musl/src/complex/ctanhf.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d9dc392571af3323d913f8286ad37f19
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2022 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/webaudio.h [2:2]
+        system/lib/libc/emscripten_fiber.c [1:1]
+        system/lib/libc/emscripten_mmap.c [2:2]
+        system/lib/libc/emscripten_time.c [2:2]
+        system/lib/libc/musl/src/internal/progname.c [2:2]
+        system/lib/libc/musl/src/internal/proxying_notification_state.h [2:2]
+        system/lib/pthread/proxying_stub.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL da9268ed81b94fc389f3ad731530c9d9
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2015 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/atomic.h [2:2]
+        system/include/emscripten/threading.h [2:2]
+        system/include/emscripten/threading_legacy.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e591717f97b3eece706f547a7b6c674e
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        /* Copyright (C) 2011 by Valentin Ochs
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/stdlib/qsort.c [1:1]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL eac4f178392fadb3db93e18e1207c567
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+          Copyright (c) 2001-2009 Ville Laurikari <vl@iki.fi>
+          All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/src/regex/regcomp.c [4:5]
+        system/lib/libc/musl/src/regex/regexec.c [4:5]
+        system/lib/libc/musl/src/regex/tre-mem.c [4:5]
+        system/lib/libc/musl/src/regex/tre.h [4:5]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa970416beea67d354b9726846b95efa
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [115:118]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff4dd72931e6988e9252fc176091be84
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Copyright 2021 The Emscripten Authors.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        system/include/emscripten/console.h [2:2]
+        system/include/emscripten/eventloop.h [2:2]
+        system/include/emscripten/proxying.h [2:2]
+        system/include/emscripten/wasmfs.h [2:2]
+        system/lib/libc/dynlink.c [2:2]
+        system/lib/libc/emscripten_console.c [2:2]
+        system/lib/libc/emscripten_get_heap_size.c [2:2]
+        system/lib/libc/emscripten_libc_stubs.c [2:2]
+        system/lib/libc/emscripten_syscall_stubs.c [2:2]
+        system/lib/libc/kill.c [2:2]
+        system/lib/libc/pthread_sigmask.c [2:2]
+        system/lib/libc/raise.c [2:2]
+        system/lib/libc/sigaction.c [2:2]
+        system/lib/libc/sigtimedwait.c [2:2]
+        system/lib/pthread/em_task_queue.h [2:2]
+        system/lib/pthread/pthread_self_stub.c [2:2]
+        system/lib/pthread/thread_profiler.c [2:2]
+        system/lib/pthread/threading_internal.h [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make

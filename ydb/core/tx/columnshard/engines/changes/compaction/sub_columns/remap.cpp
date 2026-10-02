@@ -1,0 +1,63 @@
+#include "remap.h"
+
+#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+
+namespace NKikimr::NOlap::NCompaction::NSubColumns {
+
+TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
+    const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const {
+    TDictStats::TBuilder builder;
+    std::vector<ui32> remap;
+    remap.resize(statsByKeyIndex.size(), Max<ui32>());
+    ui32 idx = 0;
+    for (auto&& i : TemporaryKeyIndex) {
+        if (i.second >= statsByKeyIndex.size()) {
+            continue;
+        }
+        if (!statsByKeyIndex[i.second].GetRecordsCount()) {
+            continue;
+        }
+        builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize(),
+            settings.IsSparsed(statsByKeyIndex[i.second].GetRecordsCount(), recordsCount) ? NArrow::NAccessor::IChunkedArray::EType::SparsedArray
+                                                                                          : NArrow::NAccessor::IChunkedArray::EType::Array,
+            NArrow::NAccessor::NSubColumns::OthersExplicitBinaryJson);
+        remap[i.second] = idx++;
+    }
+    return TOthersData::TFinishContext(builder.Finish(), remap);
+}
+
+void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
+    AFL_VERIFY(ColumnStatsRegistered);
+    if (RemapInfo.size() <= sourceIdx) {
+        RemapInfo.resize((sourceIdx + 1) * 2);
+    }
+    RemapInfo[sourceIdx].clear();
+    auto& remapSourceInfo = RemapInfo[sourceIdx];
+    remapSourceInfo.resize(2);
+    auto& remapSourceInfoColumns = remapSourceInfo[1];
+    for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
+        if (remapSourceInfoColumns.size() <= i) {
+            remapSourceInfoColumns.resize((i + 1) * 2);
+        }
+        AFL_VERIFY(!remapSourceInfoColumns[i]);
+        if (const auto it = ResultColumnKeyIndex.find(sourceColumnStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
+            remapSourceInfoColumns[i] = TRemapInfo(it->second, true);
+        } else {
+            remapSourceInfoColumns[i] = TRemapInfo(RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i)), false);
+        }
+    }
+    auto& remapSourceInfoOthers = remapSourceInfo[0];
+    for (ui32 i = 0; i < sourceOtherStats.GetColumnsCount(); ++i) {
+        if (remapSourceInfoOthers.size() <= i) {
+            remapSourceInfoOthers.resize((i + 1) * 2);
+        }
+        AFL_VERIFY(!remapSourceInfoOthers[i]);
+        if (const auto it = ResultColumnKeyIndex.find(sourceOtherStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
+            remapSourceInfoOthers[i] = TRemapInfo(it->second, true);
+        } else {
+            remapSourceInfoOthers[i] = TRemapInfo(RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i)), false);
+        }
+    }
+}
+
+}   // namespace NKikimr::NOlap::NCompaction::NSubColumns

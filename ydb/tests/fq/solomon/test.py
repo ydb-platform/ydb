@@ -39,7 +39,7 @@ def pytest_generate_tests(metafunc):
     return pytest_generate_tests_for_run(metafunc, suites=['solomon'], data_path=DATA_PATH)
 
 
-def test(suite, case, cfg, solomon):
+def test(suite, case, cfg, solomon_emulator):
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
 
     prov = 'solomon'
@@ -63,8 +63,8 @@ def test(suite, case, cfg, solomon):
     kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_config.conf'),
                     scheme_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_scheme.sql'))
     yqlrun_res = kqprun.yql_exec(
-        program=sql_query,
-        var_templates=['SOLOMON_ENDPOINT'],
+        yql_program=sql_query,
+        var_templates=['SOLOMON_HTTP_ENDPOINT', 'SOLOMON_GRPC_ENDPOINT'],
         verbose=True,
         check_error=not xfail
     )

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr::NSchemeShard;
@@ -8,7 +9,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
     Y_UNIT_TEST(CreateExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -28,7 +29,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(CreateExternalDataSourceWithProperties) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -60,7 +61,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(DropExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -87,7 +88,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     void DropTwice(const TString& path, TRuntimeTxFn createFn, TRuntimeTxFn dropFn) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         createFn(runtime, ++txId);
@@ -133,7 +134,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ParallelCreateExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -176,7 +177,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         using ESts = NKikimrScheme::EStatus;
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TString dataSourceConfig = R"(
@@ -226,7 +227,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
@@ -277,7 +278,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(SchemeErrors) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -309,6 +310,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA", Sprintf(R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
                 Installation: "%s"
                 Auth {
                     None {
@@ -328,7 +330,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(PreventDeletionOfDependentDataSources) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -367,7 +369,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(RemovingReferencesFromDataSources) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -410,10 +412,10 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
-        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
                 Location: "https://s3.cloud.net/my_bucket"
@@ -421,7 +423,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-                ReplaceIfExists: true
             )",{NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
@@ -438,7 +439,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
             UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
         }
 
-        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
                 Location: "https://s3.cloud.net/my_new_bucket"
@@ -446,7 +447,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-                ReplaceIfExists: true
             )",{NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
@@ -463,9 +463,66 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         }
     }
 
+    Y_UNIT_TEST(ParallelReplaceExternalDataSourceIfNotExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted}
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 TEST_RUNS = 30;
+        TSet<ui64> txIds;
+        for (ui32 i = 0; i < TEST_RUNS; ++i) {
+            AsyncCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
+                    Name: "MyExternalDataSource"
+                    SourceType: "ObjectStorage"
+                    Location: "https://s3.cloud.net/other_bucket"
+                    Auth {
+                        None {
+                        }
+                    }
+                )"
+            );
+
+            txIds.insert(txId);
+        }
+
+        ui32 acceptedCount = 0;
+        for (auto testTx : txIds) {
+            const auto result = TestModificationResults(runtime, testTx, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            acceptedCount += result == NKikimrScheme::StatusAccepted;
+        }
+        UNIT_ASSERT_GE(acceptedCount, 1);
+
+        env.TestWaitNotification(runtime, txIds);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), acceptedCount + 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/other_bucket");
+            UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+        }
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceShouldFailIfSuchEntityAlreadyExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
@@ -530,7 +587,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
         TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
 
-        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
                 Name: "UniqueName"
                 SourceType: "ObjectStorage"
                 Location: "https://s3.cloud.net/my_bucket"
@@ -538,7 +595,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-                ReplaceIfExists: true
             )",{{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
 
         env.TestWaitNotification(runtime, txId);
@@ -546,7 +602,68 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )",{{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(ReplaceExternalDataSourceOverDroppedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "UniqueName");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
+                Name: "UniqueName"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )",{NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/UniqueName");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceExternalDataSourceOverDroppedNotCleanedExternalDataSource) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
@@ -557,11 +674,36 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-                ReplaceIfExists: true
-            )",{{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
-
+            )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "MyExternalDataSource");
+        env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathNotExist);
+
+        TestCreateExternalDataSourceOrReplace(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_new_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )",{NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/my_new_bucket");
+        }
     }
 }

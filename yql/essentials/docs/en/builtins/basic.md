@@ -13,7 +13,7 @@ Lets you pass potentially empty values to functions that can't handle them by th
 
 A short format using the low-priority `??` operator is available (lower than the Boolean operations). You can use the `NVL` alias.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT COALESCE(
@@ -37,13 +37,31 @@ SELECT NVL(
 
 All three examples above are equivalent.
 
+## NullIf {#nullif}
 
+Returns NULL if both arguments are equal; otherwise, returns the first argument.
+
+#### Signature
+
+```yql
+NullIf(T, U)->T?
+NullIf(T?, U)->T?
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+
+#### Examples
+
+```yql
+SELECT NullIf(1,2); -- 1
+SELECT NullIf(1,1); -- NULL
+```
 
 ## LENGTH {#length}
 
 Returns the length of the string in bytes. This function is also available under the `LEN` name .
 
-### Examples
+#### Examples
 
 ```yql
 SELECT LENGTH("foo");
@@ -76,7 +94,7 @@ Optional arguments:
 Indexing starts from zero. If the specified position and length are beyond the string, returns an empty string.
 If the input string is optional, the result is also optional.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT SUBSTRING("abcdefg", 3, 1); -- d
@@ -90,6 +108,26 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
 
+## Concat {#concat}
+
+Concatenate one or more strings.
+
+#### Signature
+
+```yql
+Concat((String|Utf8)[?], ...)->(String|Utf8)[?]
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+If at least one input string is of type `Optional`, then the result is also of type `Optional`.
+If all input strings are of type `Utf8`, then the result is also of type `Utf8`; otherwise, it is `String`.
+If at least one input string is `NULL`, then the result is also of type `NULL`.
+
+#### Examples
+
+```yql
+SELECT Concat("abc", "de", "f"); -- "abcdef"
+```
 
 
 ## FIND {#find}
@@ -107,7 +145,7 @@ Optional arguments:
 
 Returns the first substring position found or `NULL` (meaning that the desired substring hasn't been found starting from the specified position).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FIND("abcdefg_abcdefg", "abc"); -- 0
@@ -136,7 +174,7 @@ Optional arguments:
 
 Returns the first substring position found or `NULL` (meaning that the desired substring hasn't been found starting from the specified position).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd"); -- 9
@@ -163,7 +201,7 @@ Required arguments:
 
 The arguments can be of the `String` or `Utf8` type and can be optional.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT StartsWith("abc_efg", "abc") AND EndsWith("abc_efg", "efg"); -- true
@@ -191,7 +229,7 @@ It's a simplified alternative for [CASE WHEN ... THEN ... ELSE ... END](../synta
 
 You may omit the `else_expression` argument. In this case, if the condition is false (`condition_expression` returned `false`), an empty value is returned with the type corresponding to `then_expression` and allowing for `NULL`. Hence, the result will have an [optional data type](../types/optional.md).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -213,7 +251,7 @@ Arguments:
 
 If one of the arguments is `Double`, the result is`Double`, otherwise, it's `Float`. If one of the arguments is `Optional`, then the result is `Optional`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -231,7 +269,7 @@ Generates a pseudorandom number:
 * `RandomNumber()`: An integer from the complete Uint64 range.
 * `RandomUuid()`: [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4).
 
-### Signatures
+#### Signatures
 
 ```yql
 Random(T1[, T2, ...])->Double
@@ -260,7 +298,7 @@ Use cases:
 * `SELECT RANDOM(some_column), RANDOM(some_column) FROM table;`: Different random numbers for each row of the table, but two identical numbers within the same row.
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` or `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;`: Two columns, with different numbers in both.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -289,6 +327,58 @@ SELECT
 FROM my_table;
 ```
 
+## Udf {#udf}
+
+Builds a `Callable` given a function name and optional `external user types`, `RunConfig` and `TypeConfig`.
+
+* `Udf(Foo::Bar)` — Function `Foo::Bar` without additional parameters.
+* `Udf(Foo::Bar)(1, 2, 'abc')` — Call udf `Foo::Bar`.
+* `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Call udf `Foo::Bar` with additional type `Int32` and specified `TypeConfig`.
+* `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
+* `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
+
+You can also specify additional settings as named arguments; their type must be `String` or numeric literal:
+
+* Cpu - a factor describing how much CPU the udf consumes. Must be a positive number. The default value is "1". The higher this value, the more parallelism is required to call such a udf. Example: "4.5".
+* ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
+  Supported formats:
+  1. Value in bytes (non-negative integer)
+  2. String representations with suffixes: "K", "M", "G" (for example, "2048M", "1G", "512K")
+
+#### Signatures
+
+```yql
+Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
+```
+
+Where `T1`, `T2`, etc. are additional (`external`) user types.
+
+#### Examples
+
+```yql
+$IsoParser = Udf(DateTime2::ParseIso8601);
+SELECT $IsoParser("2022-01-01");
+```
+
+```yql
+SELECT Udf(Unicode::IsUtf)("2022-01-01")
+```
+
+```yql
+$config = @@{ 
+"name":"MessageFoo", 
+"meta": "..."
+}@@;
+SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
+
+```yql
+SELECT Udf(Foo::Bar, 4.5 as Cpu, 100000000 as ExtraMem)(1);
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4.5" as Cpu, "100M" as ExtraMem)(1);
+```
 
 ## CurrentUtc... {#current-utc}
 
@@ -296,7 +386,7 @@ FROM my_table;
 
 The arguments are optional and work same as [RANDOM](#random).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT CurrentUtcDate();
@@ -314,7 +404,7 @@ SELECT CurrentUtcTimestamp(TableRow()) FROM my_table;
 
 The arguments that follow are optional and work same as [RANDOM](#random).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT CurrentTzDate("Europe/Moscow");
@@ -335,7 +425,7 @@ Arguments:
 
 Result type: `TzDate`/`TzDatetime`/`TzTimestamp`, depending on the input data type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
@@ -351,7 +441,7 @@ Arguments:
 
 Result type: `Date`/`Datetime`/`Timestamp`, depending on the input data type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
@@ -363,12 +453,21 @@ SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 
 `Version()` returns a string describing the current version of the node processing the request. In some cases, such as during rolling upgrades, it might return different strings depending on which node processes the request. It does not accept any arguments.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT Version();
 ```
 
+## CurrentLanguageVersion {#current-language-version}
+
+`CurrentLanguageVersion()` returns a string describing the current version of the language selected for the current request if it is defined, or an empty string.
+
+#### Examples
+
+```yql
+SELECT CurrentLanguageVersion();
+```
 
 
 ## MAX_OF, MIN_OF, GREATEST, and LEAST {#max-min}
@@ -379,7 +478,7 @@ The argument types must be mutually castable and accept `NULL`.
 
 `GREATEST` is a synonym for `MAX_OF` and `LEAST` is a synonym for `MIN_OF`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT MIN_OF(1, 2, 3);
@@ -406,7 +505,7 @@ Specifics:
 * `AsDict` and `AsDictStrict` expect `Tuple` of two elements as arguments (key and value, respectively). If the keys repeat, only the value for the first key remains in the dictionary.
 * `AsSet` and `AsSetStrict` expect keys as arguments.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -442,7 +541,7 @@ For field names in the structure literal, you can use an expression that can be 
 
 For nested lists, use [AsList](#as-container), for nested dictionaries, use [AsDict](#as-container), for nested sets, use [AsSet](#as-container), for nested tuples, use [AsTuple](#as-container), for nested structures, use [AsStruct](#as-container).
 
-### Examples
+#### Examples
 
 ```yql
 $name = "computed " || "member name";
@@ -475,7 +574,7 @@ Arguments:
 * String with a field name or tuple index
 * Variant type
 
-### Example
+#### Example
 
 ```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
@@ -494,7 +593,7 @@ Arguments:
 * Value
 * A string with the field name
 
-### Example
+#### Example
 
 ```yql
 SELECT
@@ -505,7 +604,7 @@ SELECT
 
 Processes the possible values of a variant over a structure or tuple using the provided handler functions for each field/element of the variant.
 
-### Signature
+#### Signature
 
 ```yql
 Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
@@ -521,7 +620,7 @@ VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, R, [K1->R AS key
 * For a variant over tuple: accepts the variant and handlers for each element of the variant as positional arguments.
 * `VisitOrDefault` includes an additional positional argument (on the second place) for the default value, enabling the omission of certain handlers.
 
-### Example
+#### Example
 
 ```yql
 $vartype = Variant<num: Int32, flag: Bool, str: String>;
@@ -543,14 +642,14 @@ SELECT
 
 Returns the value of a homogeneous variant (i.e., a variant containing fields/elements of the same type).
 
-### Signature
+#### Signature
 
 ```yql
 VariantItem(Variant<key1: K, key2: K, ...>{Flags:AutoMap})->K
 VariantItem(Variant<K, K, ...>{Flags:AutoMap})->K
 ```
 
-### Example
+#### Example
 
 ```yql
 $vartype1 = Variant<num1: Int32, num2: Int32, num3: Int32>;
@@ -566,14 +665,14 @@ SELECT
 
 Returns an active field (active index) of a variant over a struct (tuple).
 
-### Signature
+#### Signature
 
 ```yql
 Way(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap})->Utf8
 Way(Variant<K1, K2, ...>{Flags:AutoMap})->Uint32
 ```
 
-### Example
+#### Example
 
 ```yql
 $vr = Variant(1, "0", Variant<Int32, String>);
@@ -587,14 +686,14 @@ SELECT Way($vrs); -- "a"
 Creates a homogeneous variant instance (i.e. containing fields/elements of the same type), where the variant index or field can be set dynamically. If the index or field name does not exist, `NULL` will be returned.
 The inverse function is [VariantItem](#variantitem).
 
-### Signature
+#### Signature
 
 ```yql
 DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
 DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
 ```
 
-### Example
+#### Example
 
 ```yql
 $dt = Int32;
@@ -616,7 +715,7 @@ Arguments:
 * A string with the field name
 * Enumeration type
 
-### Example
+#### Example
 
 ```yql
 $enum_type = Enum<Foo, Bar>;
@@ -633,7 +732,7 @@ Arguments:
 
 * A string with the name of an enumeration item
 
-### Example
+#### Example
 
 ```yql
 SELECT
@@ -673,7 +772,7 @@ To avoid such a situation, create a subquery for calculating these functions, as
 
 {% endnote %}
 
-### Examples
+#### Examples
 
 ```yql
 SELECT TablePath() FROM CONCAT(table_a, table_b);
@@ -693,7 +792,7 @@ Optional arguments:
 * Path to the table, `TablePath()` is used by default (see also its limitations).
 * Specifying the system ("yt") whose rules are used to determine the table name. You need to specify the system only if [USE](../syntax/use.md) doesn't specify the current cluster.
 
-### Examples
+#### Examples
 
 ```yql
 USE cluster;
@@ -707,7 +806,7 @@ Access to the current sequence number of a row in the physical source table, **s
 
 No arguments. When used in combination with [CONCAT](../syntax/select/concat.md#concat), and other similar mechanisms, numbering restarts for each input table. If used in an incorrect context, it returns 0.
 
-### Example
+#### Example
 
 ```yql
 SELECT TableRecordIndex() FROM my_table;
@@ -717,7 +816,7 @@ SELECT TableRecordIndex() FROM my_table;
 
 Getting the entire table row as a structure. No arguments. `JoinTableRow` in case of `JOIN` always returns a structure with table prefixes.
 
-### Example
+#### Example
 
 ```yql
 SELECT TableRow() FROM my_table;
@@ -727,7 +826,7 @@ SELECT TableRow() FROM my_table;
 
 The `FileContent` and `FilePath` argument is a string with an alias.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT "Content of "
@@ -742,9 +841,9 @@ Getting the path to the root of a directory with several "attached" files with t
 
 The argument is a string with a prefix among aliases.
 
-See also [PRAGMA File](../syntax/pragma.md#file) and [PRAGMA Folder](../syntax/pragma.md#folder).
+See also [PRAGMA File](../syntax/pragma/file.md#file) and [PRAGMA Folder](../syntax/pragma/file.md#folder).
 
-### Examples
+#### Examples
 
 ```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
@@ -772,7 +871,7 @@ The return value is a lazy list. For repeat use, wrap it in the function [ListCo
 
 {% endnote %}
 
-### Examples
+#### Examples
 
 ```yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
@@ -801,7 +900,9 @@ Arguments:
 
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../syntax/discard.md).
 
-### Examples
+Ensure is not guaranteed to evaluate, if the program's result does not depend on its return value. In particular, you should not use singular types as the first argument to Ensure such as `Null`,`Void`,`EmptyList`,`EmptyDict` or empty `Struct`/`Tuple`.
+
+#### Examples
 
 ```yql
 SELECT Ensure(
@@ -827,13 +928,146 @@ SELECT EnsureConvertibleTo(
 ) AS value FROM my_table;
 ```
 
+## WithSideEffects, WithSideEffectsMode {#side_effects}
+
+#### Signature
+
+```yql
+WithSideEffects(T)->T
+WithSideEffectsMode(T, mode:string)->T
+```
+
+The functions are available since version [2025.04](../changelog/2025.04.md).
+The `WithSideEffects` or `WithSideEffectsMode` function returns its first argument. The function is a requirement for the optimizer and marks the inner expression (usually a UDF call) as containing side effects.
+
+A side effect is:
+* An effect of one function call on another other than through passing data in arguments – for example, through some global state;
+* Observable behavior outside YQL during query execution – for example, reading/writing data in external systems.
+
+A side effect is not:
+* UDF counters and logs exposed by the ABI. In other words, optimizations are allowed that will change the values ​​of these counters or log entries at the expense of a different number of UDF calls;
+* Query execution error.
+
+The optimizer should not remove the evaluation of such an expression, and generally should not change the number of its evaluations, if it depends, for example, on each row of a table.
+
+Possible values ​​of mode:
+
+* `General` - all kinds of side effects are allowed, common subexpression removal is not possible;
+* `SemilatticeRT` - only idempotent and commutative side effects are allowed, and the expression result can be evaluated once and reused, which allows common subexpression removal;
+* `None` - no side effects are allowed outside the expression.
+
+The `WithSideEffects` function is a shorthand for calling the `WithSideEffectsMode` function with mode equal to `General`.
+
+A typical example of a `General` side effect is to perform an `UPDATE` to another system, and return the number of records changed as the expression result.
+A typical example of a `SemilatticeRT` side effect is to perform an `UPSERT` to a table with no non-key columns (which is an idempotent and commutative action), and return the number of records sent as the expression result.
+
+#### Example
+
+```yql
+SELECT WithSideEffects(MyModule::Func(...)) FROM table
+```
+
+## ToDynamicLinear
+
+#### Signature
+
+```yql
+ToDynamicLinear(Linear<T>)->DynamicLinear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `ToDynamicLinear` function converts a value from a static [linear](../types/linear.md) type to a dynamic type.
+
+## FromDynamicLinear
+
+#### Signature
+
+```yql
+FromDynamicLinear(DynamicLinear<T>)->Linear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `FromDynamicLinear` function converts a value from a dynamic [linear](../types/linear.md) type to a static type.
+
+## LinearDestroy
+
+#### Signature
+
+```yql
+LinearDestroy(T, [Linear<U1>...])->T
+```
+
+This function is available since version [2025.05](../changelog/2025.05.md).
+The function returns its first argument, consuming zero or more values ​​of the [linear](../types/linear.md) types listed after the first argument.
+
+## AsErased, PeekErased {#type_erasure}
+
+#### Signature
+
+```yql
+AsErased(T)->Resource<_Erased>
+PeekErased(Resource<_Erased>, type U)->Optional<U>
+```
+
+Functions are available since version [2026.02](../changelog/2026.02.md).
+
+The `AsErased` function erases the value type, converting any input type to a fixed type. Passing a [Linear](../types/linear.md) type to `AsErased` is prohibited (but `DynamicLinear` type can be used).
+The `PeekErased` function checks whether the original type strictly matches the specified one. If the types do not match, an empty `Optional` is returned; otherwise, the filled-in value of the original type is returned.
+
+A typical use for these functions is to construct recursive functions and/or data. For example, a tree node type and its creation function might look like this:
+
+```yql
+$erased = TypeOf(AsErased(NULL));
+$nodeType = Struct<value: String, left: Optional<$erased>, right: Optional<$erased>>;
+
+$makeNode = ($value, $left, $right) -> {
+    RETURN CAST(
+        <|
+            value: $value,
+            left: if($left IS NOT NULL, AsErased($left)),
+            right: if($right IS NOT NULL, AsErased($right))
+        |> AS $nodeType
+    );
+};
+```
+
+#### Example
+
+```yql
+$e = AsErased(1);
+SELECT PeekErased($e, Int32), -- 1
+       PeekErased($e, String) -- NULL
+```
+
+## Block
+
+#### Signature
+
+```yql
+Block(lambda((dependsOnArgument)->T))->T
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `Block` function evaluates a lambda with one argument (whose type is unspecified, as it should only be used as a dependent node) and returns its output value.
+Dependent nodes are those used to control the evaluation of nondeterministic functions such as [Random](#random) or functions that produce values ​​of [linear](../types/linear.md) types.
+
+#### Example
+
+```yql
+SELECT Block(($arg)->{
+    $dict = ToMutDict({'key1':123}, $arg); -- use a dependent node when creating a linear value
+    $dict = MutDictInsert($dict, 'key2', 456);
+    return FromMutDict($dict);
+}); -- {'key1':123, 'key2': 456}
+```
+
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
 Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
 
-* Round the current time to days, weeks, or months and insert it into the query to ensure correct [query caching](../syntax/pragma.md#yt.querycachemode), although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
+* Round the current time to days, weeks, or months and insert it into the query to ensure correct query caching, although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
 * Run a heavy calculation with a small result once per query instead of once per job.
 
 EvaluateAtom lets you dynamically create an [atom](../types/special.md), but since atoms are mainly controlled from a lower [s-expressions](/docs/s_expressions/functions) level, it's generally not recommended to use this function directly.
@@ -845,7 +1079,7 @@ Restrictions:
 * The expression must not trigger MapReduce operations.
 * This functionality is fully locked in YQL over YDB.
 
-### Examples
+#### Examples
 
 ```yql
 $now = CurrentUtcDate();
@@ -860,7 +1094,7 @@ SELECT EvaluateExpr(
 
 For primitive types, you can create literals based on string literals.
 
-### Syntax
+#### Syntax
 
 `<Primitive type>( <string>[, <additional attributes>] )`
 
@@ -880,7 +1114,7 @@ For the data types `TzDate`, `TzDatetime`, `TzTimestamp`, literals are also set 
 
 {% include [decimal args](../_includes/decimal_args.md) %}
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -911,7 +1145,7 @@ SELECT
 
 Conversion of [primitive data types](../types/primitive.md) to a string with their binary representation and back. Numbers are represented in the [little endian](https://en.wikipedia.org/wiki/Endianness#Little-endian) format.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -933,7 +1167,7 @@ Arguments:
 1. String: `String` or `Utf8`.
 2. Index: `Uint32`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -950,16 +1184,22 @@ SELECT
 
 Arguments:
 
-1. An unsigned number that's subject to the operation. TestBit is also implemented for strings.
+1. An unsigned number that's subject to the operation. `TestBit` is also implemented for strings (see the description below).
 2. Number of the bit.
 
-TestBit returns `true/false`. The other functions return a copy of their first argument with the corresponding conversion.
+`TestBit` returns `true/false`. The other functions return a copy of their first argument with the corresponding conversion.
 
-### Examples
+`TestBit` works the following way for the string argument:
+
+1. For the second argument (the number of the bit) the corresponding byte **from the beginning of the string** is chosen.
+2. Next, for the given byte the corresponding LSB is chosen.
+
+#### Examples
 
 ```yql
 SELECT
     TestBit(1u, 0), -- true
+    TestBit('ax', 12) -- true (second byte, fourth bit)
     SetBit(8u, 0); -- 9
 ```
 
@@ -969,7 +1209,7 @@ SELECT
 
 The absolute value of the number.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT Abs(-123); -- 123
@@ -983,11 +1223,25 @@ SELECT Abs(-123); -- 123
 
 The reverse operation is [Unwrap](#optional-ops).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
   Just("my_string"); --  String?
+```
+
+## AsOptional {#asoptional}
+
+Available since version [2026.01](../changelog/2026.01.md). Adds the ability to contain `NULL` to the passed value. If the value's type is already optional, PostgreSQL type or `NULL`, it returns the value unchanged. Otherwise, it wraps the value in [Just](#optional-ops). Unlike [Just](#optional-ops), it does not add an additional level of nesting for already optional values.
+
+#### Examples
+
+```yql
+SELECT 
+  AsOptional(42), -- Just(42)
+  AsOptional(NULL), -- NULL
+  AsOptional(Just(42)), -- Just(42)
+  AsOptional(1p); -- 1p
 ```
 
 ## Unwrap {#unwrap}
@@ -1003,7 +1257,7 @@ Arguments:
 
 Reverse operation is [Just](#optional-ops).
 
-### Examples
+#### Examples
 
 ```yql
 $value = Just("value");
@@ -1015,7 +1269,7 @@ SELECT Unwrap($value, "Unexpected NULL for $value");
 
 `Nothing()`: Create an empty value for the specified [Optional](../types/optional.md) data type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -1035,7 +1289,7 @@ Arguments:
 1. Type.
 2. Lambda function.
 
-### Examples
+#### Examples
 
 ```yql
 $lambda = ($x) -> {
@@ -1058,7 +1312,7 @@ SELECT $callables.0(10), $callables.1(true);
 
 `Unpickle()` is the inverse operation (deserialization), where with the first argument being the data type of the result and the second argument is the string with the result of `Pickle()` or `StablePickle()`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT *
@@ -1084,7 +1338,7 @@ Arguments:
 
 Result: a structure or tuple with the same number and naming of items as in the first argument, and with item data types determined by lambda results.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT *
@@ -1105,7 +1359,7 @@ Merges structures or tuples element-by-element. All arguments (one or more) must
 The result will be a structure or tuple, respectively.
 Each item of the result is a tuple comprised of items taken from arguments.
 
-### Examples
+#### Examples
 
 ```yql
 $one = <|k1:1, k2:2.0|>;
@@ -1162,7 +1416,7 @@ Arguments:
 The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](aggregation.md#aggregate-by).
 If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](aggregation.md#minby), then in [AGGREGATE_BY](aggregation.md#aggregate-by), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
 
-### Examples
+#### Examples
 
 ```yql
 $factory = AggregationFactory("MIN");
@@ -1180,7 +1434,7 @@ Arguments:
 1. Aggregation factory.
 2. A lambda function with one argument that converts an input item.
 
-### Examples
+#### Examples
 
 ```yql
 $f = AggregationFactory("sum");
@@ -1200,7 +1454,7 @@ Arguments:
 1. Aggregation factory.
 2. A lambda function with one argument that converts the result.
 
-### Examples
+#### Examples
 
 ```yql
 $f = AggregationFactory("sum");
@@ -1217,7 +1471,7 @@ Arguments:
 
 1. Aggregation factory.
 
-### Examples
+#### Examples
 
 ```yql
 $i = AggregationFactory("AGGREGATE_LIST_DISTINCT");

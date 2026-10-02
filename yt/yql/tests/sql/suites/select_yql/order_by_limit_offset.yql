@@ -1,0 +1,9 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM
+    plato.Input
+ORDER BY
+    key
+LIMIT 2 OFFSET 3;

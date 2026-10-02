@@ -1,12 +1,11 @@
 #include "yql_codec_buf_input_stream.h"
 
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 
 #include <arrow/buffer.h>
-#include <arrow/buffer.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 arrow::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void* outBuffer) {
     auto outBufferPtr = static_cast<char*>(outBuffer);
@@ -26,12 +25,11 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> TInputBufArrowInputStream::Read(in
     auto outBuffer = ARROW_RESULT(AllocateResizableBuffer(nbytes, Pool_));
     auto bytesRead = ARROW_RESULT(Read(nbytes, outBuffer->mutable_data()));
     if (bytesRead == 0) {
-        return std::make_shared<arrow::Buffer>(nullptr, 0);
+        return NKikimr::NMiniKQL::MakeEmptyBuffer();
     }
 
     YQL_ENSURE(bytesRead == nbytes);
     return outBuffer;
 }
 
-} // NCommon
-} // NYql
+} // namespace NYql::NCommon

@@ -14,7 +14,8 @@ namespace NYql::NDq {
 struct TDqChannelStorageActorEvents {
     enum {
         EvPut = EventSpaceBegin(NActors::TEvents::EEventSpace::ES_USERSPACE) + 30100,
-        EvGet
+        EvGet,
+        EvSetWakeUpCallback
     };
 };
 
@@ -41,6 +42,15 @@ struct TEvDqChannelSpilling {
 
         ui64 BlobId_;
         NThreading::TPromise<TBuffer> Promise_;
+    };
+
+    struct TEvSetWakeUpCallback : NActors::TEventLocal<TEvSetWakeUpCallback, TDqChannelStorageActorEvents::EvSetWakeUpCallback> {
+        TEvSetWakeUpCallback(TWakeUpCallback&& wakeUpCallback)
+            : WakeUpCallback_(std::move(wakeUpCallback))
+        {
+        }
+
+       TWakeUpCallback WakeUpCallback_;
     };
 };
 

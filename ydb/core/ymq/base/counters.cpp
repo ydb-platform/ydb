@@ -537,7 +537,7 @@ void TFolderCounters::InitCounters() {
     InsertCounters();
     if (UserCounters.YmqCounters) {
         total_count.Init(
-            FolderCounters.YmqCounters, ELifetime::Expiring, EValueType::Absolute, DEFAULT_COUNTER_NAME,
+            FolderCounters.YmqCounters, ELifetime::Expiring, EValueType::Absolute, DEFAULT_YMQ_COUNTER_NAME,
             "queue.total_count",
             ELaziness::OnStart
         );
@@ -740,10 +740,17 @@ void TQueueCounters::InsertCounters() {
         if (!parent.SqsCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
             QueueCounters.SqsCounters->ResetCounters();
             parent.SqsCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.SqsCounters);
+        } else {
+            parent.SqsCounters->GetSubgroup(QUEUE_LABEL, QueueName)->GetNamedCounter("sensor", "RequestTimeouts", true);
         }
-        if (parent.YmqCounters && !parent.YmqCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
-            QueueCounters.YmqCounters->ResetCounters();
-            parent.YmqCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.YmqCounters);
+        if (parent.YmqCounters) {
+            if (!parent.YmqCounters->FindSubgroup(QUEUE_LABEL, QueueName)) {
+                QueueCounters.YmqCounters->ResetCounters();
+                parent.YmqCounters->RegisterSubgroup(QUEUE_LABEL, QueueName, QueueCounters.YmqCounters);
+            } else if (!AggregatedCounters) {
+                parent.YmqCounters->GetSubgroup(QUEUE_LABEL, QueueName)->GetExpiringNamedCounter(
+                    DEFAULT_YMQ_COUNTER_NAME, QUEUE_CNTR_PREFIX + "request_timeouts_count_per_second", true);
+            }
         }
     };
 
@@ -985,7 +992,7 @@ void TCloudAuthCounters::InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCount
         for (size_t credentialType = 0; credentialType < NCloudAuth::ECredentialType::CredentialTypesCount; ++credentialType) {
             const auto credentialTypeStr = ToString(static_cast<NCloudAuth::ECredentialType>(credentialType));
             const auto actionAndCredentialCounters = actionCounters->GetSubgroup("credential_type", credentialTypeStr);
-            
+
             if (actionType == NCloudAuth::EActionType::Authorize) {
                 INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeSuccess[credentialType], "Ok", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
                 INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeError[credentialType], "PermissionDenied", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
@@ -1017,11 +1024,11 @@ void TMonitoringCounters::InitCounters() {
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesDone, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesRows, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesErrors, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
-    
-    
+
+
     INIT_COUNTER(MonitoringCounters, LocalLeaderStartInflight, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     INIT_COUNTER(MonitoringCounters, LocalLeaderStartQueue, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
-    
+
     INIT_HISTOGRAM_COUNTER(MonitoringCounters, LocalLeaderStartAwaitMs, ELifetime::Expiring, DurationBucketsMs, ELaziness::OnDemand);
 }
 

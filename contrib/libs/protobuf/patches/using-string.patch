@@ -207,16 +207,6 @@ index 16dd7b9..371234a 100644
  
  // Must be included last.
  #include "google/protobuf/port_def.inc"
---- a/src/google/protobuf/io/printer.h	(index)
-+++ b/src/google/protobuf/io/printer.h	(working tree)
-@@ -50,6 +50,7 @@
- #include "absl/functional/function_ref.h"
- #include "absl/log/absl_check.h"
- #include "absl/meta/type_traits.h"
-+#include "absl/strings/str_cat.h"
- #include "absl/strings/str_format.h"
- #include "absl/strings/string_view.h"
- #include "absl/types/optional.h"
 --- a/src/google/protobuf/io/strtod.h	(index)
 +++ b/src/google/protobuf/io/strtod.h	(working tree)
 @@ -35,11 +35,13 @@

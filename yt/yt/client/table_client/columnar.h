@@ -211,6 +211,7 @@ void DecodeIntegerVector(
     bool zigZagEncoded,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
+    TRef bitmap,
     TFetcher fetcher,
     TConsumer consumer);
 

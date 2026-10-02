@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/gtest/friend.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <util/system/yassert.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
@@ -84,7 +86,7 @@ private:
 };
 
 template <class TValue>
-bool operator ==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
+bool operator==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -379,7 +381,7 @@ public:
     class TLeftToRightTraverser
     {
     public:
-        TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
+        explicit TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
 
         // See: |TPiecewiseLinearFunction::LeftSegmentAt|.
         // If |y > x|, |LeftSegmentAt(x)| cannot be called after |LeftSegmentAt(y)|.
@@ -433,6 +435,9 @@ private:
 
 template <class TValue>
 bool operator==(const TPiecewiseLinearFunction<TValue>& lhs, const TPiecewiseLinearFunction<TValue>& rhs);
+
+template <class TValue>
+void FormatValue(TStringBuilderBase* builder, const TPiecewiseLinearFunction<TValue>& func, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

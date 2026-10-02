@@ -4,10 +4,7 @@ PEERDIR(
     contrib/python/xmltodict
 )
 
-TEST_SRCS(
-    test_dicttoxml.py
-    test_xmltodict.py
-)
+ALL_PYTEST_SRCS(RECURSIVE)
 
 NO_LINT()
 

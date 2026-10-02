@@ -1,8 +1,10 @@
 #include "column_tables.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
+
 namespace NKikimr::NColumnShard {
 
-std::shared_ptr<TSingleColumnTableCounters> TColumnTablesCounters::GetPathIdCounter(ui64 pathId) {
+std::shared_ptr<TSingleColumnTableCounters> TColumnTablesCounters::GetPathIdCounter(const TInternalPathId pathId) {
     auto findCounter = PathIdCounters.FindPtr(pathId);
     if (findCounter) {
         return *findCounter;
@@ -10,4 +12,4 @@ std::shared_ptr<TSingleColumnTableCounters> TColumnTablesCounters::GetPathIdCoun
     return PathIdCounters.emplace(pathId, std::make_shared<TSingleColumnTableCounters>(*this)).first->second;
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

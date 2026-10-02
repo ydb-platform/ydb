@@ -1,0 +1,4 @@
+--!ansi_lexer
+use plato;
+
+select "a".* from Input as "a" order by "key", `subkey`;

@@ -31,23 +31,23 @@ public:
 
         if (op->IsImmediate()) {
             // Every time we execute immediate transaction we may choose a new mvcc version
-            op->MvccReadWriteVersion.reset();
+            op->CachedMvccVersion.reset();
         }
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
-        Y_ABORT_UNLESS(tx != nullptr);
+        Y_ENSURE(tx != nullptr);
 
         try {
             if (!tx->Execute(&DataShard, txc)) {
                 return EExecutionStatus::Restart;
             }
         } catch (const TNeedGlobalTxId&) {
-            Y_VERIFY_S(op->GetGlobalTxId() == 0,
+            Y_ENSURE(op->GetGlobalTxId() == 0,
                 "Unexpected TNeedGlobalTxId exception for direct operation with TxId# " << op->GetGlobalTxId());
-            Y_VERIFY_S(op->IsImmediate(),
+            Y_ENSURE(op->IsImmediate(),
                 "Unexpected TNeedGlobalTxId exception for a non-immediate operation with TxId# " << op->GetTxId());
 
             ctx.Send(MakeTxProxyID(),
@@ -83,7 +83,7 @@ public:
         DataShard.EmitHeartbeats();
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
-        Y_ABORT_UNLESS(tx != nullptr);
+        Y_ENSURE(tx != nullptr);
 
         tx->SendResult(&DataShard, ctx);
     }

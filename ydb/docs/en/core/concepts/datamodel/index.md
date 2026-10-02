@@ -1,21 +1,22 @@
-# Data model and schema
+# {{ ydb-short-name }} Schema Objects
 
-This section describes the entities that {{ ydb-short-name }} uses within DBs. The {{ ydb-short-name }} core lets you flexibly implement various storage primitives, so new entities may appear in the future.
+{{ ydb-short-name }} supports the following types of schema objects:
 
-{{ ydb-short-name }} is a relational database where the data is stored in [tables](table.md) with each table consisting of rows and columns. Database objects in {{ ydb-short-name }} can be organized into a hierarchy of [folders](dir.md).
-
-* [Folder](dir.md)
-* [Table](table.md)
+* [Directories](dir.md)
+* [Tables](table.md)
 
 {% if feature_view %}
-* [View](view.md)
+* [Views](view.md)
 {% endif %}
+* [Topics](topic.md)
+* [Coordination nodes](coordination-node.md)
+* [Secrets](secrets.md)
+* [External tables](external_table.md)
+* [External data sources](external_data_source.md)
 
-* [Topic](../topic.md)
-* [Secret](secrets.md)
-* [External table](external_table.md)
-* [External data source](external_data_source.md)
+Schema objects are placed within the [cluster namespace](cluster-namespace.md) and are named according to the common [naming rules](cluster-namespace.md) that apply to all schema objects.
 
-[Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below. However, requirements for column names are slightly different.
+## See Also {#see-also}
 
-{% include [object naming rules](./_includes/object-naming-rules.md) %}
+- [{#T}](../index.md)
+- [{#T}](../topology.md)

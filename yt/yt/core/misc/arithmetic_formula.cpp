@@ -96,8 +96,8 @@ void ThrowError(const std::string& formula, int position, const std::string& mes
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
     THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
-        << TErrorAttribute("context", context)
-        << TErrorAttribute("context_pos", contextPosition);
+        .With("context", context)
+        .With("context_pos", contextPosition);
 }
 
 // NB: 'Set' type cannot appear in parsed/tokenized formula, it is needed only for CheckTypeConsistency.
@@ -242,8 +242,8 @@ i64 TGenericFormulaImpl::Eval(const THashMap<std::string, i64>& values, EEvaluat
                 return 0;
             } else {
                 THROW_ERROR_EXCEPTION("Undefined variable %Qv", var)
-                    << TErrorAttribute("formula", Formula_)
-                    << TErrorAttribute("values", values);
+                    .With("formula", Formula_)
+                    .With("values", values);
             }
         }
         return iter->second;
@@ -324,13 +324,13 @@ i64 TGenericFormulaImpl::Eval(const THashMap<std::string, i64>& values, EEvaluat
                     i64 top = std::get<i64>(stack.back());
                     if (top == 0) {
                         THROW_ERROR_EXCEPTION("Division by zero in formula %Qv", Formula_)
-                            << TErrorAttribute("values", values);
+                            .With("values", values);
                     }
                     stack.pop_back();
                     YT_VERIFY(std::holds_alternative<i64>(stack.back()));
                     if (std::get<i64>(stack.back()) == std::numeric_limits<i64>::min() && top == -1) {
                         THROW_ERROR_EXCEPTION("Division of INT64_MIN by -1 in formula %Qv", Formula_)
-                            << TErrorAttribute("values", values);
+                            .With("values", values);
                     }
                     if (token.Type == EFormulaTokenType::Divides) {
                         stack.back() = std::get<i64>(stack.back()) / top;
@@ -793,9 +793,9 @@ TArithmeticFormula::TArithmeticFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
 { }
 
 TArithmeticFormula::TArithmeticFormula(const TArithmeticFormula& other) = default;
-TArithmeticFormula::TArithmeticFormula(TArithmeticFormula&& other) = default;
+TArithmeticFormula::TArithmeticFormula(TArithmeticFormula&& other) noexcept = default;
 TArithmeticFormula& TArithmeticFormula::operator=(const TArithmeticFormula& other) = default;
-TArithmeticFormula& TArithmeticFormula::operator=(TArithmeticFormula&& other) = default;
+TArithmeticFormula& TArithmeticFormula::operator=(TArithmeticFormula&& other) noexcept = default;
 TArithmeticFormula::~TArithmeticFormula() = default;
 
 bool TArithmeticFormula::operator==(const TArithmeticFormula& other) const
@@ -922,9 +922,9 @@ TBooleanFormula::TBooleanFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
 { }
 
 TBooleanFormula::TBooleanFormula(const TBooleanFormula& other) = default;
-TBooleanFormula::TBooleanFormula(TBooleanFormula&& other) = default;
+TBooleanFormula::TBooleanFormula(TBooleanFormula&& other) noexcept = default;
 TBooleanFormula& TBooleanFormula::operator=(const TBooleanFormula& other) = default;
-TBooleanFormula& TBooleanFormula::operator=(TBooleanFormula&& other) = default;
+TBooleanFormula& TBooleanFormula::operator=(TBooleanFormula&& other) noexcept = default;
 TBooleanFormula::~TBooleanFormula() = default;
 
 bool TBooleanFormula::operator==(const TBooleanFormula& other) const
@@ -1044,9 +1044,9 @@ void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanForm
 
 TTimeFormula::TTimeFormula() = default;
 TTimeFormula::TTimeFormula(const TTimeFormula& other) = default;
-TTimeFormula::TTimeFormula(TTimeFormula&& other) = default;
+TTimeFormula::TTimeFormula(TTimeFormula&& other) noexcept = default;
 TTimeFormula& TTimeFormula::operator=(const TTimeFormula& other) = default;
-TTimeFormula& TTimeFormula::operator=(TTimeFormula&& other) = default;
+TTimeFormula& TTimeFormula::operator=(TTimeFormula&& other) noexcept = default;
 TTimeFormula::~TTimeFormula() = default;
 
 bool TTimeFormula::operator==(const TTimeFormula& other) const

@@ -6,7 +6,7 @@ import requests
 
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
-from yatest.common.network import PortManager
+import library.python.port_manager
 import yatest.common
 import os
 
@@ -16,9 +16,10 @@ MOTO_SERVER_PATH = os.getenv("MOTO_SERVER_EXECUTABLE") or "contrib/python/moto/b
 
 def start(argv):
     logging.debug("Starting S3 recipe")
-    pm = PortManager()
+    pm = library.python.port_manager.PortManager()
     port = pm.get_port()
-    url = "http://localhost:{port}".format(port=port)
+    url = "http://localhost:{port}".format(port=port)  # S3 libs require DNS name for S3 endpoint
+    check_url = "http://[::1]:{port}".format(port=port)
     cmd = [
         yatest.common.binary_path(MOTO_SERVER_PATH),
         "s3",
@@ -28,7 +29,7 @@ def start(argv):
 
     def is_s3_ready():
         try:
-            response = requests.get(url)
+            response = requests.get(check_url)
             response.raise_for_status()
             return True
         except requests.RequestException as err:

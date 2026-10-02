@@ -27,12 +27,17 @@ protected:
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
     std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IConfigClient> ConfigClient;
     std::unique_ptr<NConfig::IEnv> Env;
     std::unique_ptr<NConfig::IInitLogger> Logger;
 
     std::unique_ptr<NConfig::IInitialConfiguratorDepsRecorder> DepsRecorder;
 
     NConfig::TInitialConfigurator InitCfg;
+
+private:
+    NKikimrConfig::TAppConfig AppConfig;
+    TKikimrRunConfig RunConfig;
 };
 
 } // namespace NKikimr::NDriverClient

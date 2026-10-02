@@ -1,0 +1,22 @@
+-- !syntax_pg
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a,
+    Sum(Sum(b)) OVER () AS window_group_sum,
+    Sum(b) AS group_sum
+FROM (
+    VALUES
+        (1, 001),
+        (2, 002),
+        (2, 020),
+        (3, 003),
+        (3, 030),
+        (3, 300)
+) AS x (
+    a,
+    b
+)
+GROUP BY
+    a
+;

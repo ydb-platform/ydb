@@ -40,7 +40,7 @@ public:
 
     Y_FORCE_INLINE void Prefetch(size_t index) const;
 
-    Y_FORCE_INLINE TWord operator[] (size_t index) const;
+    Y_FORCE_INLINE TWord operator[](size_t index) const;
 
     template <class T>
     void UnpackTo(T* output);
@@ -66,7 +66,7 @@ public:
 
     Y_FORCE_INLINE void Prefetch(size_t index) const;
 
-    Y_FORCE_INLINE ui32 operator[] (size_t index) const;
+    Y_FORCE_INLINE ui32 operator[](size_t index) const;
 
 private:
     const ui64* Ptr_ = nullptr;

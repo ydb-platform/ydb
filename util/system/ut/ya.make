@@ -14,7 +14,12 @@ EXPLICIT_DATA()
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
     TIMEOUT(3600)
 ENDIF()
 
@@ -28,12 +33,14 @@ SRCS(
     system/backtrace_ut.cpp
     system/byteorder_ut.cpp
     system/compat_ut.cpp
+    system/compiler_ut.c
     system/compiler_ut.cpp
     system/context_ut.cpp
     system/condvar_ut.cpp
     system/cpu_id_ut.cpp
     system/datetime_ut.cpp
     system/daemon_ut.cpp
+    system/defaults_ut.c
     system/direct_io_ut.cpp
     system/env_ut.cpp
     system/error_ut.cpp

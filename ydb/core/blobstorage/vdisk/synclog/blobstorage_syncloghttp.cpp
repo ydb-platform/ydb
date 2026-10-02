@@ -41,7 +41,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogSnapshotResult::TPtr &ev, const TActorContext &ctx) {
-                Y_ABORT_UNLESS(!SnapPtr);
+                Y_VERIFY_S(!SnapPtr, VCtx->VDiskLogPrefix);
                 SnapPtr = std::move(ev->Get()->SnapshotPtr);
                 SublogContent = std::move(ev->Get()->SublogContent);
                 if (NodesInfoMsg)
@@ -49,7 +49,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-                Y_ABORT_UNLESS(!NodesInfoMsg);
+                Y_VERIFY_S(!NodesInfoMsg, VCtx->VDiskLogPrefix);
                 NodesInfoMsg = ev;
                 if (SnapPtr)
                     Finish(ctx);
@@ -133,4 +133,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

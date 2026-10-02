@@ -8,10 +8,8 @@ PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
-  auto logspace(double start, double stop, long num = 50, bool endpoint = true,
-                double base = 10.0)
-      -> decltype(functor::power()(base, functor::linspace()(start, stop, num,
-                                                             endpoint)));
+  auto logspace(double start, double stop, long num = 50, bool endpoint = true, double base = 10.0)
+      -> decltype(functor::power()(base, functor::linspace()(start, stop, num, endpoint)));
 
   DEFINE_FUNCTOR(pythonic::numpy, logspace);
 } // namespace numpy

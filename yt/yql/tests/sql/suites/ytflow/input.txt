@@ -1,0 +1,3 @@
+{"string_field"="foo";"int64_field"=1};
+{"string_field"="bar";"int64_field"=10};
+{"string_field"="foobar";"int64_field"=100};

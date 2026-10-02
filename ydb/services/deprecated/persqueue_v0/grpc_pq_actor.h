@@ -20,7 +20,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -114,15 +114,17 @@ struct TEvPQProxy {
 
 
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
-        TEvWriteInit(const NPersQueue::TWriteRequest& req, const TString& peerName, const TString& database)
+        TEvWriteInit(const NPersQueue::TWriteRequest& req, const TString& peerName, const TString& database, const TString& requestId)
             : Request(req)
             , PeerName(peerName)
             , Database(database)
+            , RequestId(requestId)
         { }
 
         NPersQueue::TWriteRequest Request;
         TString PeerName;
         TString Database;
+        TString RequestId;
     };
 
     struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> {
@@ -147,15 +149,17 @@ struct TEvPQProxy {
     };
 
     struct TEvReadInit : public NActors::TEventLocal<TEvReadInit, EvReadInit> {
-        TEvReadInit(const NPersQueue::TReadRequest& req, const TString& peerName, const TString& database)
+        TEvReadInit(const NPersQueue::TReadRequest& req, const TString& peerName, const TString& database, const TString& requestId)
             : Request(req)
             , PeerName(peerName)
             , Database(database)
+            , RequestId(requestId)
         { }
 
         NPersQueue::TReadRequest Request;
         TString PeerName;
         TString Database;
+        TString RequestId;
     };
 
     struct TEvRead : public NActors::TEventLocal<TEvRead, EvRead> {
@@ -490,6 +494,7 @@ private:
 
     TString PeerName;
     TString Database;
+    TString RequestId;
     ui64 Cookie;
 
     ui32 Partition;
@@ -591,7 +596,7 @@ class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {
 public:
      TReadSessionActor(IReadSessionHandlerRef handler, const NPersQueue::TTopicsListController& topicsHandler, const ui64 cookie,
                         const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                        const TMaybe<TString> clientDC);
+                        const TMaybe<TString> clientDC, TString authority);
     ~TReadSessionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -750,6 +755,7 @@ private:
     TString Session;
     TString PeerName;
     TString Database;
+    TString RequestId;
     TString UserAgent;
 
     bool ClientsideLocksAllowed;
@@ -804,7 +810,7 @@ private:
     THashMap<std::pair<TString, ui32>, TPartitionActorInfo> Partitions; //topic[ClientSideName!]:partition -> info
 
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
-    THashMap<TString, TTopicHolder> Topics; // PrimaryName ->topic info
+    THashMap<TString, TTopicHolder::TPtr> Topics; // PrimaryName ->topic info
 
     TVector<ui32> Groups;
     bool ReadOnlyLocal;
@@ -899,6 +905,7 @@ private:
     std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
 
     ui64 Cookie;
+    TString Authority;
 
     struct TCommitInfo {
         ui64 StartReadId;
@@ -943,6 +950,8 @@ private:
 
     NPersQueue::TTopicsListController TopicsHandler;
     NPersQueue::TTopicsToConverter TopicsList;
+
+    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 };
 
 }

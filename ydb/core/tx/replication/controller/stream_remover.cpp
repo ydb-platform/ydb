@@ -6,6 +6,9 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -16,6 +19,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     STATEFN(StateRequestPermission) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateRequestPermission"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAllowDropStream, Handle);
         default:
@@ -24,7 +29,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         DropStream();
     }
 
@@ -35,12 +41,16 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
+        case TReplication::ETargetKind::Transfer:
+            Y_ABORT("Unreachable");
         }
 
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
@@ -50,21 +60,22 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry");
+                YDB_LOG_DEBUG("Retry");
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
-                << ": status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Error",
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
         } else {
-            LOG_I("Success"
-                << ": issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_INFO("Success",
+                {"issues", result.GetIssues().ToOneLineString()});
         }
 
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));
@@ -91,15 +102,24 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , StreamName(streamName)
-        , LogPrefix("StreamRemover", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("StreamRemover", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
-        RequestPermission();
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
+            return RequestPermission();
+        case TReplication::ETargetKind::Transfer:
+            Y_ABORT("Unreachable");
+        }
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -113,7 +133,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamRemover
 

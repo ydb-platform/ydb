@@ -1,0 +1,6 @@
+PRAGMA YqlSelect = 'force';
+
+    (SELECT * FROM (VALUES (1), (1), (1), (1), (1)) AS t (x))
+EXCEPT DISTINCT
+    (SELECT * FROM (VALUES (1), (1)) AS t (x))
+;

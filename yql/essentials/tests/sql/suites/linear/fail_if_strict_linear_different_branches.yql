@@ -1,0 +1,10 @@
+/* custom error: Cannot guarantee single use in static analysis, consider using DynamicLinear */
+$x = WithSideEffects(ToMutDict({1:2},null));
+$z = WithSideEffects(ToMutDict({3:4},null));
+$y = IF_STRICT(
+        Opaque(true),
+        ($x,1),
+        ($z,2)
+        );
+select 
+    FromMutDict($y.0), $y.1

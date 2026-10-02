@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxRemovePermissions : public TTransactionBase<TCms> {
@@ -25,7 +27,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_PERMISSIONS; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemovePermissions Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemovePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         for (auto id : Ids) {
@@ -41,13 +43,14 @@ public:
 
             auto it = Self->State->ScheduledRequests.find(requestId);
             if (it != Self->State->ScheduledRequests.end()) {
+                bool evictVDisks = it->second.Request.GetEvictVDisks();
                 if (Expired) {
                     RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
                         << ": id# " << requestId
                         << ", reason# " << "permission " << id << " has expired");
                 }
                 
-                if (it->second.Request.GetEvictVDisks()) {
+                if (evictVDisks) {
                     auto ret = Self->ResetHostMarkers(host, txc, ctx);
                     std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
 
@@ -76,7 +79,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemovePermissions Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemovePermissions Complete");
 
         if (Response) {
             Y_ABORT_UNLESS(Request);

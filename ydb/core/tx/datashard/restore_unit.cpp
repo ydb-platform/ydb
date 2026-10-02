@@ -26,28 +26,32 @@ protected:
 
     bool Run(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_ABORT_UNLESS(tx->GetSchemeTx().HasRestore());
+        Y_ENSURE(tx->GetSchemeTx().HasRestore());
         const auto& restore = tx->GetSchemeTx().GetRestore();
 
         const ui64 tableId = restore.GetTableId();
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const TTableInfo tableInfo = TTableInfo(tableId, DataShard.GetUserTables().at(tableId));
 
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
         #ifndef KIKIMR_DISABLE_S3_OPS
-            tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
-                TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));
+            tx->SetAsyncJobActor(ctx.Register(
+                CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
+                TMailboxType::HTSwap,
+                AppData(ctx)->BatchPoolId));
             break;
         #else
-            Abort(op, ctx, "Imports from S3 are disabled");
+            Abort(op, ctx, TStringBuilder() << "Imports from "
+                << (settingsKind == NKikimrSchemeOp::TRestoreTask::kS3Settings ? "S3" : "FS")
+                << " are disabled");
             return false;
         #endif
-
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
             return false;
@@ -62,7 +66,7 @@ protected:
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TImportJobProduct*>(op->AsyncJobResult().Get());
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());

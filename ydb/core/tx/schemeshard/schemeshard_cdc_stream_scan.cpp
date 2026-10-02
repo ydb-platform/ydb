@@ -4,24 +4,20 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 #include <util/generic/deque.h>
 
-#if defined LOG_D || \
-    defined LOG_W || \
-    defined LOG_E
-#error log macro redefinition
-#endif
-
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
 class TCdcStreamScanFinalizer: public TActorBootstrapped<TCdcStreamScanFinalizer> {
+    static constexpr auto RetryInterval = TDuration::Seconds(1);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER;
@@ -29,7 +25,7 @@ public:
 
     explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
         : SSActorId(ssActorId)
-        , Request(std::move(req)) // template without txId
+        , Request(std::move(req->Record)) // template without txId
     {
     }
 
@@ -41,6 +37,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle)
+            sFunc(TEvents::TEvWakeup, SendRequest);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -51,14 +49,29 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        Request->Record.SetTxId(ev->Get()->TxId);
-        Send(SSActorId, Request.Release());
-        TActorBootstrapped::PassAway();
+        Request.SetTxId(ev->Get()->TxId);
+        SendRequest();
+    }
+
+    void SendRequest() {
+        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        ev->Record = Request;
+        Send(SSActorId, std::move(ev));
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        switch (ev->Get()->Record.GetStatus()) {
+        case NKikimrScheme::StatusAccepted:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            return PassAway();
+        default:
+            return Schedule(RetryInterval, new TEvents::TEvWakeup);
+        }
     }
 
 private:
     const TActorId SSActorId;
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> Request;
+    NKikimrScheme::TEvModifySchemeTransaction Request;
 
 }; // TCdcStreamScanFinalizer
 
@@ -115,7 +128,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         for (auto& [streamPathId, tabletId, ev] : ScanRequests) {
-            Self->CdcStreamScanPipes.Create(streamPathId, tabletId, std::move(ev), ctx);
+            Self->CdcStreamScanPipes.Send(streamPathId, tabletId, std::move(ev), ctx);
         }
 
         if (StreamToProgress) {
@@ -135,21 +148,24 @@ private:
     bool OnRunCdcStreamScan(TTransactionContext& txc, const TActorContext& ctx) {
         const auto& streamPathId = RunCdcStreamScan->Get()->StreamPathId;
 
-        LOG_D("Run"
-            << ": streamPathId# " << streamPathId);
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Run",
+            {"streamPathId", streamPathId},
+        );
 
         if (!Self->CdcStreams.contains(streamPathId)) {
-            LOG_W("Cannot run"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "stream doesn't exist");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot run",
+                {"streamPathId", streamPathId},
+                {"reason", "stream doesn't exist"},
+            );
             return true;
         }
 
         auto streamInfo = Self->CdcStreams.at(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
-            LOG_W("Cannot run"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "unexpected state");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot run",
+                {"streamPathId", streamPathId},
+                {"reason", "unexpected state"},
+            );
             return true;
         }
 
@@ -164,11 +180,11 @@ private:
 
         if (streamInfo->ScanShards.empty()) {
             NIceDb::TNiceDb db(txc.DB);
-            for (const auto& shard : table->GetPartitions()) {
+            for (const auto* shard : table->GetPartitions()) {
                 const auto status = TCdcStreamInfo::TShardStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::PENDING);
-                streamInfo->ScanShards.emplace(shard.ShardIdx, status);
-                streamInfo->PendingShards.insert(shard.ShardIdx);
-                Self->PersistCdcStreamScanShardStatus(db, streamPathId, shard.ShardIdx, status);
+                streamInfo->ScanShards.emplace(shard->ShardIdx, status);
+                streamInfo->PendingShards.insert(shard->ShardIdx);
+                Self->PersistCdcStreamScanShardStatus(db, streamPathId, shard->ShardIdx, status);
             }
         }
 
@@ -216,51 +232,57 @@ private:
     bool OnCdcStreamScanResponse(TTransactionContext& txc, const TActorContext& ctx) {
         const auto& record = CdcStreamScanResponse->Get()->Record;
 
-        LOG_D("Response"
-            << ": ev# " << record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Response",
+            {"ev", record.ShortDebugString()},
+        );
 
         const auto streamPathId = TPathId::FromProto(record.GetStreamPathId());
         if (!Self->CdcStreams.contains(streamPathId)) {
-            LOG_W("Cannot process response"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "stream doesn't exist");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot process response",
+                {"streamPathId", streamPathId},
+                {"reason", "stream doesn't exist"},
+            );
             return true;
         }
 
         auto streamInfo = Self->CdcStreams.at(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
-            LOG_W("Cannot process response"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "unexpected state");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot process response",
+                {"streamPathId", streamPathId},
+                {"reason", "unexpected state"},
+            );
             return true;
         }
 
         const auto tabletId = TTabletId(record.GetTabletId());
         const auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            LOG_E("Cannot process response"
-                << ": streamPathId# " << streamPathId
-                << ", tabletId# " << tabletId
-                << ", reason# " << "tablet not found");
+            YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot process response",
+                {"streamPathId", streamPathId},
+                {"tabletId", tabletId},
+                {"reason", "tablet not found"},
+            );
             return true;
         }
 
         auto it = streamInfo->ScanShards.find(shardIdx);
         if (it == streamInfo->ScanShards.end()) {
-            LOG_E("Cannot process response"
-                << ": streamPathId# " << streamPathId
-                << ", shardIdx# " << shardIdx
-                << ", reason# " << "shard not found");
+            YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot process response",
+                {"streamPathId", streamPathId},
+                {"shardIdx", shardIdx},
+                {"reason", "shard not found"},
+            );
             return true;
         }
 
         auto& status = it->second;
         if (!streamInfo->InProgressShards.contains(shardIdx)) {
-            LOG_W("Shard status mismatch"
-                << ": streamPathId# " << streamPathId
-                << ", shardIdx# " << shardIdx
-                << ", got# " << record.GetStatus()
-                << ", current# " << status.Status);
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Shard status mismatch",
+                {"streamPathId", streamPathId},
+                {"shardIdx", shardIdx},
+                {"got", record.GetStatus()},
+                {"current", status.Status},
+            );
             return true;
         }
 
@@ -291,9 +313,10 @@ private:
             Y_ABORT("unreachable");
 
         default:
-            LOG_E("Unexpected response status"
-                << ": status# " << static_cast<int>(record.GetStatus())
-                << ", error# " << record.GetErrorDescription());
+            YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Unexpected response status",
+                {"status", static_cast<int>(record.GetStatus())},
+                {"error", record.GetErrorDescription()},
+            );
             return true;
         }
 
@@ -311,40 +334,45 @@ private:
         const auto& streamPathId = PipeRetry.StreamPathId;
         const auto& tabletId = PipeRetry.TabletId;
 
-        LOG_D("Pipe retry"
-            << ": streamPathId# " << streamPathId
-            << ", tabletId# " << tabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Pipe retry",
+            {"streamPathId", streamPathId},
+            {"tabletId", tabletId},
+        );
 
         if (!Self->CdcStreams.contains(streamPathId)) {
-            LOG_W("Cannot retry"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "stream doesn't exist");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot retry",
+                {"streamPathId", streamPathId},
+                {"reason", "stream doesn't exist"},
+            );
             return true;
         }
 
         auto streamInfo = Self->CdcStreams.at(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
-            LOG_W("Cannot retry"
-                << ": streamPathId# " << streamPathId
-                << ", reason# " << "unexpected state");
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot retry",
+                {"streamPathId", streamPathId},
+                {"reason", "unexpected state"},
+            );
             return true;
         }
 
         const auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            LOG_E("Cannot retry"
-                << ": streamPathId# " << streamPathId
-                << ", tabletId# " << tabletId
-                << ", reason# " << "tablet not found");
+            YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot retry",
+                {"streamPathId", streamPathId},
+                {"tabletId", tabletId},
+                {"reason", "tablet not found"},
+            );
             return true;
         }
 
         auto it = streamInfo->InProgressShards.find(shardIdx);
         if (it == streamInfo->InProgressShards.end()) {
-            LOG_E("Cannot retry"
-                << ": streamPathId# " << streamPathId
-                << ", shardIdx# " << shardIdx
-                << ", reason# " << "shard not found");
+            YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot retry",
+                {"streamPathId", streamPathId},
+                {"shardIdx", shardIdx},
+                {"reason", "shard not found"},
+            );
             return true;
         }
 
@@ -363,9 +391,10 @@ private:
         auto domainInfo = Self->SubDomains.at(domainPathId);
 
         if (!Self->IsServerlessDomain(domainInfo)) {
-            LOG_D("Unable to make a bill"
-                << ": streamPathId# " << pathId
-                << ", reason# " << "domain is not a serverless db");
+            YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill",
+                {"streamPathId", pathId},
+                {"reason", "domain is not a serverless db"},
+            );
             return;
         }
 
@@ -374,23 +403,26 @@ private:
 
         const auto& attrs = domainPath->UserAttrs->Attrs;
         if (!attrs.contains("cloud_id")) {
-            LOG_D("Unable to make a bill"
-                << ": streamPathId# " << pathId
-                << ", reason# " << "'cloud_id' not found in user attributes");
+            YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill",
+                {"streamPathId", pathId},
+                {"reason", "'cloud_id' not found in user attributes"},
+            );
             return;
         }
 
         if (!attrs.contains("folder_id")) {
-            LOG_D("Unable to make a bill"
-                << ": streamPathId# " << pathId
-                << ", reason# " << "'folder_id' not found in user attributes");
+            YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill",
+                {"streamPathId", pathId},
+                {"reason", "'folder_id' not found in user attributes"},
+            );
             return;
         }
 
         if (!attrs.contains("database_id")) {
-            LOG_D("Unable to make a bill"
-                << ": streamPathId# " << pathId
-                << ", reason# " << "'database_id' not found in user attributes");
+            YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill",
+                {"streamPathId", pathId},
+                {"reason", "'database_id' not found in user attributes"},
+            );
             return;
         }
 
@@ -407,9 +439,10 @@ private:
             .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
             .ToString();
 
-        LOG_N("Make a bill"
-            << ": streamPathId# " << pathId
-            << ", record# " << billRecord);
+        YDB_LOG_NOTICE_CTX(ctx, "[CdcStreamScan] Make a bill",
+            {"streamPathId", pathId},
+            {"record", billRecord},
+        );
         Metering = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
     }
 };
@@ -457,3 +490,5 @@ void TSchemeShard::RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPa
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

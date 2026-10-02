@@ -1,9 +1,10 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
@@ -15,6 +16,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -36,7 +40,7 @@ struct TPDiskSchedulerConfig {
     double MaxChunkWritesDurationPerCycleMs = 1;
 
     TString ToString(bool isMultiline) const {
-        const char *x = isMultiline ? "\n" : "";
+        const char *x = isMultiline ? "\n " : "";
         TStringStream str;
         str << "{TPDiskSchedulerConfig" << x;
         str << " BytesSchedulerWeight# " << BytesSchedulerWeight << x;
@@ -53,7 +57,7 @@ struct TPDiskSchedulerConfig {
         str << " MaxChunkReadsDurationPerCycleMs# " << MaxChunkReadsDurationPerCycleMs << x;
         str << " MaxChunkWritesPerCycle# " << MaxChunkWritesPerCycle << x;
         str << " MaxChunkWritesDurationPerCycleMs# " << MaxChunkWritesDurationPerCycleMs << x;
-        str << "}" << x;
+        str << "}";
         return str.Str();
     }
 
@@ -105,9 +109,17 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
-    bool EnableSectorEncryption = true;
+
+    // EnablePDiskDataEncryption feature flag is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // unlike the macro, it does not disable metadata encryption.
+    // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
+    bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
+    // Physical chunk size to format the disk with, instead of deriving it from the user-accessible
+    // ChunkSize. Zero means derive from ChunkSize. Only used when the disk is formatted. Setting it
+    // along with ChunkSize is a misconfiguration: NodeWarden warns and keeps ChunkSize.
+    ui32 PhysicalChunkSize = 0;
     ui32 SectorSize = 4 << 10;
 
     ui64 StatisticsUpdateIntervalMs = 1000;
@@ -134,16 +146,23 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferSizeBytes;
     ui32 BufferPoolBufferCount;
     ui32 MaxQueuedCompletionActions;
+    ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
-    ui64 ExpectedSlotCount = 0;
+    // Slot sizing settings are either user-defined or inferred from drive size
+    ui32 ExpectedSlotCount = 0;
+    ui32 SlotSizeInUnits = 0;
+    ui64 ExpectedSlotSize = 0;
+    ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // EnableTightPDiskSpaceColors uses 30 (3%) plus per-color MinChunks floors; this default stays 130.
     ui32 ChunkBaseLimit = 130;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    TControlWrapper MaxCommonLogChunks = 200;
+    i64 MaxCommonLogChunks = 200ll;
+    i64 CommonStaticLogChunks = 70ll;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor
@@ -166,21 +185,37 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
+    bool UseBytesFlightControl = false;
+
+    bool PlainDataChunks = false;
+
+    bool SeparateHugePriorities = false;
 
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
 
+    bool SortFreeChunksHDD = true;
+
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
+
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
 
-    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
+    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory,
+            const NKikimrConfig::TFeatureFlags* featureFlags = nullptr)
         : Path(path)
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
     {
+        if (featureFlags) {
+            FeatureFlags = *featureFlags;
+        }
         Initialize();
     }
 
@@ -227,10 +262,13 @@ struct TPDiskConfig : public TThrRefBase {
         BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
         BufferPoolBufferCount = choose(1024, 512, 256);
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+        IoPieceSizeBytes = choose(64 << 10, 64 << 10, 512 << 10);
+        // piece size should be ≤ buffer size
+        IoPieceSizeBytes = Min(IoPieceSizeBytes, BufferPoolBufferSizeBytes);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "SPDK NVMe driver can be used only with NVMe devices!");
+        Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {
@@ -272,7 +310,7 @@ struct TPDiskConfig : public TThrRefBase {
     TString ToString(bool isMultiline) const {
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
-        str << "{TPDiskConfg" << x;
+        str << "{TPDiskConfig" << x;
         str << " Path# \"" << Path << "\"" << x;
         str << " ExpectedPath# \"" << ExpectedPath << "\"" << x;
         str << " ExpectedSerial# \"" << ExpectedSerial << "\"" << x;
@@ -285,9 +323,10 @@ struct TPDiskConfig : public TThrRefBase {
         }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
-        str << " EnableSectorEncryption # " << EnableSectorEncryption << x;
+        str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
+        str << " PhysicalChunkSize# " << PhysicalChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
 
         str << " StatisticsUpdateIntervalMs# " << StatisticsUpdateIntervalMs << x;
@@ -313,7 +352,11 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferSizeBytes# " << BufferPoolBufferSizeBytes << x;
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
+        str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " ExpectedSlotSize# " << ExpectedSlotSize << x;
+        str << " MaxSlots# " << MaxSlots << x;
+        str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -325,6 +368,13 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
+        str << " PlainDataChunks# " << PlainDataChunks << x;
+        str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }
@@ -336,6 +386,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasChunkSize()) {
             ChunkSize = cfg->GetChunkSize();
+        }
+        if (cfg->HasPhysicalChunkSize()) {
+            PhysicalChunkSize = cfg->GetPhysicalChunkSize();
         }
         if (cfg->HasSectorSize()) {
             SectorSize = cfg->GetSectorSize();
@@ -395,12 +448,23 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasMaxQueuedCompletionActions()) {
             MaxQueuedCompletionActions = cfg->GetMaxQueuedCompletionActions();
         }
+        if (cfg->HasIoPieceSizeBytes()) {
+            IoPieceSizeBytes = cfg->GetIoPieceSizeBytes();
+        }
         if (cfg->HasInsaneLogChunksMultiplier()) {
             InsaneLogChunksMultiplier = cfg->GetInsaneLogChunksMultiplier();
         }
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasExpectedSlotSize()) {
+            ExpectedSlotSize = cfg->GetExpectedSlotSize();
+        }
+
+        if (cfg->HasMaxSlots()) {
+            MaxSlots = cfg->GetMaxSlots();
         }
 
         if (cfg->HasChunkBaseLimit()) {
@@ -417,6 +481,69 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
+        if (cfg->HasUseBytesFlightControl()) {
+            UseBytesFlightControl = cfg->GetUseBytesFlightControl();
+        }
+        if (cfg->HasPlainDataChunks()) {
+            PlainDataChunks = cfg->GetPlainDataChunks();
+        }
+
+        if (cfg->HasSlotSizeInUnits()) {
+            SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+
+        if (cfg->HasSeparateHugePriorities()) {
+            SeparateHugePriorities = cfg->GetSeparateHugePriorities();
+        }
+
+        if (cfg->HasSortFreeChunksHDD()) {
+            SortFreeChunksHDD = cfg->GetSortFreeChunksHDD();
+        }
+    }
+
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
+        ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
+        ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
+        return int(vu / pu) + !!(vu % pu);
+    }
+};
+
+struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 SlotSize = 0;
+    ui64 UnitSize = 0;
+    ui32 MaxSlots = 0;
+    bool PreferInferredSettingsOverExplicit = false;
+
+    TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
+        switch (type) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                SlotSize = settings.GetRot().GetSlotSize();
+                UnitSize = settings.GetRot().GetUnitSize();
+                MaxSlots = settings.GetRot().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+            case NPDisk::DEVICE_TYPE_NVME:
+                SlotSize = settings.GetSsd().GetSlotSize();
+                UnitSize = settings.GetSsd().GetUnitSize();
+                MaxSlots = settings.GetSsd().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_UNKNOWN:
+                break;
+        }
+    }
+
+    explicit operator bool() const {
+        return (SlotSize || UnitSize) && MaxSlots;
     }
 };
 

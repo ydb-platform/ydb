@@ -1,5 +1,3 @@
-requirements:
-  - library/python/symbols/win_unicode_console
 exclude:
   - run.py
 dos_to_unix:

@@ -3,6 +3,7 @@
 #include <string>
 
 namespace NPersQueue {
+inline namespace Dev {
 
 std::string GetDC(const std::string& topic);
 
@@ -29,4 +30,5 @@ std::string ConvertOldProducerName(const std::string& producer);
 std::string ConvertOldConsumerName(const std::string& consumer);
 
 
-} // namespace NPersQueue
+}
+}

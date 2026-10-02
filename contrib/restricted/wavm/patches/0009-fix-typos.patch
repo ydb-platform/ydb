@@ -1,0 +1,26 @@
+commit f975eba5bdab412fd51c564121aedda7ef2f2f65
+author: dtorilov
+date: 2023-08-31T21:07:27+03:00
+
+    Add WebAssembly Execution Backend
+
+--- a/Lib/Runtime/Exception.cpp	(24bc218073432246195052658040cc093fe7b222)
++++ b/Lib/Runtime/Exception.cpp	(f975eba5bdab412fd51c564121aedda7ef2f2f65)
+@@ -322,7 +322,7 @@ static bool isRuntimeException(const Platform::Signal& signal)
+ 	switch(signal.type)
+ 	{
+ 	case Platform::Signal::Type::accessViolation: {
+-		// If the access violation occured in a Memory or Table's reserved pages, it's a runtime
++		// If the access violation occurred in a Memory or Table's reserved pages, it's a runtime
+ 		// exception.
+ 		Table* table = nullptr;
+ 		Uptr tableIndex = 0;
+@@ -347,7 +347,7 @@ static void translateSignalToRuntimeException(const Platform::Signal& signal,
+ 	switch(signal.type)
+ 	{
+ 	case Platform::Signal::Type::accessViolation: {
+-		// If the access violation occured in a Table's reserved pages, treat it as an undefined
++		// If the access violation occurred in a Table's reserved pages, treat it as an undefined
+ 		// table element runtime error.
+ 		Table* table = nullptr;
+ 		Uptr tableIndex = 0;

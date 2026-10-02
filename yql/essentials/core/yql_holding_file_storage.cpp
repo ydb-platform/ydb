@@ -25,6 +25,15 @@ TFileLinkPtr THoldingFileStorage::FreezeFile(const TUserDataBlock& block) {
     return FindOrPutData(block);
 }
 
+TFileLinkPtr THoldingFileStorage::GetFrozenBlock(const TUserDataBlock& block) const {
+    if (block.FrozenFile) {
+        return block.FrozenFile;
+    }
+    auto it = Links_.find(block);
+    Y_ENSURE(it != Links_.end());
+    return it->second;
+}
+
 NThreading::TFuture<std::function<TFileLinkPtr()>> THoldingFileStorage::FreezeFileAsync(const TUserDataBlock& block) {
     if (block.FrozenFile) {
         return MakeFutureWithConstantAction(block.FrozenFile);
@@ -59,17 +68,17 @@ TFileLinkPtr THoldingFileStorage::PutData(const TUserDataBlock& block) {
     }
 
     switch (block.Type) {
-    case EUserDataType::PATH:
-        return FileStorage_->PutFile(block.Data);
+        case EUserDataType::PATH:
+            return FileStorage_->PutFile(block.Data);
 
-    case EUserDataType::URL:
-        return FileStorage_->PutUrl(block.Data, block.UrlToken);
+        case EUserDataType::URL:
+            return FileStorage_->PutUrl(block.Data, block.UrlToken);
 
-    case EUserDataType::RAW_INLINE_DATA:
-        return FileStorage_->PutInline(block.Data);
+        case EUserDataType::RAW_INLINE_DATA:
+            return FileStorage_->PutInline(block.Data);
 
-    default:
-        ythrow yexception() << "Unknown user data type " << block.Type;
+        default:
+            ythrow yexception() << "Unknown user data type " << block.Type;
     }
 }
 
@@ -96,18 +105,18 @@ NThreading::TFuture<TFileLinkPtr> THoldingFileStorage::PutDataAsync(const TUserD
     }
 
     switch (block.Type) {
-    case EUserDataType::PATH:
-        return FileStorage_->PutFileAsync(block.Data);
+        case EUserDataType::PATH:
+            return FileStorage_->PutFileAsync(block.Data);
 
-    case EUserDataType::URL:
-        return FileStorage_->PutUrlAsync(block.Data, block.UrlToken);
+        case EUserDataType::URL:
+            return FileStorage_->PutUrlAsync(block.Data, block.UrlToken);
 
-    case EUserDataType::RAW_INLINE_DATA:
-        return FileStorage_->PutInlineAsync(block.Data);
+        case EUserDataType::RAW_INLINE_DATA:
+            return FileStorage_->PutInlineAsync(block.Data);
 
-    default:
-        ythrow yexception() << "Unknown user data type " << block.Type;
+        default:
+            ythrow yexception() << "Unknown user data type " << block.Type;
     }
 }
 
-}
+} // namespace NYql

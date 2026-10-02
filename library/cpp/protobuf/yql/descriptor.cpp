@@ -232,10 +232,13 @@ TString GenerateProtobufTypeConfig(
         case ERecursionTraits::Bytes:
             ret["view"]["recursion"] = "bytes";
             break;
+        case ERecursionTraits::BytesV2:
+            ret["view"]["recursion"] = "bytesV2";
+            break;
     }
 
     if (options.YtMode) {
-         ret["view"]["yt_mode"] = true;
+        ret["view"]["yt_mode"] = true;
     }
 
     if (options.Deterministic) {
@@ -314,6 +317,8 @@ TProtoTypeConfig ParseTypeConfig(const TStringBuf& config) {
                     result.Recursion = ERecursionTraits::Ignore;
                 } else if (recursion == "bytes") {
                     result.Recursion = ERecursionTraits::Bytes;
+                } else if (recursion == "bytesV2") {
+                    result.Recursion = ERecursionTraits::BytesV2;
                 } else {
                     ythrow yexception() << "unsupported recursion trait "
                                         << recursion;

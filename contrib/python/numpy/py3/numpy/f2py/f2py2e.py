@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 
 f2py2e - Fortran to Python C/API generator. 2nd Edition.
@@ -11,28 +10,29 @@ terms of the NumPy License.
 
 NO WARRANTY IS EXPRESSED OR IMPLIED.  USE AT YOUR OWN RISK.
 """
-import sys
+import argparse
 import os
 import pprint
 import re
-from pathlib import Path
-from itertools import dropwhile
-import argparse
-import copy
+import sys
 
-from . import crackfortran
-from . import rules
-from . import cb_rules
-from . import auxfuncs
-from . import cfuncs
-from . import f90mod_rules
-from . import __version__
-from . import capi_maps
 from numpy.f2py._backends import f2py_build_generator
+
+from . import (
+    __version__,
+    auxfuncs,
+    capi_maps,
+    cb_rules,
+    cfuncs,
+    crackfortran,
+    f90mod_rules,
+    rules,
+)
+from .cfuncs import errmess
 
 f2py_version = __version__.version
 numpy_version = __version__.version
-errmess = sys.stderr.write
+
 # outmess=sys.stdout.write
 show = pprint.pprint
 outmess = auxfuncs.outmess
@@ -106,6 +106,14 @@ Options:
                    functions. --wrap-functions is default because it ensures
                    maximum portability/compiler independence.
 
+  --[no-]freethreading-compatible    Create a module that declares it does or
+                   doesn't require the GIL. The default is
+                   --freethreading-compatible for backward
+                   compatibility. Inspect the Fortran code you are wrapping for
+                   thread safety issues before passing
+                   --no-freethreading-compatible, as f2py does not analyze
+                   fortran code for thread safety issues.
+
   --include-paths <path1>:<path2>:...   Search include files from the given
                    directories.
 
@@ -172,7 +180,6 @@ Extra options (only effective with -c):
   Using the following macros may be required with non-gcc Fortran
   compilers:
     -DPREPEND_FORTRAN -DNO_APPEND_FORTRAN -DUPPERCASE_FORTRAN
-    -DUNDERSCORE_G77
 
   When using -DF2PY_REPORT_ATEXIT, a performance report of F2PY
   interface is printed out at exit (platforms: Linux).
@@ -200,7 +207,7 @@ def scaninputline(inputline):
     dorestdoc = 0
     wrapfuncs = 1
     buildpath = '.'
-    include_paths, inputline = get_includes(inputline)
+    include_paths, freethreading_compatible, inputline = get_newer_options(inputline)
     signsfile, modulename = None, None
     options = {'buildpath': buildpath,
                'coutput': None,
@@ -263,7 +270,7 @@ def scaninputline(inputline):
         elif l == '--skip-empty-wrappers':
             emptygen = False
         elif l[0] == '-':
-            errmess('Unknown option %s\n' % repr(l))
+            errmess(f'Unknown option {repr(l)}\n')
             sys.exit()
         elif f2:
             f2 = 0
@@ -299,13 +306,13 @@ def scaninputline(inputline):
         sys.exit()
     if not os.path.isdir(buildpath):
         if not verbose:
-            outmess('Creating build directory %s\n' % (buildpath))
+            outmess(f'Creating build directory {buildpath}\n')
         os.mkdir(buildpath)
     if signsfile:
         signsfile = os.path.join(buildpath, signsfile)
     if signsfile and os.path.isfile(signsfile) and 'h-overwrite' not in options:
         errmess(
-            'Signature file "%s" exists!!! Use --overwrite-signature to overwrite.\n' % (signsfile))
+            f'Signature file "{signsfile}" exists!!! Use --overwrite-signature to overwrite.\n')
         sys.exit()
 
     options['emptygen'] = emptygen
@@ -328,6 +335,7 @@ def scaninputline(inputline):
     options['wrapfuncs'] = wrapfuncs
     options['buildpath'] = buildpath
     options['include_paths'] = include_paths
+    options['requires_gil'] = not freethreading_compatible
     options.setdefault('f2cmap_file', None)
     return files, options
 
@@ -346,7 +354,7 @@ def callcrackfortran(files, options):
     crackfortran.dolowercase = options['do-lower']
     postlist = crackfortran.crackfortran(files)
     if 'signsfile' in options:
-        outmess('Saving signatures to file "%s"\n' % (options['signsfile']))
+        outmess(f"Saving signatures to file \"{options['signsfile']}\"\n")
         pyf = crackfortran.crack2fortran(postlist)
         if options['signsfile'][-6:] == 'stdout':
             sys.stdout.write(pyf)
@@ -355,16 +363,21 @@ def callcrackfortran(files, options):
                 f.write(pyf)
     if options["coutput"] is None:
         for mod in postlist:
-            mod["coutput"] = "%smodule.c" % mod["name"]
+            mod["coutput"] = f"{mod['name']}module.c"
     else:
         for mod in postlist:
             mod["coutput"] = options["coutput"]
     if options["f2py_wrapper_output"] is None:
         for mod in postlist:
-            mod["f2py_wrapper_output"] = "%s-f2pywrappers.f" % mod["name"]
+            mod["f2py_wrapper_output"] = f"{mod['name']}-f2pywrappers.f"
     else:
         for mod in postlist:
             mod["f2py_wrapper_output"] = options["f2py_wrapper_output"]
+    for mod in postlist:
+        if options["requires_gil"]:
+            mod['gil_used'] = 'Py_MOD_GIL_USED'
+        else:
+            mod['gil_used'] = 'Py_MOD_GIL_NOT_USED'
     return postlist
 
 
@@ -469,19 +482,19 @@ def run_main(comline_list):
                     isusedby[u] = []
                 isusedby[u].append(plist['name'])
     for plist in postlist:
-        if plist['block'] == 'python module' and '__user__' in plist['name']:
-            if plist['name'] in isusedby:
+        module_name = plist['name']
+        if plist['block'] == 'python module' and '__user__' in module_name:
+            if module_name in isusedby:
                 # if not quiet:
+                usedby = ','.join(f'"{s}"' for s in isusedby[module_name])
                 outmess(
-                    f'Skipping Makefile build for module "{plist["name"]}" '
-                    'which is used by {}\n'.format(
-                        ','.join(f'"{s}"' for s in isusedby[plist['name']])))
+                    f'Skipping Makefile build for module "{module_name}" '
+                    f'which is used by {usedby}\n')
     if 'signsfile' in options:
         if options['verbose'] > 1:
             outmess(
                 'Stopping. Edit the signature file and then run f2py on the signature file: ')
-            outmess('%s %s\n' %
-                    (os.path.basename(sys.argv[0]), options['signsfile']))
+            outmess(f"{os.path.basename(sys.argv[0])} {options['signsfile']}\n")
         return
     for plist in postlist:
         if plist['block'] != 'python module':
@@ -529,27 +542,28 @@ class CombineIncludePaths(argparse.Action):
         include_paths_set = set(getattr(namespace, 'include_paths', []) or [])
         if option_string == "--include_paths":
             outmess("Use --include-paths or -I instead of --include_paths which will be removed")
-        if option_string == "--include-paths" or option_string == "--include_paths":
+        if option_string in {"--include-paths", "--include_paths"}:
             include_paths_set.update(values.split(':'))
         else:
             include_paths_set.add(values)
-        setattr(namespace, 'include_paths', list(include_paths_set))
+        namespace.include_paths = list(include_paths_set)
 
-def include_parser():
+def f2py_parser():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-I", dest="include_paths", action=CombineIncludePaths)
     parser.add_argument("--include-paths", dest="include_paths", action=CombineIncludePaths)
     parser.add_argument("--include_paths", dest="include_paths", action=CombineIncludePaths)
+    parser.add_argument("--freethreading-compatible", dest="ftcompat", action=argparse.BooleanOptionalAction)
     return parser
 
-def get_includes(iline):
+def get_newer_options(iline):
     iline = (' '.join(iline)).split()
-    parser = include_parser()
+    parser = f2py_parser()
     args, remain = parser.parse_known_args(iline)
     ipaths = args.include_paths
     if args.include_paths is None:
         ipaths = []
-    return ipaths, remain
+    return ipaths, args.ftcompat, remain
 
 def make_f2py_compile_parser():
     parser = argparse.ArgumentParser(add_help=False)
@@ -616,7 +630,7 @@ def run_compile():
         sysinfo_flags = [f[7:] for f in sysinfo_flags]
 
     _reg2 = re.compile(
-        r'--((no-|)(wrap-functions|lower)|debug-capi|quiet|skip-empty-wrappers)|-include')
+        r'--((no-|)(wrap-functions|lower|freethreading-compatible)|debug-capi|quiet|skip-empty-wrappers)|-include')
     f2py_flags = [_m for _m in sys.argv[1:] if _reg2.match(_m)]
     sys.argv = [_m for _m in sys.argv if _m not in f2py_flags]
     f2py_flags2 = []
@@ -636,10 +650,14 @@ def run_compile():
         r'--((f(90)?compiler(-exec|)|compiler)=|help-compiler)')
     flib_flags = [_m for _m in sys.argv[1:] if _reg3.match(_m)]
     sys.argv = [_m for _m in sys.argv if _m not in flib_flags]
-    _reg4 = re.compile(
-        r'--((f(77|90)(flags|exec)|opt|arch)=|(debug|noopt|noarch|help-fcompiler))')
-    fc_flags = [_m for _m in sys.argv[1:] if _reg4.match(_m)]
-    sys.argv = [_m for _m in sys.argv if _m not in fc_flags]
+    # TODO: Once distutils is dropped completely, i.e. min_ver >= 3.12, unify into --fflags
+    reg_f77_f90_flags = re.compile(r'--f(77|90)flags=')
+    reg_distutils_flags = re.compile(r'--((f(77|90)exec|opt|arch)=|(debug|noopt|noarch|help-fcompiler))')
+    fc_flags = [_m for _m in sys.argv[1:] if reg_f77_f90_flags.match(_m)]
+    distutils_flags = [_m for _m in sys.argv[1:] if reg_distutils_flags.match(_m)]
+    if not (MESON_ONLY_VER or backend_key == 'meson'):
+        fc_flags.extend(distutils_flags)
+    sys.argv = [_m for _m in sys.argv if _m not in (fc_flags + distutils_flags)]
 
     del_list = []
     for s in flib_flags:
@@ -661,10 +679,10 @@ def run_compile():
                         nv = vmap[ov]
                     except KeyError:
                         if ov not in vmap.values():
-                            print('Unknown vendor: "%s"' % (s[len(v):]))
+                            print(f'Unknown vendor: "{s[len(v):]}"')
                     nv = ov
                 i = flib_flags.index(s)
-                flib_flags[i] = '--fcompiler=' + nv
+                flib_flags[i] = '--fcompiler=' + nv  # noqa: B909
                 continue
     for s in del_list:
         i = flib_flags.index(s)
@@ -714,7 +732,7 @@ def run_compile():
             run_main(f" {' '.join(f2py_flags)} {' '.join(pyf_files)}".split())
 
     # Order matters here, includes are needed for run_main above
-    include_dirs, sources = get_includes(sources)
+    include_dirs, _, sources = get_newer_options(sources)
     # Now use the builder
     builder = build_backend(
         modulename,

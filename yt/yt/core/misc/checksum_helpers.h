@@ -2,7 +2,9 @@
 
 #include "public.h"
 
-#ifdef YT_USE_SSE42
+#include <util/system/compiler.h>
+
+#ifdef __SSE4_2__
     #include <tmmintrin.h>
     #include <nmmintrin.h>
     #include <wmmintrin.h>
@@ -12,7 +14,7 @@ namespace NYT::NCrc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
 
 inline __m128i _mm_shift_right_si128(__m128i v, ui8 offset)
 {
@@ -52,13 +54,15 @@ inline __m128i Fold(__m128i value, __m128i data, __m128i foldFactor)
     return _mm_xor_si128(data, Fold(value, foldFactor));
 }
 
-YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline __m128i AlignedPrefixLoad(const void* p, size_t* length)
+Y_NO_SANITIZE("address")
+inline __m128i AlignedPrefixLoad(const void* p, size_t* length)
 {
     size_t offset = (size_t)p & 15; *length = 16 - offset;
     return _mm_shift_right_si128(_mm_load_si128((__m128i*)((char*)p - offset)), offset);
 }
 
-YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline __m128i UnalignedLoad(const void* buf, size_t expectedLength = 16)
+Y_NO_SANITIZE("address")
+inline __m128i UnalignedLoad(const void* buf, size_t expectedLength = 16)
 {
     size_t length;
     __m128i result = AlignedPrefixLoad(buf, &length);

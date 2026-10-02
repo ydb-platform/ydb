@@ -6,18 +6,37 @@
 
 namespace NYql::NDq {
 
+enum class ESpillingType {
+    Compute,
+    Channel,
+};
+
 struct TSpillingCounters : public TThrRefBase {
+
+    struct TTypeCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr WriteBlobs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReadBlobs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StoredBlobs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceUsed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TooBigFileErrors;
+        ::NMonitoring::TDynamicCounters::TCounterPtr NoSpaceErrors;
+        ::NMonitoring::TDynamicCounters::TCounterPtr IoErrors;
+        ::NMonitoring::TDynamicCounters::TCounterPtr QueueOverflowErrors;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FileDescriptors;
+    };
 
     TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingFileDescriptors;
+    TTypeCounters& GetTypeCounters(ESpillingType type) {
+        return type == ESpillingType::Compute ? ComputeSpilling : ChannelSpilling;
+    }
+
+    TTypeCounters ComputeSpilling;
+    TTypeCounters ChannelSpilling;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIOQueueSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StartupErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ServiceNotStarted;
 };
 
 struct TSpillingTaskCounters : public TThrRefBase {

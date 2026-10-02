@@ -1,14 +1,18 @@
 #include "ydb_admin.h"
 
+#include "ydb_database_attribute.h"
 #include "ydb_dynamic_config.h"
+#include "ydb_node_config.h"
 #include "ydb_storage_config.h"
 #include "ydb_cluster.h"
 
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 namespace NYdb {
@@ -20,7 +24,9 @@ class TCommandNode : public TClientCommandTree {
 public:
     TCommandNode()
         : TClientCommandTree("node", {}, "Node-wide administration")
-    {}
+    {
+        AddCommand(std::make_unique<NNodeConfig::TCommandNodeConfig>());
+    }
 };
 
 class TCommandDatabase : public TClientCommandTree {
@@ -28,14 +34,15 @@ public:
     TCommandDatabase()
         : TClientCommandTree("database", {}, "Database-wide administration")
     {
-        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
+        AddCommand(std::make_unique<TCommandDatabaseAttribute>());
     }
 };
 
-TCommandDatabaseDump::TCommandDatabaseDump() 
-    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory") 
+TCommandDatabaseDump::TCommandDatabaseDump()
+    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory")
 {}
 
 void TCommandDatabaseDump::Config(TConfig& config) {
@@ -54,23 +61,23 @@ void TCommandDatabaseDump::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpDatabase(config.Database, FilePath));
 
     return EXIT_SUCCESS;
 }
 
-TCommandDatabaseRestore::TCommandDatabaseRestore() 
-    : TYdbCommand("restore", {}, "Restore database from local dump") 
+TCommandDatabaseRestore::TCommandDatabaseRestore()
+    : TYdbCommand("restore", {}, "Restore database from local dump")
 {}
 
 void TCommandDatabaseRestore::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.AllowEmptyDatabase = true; // it is possible to retrieve database path from dump
 
     config.Opts->AddLongOption('i', "input", "Path in a local filesystem to a directory with dump.")
         .RequiredArgument("PATH")
@@ -87,18 +94,15 @@ void TCommandDatabaseRestore::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseRestore::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     auto settings = NDump::TRestoreDatabaseSettings()
-        .WaitNodesDuration(WaitNodesDuration);
+        .WaitNodesDuration(WaitNodesDuration)
+        .Database(config.Database);
 
-    if (!config.Database.empty()) {
-        settings.Database(config.Database);
-        config.Database.clear(); // always connect directly to cluster
-    }
-
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreDatabase(FilePath, settings));
 
     return EXIT_SUCCESS;
@@ -111,6 +115,7 @@ TCommandAdmin::TCommandAdmin()
     UseOnlyExplicitProfile();
     // keep old commands "safe", to keep old behavior
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(
+                         true,
                          NDynamicConfig::TCommandFlagsOverrides{.Dangerous = false, .OnlyExplicitProfile = false},
                          false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
@@ -126,7 +131,7 @@ void TCommandAdmin::Config(TConfig& config) {
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
            << colors.BoldColor()
            << "Commands in this subtree may damage your cluster if used wrong" << Endl
@@ -137,7 +142,7 @@ void TCommandAdmin::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());

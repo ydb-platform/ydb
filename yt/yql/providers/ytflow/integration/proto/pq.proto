@@ -1,0 +1,25 @@
+package NYql.NYtflow.NProto;
+
+import "yql/essentials/providers/common/proto/gateways_config.proto";
+
+message TPQSourceMessage {
+   optional string Cluster = 5;
+   repeated string Endpoints = 1;
+   optional string CmEndpoint = 6;
+   optional TPqClusterConfig.EClusterType ClusterType = 2;
+   optional string Database = 3;
+   optional string TopicPath = 4;
+   optional bool UseSsl = 7; // grpcs
+   optional bool AddBearerToToken = 8; // whether to use prefix "Bearer " in token
+}
+
+message TPQSinkMessage {
+   optional string Cluster = 1;
+   optional string Endpoint = 5;
+   optional string CmEndpoint = 6;
+   optional TPqClusterConfig.EClusterType ClusterType = 2;
+   optional string Database = 3;
+   optional string TopicPath = 4;
+   optional bool UseSsl = 7; // grpcs
+   optional bool AddBearerToToken = 8; // whether to use prefix "Bearer " in token
+}

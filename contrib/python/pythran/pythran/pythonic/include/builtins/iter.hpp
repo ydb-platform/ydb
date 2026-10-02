@@ -26,9 +26,7 @@ namespace builtins
   } // namespace details
 
   template <class T>
-  details::iter<
-      typename std::remove_cv<typename std::remove_reference<T>::type>::type>
-  iter(T &&t);
+  details::iter<std::remove_cv_t<std::remove_reference_t<T>>> iter(T &&t);
 
   DEFINE_FUNCTOR(pythonic::builtins, iter);
 } // namespace builtins

@@ -1,11 +1,14 @@
 services:
+
   fq-connector-go:
+    build: ./connector.d
     container_name: fq-tests-pg-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.2@sha256:a79b73f31d6ad37ca32d9212fe588e13bef30b56b3d29bbf49e450270c5e11f7
     ports:
       - 2130
-    volumes:
-      - ../../fq-connector-go/:/opt/ydb/cfg/
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
   postgresql:
     command:
       - postgres
@@ -27,4 +30,11 @@ services:
       - /run
       - /tmp
       - /var
-version: "3.4"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "localhost", "-p", "5432", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 50s
+      retries: 5
+      start_period: 30s
+
+version: "2.4"

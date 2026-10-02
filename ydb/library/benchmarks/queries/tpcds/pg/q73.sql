@@ -24,6 +24,6 @@ select c_last_name
     group by ss_ticket_number,ss_customer_sk) dj,{{customer}}
     where ss_customer_sk = c_customer_sk
       and cnt between 1::int8 and 5::int8
-    order by cnt desc, c_last_name asc;
+    order by cnt desc, c_last_name asc, ss_ticket_number asc;
 
 -- end query 1 in stream 0 using template ../query_templates/query73.tpl

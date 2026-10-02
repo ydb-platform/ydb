@@ -5,7 +5,7 @@
 #include "ydb_ping.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 
 #include <memory>
 
@@ -20,12 +20,13 @@ namespace NConsoleClient {
 class TCommandLatency
     : public TYdbCommand
     , public TCommandWithFormat
-    , public TInterruptibleCommand
+    , public TInterruptableCommand
 {
 public:
     enum class EFormat {
         Plain = 0,
         CSV,
+        JSON,
     };
 
 public:
@@ -38,10 +39,11 @@ public:
 
 private:
     int IntervalSeconds;
+    int MinInflight;
     int MaxInflight;
     EFormat Format;
     TCommandPing::EPingKind RunKind;
-    double Percentile;
+    std::vector<double> Percentiles;
 
     std::unique_ptr<NDebug::TActorChainPingSettings> ChainConfig;
 };

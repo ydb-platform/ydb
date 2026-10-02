@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NOperation {
 
 template <typename TOp>
@@ -56,11 +56,11 @@ public:
     TAsyncStatus Forget(const TOperation::TOperationId& id);
 
     template <typename TOp>
-    NThreading::TFuture<TOperationsList<TOp>> List(ui64 pageSize = 0, const std::string& pageToken = std::string());
+    NThreading::TFuture<TOperationsList<TOp>> List(std::uint64_t pageSize = 0, const std::string& pageToken = std::string());
 
 private:
     template <typename TOp>
-    NThreading::TFuture<TOperationsList<TOp>> List(const std::string& kind, ui64 pageSize, const std::string& pageToken);
+    NThreading::TFuture<TOperationsList<TOp>> List(const std::string& kind, std::uint64_t pageSize, const std::string& pageToken);
 
 private:
     std::shared_ptr<TImpl> Impl_;

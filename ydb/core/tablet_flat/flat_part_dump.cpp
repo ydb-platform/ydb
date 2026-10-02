@@ -39,14 +39,16 @@ namespace {
 
     TDump::~TDump() { }
 
-    void TDump::Part(const TPart &part, ui32 depth) noexcept
+    void TDump::Part(const TPart &part, ui32 depth)
     {
         Out << NFmt::Do(part) << " data " << part.DataSize() << "b" << Endl;
 
         if (auto *frames = part.Small.Get()) Frames(*frames, "Small");
         if (auto *frames = part.Large.Get()) Frames(*frames, "Large");
         if (auto *blobs = part.Blobs.Get())  Blobs(*blobs);
-        if (auto *bloom = part.ByKey.Get())  Bloom(*bloom);
+        for (const auto& [prefixLen, bloom] : part.ByKeyPrefixes) {
+            if (bloom) Bloom(*bloom);
+        }
 
         Index(part, depth);
         BTreeIndex(part);
@@ -65,12 +67,12 @@ namespace {
 
                 Out << Endl;
 
-                DataPage(part, index->GetPageId());
+                DataPage(part, index->GetLocation());
             }
         }
     }
 
-    void TDump::Frames(const NPage::TFrames &page, const char *tag) noexcept
+    void TDump::Frames(const NPage::TFrames &page, const char *tag)
     {
         Out
             << " + " << tag << " Label{" << page.Raw.size() << "b}"
@@ -79,7 +81,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Blobs(const NPage::TExtBlobs &page) noexcept
+    void TDump::Blobs(const NPage::TExtBlobs &page)
     {
         Out
             << " + Blobs Label{" << page.Raw.size() << "b} "
@@ -88,7 +90,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Bloom(const NPage::TBloom &page) noexcept
+    void TDump::Bloom(const NPage::TBloom &page)
     {
         Out
             << " + Bloom Label{" << page.Raw.size() << "b} "
@@ -97,7 +99,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Index(const TPart &part, ui32 depth) noexcept
+    void TDump::Index(const TPart &part, ui32 depth)
     {
         if (!part.IndexPages.HasFlat()) {
             return;
@@ -106,7 +108,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.GetFlat({});
-        auto indexPage = Env->TryGetPage(&part, indexPageId, {});
+        auto indexPage = Env->TryGetPage(&part, part.GetPageLocation(indexPageId, {}), {});
 
         if (!indexPage) {
             Out
@@ -142,7 +144,7 @@ namespace {
                 << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
                 << (Printf(Out, " %6lu", record->GetRowId()), " ");
 
-            if (auto *page = Env->TryGetPage(&part, record->GetPageId(), {})) {
+            if (auto *page = Env->TryGetPage(&part, part.GetPageLocation(record->GetPageId(), {}), {})) {
                 Printf(Out, " %6zub  ", page->size());
             } else {
                 Out << "~none~  ";
@@ -170,12 +172,13 @@ namespace {
         }
     }
 
-    void TDump::BTreeIndex(const TPart &part) noexcept
+    void TDump::BTreeIndex(const TPart &part)
     {
         if (part.IndexPages.HasBTree()) {
             auto meta = part.IndexPages.GetBTree({});
-            if (meta.LevelCount) {
-                BTreeIndexNode(part, meta);
+            if (meta.LevelCount()) {
+                auto rootLoc = part.IndexPages.GetRootLocation(&part, {});
+                BTreeIndexNode(part, rootLoc, meta.ToString(), /* level */ 0, /* totalLevels */ meta.LevelCount(), meta.HasRootV2());
             } else {
                 Out
                     << " + BTreeIndex{Empty, "
@@ -184,15 +187,16 @@ namespace {
         }
     }
 
-    void TDump::DataPage(const TPart &part, ui32 page) noexcept
+    void TDump::DataPage(const TPart &part, TPageLocation location)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         // TODO: need to join with other column groups
-        auto data = NPage::TDataPage(Env->TryGetPage(&part, page, {}));
+        auto data = NPage::TDataPage(Env->TryGetPage(&part, location, {}));
 
         if (data) {
             auto label = data.Label();
+            auto page = location.Offset;
             Out
                 << " + Rows{" << page << "} Label{" << page << (ui16)label.Type
                 << " rev " << label.Format << ", " << label.Size << "b}"
@@ -200,7 +204,7 @@ namespace {
                 << Endl;
 
         } else {
-            Out << " | " << page << " NOT_LOADED" << Endl;
+            Out << " | " << location.Offset << " NOT_LOADED" << Endl;
 
             return;
         }
@@ -268,7 +272,7 @@ namespace {
         }
     }
 
-    void TDump::TName(ui32 num) noexcept
+    void TDump::TName(ui32 num)
     {
         const auto &type = Reg->GetType(num);
 
@@ -279,9 +283,9 @@ namespace {
         }
     }
 
-    void TDump::Key(TCellsRef key, const TPartScheme &scheme) noexcept
+    void TDump::Key(TCellsRef key, const TPartScheme &scheme)
     {
-        Out << "(";
+        Out << "{";
 
         for (auto off : xrange(key.size())) {
             TString str;
@@ -291,10 +295,10 @@ namespace {
             Out << (off ? ", " : "") << str;
         }
 
-        Out << ")";
+        Out << "}";
     }
 
-    void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level) noexcept
+    void TDump::BTreeIndexNode(const TPart &part, NPage::TPageLocation loc, const TString &parent, ui32 level, ui32 totalLevels, bool v2Format)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
@@ -303,31 +307,35 @@ namespace {
             intend += " |";
         }
 
-        auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
-            if (part.GetPageType(child.GetPageId(), {}) == EPage::BTreeIndex) {
-                BTreeIndexNode(part, child, level + 1);
+        bool isLeafLevel = (totalLevels <= 1);
+
+        auto dumpChild = [&](const NPage::TBtreeIndexNode &node, NPage::TRecIdx pos) {
+            auto childRef = node.GetChild(pos, isLeafLevel);
+            auto childLoc = NTable::ResolvePageLocation(&part, childRef, {});
+            if (childLoc.Type == (v2Format ? NPage::EPage::BTreeIndexV2 : NPage::EPage::BTreeIndex)) {
+                BTreeIndexNode(part, childLoc, node.ChildToString(pos), level + 1, totalLevels - 1, v2Format);
             } else {
-                Out << intend << " | " << child.ToString() << Endl;
+                Out << intend << " | " << node.ChildToString(pos) << Endl;
             }
         };
 
-        auto page = Env->TryGetPage(&part, meta.GetPageId(), {});
+        auto page = Env->TryGetPage(&part, loc, {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;
         }
 
-        auto node = NPage::TBtreeIndexNode(*page);
+        auto node = NPage::TBtreeIndexNode(*page, v2Format);
 
         auto label = node.Label();
 
         Out
             << intend
-            << " + BTreeIndex{" << meta.ToString() << "}"
+            << " + BTreeIndex{" << parent << "}"
             << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << Endl;
 
-        dumpChild(node.GetChild(0));
+        dumpChild(node, 0);
 
         for (NPage::TRecIdx i : xrange(node.GetKeysCount())) {
             Out << intend << " | > ";
@@ -341,7 +349,7 @@ namespace {
 
             Key(key, *part.Scheme);
             Out << Endl;
-            dumpChild(node.GetChild(i + 1));
+            dumpChild(node, i + 1);
         }
 
         Out << Endl;

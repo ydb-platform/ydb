@@ -1,13 +1,7 @@
 UNITTEST_FOR(ydb/library/time_series_vec)
 
 FORK_SUBTESTS()
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(30)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt

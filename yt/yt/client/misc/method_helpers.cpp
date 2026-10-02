@@ -6,7 +6,7 @@ namespace NYT {
 
 [[noreturn]] void ThrowUnimplementedClientMethodError(TStringBuf methodName, TStringBuf reason)
 {
-    throw TErrorException() <<= TError("%v method: %v", reason, methodName);
+    THROW_ERROR_EXCEPTION("%v method %v", reason, methodName);
 }
 
 } // namespace NYT

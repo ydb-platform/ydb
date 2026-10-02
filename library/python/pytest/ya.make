@@ -5,6 +5,7 @@ PY_SRCS(
     config.py
     context.py
     main.py
+    module_utils.py
     rewrite.py
     yatest_tools.py
 )

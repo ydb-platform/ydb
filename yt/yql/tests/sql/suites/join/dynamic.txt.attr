@@ -1,0 +1,22 @@
+{
+    "_yql_dynamic"=%true;
+    "schema"=<
+        "strict" = %true;
+        "unique_keys" = %true
+    >[
+        {
+            "name" = "key";
+            "type" = "string";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "subkey";
+            "type" = "string";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "value";
+            "type" = "string";
+        };
+    ]
+}

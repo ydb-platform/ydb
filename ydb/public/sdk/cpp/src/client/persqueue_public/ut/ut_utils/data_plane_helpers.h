@@ -1,22 +1,22 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <src/client/persqueue_public/persqueue.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/hash.h>
 
 namespace NKikimr::NPersQueueTests {
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const NYdb::NPersQueue::TWriteSessionSettings& settings,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> creds = nullptr
     );
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const TString& topic,
         const TString& sourceId,
         std::optional<ui32> partitionGroup = {},

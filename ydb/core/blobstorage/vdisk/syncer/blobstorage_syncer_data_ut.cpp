@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
     }
 
     Y_UNIT_TEST(SerDes1) {
-        SerDes(TBlobStorageGroupType::ErasureMirror3, 2U, 4U);
+        SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 2U, 4U);
     }
 
     Y_UNIT_TEST(SerDes2) {

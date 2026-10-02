@@ -39,9 +39,9 @@ namespace NBoot {
 
     struct IEnv {
         virtual const NUtil::ILogger* Logger() const noexcept = 0;
-        virtual void Describe(IOutputStream&) const noexcept = 0;
-        virtual void Start(TIntrusivePtr<IStep>) noexcept = 0;
-        virtual void Finish(TIntrusivePtr<IStep>) noexcept = 0;
+        virtual void Describe(IOutputStream&) const = 0;
+        virtual void Start(TIntrusivePtr<IStep>) = 0;
+        virtual void Finish(TIntrusivePtr<IStep>) = 0;
     };
 
     class IStep : public TSimpleRefCount<IStep> {
@@ -65,21 +65,21 @@ namespace NBoot {
             , Logic(owner->Logic)
             , Back(owner->Back)
         {
-            Y_ABORT_UNLESS(Owner != this, "Boot IStep Cannot be on its own");
+            Y_ENSURE(Owner != this, "Boot IStep Cannot be on its own");
         }
 
         virtual ~IStep() = default;
 
-        virtual void Start() noexcept = 0;
+        virtual void Start() = 0;
 
-        virtual bool HandleBio(NSharedCache::TEvResult&) noexcept
+        virtual bool HandleBio(NSharedCache::TEvResult&)
         {
-            Y_ABORT("Boot IStep got an unhandled NSharedCache::TEvResult event");
+            Y_TABLET_ERROR("Boot IStep got an unhandled NSharedCache::TEvResult event");
         }
 
-        virtual void HandleStep(TIntrusivePtr<IStep>) noexcept
+        virtual void HandleStep(TIntrusivePtr<IStep>)
         {
-            Y_ABORT("Boot IStep got an unhandled child step result");
+            Y_TABLET_ERROR("Boot IStep got an unhandled child step result");
         }
 
         template<typename TStep, typename ... TArgs>
@@ -104,7 +104,7 @@ namespace NBoot {
             if (typeid(*this) == typeid(TStep)) {
                 return static_cast<TStep*>(this);
             } else if (require) {
-                Y_ABORT("Cannot cast IStep to particular unit");
+                Y_TABLET_ERROR("Cannot cast IStep to particular unit");
             } else {
                 return nullptr;
             }

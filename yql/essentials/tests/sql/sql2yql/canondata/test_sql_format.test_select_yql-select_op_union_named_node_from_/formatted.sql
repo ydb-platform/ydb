@@ -1,0 +1,17 @@
+PRAGMA YqlSelect = 'force';
+
+$x = (
+    SELECT
+        1 AS a
+    UNION
+    SELECT
+        2 AS a
+);
+
+SELECT
+    a
+FROM
+    $x
+ORDER BY
+    a
+;

@@ -1,7 +1,11 @@
 #pragma once
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <util/generic/string.h>
 #include <util/string/printf.h>
+
+#include <optional>
 
 namespace NKikimrSchemeOp {
     class TBackupTask;
@@ -13,7 +17,8 @@ namespace NBackupRestoreTraits {
 
 enum class EDataFormat: int {
     Invalid /* "invalid" */,
-    Csv /* "csv" */,
+    YdbDump /* "csv" */,
+    Parquet /* "parquet" */,
 };
 
 enum class ECompressionCodec: int {
@@ -24,18 +29,20 @@ enum class ECompressionCodec: int {
 
 bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCodec& codec);
 ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task);
+EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task);
+std::optional<TParquetExportSettings> ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task);
 
 EDataFormat NextDataFormat(EDataFormat cur);
 ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 
-TString PermissionsKeySuffix();
-TString TopicKeySuffix();
-TString ChangefeedKeySuffix();
-TString SchemeKeySuffix();
-TString MetadataKeySuffix();
-TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec);
+TString PermissionsKeySuffix(bool encryptedBackup);
+TString TopicKeySuffix(bool encryptedBackup);
+TString ChangefeedKeySuffix(bool encryptedBackup);
+TString SchemeKeySuffix(bool encryptedBackup);
+TString MetadataKeySuffix(bool encryptedBackup);
+TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec, bool encryptedBackup);
 
 } // NBackupRestoreTraits
 } // NDataShard

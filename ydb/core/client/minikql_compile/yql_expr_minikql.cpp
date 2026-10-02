@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -32,7 +32,7 @@
 #include <library/cpp/threading/future/async.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
@@ -257,9 +257,12 @@ class TKikimrCallableTypeAnnotationTransformer : public TSyncTransformerBase {
 public:
     TKikimrCallableTypeAnnotationTransformer(
             TContext::TPtr mkqlCtx,
-            TAutoPtr<IGraphTransformer> callableTransformer)
+            TAutoPtr<IGraphTransformer> callableTransformer,
+            TTypeAnnotationContext& typeCtx)
         : MkqlCtx(mkqlCtx)
-        , CallableTransformer(callableTransformer) {}
+        , CallableTransformer(callableTransformer)
+        , TypeCtx(typeCtx)
+        {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -323,9 +326,9 @@ public:
                 return NTypeAnnImpl::SortWrapper(input, output, typeAnnCtx);
             }
             if (input->IsCallable("PartialTake")) {
-                NTypeAnnImpl::TContext typeAnnCtx(ctx);
+                NTypeAnnImpl::TExtContext typeAnnCtx(ctx, TypeCtx);
                 TExprNode::TPtr output;
-                return NTypeAnnImpl::TakeWrapper(input, output, typeAnnCtx);
+                return NTypeAnnImpl::TakeWrapperEx(input, output, typeAnnCtx);
             }
         }
 
@@ -386,9 +389,10 @@ private:
             const TTypeAnnotationNode *columnDataType;
             auto typeConstraint = EColumnTypeConstraint::Nullable;
 
-            auto systemColumnType = KikimrSystemColumns().find(columnName);
-            if (systemColumnType != KikimrSystemColumns().end()) {
-                columnDataType = ctx.MakeType<TDataExprType>(systemColumnType->second);
+            auto systemColumn = GetSystemColumns().find(columnName);
+            if (systemColumn != GetSystemColumns().end()) {
+                columnDataType = GetMkqlDataTypeAnnotation(
+                    TDataType::Create(systemColumn->second.TypeId, *MkqlCtx->TypeEnv), ctx);
             } else {
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
@@ -809,6 +813,7 @@ private:
 private:
     TContext::TPtr MkqlCtx;
     TAutoPtr<IGraphTransformer> CallableTransformer;
+    TTypeAnnotationContext& TypeCtx;
 };
 
 bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContext::TPtr mkqlContext) {
@@ -820,7 +825,7 @@ bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContex
     types.RandomProvider = CreateDefaultRandomProvider();
 
     TAutoPtr<IGraphTransformer> kikimrTransformer = new TKikimrCallableTypeAnnotationTransformer(
-        mkqlContext, callableTransformer);
+        mkqlContext, callableTransformer, types);
 
     auto typeTransformer = CreateTypeAnnotationTransformer(kikimrTransformer, types);
 
@@ -869,7 +874,7 @@ void ValidateCompiledTable(const TExprNode& node, const TTableId& tableId) {
             << " current: " << currentVersion
             << " for table: " << TString(node.Child(0)->Child(0)->Content());
     }
-    auto currentPathId = TKikimrPathId(tableId.PathId.OwnerId, tableId.PathId.LocalPathId).ToString();
+    const TString currentPathId = TStringBuilder() << tableId.PathId.OwnerId << ':' << tableId.PathId.LocalPathId;
     const auto& programPathId = node.Child(0)->Child(2)->Content();
     // TODO: Remove this checks.
     // Check for programPathId just to be able to disable this check
@@ -1589,7 +1594,7 @@ private:
         }
         IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
         do {
-            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
+            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context, Expr->TypeContext);
         } while (status.Level == IGraphTransformer::TStatus::Repeat);
         Y_DEBUG_ABORT_UNLESS(status.Level == IGraphTransformer::TStatus::Ok ||
                      status.Level == IGraphTransformer::TStatus::Error);

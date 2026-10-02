@@ -1,0 +1,18 @@
+PRAGMA YqlSelect = 'force';
+
+USE plato;
+
+INSERT INTO @tmp (
+    a
+)
+VALUES
+    (1)
+;
+
+COMMIT;
+
+SELECT
+    a
+FROM
+    @tmp
+;

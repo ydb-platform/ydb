@@ -1,7 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/scheme_board/populator.h>
 
@@ -9,6 +8,22 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
+
+static bool IsUnderOrphanPlaceholder(const TSchemeShard* self, TPathElement::TPtr path) {
+    for (TPathElement::TPtr cur = path; ; ) {
+        if (cur->IsOrphanPlaceholder) {
+            return true;
+        }
+        if (cur->PathId == self->RootPathId()) {
+            return false;
+        }
+        auto parentIt = self->PathsById.find(cur->ParentPathId);
+        if (parentIt == self->PathsById.end()) {
+            return false;
+        }
+        cur = parentIt->second;
+    }
+}
 
 struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     using TDescription = NSchemeBoard::TTwoPartDescription;
@@ -44,6 +59,10 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
             }
 
             if (!Self->PathIsActive(pathId)) {
+                continue;
+            }
+
+            if (Self->HasOrphanPlaceholders && IsUnderOrphanPlaceholder(Self, pathEl)) {
                 continue;
             }
 

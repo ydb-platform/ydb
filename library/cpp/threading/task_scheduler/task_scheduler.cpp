@@ -3,11 +3,38 @@
 #include <util/system/thread.h>
 #include <util/string/cast.h>
 #include <util/stream/output.h>
+#include <util/generic/yexception.h>
 
 TTaskScheduler::ITask::~ITask() {}
 TTaskScheduler::IRepeatedTask::~IRepeatedTask() {}
 
+class TFunctionTask final : public TTaskScheduler::ITask {
+public:
+    explicit TFunctionTask(std::function<TInstant()> function)
+        : Function_{std::move(function)}
+    {}
 
+    TInstant Process() override {
+        return Function_();
+    }
+
+private:
+    std::function<TInstant()> Function_;
+};
+
+class TRepeatedFunctionTask final : public TTaskScheduler::IRepeatedTask {
+public:
+    explicit TRepeatedFunctionTask(std::function<bool()> function)
+        : Function_{std::move(function)}
+    {}
+
+    bool Process() override {
+        return Function_();
+    }
+
+private:
+    std::function<bool()> Function_;
+};
 
 class TTaskScheduler::TWorkerThread
     : public ISimpleThread
@@ -147,6 +174,35 @@ bool TTaskScheduler::Add(IRepeatedTaskRef task, TDuration period) {
     return Add(t, deadline);
 }
 
+static void ThrowOnTaskLimitReached(bool sucessfullyScheduled) {
+    if (!sucessfullyScheduled) {
+        throw TTaskScheduler::TTaskSchedulerTaskLimitReached{} << "Failed to schedule task";
+    }
+}
+
+bool TTaskScheduler::AddFunc(std::function<TInstant()> function, TInstant expire) {
+    return Add(MakeIntrusive<TFunctionTask>(std::move(function)), expire);
+}
+
+bool TTaskScheduler::AddRepeatedFunc(std::function<bool()> function, TDuration period) {
+    return Add(MakeIntrusive<TRepeatedFunctionTask>(std::move(function)), period);
+}
+
+void TTaskScheduler::SafeAdd(ITaskRef task, TInstant expire) {
+    ThrowOnTaskLimitReached(Add(std::move(task), expire));
+}
+
+void TTaskScheduler::SafeAdd(IRepeatedTaskRef task, TDuration period) {
+    ThrowOnTaskLimitReached(Add(std::move(task), period));
+}
+
+void TTaskScheduler::SafeAddFunc(std::function<TInstant()> function, TInstant expire) {
+    ThrowOnTaskLimitReached(AddFunc(std::move(function), expire));
+}
+
+void TTaskScheduler::SafeAddRepeatedFunc(std::function<bool()> function, TDuration period) {
+    ThrowOnTaskLimitReached(AddRepeatedFunc(std::move(function), period));
+}
 
 const bool debugOutput = false;
 

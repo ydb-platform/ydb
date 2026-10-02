@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/counters.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/counters.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/system/spinlock.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 template <bool UseMigrationProtocol>
 class TSingleClusterReadSessionImpl;
@@ -46,9 +46,14 @@ public:
     void Stop() {
         Y_ABORT_UNLESS(SelfContext);
 
+        IQueueClientContextPtr toCancel;
         {
             std::lock_guard guard(Lock);
             Stopping = true;
+            toCancel = std::move(DumpCountersContext);
+        }
+        if (toCancel) {
+            toCancel->Cancel();
         }
 
         // Log final counters.
@@ -115,6 +120,7 @@ private:
                 C(BytesRead)
                 C(MessagesRead)
                 C(BytesReadCompressed)
+                C(ReadSizeBudget)
                 C(BytesInflightUncompressed)
                 C(BytesInflightCompressed)
                 C(BytesInflightTotal)

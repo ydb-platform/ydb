@@ -45,6 +45,7 @@
 //     and different processors. Overall 0x1F0 seems to be the best choice.
 #ifndef LZMA_RANGE_DECODER_CONFIG
 #	if defined(__x86_64__) && !defined(__ILP32__) \
+			&& !defined(__arm64ec__) && !defined(_M_ARM64EC) \
 			&& !defined(__NVCOMPILER) \
 			&& (defined(__GNUC__) || defined(__clang__))
 #		define LZMA_RANGE_DECODER_CONFIG 0x1F0
@@ -246,14 +247,14 @@ do { \
 #define rc_bit(prob, action0, action1) \
 	rc_bit_last(prob, \
 		symbol <<= 1; action0, \
-		symbol = (symbol << 1) + 1; action1);
+		symbol = (symbol << 1) + 1; action1)
 
 
 #define rc_bit_safe(prob, action0, action1, seq) \
 	rc_bit_last_safe(prob, \
 		symbol <<= 1; action0, \
 		symbol = (symbol << 1) + 1; action1, \
-		seq);
+		seq)
 
 // Unroll fixed-sized bittree decoding.
 //
@@ -327,7 +328,7 @@ do { \
 #define rc_bit_add_if_1(probs, dest, value_to_add_if_1) \
 	rc_bit(probs[symbol], \
 		, \
-		dest += value_to_add_if_1);
+		dest += value_to_add_if_1)
 
 
 // Matched literal

@@ -1,10 +1,5 @@
 LIBRARY()
 
-SUBSCRIBER(
-    imakunin
-    g:kikimr
-)
-
 SRCS(
     tpch_runner.cpp
     tpch_tables.cpp

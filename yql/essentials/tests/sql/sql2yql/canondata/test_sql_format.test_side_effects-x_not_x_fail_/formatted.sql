@@ -1,0 +1,11 @@
+/* custom error:shoud_fail*/
+PRAGMA config.flags('OptimizerFlags', 'OptimizeXNotX');
+
+SELECT
+    k1 AND WithSideEffects(ENSURE(TRUE, FALSE, 'shoud_fail')) AND NOT k1,
+FROM
+    AS_TABLE([
+        <|k1: TRUE|>,
+        <|k1: FALSE|>,
+    ])
+;

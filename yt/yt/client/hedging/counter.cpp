@@ -9,37 +9,74 @@ static const auto LagPenaltyProviderProfiler = NProfiling::TRegistry{"/lag_penal
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCounter::TCounter(const NProfiling::TRegistry& registry)
+TCounter::TCounter(
+    const NProfiling::TRegistry& registry,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    std::optional<TDuration> requestDurationHistogramGranularity)
     : SuccessRequestCount(registry.Counter("/requests_success"))
     , CancelRequestCount(registry.Counter("/requests_cancel"))
     , ErrorRequestCount(registry.Counter("/requests_error"))
+    , TotalRequestCount(registry.Counter("/requests_total"))
     , EffectivePenalty(registry.TimeGauge("/effective_penalty"))
     , ExternalPenalty(registry.TimeGauge("/external_penalty"))
-    , RequestDuration(registry.TimeHistogram("/request_duration", TDuration::MilliSeconds(1), TDuration::MilliSeconds(70)))
+    , RequestDuration(
+        requestDurationHistogramGranularity
+            ? registry.TimeHistogram(
+                "/request_duration",
+                requestDurationHistogramMin,
+                requestDurationHistogramMax,
+                requestDurationHistogramGranularity.value())
+            : registry.TimeHistogram(
+                "/request_duration",
+                requestDurationHistogramMin,
+                requestDurationHistogramMax))
 { }
 
-TCounter::TCounter(const TString& clusterName)
-    : TCounter(HedgingClientProfiler.WithTag("yt_cluster", clusterName))
+TCounter::TCounter(
+    const std::string& clusterName,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    std::optional<TDuration> requestDurationHistogramGranularity)
+    : TCounter(
+        HedgingClientProfiler.WithTag("yt_cluster", clusterName),
+        requestDurationHistogramMin,
+        requestDurationHistogramMax,
+        requestDurationHistogramGranularity)
 { }
 
-TCounter::TCounter(const NProfiling::TTagSet& tagSet)
-    : TCounter(HedgingClientProfiler.WithTags(tagSet))
+TCounter::TCounter(
+    const NProfiling::TTagSet& tagSet,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    std::optional<TDuration> requestDurationHistogramGranularity)
+    : TCounter(
+        HedgingClientProfiler.WithTags(tagSet),
+        requestDurationHistogramMin,
+        requestDurationHistogramMax,
+        requestDurationHistogramGranularity)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const NProfiling::TRegistry& registry, const std::vector<TString>& clusters)
+TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
+    const NProfiling::TRegistry& registry,
+    [[maybe_unused]] const std::vector<std::string>& clusters)
     : SuccessRequestCount(registry.Counter("/update_success"))
     , ErrorRequestCount(registry.Counter("/update_error"))
-    , TotalTabletCount(registry.Gauge("/tablets_total"))
-{
-    for (const auto& cluster : clusters) {
-        TabletWithLagCountPerReplica.emplace(cluster, registry.WithTag("yt_cluster", cluster).Gauge("/tablets_with_lag"));
-    }
-}
+{ }
 
-TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const TString& tablePath, const std::vector<TString>& clusterNames)
+TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
+    const NYPath::TYPath& tablePath,
+    const std::vector<std::string>& clusterNames)
     : TLagPenaltyProviderCounters(LagPenaltyProviderProfiler.WithTag("table", tablePath), clusterNames)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+THedgingExecutorCounters::THedgingExecutorCounters(
+    const NProfiling::TTagSet& tagSet)
+    : HedgingRequestRatio(HedgingClientProfiler.WithTags(tagSet).Gauge("/hedging_request_ratio"))
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

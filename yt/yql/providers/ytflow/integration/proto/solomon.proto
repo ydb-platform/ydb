@@ -1,0 +1,16 @@
+package NYql.NYtflow.NProto;
+
+message TSolomonMetricParameters {
+   optional string MetricValueColumn = 1;
+   optional string MetricType = 2;
+}
+
+message TSolomonSinkMessage {
+   optional string Endpoint = 1;
+   optional string Project = 2;
+   optional string Cluster = 3;
+   optional string Service = 4;
+   repeated TSolomonMetricParameters Metrics = 5;
+   optional string MetricTimestampColumn = 6;
+   repeated string LabelColumns = 7;
+}

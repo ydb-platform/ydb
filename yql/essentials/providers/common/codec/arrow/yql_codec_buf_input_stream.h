@@ -1,12 +1,13 @@
+#pragma once
+
 #include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
-class TInputBufArrowInputStream : public arrow::io::InputStream {
+class TInputBufArrowInputStream: public arrow::io::InputStream {
 public:
     explicit TInputBufArrowInputStream(TInputBuf& buffer, arrow::MemoryPool* pool)
         : Buffer_(buffer)
@@ -16,6 +17,11 @@ public:
 
     arrow::Result<int64_t> Read(int64_t bytesToRead, void* outBuffer) override;
     arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
+
+    void Reset() {
+        BytesRead_ = 0;
+        EOSReached_ = false;
+    }
 
     arrow::Status Close() override {
         return arrow::Status::OK();
@@ -32,7 +38,7 @@ public:
     bool EOSReached() const {
         return EOSReached_;
     }
-    
+
 private:
     TInputBuf& Buffer_;
     int64_t BytesRead_ = 0;
@@ -41,5 +47,4 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-} // NCommon
-} // NYql
+} // namespace NYql::NCommon

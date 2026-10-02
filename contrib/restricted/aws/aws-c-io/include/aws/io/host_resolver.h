@@ -8,6 +8,8 @@
 #include <aws/common/ref_count.h>
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_event_loop_group;
 
 enum aws_address_record_type {
@@ -272,5 +274,6 @@ AWS_IO_API size_t aws_host_resolver_get_host_address_count(
 AWS_IO_API struct aws_host_resolution_config aws_host_resolver_init_default_resolution_config(void);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_HOST_RESOLVER_H */

@@ -4,7 +4,7 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString CustomRuntimeDataWatermarkKey("watermark");
+const std::string CustomRuntimeDataWatermarkKey("watermark");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -12,6 +12,8 @@ void TWatermarkRuntimeDataConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("column_name", &TThis::ColumnName);
     registrar.Parameter("watermark", &TThis::Watermark);
+    registrar.Parameter("comparison_operator", &TThis::ComparisonOperator)
+        .Default(EWatermarkComparisonOperator::Less);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

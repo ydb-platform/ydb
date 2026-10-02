@@ -12,7 +12,7 @@
 * [INSERT](insert_into.md)
 * [INTO RESULT](into_result.md)
 * [JOIN](join.md)
-* [PRAGMA](pragma.md)
+* [PRAGMA](pragma/index.md)
 * [PROCESS](process.md)
 * [REDUCE](reduce.md)
 * [SELECT](select/index.md)
@@ -20,3 +20,4 @@
 * [USE](use.md)
 * [VALUES](values.md)
 * [WINDOW](window.md)
+* [MATERIALIZE](materialize.md)

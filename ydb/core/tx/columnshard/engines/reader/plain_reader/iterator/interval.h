@@ -1,7 +1,8 @@
 #pragma once
-#include "source.h"
 #include "merge.h"
+#include "source.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
@@ -14,7 +15,7 @@ private:
     std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
-    THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
+    THashMap<ui32, std::shared_ptr<const IDataSource>> Sources;
 
     void ConstructResult();
 
@@ -25,8 +26,8 @@ private:
     NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
 
 public:
-    std::set<ui64> GetPathIds() const {
-        std::set<ui64> result;
+    std::set<TInternalPathId> GetPathIds() const {
+        std::set<TInternalPathId> result;
         for (auto&& i : Sources) {
             result.emplace(i.second->GetPathId());
         }
@@ -42,16 +43,8 @@ public:
         return IntervalGroupGuard->GetGroupId();
     }
 
-    const THashMap<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
+    const THashMap<ui32, std::shared_ptr<const IDataSource>>& GetSources() const {
         return Sources;
-    }
-
-    void Abort() {
-        if (AtomicCas(&SourcesFinalized, 1, 0)) {
-            for (auto&& i : Sources) {
-                i.second->Abort();
-            }
-        }
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -77,16 +70,17 @@ public:
     void OnPartSendingComplete();
     void SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger);
     bool HasMerger() const;
+
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GetGroupGuard() const {
         return IntervalGroupGuard;
     }
 
     TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-        const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
-    
+        const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources,
+        const std::shared_ptr<TSpecialReadContext>& context, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
+
     ~TFetchingInterval() {
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

@@ -1,4 +1,9 @@
 #pragma once
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydb_impl.h>
+#include <ydb/mvp/core/core_ydbc_impl.h>
+#include <ydb/mvp/core/merger.h>
+
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
@@ -9,17 +14,13 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/client/yc_private/resourcemanager/cloud_service.grpc.pb.h>
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydb_impl.h>
-#include <ydb/mvp/core/core_ydbc_impl.h>
-#include <ydb/mvp/core/merger.h>
 
 namespace NMVP {
 
@@ -124,7 +125,7 @@ public:
                             Request.SetHeader(meta, "authorization", token);
                         }
                     }
-                    meta.Timeout = GetClientTimeout();
+                    meta.Timeout = NYdb::TDeadline::SafeDurationCast(GetClientTimeout());
                     auto connection = Location.CreateGRpcServiceConnectionFromEndpoint<yandex::cloud::priv::resourcemanager::v1::CloudService>(resource_manager);
                     connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::resourcemanager::v1::CloudService::Stub::AsyncGet, meta);
                     return;

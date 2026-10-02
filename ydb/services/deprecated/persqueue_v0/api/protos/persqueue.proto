@@ -137,7 +137,7 @@ message ReadRequest {
 
         string client_id = 4;
         bool clientside_locks_allowed = 5; //if true then partitions Lock signal will be sent from server,
-                                         //and reads from partitions will began only after Locked signal recieved by server from client
+                                         //and reads from partitions will began only after Locked signal received by server from client
 
         uint64 proxy_cookie = 6; //cookie provided by ChooseProxy request
 
@@ -321,6 +321,7 @@ message ReadResponse {
         uint64 committed_offset = 4;
         uint64 end_offset = 5;
         uint64 write_watermark_ms = 6;
+        uint64 read_offset = 7;
     }
 
     oneof response {

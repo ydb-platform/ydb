@@ -1,0 +1,28 @@
+Command {
+  DefineHostConfig {
+    HostConfigId: 1
+    Drive {
+      Path: "data/pdisk-ssd-1.data"
+      Type: SSD
+    }
+    Drive {
+      Path: "data/pdisk-ssd-2.data"
+      Type: SSD
+    }
+    Drive {
+      Path: "data/pdisk-rot.data"
+    }
+  }
+}
+Command {
+  DefineBox {
+    BoxId: 1
+    Host {
+      Key {
+        Fqdn: "localhost"
+        IcPort: 29501
+      }
+      HostConfigId: 1
+    }
+  }
+}

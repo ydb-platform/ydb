@@ -6,17 +6,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TChunkStripeStatistics::Persist(const NTableClient::TPersistenceContext& context)
-{
-    using NYT::Persist;
-    Persist(context, ChunkCount);
-    Persist(context, DataWeight);
-    Persist(context, RowCount);
-    Persist(context, ValueCount);
-    Persist(context, MaxBlockSize);
-}
-
-TChunkStripeStatistics operator + (
+TChunkStripeStatistics operator+(
     const TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {
@@ -26,10 +16,11 @@ TChunkStripeStatistics operator + (
     result.RowCount = lhs.RowCount + rhs.RowCount;
     result.ValueCount = lhs.ValueCount + rhs.ValueCount;
     result.MaxBlockSize = std::max(lhs.MaxBlockSize, rhs.MaxBlockSize);
+    result.CompressedDataSize = lhs.CompressedDataSize + rhs.CompressedDataSize;
     return result;
 }
 
-TChunkStripeStatistics& operator += (
+TChunkStripeStatistics& operator+=(
     TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {
@@ -38,6 +29,7 @@ TChunkStripeStatistics& operator += (
     lhs.RowCount += rhs.RowCount;
     lhs.ValueCount += rhs.ValueCount;
     lhs.MaxBlockSize = std::max(lhs.MaxBlockSize, rhs.MaxBlockSize);
+    lhs.CompressedDataSize += rhs.CompressedDataSize;
     return lhs;
 }
 
@@ -60,7 +52,19 @@ void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* c
             .Item("row_count").Value(statistics.RowCount)
             .OptionalItem("value_count", statistics.ValueCount)
             .OptionalItem("max_block_size", statistics.MaxBlockSize)
+            .OptionalItem("compressed_data_size", statistics.CompressedDataSize)
         .EndMap();
+}
+
+void FormatValue(TStringBuilderBase* builder, const TChunkStripeStatistics& statistics, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("{ChunkCount: %v, DataWeight: %v, RowCount: %v, ValueCount: %v, MaxBlockSize: %v, CompressedDataSize: %v}",
+        statistics.ChunkCount,
+        statistics.DataWeight,
+        statistics.RowCount,
+        statistics.ValueCount,
+        statistics.MaxBlockSize,
+        statistics.CompressedDataSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

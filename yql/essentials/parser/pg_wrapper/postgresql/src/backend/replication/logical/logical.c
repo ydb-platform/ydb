@@ -151,6 +151,7 @@ StartupDecodingContext(List *output_plugin_options,
 					   TransactionId xmin_horizon,
 					   bool need_full_snapshot,
 					   bool fast_forward,
+					   bool in_create,
 					   XLogReaderRoutine *xl_routine,
 					   LogicalOutputPluginWriterPrepareWrite prepare_write,
 					   LogicalOutputPluginWriterWrite do_write,
@@ -296,6 +297,8 @@ StartupDecodingContext(List *output_plugin_options,
 
 	ctx->fast_forward = fast_forward;
 
+	ctx->in_create = in_create;
+
 	MemoryContextSwitchTo(old_context);
 
 	return ctx;
@@ -401,11 +404,11 @@ CreateInitDecodingContext(const char *plugin,
 	 * without further interlock its return value might immediately be out of
 	 * date.
 	 *
-	 * So we have to acquire the ProcArrayLock to prevent computation of new
-	 * xmin horizons by other backends, get the safe decoding xid, and inform
-	 * the slot machinery about the new limit. Once that's done the
-	 * ProcArrayLock can be released as the slot machinery now is
-	 * protecting against vacuum.
+	 * So we have to acquire both the ReplicationSlotControlLock and the
+	 * ProcArrayLock to prevent concurrent computation and update of new xmin
+	 * horizons by other backends, get the safe decoding xid, and inform the
+	 * slot machinery about the new limit. Once that's done both locks can be
+	 * released as the slot machinery now is protecting against vacuum.
 	 *
 	 * Note that, temporarily, the data, not just the catalog, xmin has to be
 	 * reserved if a data snapshot is to be exported.  Otherwise the initial
@@ -418,6 +421,7 @@ CreateInitDecodingContext(const char *plugin,
 	 *
 	 * ----
 	 */
+	LWLockAcquire(ReplicationSlotControlLock, LW_EXCLUSIVE);
 	LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
 
 	xmin_horizon = GetOldestSafeDecodingTransactionId(!need_full_snapshot);
@@ -432,12 +436,13 @@ CreateInitDecodingContext(const char *plugin,
 	ReplicationSlotsComputeRequiredXmin(true);
 
 	LWLockRelease(ProcArrayLock);
+	LWLockRelease(ReplicationSlotControlLock);
 
 	ReplicationSlotMarkDirty();
 	ReplicationSlotSave();
 
 	ctx = StartupDecodingContext(NIL, restart_lsn, xmin_horizon,
-								 need_full_snapshot, false,
+								 need_full_snapshot, false, true,
 								 xl_routine, prepare_write, do_write,
 								 update_progress);
 
@@ -573,7 +578,7 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 
 	ctx = StartupDecodingContext(output_plugin_options,
 								 start_lsn, InvalidTransactionId, false,
-								 fast_forward, xl_routine, prepare_write,
+								 fast_forward, false, xl_routine, prepare_write,
 								 do_write, update_progress);
 
 	/* call output plugin initialization callback */
@@ -1754,6 +1759,7 @@ LogicalIncreaseRestartDecodingForSlot(XLogRecPtr current_lsn, XLogRecPtr restart
 	/* don't overwrite if have a newer restart lsn */
 	if (restart_lsn <= slot->data.restart_lsn)
 	{
+		SpinLockRelease(&slot->mutex);
 	}
 
 	/*
@@ -1764,6 +1770,7 @@ LogicalIncreaseRestartDecodingForSlot(XLogRecPtr current_lsn, XLogRecPtr restart
 	{
 		slot->candidate_restart_valid = current_lsn;
 		slot->candidate_restart_lsn = restart_lsn;
+		SpinLockRelease(&slot->mutex);
 
 		/* our candidate can directly be used */
 		updated_lsn = true;
@@ -1774,7 +1781,7 @@ LogicalIncreaseRestartDecodingForSlot(XLogRecPtr current_lsn, XLogRecPtr restart
 	 * might never end up updating if the receiver acks too slowly. A missed
 	 * value here will just cause some extra effort after reconnecting.
 	 */
-	if (slot->candidate_restart_valid == InvalidXLogRecPtr)
+	else if (slot->candidate_restart_valid == InvalidXLogRecPtr)
 	{
 		slot->candidate_restart_valid = current_lsn;
 		slot->candidate_restart_lsn = restart_lsn;
@@ -1825,7 +1832,19 @@ LogicalConfirmReceivedLocation(XLogRecPtr lsn)
 
 		SpinLockAcquire(&MyReplicationSlot->mutex);
 
-		MyReplicationSlot->data.confirmed_flush = lsn;
+		/*
+		 * Prevent moving the confirmed_flush backwards, as this could lead to
+		 * data duplication issues caused by replicating already replicated
+		 * changes.
+		 *
+		 * This can happen when a client acknowledges an LSN it doesn't have
+		 * to do anything for, and thus didn't store persistently. After a
+		 * restart, the client can send the prior LSN that it stored
+		 * persistently as an acknowledgement, but we need to ignore such an
+		 * LSN. See similar case handling in CreateDecodingContext.
+		 */
+		if (lsn > MyReplicationSlot->data.confirmed_flush)
+			MyReplicationSlot->data.confirmed_flush = lsn;
 
 		/* if we're past the location required for bumping xmin, do so */
 		if (MyReplicationSlot->candidate_xmin_lsn != InvalidXLogRecPtr &&
@@ -1863,7 +1882,15 @@ LogicalConfirmReceivedLocation(XLogRecPtr lsn)
 
 		SpinLockRelease(&MyReplicationSlot->mutex);
 
-		/* first write new xmin to disk, so we know what's up after a crash */
+		/*
+		 * First, write new xmin and restart_lsn to disk so we know what's up
+		 * after a crash.  Even when we do this, the checkpointer can see the
+		 * updated restart_lsn value in the shared memory; then, a crash can
+		 * happen before we manage to write that value to the disk.  Thus,
+		 * checkpointer still needs to make special efforts to keep WAL
+		 * segments required by the restart_lsn written to the disk.  See
+		 * CreateCheckPoint() and CreateRestartPoint() for details.
+		 */
 		if (updated_xmin || updated_restart)
 		{
 			ReplicationSlotMarkDirty();
@@ -1890,7 +1917,14 @@ LogicalConfirmReceivedLocation(XLogRecPtr lsn)
 	else
 	{
 		SpinLockAcquire(&MyReplicationSlot->mutex);
-		MyReplicationSlot->data.confirmed_flush = lsn;
+
+		/*
+		 * Prevent moving the confirmed_flush backwards. See comments above
+		 * for the details.
+		 */
+		if (lsn > MyReplicationSlot->data.confirmed_flush)
+			MyReplicationSlot->data.confirmed_flush = lsn;
+
 		SpinLockRelease(&MyReplicationSlot->mutex);
 	}
 }

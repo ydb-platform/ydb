@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "peer_discovery.h"
 #include "hedging_channel.h"
 
 #include <yt/yt/core/actions/callback.h>
@@ -31,7 +30,8 @@ public:
         const std::string& endpointDescription,
         NYTree::IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
-        IPeerDiscoveryPtr peerDiscovery);
+        IPeerDiscoveryPtr peerDiscovery,
+        IPeerPriorityProviderPtr peerPriorityProvider = nullptr);
     ~TDynamicChannelPool();
 
     TFuture<IChannelPtr> GetRandomChannel();
@@ -40,6 +40,7 @@ public:
         const std::optional<THedgingChannelOptions>& hedgingOptions = std::nullopt);
 
     void SetPeers(const std::vector<std::string>& addresses);
+
     void SetPeerDiscoveryError(const TError& error);
 
     void Terminate(const TError& error);

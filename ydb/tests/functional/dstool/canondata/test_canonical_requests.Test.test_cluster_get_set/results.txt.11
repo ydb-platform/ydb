@@ -1,0 +1,4 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --pdisk-space-margin-promille 1001
+Exit Status: 1
+===== stderr =====
+error, Incorrect PDisk space margin setting 1001.000000

@@ -6,7 +6,24 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
+
+// Canonical `column_tags` key for a statistic: the comma-joined ordered tag tuple for multi-column
+// stats, the single decimal tag for single-column stats, or the empty string for stats with no
+// column (SIMPLE/TABLE_SUMMARY). Producer (save) and consumer (load) must agree on this encoding.
+static TString SerializeColumnTags(const TColumnTags& tags) {
+    if (const auto* multi = tags.AsMulti()) {
+        return JoinSeq(",", *multi);
+    }
+    if (const auto single = tags.AsSingle()) {
+        return ToString(*single);
+    }
+    return {};
+}
 
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
@@ -28,15 +45,16 @@ public:
 
         Register(
             CreateTableCreator(
-                { ".metadata", "_statistics" },
+                { ".metadata", "statistics_v2" },
                 {
                     Col("owner_id", NScheme::NTypeIds::Uint64),
                     Col("local_path_id", NScheme::NTypeIds::Uint64),
                     Col("stat_type", NScheme::NTypeIds::Uint32),
-                    Col("column_tag", NScheme::NTypeIds::Uint32),
+                    Col("column_tags", NScheme::NTypeIds::String),
                     Col("data", NScheme::NTypeIds::String),
+                    Col("sampled_data", NScheme::NTypeIds::String),
                 },
-                { "owner_id", "local_path_id", "stat_type", "column_tag"},
+                { "owner_id", "local_path_id", "stat_type", "column_tags"},
                 NKikimrServices::STATISTICS,
                 Nothing(),
                 Database,
@@ -78,84 +96,108 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 }
 
 
-class TSaveStatisticsQuery : public NKikimr::TQueryBase {
+class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
-    const ui64 StatType;
-    const std::vector<ui32> ColumnTags;
-    const std::vector<TString> Data;
+    std::vector<TStatisticsItem> SampledItems;
+    std::vector<TStatisticsItem> FullItems;
+    bool SavingSampledRows = true;
 
 public:
-    TSaveStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType,
-        const std::vector<ui32>& columnTags, const std::vector<TString>& data)
+    TSaveStatisticsQuery(
+        const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
-        , StatType(statType)
-        , ColumnTags(columnTags)
-        , Data(data)
     {
-        Y_ABORT_UNLESS(ColumnTags.size() == Data.size());
+        for (auto& item : items) {
+            if (item.Sampling) {
+                SampledItems.push_back(std::move(item));
+            } else {
+                FullItems.push_back(std::move(item));
+            }
+        }
     }
 
     void OnRunQuery() override {
+        if (SavingSampledRows && SampledItems.empty()) {
+            SavingSampledRows = false;
+        }
+        const auto& items = SavingSampledRows ? SampledItems : FullItems;
+        if (items.empty()) {
+            Finish();
+            return;
+        }
+
         TStringBuilder sql;
         sql << R"(
-            DECLARE $owner_id AS Uint64;
-            DECLARE $local_path_id AS Uint64;
-            DECLARE $stat_type AS Uint32;
-            DECLARE $column_tags AS List<Uint32>;
-            DECLARE $data AS List<String>;
+            DECLARE $rows AS List<Struct<
+                column_tags: String,
+                data: String,
+                local_path_id: Uint64,
+                owner_id: Uint64,
+                stat_type: Uint32
+            >>;
 
-            UPSERT INTO `.metadata/_statistics`
-                (owner_id, local_path_id, stat_type, column_tag, data)
-            VALUES
+            UPSERT INTO `)" << StatisticsTablePath << R"(`
         )";
-
-        for (size_t i = 0; i < Data.size(); ++i) {
-            sql << " ($owner_id, $local_path_id, $stat_type, $column_tags[" << i << "], $data[" << i << "])";
-            sql << (i == Data.size() - 1 ? ";" : ",");
+        if (SavingSampledRows) {
+            sql << R"(
+                (column_tags, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, local_path_id, owner_id, data AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
+        } else {
+            sql << R"(
+                (column_tags, data, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, data, local_path_id, owner_id, NULL AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
         }
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$owner_id")
-                .Uint64(PathId.OwnerId)
-                .Build()
-            .AddParam("$local_path_id")
-                .Uint64(PathId.LocalPathId)
-                .Build()
-            .AddParam("$stat_type")
-                .Uint32(StatType)
-                .Build();
-        auto& columnTags = params.AddParam("$column_tags").BeginList();
-        for (size_t i = 0; i < ColumnTags.size(); ++i) {
-            columnTags
-                .AddListItem()
-                .Uint32(ColumnTags[i]);
+        auto& rows = params.AddParam("$rows").BeginList();
+        for (const auto& item : items) {
+            auto& row = rows.AddListItem().BeginStruct();
+            row.AddMember("column_tags").String(SerializeColumnTags(item.ColumnTags));
+            row.AddMember("local_path_id").Uint64(PathId.LocalPathId);
+            row.AddMember("owner_id").Uint64(PathId.OwnerId);
+            row.AddMember("stat_type").Uint32(static_cast<ui32>(item.Type));
+            if (item.Sampling) {
+                NKikimrStat::TSampledStatistic payload;
+                *payload.MutableSampling() = *item.Sampling;
+                payload.SetData(item.Data);
+                row.AddMember("data").String(payload.SerializeAsString());
+            } else {
+                row.AddMember("data").String(item.Data);
+            }
+            row.EndStruct();
         }
-        columnTags.EndList().Build();
-        auto& data = params.AddParam("$data").BeginList();
-        for (size_t i = 0; i < Data.size(); ++i) {
-            data
-                .AddListItem()
-                .String(Data[i]);
-        }
-        data.EndList().Build();
+        rows.EndList().Build();
 
-        RunDataQuery(sql, &params);
+        // Separate statements avoid multiple write effects in RBO; one transaction keeps the batch atomic.
+        TTxControl txControl = TTxControl::BeginAndCommitTx();
+        if (SavingSampledRows && !FullItems.empty()) {
+            txControl = TTxControl::BeginTx();
+        } else if (!SavingSampledRows && !SampledItems.empty()) {
+            txControl = TTxControl::ContinueAndCommitTx();
+        }
+        RunDataQuery(sql, &params, txControl);
     }
 
     void OnQueryResult() override {
+        if (SavingSampledRows) {
+            SavingSampledRows = false;
+            if (!FullItems.empty()) {
+                OnRunQuery();
+                return;
+            }
+        }
         Finish();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>();
-        response->Status = status;
-        response->Issues = std::move(issues);
-        response->Success = (status == Ydb::StatusIds::SUCCESS);
-        response->PathId = PathId;
+        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>(
+            status, std::move(issues), PathId);
         Send(Owner, response.release());
     }
 };
@@ -165,33 +207,25 @@ private:
     const NActors::TActorId ReplyActorId;
     const TString Database;
     const TPathId PathId;
-    const ui64 StatType;
-    const std::vector<ui32> ColumnTags;
-    const std::vector<TString> Data;
+    const std::vector<TStatisticsItem> Items;
 
 public:
-    using TSaveRetryingQuery = TQueryRetryActor<
-        TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse,
-        const TString&, const TPathId&, ui64, const std::vector<ui32>&, const std::vector<TString>&>;
-
     TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+        const TPathId& pathId, std::vector<TStatisticsItem>&& items)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PathId(pathId)
-        , StatType(statType)
-        , ColumnTags(std::move(columnTags))
-        , Data(std::move(data))
+        , Items(std::move(items))
     {}
 
     void Bootstrap() {
-        Register(new TSaveRetryingQuery(
+        Register(TSaveStatisticsQuery::MakeRetry(
             SelfId(),
-            TSaveRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TSaveRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId, StatType, ColumnTags, Data
+            Database, PathId, std::move(Items)
         ));
         Become(&TSaveStatisticsRetryingQuery::StateFunc);
     }
@@ -207,143 +241,103 @@ public:
 };
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+    const TPathId& pathId, std::vector<TStatisticsItem>&& items)
 {
-    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, statType, std::move(columnTags), std::move(data));
+    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, std::move(items));
 }
 
 
-class TLoadStatisticsQuery : public NKikimr::TQueryBase {
-private:
-    const TPathId PathId;
-    const ui64 StatType;
-    const ui32 ColumnTag;
+void DispatchLoadStatisticsQuery(
+        const TActorId& replyToActor, ui64 queryId,
+        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags,
+        bool acceptSampledStatistics) {
+    const TString serializedColumnTags = SerializeColumnTags(columnTags);
+    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
+        {"queryId", queryId},
+        {"pathId", pathId},
+        {"statType", static_cast<ui32>(statType)},
+        {"columnTags", serializedColumnTags});
 
-    std::optional<TString> Data;
+    const auto statisticsTablePath = CanonizePath(
+        TStringBuilder() << database << '/' << StatisticsTablePath);
 
-public:
-    TLoadStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
-        , PathId(pathId)
-        , StatType(statType)
-        , ColumnTag(columnTag)
-    {}
-
-    void OnRunQuery() override {
-        TString sql = R"(
-            DECLARE $owner_id AS Uint64;
-            DECLARE $local_path_id AS Uint64;
-            DECLARE $stat_type AS Uint32;
-            DECLARE $column_tag AS Uint32;
-
-            SELECT
-                data
-            FROM `.metadata/_statistics`
-            WHERE
-                owner_id = $owner_id AND
-                local_path_id = $local_path_id AND
-                stat_type = $stat_type AND
-                column_tag = $column_tag;
-        )";
-
-        NYdb::TParamsBuilder params;
-        params
-            .AddParam("$owner_id")
-                .Uint64(PathId.OwnerId)
-                .Build()
-            .AddParam("$local_path_id")
-                .Uint64(PathId.LocalPathId)
-                .Build()
-            .AddParam("$stat_type")
-                .Uint32(StatType)
-                .Build()
-            .AddParam("$column_tag")
-                .Uint32(ColumnTag)
-                .Build();
-
-        RunDataQuery(sql, &params, TTxControl::BeginTx());
+    auto readRowsRequest = Ydb::Table::ReadRowsRequest();
+    readRowsRequest.set_path(statisticsTablePath);
+    readRowsRequest.add_columns("data");
+    if (acceptSampledStatistics) {
+        readRowsRequest.add_columns("sampled_data");
     }
 
-    void OnQueryResult() override {
-        if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected read response", false);
-            return;
+    NYdb::TValueBuilder keys_builder;
+    keys_builder.BeginList()
+        .AddListItem()
+            .BeginStruct()
+                .AddMember("owner_id").Uint64(pathId.OwnerId)
+                .AddMember("local_path_id").Uint64(pathId.LocalPathId)
+                .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
+                .AddMember("column_tags").String(serializedColumnTags)
+            .EndStruct()
+        .EndList();
+    auto keys = keys_builder.Build();
+    auto protoKeys = readRowsRequest.mutable_keys();
+    *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
+    *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
+
+    using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
+
+    auto actorSystem = TlsActivationContext->ActorSystem();
+    auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
+        std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
+    );
+    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem, acceptSampledStatistics](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+        const auto& response = future.GetValueSync();
+        auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+        query_response->Status = response.status();
+        NYql::IssuesFromMessage(response.issues(), query_response->Issues);
+
+        if (response.status() == Ydb::StatusIds::SUCCESS) {
+            NYdb::TResultSetParser parser(response.result_set());
+            const auto rowsCount = parser.RowsCount();
+            Y_ABORT_UNLESS(rowsCount < 2);
+
+            if (rowsCount == 0) {
+                YDB_LOG_WARN("[ReadRowsResponse]",
+                    {"queryId", queryId},
+                    {"rowsCount", 0});
+            }
+
+            if (parser.TryNextRow()) {
+                auto& col = parser.ColumnParser("data");
+                // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
+                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                    ? col.GetOptionalString()
+                    : col.GetString();
+                if (acceptSampledStatistics) {
+                    const auto sampledData = parser.ColumnParser("sampled_data").GetOptionalString();
+                    NKikimrStat::TSampledStatistic payload;
+                    if (sampledData && payload.ParseFromString(*sampledData) && payload.HasData() && payload.HasSampling()
+                            && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
+                            && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
+                        query_response->Data = std::move(*payload.MutableData());
+                        query_response->Sampling = std::move(*payload.MutableSampling());
+                    }
+                }
+            }
+            query_response->Success = query_response->Data.has_value();
+        } else {
+            YDB_LOG_ERROR("[ReadRowsResponse]",
+                {"queryId", queryId},
+                {"status", response.status()},
+                {"issues", query_response->Issues.ToOneLineString()});
+            query_response->Success = false;
         }
-        NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() == 0) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "No data", false);
-            return;
-        }
-        result.TryNextRow();
-        Data = *result.ColumnParser("data").GetOptionalString();
-        Finish();
-    }
 
-    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
-        response->Status = status;
-        response->Issues = std::move(issues);
-        response->Success = (status == Ydb::StatusIds::SUCCESS);
-        if (response->Success) {
-            response->Data = Data;
-        }
-        Send(Owner, response.release());
-    }
-};
-
-class TLoadStatisticsRetryingQuery : public TActorBootstrapped<TLoadStatisticsRetryingQuery> {
-private:
-    const NActors::TActorId ReplyActorId;
-    const TString Database;
-    const TPathId PathId;
-    const ui64 StatType;
-    const ui32 ColumnTag;
-
-public:
-    using TLoadRetryingQuery = TQueryRetryActor<
-        TLoadStatisticsQuery, TEvStatistics::TEvLoadStatisticsQueryResponse,
-        const TString&, const TPathId&, ui64, ui32>;
-
-    TLoadStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId, ui64 statType, ui32 columnTag)
-        : ReplyActorId(replyActorId)
-        , Database(database)
-        , PathId(pathId)
-        , StatType(statType)
-        , ColumnTag(columnTag)
-    {}
-
-    void Bootstrap() {
-        Register(new TLoadRetryingQuery(
-            SelfId(),
-            TLoadRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TLoadRetryingQuery::Retryable, TDuration::MilliSeconds(10),
-                TDuration::MilliSeconds(200), TDuration::Seconds(1),
-                std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId, StatType, ColumnTag
-        ));
-        Become(&TLoadStatisticsRetryingQuery::StateFunc);
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
-    )
-
-    void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
-        Send(ReplyActorId, ev->Release().Release());
-        PassAway();
-    }
-};
-
-NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId,
-    const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
-{
-    return new TLoadStatisticsRetryingQuery(replyActorId, database, pathId, statType, columnTag);
+        actorSystem->Send(replyTo, query_response.release(), 0, queryId);
+    });
 }
 
 
-class TDeleteStatisticsQuery : public NKikimr::TQueryBase {
+class TDeleteStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse> {
 private:
     const TPathId PathId;
 
@@ -355,11 +349,11 @@ public:
     }
 
     void OnRunQuery() override {
-        TString sql = R"(
+        TString sql = TStringBuilder() << R"(
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
 
-            DELETE FROM `.metadata/_statistics`
+            DELETE FROM `)" << StatisticsTablePath << R"(`
             WHERE
                 owner_id = $owner_id AND
                 local_path_id = $local_path_id;
@@ -382,7 +376,6 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
         response->Status = status;
         response->Issues = std::move(issues);
@@ -398,10 +391,6 @@ private:
     const TPathId PathId;
 
 public:
-    using TDeleteRetryingQuery = TQueryRetryActor<
-        TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse,
-        const TString&, const TPathId&>;
-
     TDeleteStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
         const TPathId& pathId)
         : ReplyActorId(replyActorId)
@@ -410,10 +399,10 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TDeleteRetryingQuery(
+        Register(TDeleteStatisticsQuery::MakeRetry(
             SelfId(),
-            TDeleteRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TDeleteRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
             Database, PathId

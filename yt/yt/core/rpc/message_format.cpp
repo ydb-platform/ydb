@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT::NRpc {
@@ -80,20 +82,20 @@ public:
             // NB: FormatOptionsYson is ignored, since YSON parser has no user-defined options.
             ParseYsonStringBuffer(TStringBuf(message.Begin(), message.End()), EYsonType::Node, converter.get());
         }
-        return TSharedRef::FromString(FromProto<TString>(protoBuffer));
+        return TSharedRef::FromString(FromProto<std::string>(std::move(protoBuffer)));
     }
 
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
-        TString ysonBuffer;
+        std::string ysonBuffer;
         {
-            TStringOutput output(ysonBuffer);
+            TStdStringOutput output(ysonBuffer);
             // TODO(ignat): refactor TYsonFormatConfig, move it closer to YSON.
             TYsonWriter writer{&output, EYsonFormat::Text};
             ParseProtobuf(&writer, &stream, messageType);
         }
-        return TSharedRef::FromString(ysonBuffer);
+        return TSharedRef::FromString(std::move(ysonBuffer));
     }
 } YsonFormat;
 
@@ -119,15 +121,15 @@ public:
             }
             ParseJson(&input, converter.get(), formatConfig);
         }
-        return TSharedRef::FromString(FromProto<TString>(std::move(protoBuffer)));
+        return TSharedRef::FromString(FromProto<std::string>(std::move(protoBuffer)));
     }
 
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override
     {
         google::protobuf::io::ArrayInputStream stream(message.Begin(), message.Size());
-        TString ysonBuffer;
+        std::string ysonBuffer;
         {
-            TStringOutput output(ysonBuffer);
+            TStdStringOutput output(ysonBuffer);
             auto formatConfig = New<TJsonFormatConfig>();
             if (formatOptionsYson) {
                 formatConfig->Load(NYTree::ConvertToNode(formatOptionsYson));
@@ -136,7 +138,7 @@ public:
             ParseProtobuf(writer.get(), &stream, messageType);
             writer->Flush();
         }
-        return TSharedRef::FromString(ysonBuffer);
+        return TSharedRef::FromString(std::move(ysonBuffer));
     }
 } JsonFormat;
 

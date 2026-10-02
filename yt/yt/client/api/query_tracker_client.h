@@ -12,7 +12,7 @@ namespace NYT::NApi {
 
 struct TQueryTrackerOptions
 {
-    TString QueryTrackerStage = "production";
+    std::string QueryTrackerStage = NQueryTrackerClient::ProductionStage;
 };
 
 DEFINE_ENUM(EContentType,
@@ -23,8 +23,8 @@ DEFINE_ENUM(EContentType,
 struct TQueryFile
     : public NYTree::TYsonStruct
 {
-    TString Name;
-    TString Content;
+    std::string Name;
+    std::string Content;
     EContentType Type;
 
     REGISTER_YSON_STRUCT(TQueryFile);
@@ -34,6 +34,21 @@ struct TQueryFile
 
 DEFINE_REFCOUNTED_TYPE(TQueryFile)
 
+struct TQuerySecret
+    : public NYTree::TYsonStruct
+{
+    std::string Id;
+    std::string Category;
+    std::string Subcategory;
+    std::string YPath;
+
+    REGISTER_YSON_STRUCT(TQuerySecret);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TQuerySecret)
+
 struct TStartQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
@@ -42,15 +57,16 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
+    std::vector<TQuerySecretPtr> Secrets;
 };
 
 struct TAbortQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::optional<TString> AbortMessage;
+    std::optional<std::string> AbortMessage;
 };
 
 struct TGetQueryResultOptions
@@ -83,27 +99,32 @@ struct TListQueriesOptions
     std::optional<TInstant> ToTime;
     std::optional<TInstant> CursorTime;
     EOperationSortDirection CursorDirection = EOperationSortDirection::Past;
-    std::optional<TString> UserFilter;
+    std::optional<std::string> UserFilter;
 
     std::optional<NQueryTrackerClient::EQueryState> StateFilter;
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
-    std::optional<TString> SubstrFilter;
+    std::optional<std::string> SubstrFilter;
     ui64 Limit = 100;
+    bool TutorialFilter = false;
 
     NYTree::TAttributeFilter Attributes;
+
+    bool SearchByTokenPrefix = false;
+    bool UseFullTextSearch = false;
+    EListQueriesSortOrder SortOrder = EListQueriesSortOrder::Cursor;
 };
 
 struct TQuery
 {
     NQueryTrackerClient::TQueryId Id;
     std::optional<NQueryTrackerClient::EQueryEngine> Engine;
-    std::optional<TString> Query;
+    std::optional<std::string> Query;
     std::optional<NYson::TYsonString> Files;
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
-    std::optional<TString> User;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::string> User;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<NYson::TYsonString> AccessControlObjects;
     std::optional<NQueryTrackerClient::EQueryState> State;
     std::optional<i64> ResultCount;
@@ -111,6 +132,8 @@ struct TQuery
     std::optional<TError> Error;
     NYson::TYsonString Annotations;
     NYTree::IAttributeDictionaryPtr OtherAttributes;
+    std::optional<NYson::TYsonString> Secrets;
+    std::optional<bool> IsIndexed;
 };
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer);
@@ -123,7 +146,7 @@ struct TQueryResult
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
     bool IsTruncated;
-    std::optional<NYson::TYsonString> FullResult;
+    NYson::TYsonString FullResult;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);
@@ -140,8 +163,8 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
 };
 
 struct TGetQueryTrackerInfoOptions
@@ -149,14 +172,32 @@ struct TGetQueryTrackerInfoOptions
     , public TQueryTrackerOptions
 {
     NYTree::TAttributeFilter Attributes;
+    NYTree::INodePtr Settings;
 };
 
 struct TGetQueryTrackerInfoResult
 {
-    TString QueryTrackerStage;
-    TString ClusterName;
+    std::string QueryTrackerStage;
+    std::string ClusterName;
     NYson::TYsonString SupportedFeatures;
-    std::vector<TString> AccessControlObjects;
+    std::vector<std::string> AccessControlObjects;
+    std::vector<std::string> Clusters;
+    std::optional<NYson::TYsonString> EnginesInfo;
+    std::optional<int> ExpectedTablesVersion;
+};
+
+struct TGetQueryDeclaredParametersInfoOptions
+    : public TTimeoutOptions
+    , public TQueryTrackerOptions
+{
+    std::string Query;
+    NYson::TYsonString Settings;
+    NQueryTrackerClient::EQueryEngine Engine;
+};
+
+struct TGetQueryDeclaredParametersInfoResult
+{
+    NYson::TYsonString Parameters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +208,7 @@ struct IQueryTrackerClient
 
     virtual TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options = {}) = 0;
 
     virtual TFuture<void> AbortQuery(
@@ -195,6 +236,8 @@ struct IQueryTrackerClient
         const TAlterQueryOptions& options = {}) = 0;
 
     virtual TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(const TGetQueryTrackerInfoOptions& options = {}) = 0;
+
+    virtual TFuture<TGetQueryDeclaredParametersInfoResult> GetQueryDeclaredParametersInfo(const TGetQueryDeclaredParametersInfoOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

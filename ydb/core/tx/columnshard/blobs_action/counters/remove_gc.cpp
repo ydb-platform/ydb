@@ -20,4 +20,4 @@ TRemoveGCCounters::TRemoveGCCounters(const TConsumerCounters& owner)
     FailBytes = TBase::GetDeriviative("Fails/Bytes");
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

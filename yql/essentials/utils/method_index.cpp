@@ -1,4 +1,5 @@
 #include "method_index.h"
+
 #include <util/generic/yexception.h>
 #include <util/string/hex.h>
 
@@ -41,4 +42,4 @@ size_t GetMethodPtrIndex(uintptr_t ptr) {
 #endif
 }
 
-}
+} // namespace NYql

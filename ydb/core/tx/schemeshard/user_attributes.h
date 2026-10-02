@@ -21,6 +21,7 @@ constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
 constexpr TStringBuf ATTR_ASYNC_REPLICATION = "__async_replication";
 constexpr TStringBuf ATTR_ASYNC_REPLICA = "__async_replica";
 constexpr TStringBuf ATTR_INCREMENTAL_BACKUP = "__incremental_backup";
+constexpr TStringBuf ATTR_MONITORING_PROJECT_ID = "monitoring_project_id";
 
 enum class EAttribute {
     USER,

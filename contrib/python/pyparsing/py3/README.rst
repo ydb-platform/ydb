@@ -26,7 +26,7 @@ Here is a program to parse ``"Hello, World!"`` (or any greeting of the form
     from pyparsing import Word, alphas
     greet = Word(alphas) + "," + Word(alphas) + "!"
     hello = "Hello, World!"
-    print(hello, "->", greet.parseString(hello))
+    print(hello, "->", greet.parse_string(hello))
 
 The program outputs the following::
 
@@ -36,7 +36,7 @@ The Python representation of the grammar is quite readable, owing to the
 self-explanatory class names, and the use of '+', '|' and '^' operator
 definitions.
 
-The parsed results returned from ``parseString()`` is a collection of type
+The parsed results returned from ``parse_string()`` is a collection of type
 ``ParseResults``, which can be accessed as a
 nested list, a dictionary, or an object with named attributes.
 
@@ -60,6 +60,16 @@ documentation resources and project info are listed in the online
 `GitHub wiki <https://github.com/pyparsing/pyparsing/wiki>`__. An
 entire directory of examples can be found `here <https://github.com/pyparsing/pyparsing/tree/master/examples>`__.
 
+AI Instructions
+===============
+
+There are also instructions for AI agents to use when helping you to create your parser. They can
+be pulled from the GitHub project repository, at pyparsing/ai/best_practices.md. You can also tell
+the AI to access them programmatically after installing pyparsing, either from the CLI with
+``python -m pyparsing.ai.show_best_practices`` or within python with
+``import pyparsing; pyparsing.show_best_practices()``.
+
+
 License
 =======
 
@@ -69,6 +79,13 @@ History
 =======
 
 See `CHANGES <https://github.com/pyparsing/pyparsing/blob/master/CHANGES>`__ file.
+
+
+Performance benchmarks
+======================
+
+For usage instructions and details on the performance benchmark suite, see
+``tests/README.md`` in this repository.
 
 .. |Build Status| image:: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/pyparsing/pyparsing/actions/workflows/ci.yml

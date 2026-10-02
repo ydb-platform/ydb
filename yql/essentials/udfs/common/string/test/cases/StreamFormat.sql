@@ -1,4 +1,10 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"qwertyui", biguint:1234567890ul, negint:-123l|>,
+    <|value:"asdfghjl", biguint:9876543210ul, negint:-456l|>,
+    <|value:"zxcvbnm?", biguint:9999999999ul, negint:-789l|>,
+    <|value:"12345678", biguint:0ul, negint:0l|>,
+    <|value:"!@#$%^&*", biguint:9182737465ul, negint:-999l|>
+);
 
 SELECT
     value,
@@ -16,4 +22,4 @@ SELECT
     String::HumanReadableQuantity(biguint) AS quantity,
     String::HumanReadableBytes(biguint) AS bytes,
     String::Prec(negint / 12345.6789, 4) AS prec
-FROM Input;
+FROM AS_TABLE($input);

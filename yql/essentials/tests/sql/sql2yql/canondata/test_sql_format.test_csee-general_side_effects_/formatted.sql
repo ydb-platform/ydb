@@ -1,0 +1,4 @@
+SELECT
+    WithSideEffectsMode(1, 'General')
+    + WithSideEffectsMode(1, 'General')
+;

@@ -15,7 +15,7 @@ It is meant to efficiently compile **scientific programs**, and takes advantage
 of multi-cores and SIMD instruction units.
 
 Until 0.9.5 (included), Pythran was supporting Python 3 and Python 2.7.
-It now only supports Python **3**.
+It now only supports Python **3.7** and upward.
 
 Installation
 ------------
@@ -46,7 +46,7 @@ Using ``pip``
 Using ``mamba`` or ``conda``
 ****************************
 
-1. Using ``mamba`` (https://github.com/conda-forge/miniforge#mambaforge) or ``conda`` (https://github.com/conda-forge/miniforge)
+1. Using ``mamba`` (https://github.com/conda-forge/miniforge) or ``conda`` (https://github.com/conda-forge/miniforge)
  
 2. Run::
 

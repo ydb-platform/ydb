@@ -1,0 +1,39 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk list --columns NodeId:PDiskId Status
+Exit Status: 0
+===== stdout =====
+┌────────────────┬──────────┐
+│ NodeId:PDiskId │ Status   │
+├────────────────┼──────────┤
+│ [1:1]          │ ACTIVE   │
+│ [1:1000]       │ INACTIVE │
+│ [2:1]          │ INACTIVE │
+│ [2:1000]       │ ACTIVE   │
+│ [3:1]          │ ACTIVE   │
+│ [3:1000]       │ ACTIVE   │
+│ [4:1]          │ ACTIVE   │
+│ [4:1000]       │ ACTIVE   │
+│ [5:1]          │ ACTIVE   │
+│ [5:1000]       │ ACTIVE   │
+│ [6:1]          │ ACTIVE   │
+│ [6:1000]       │ ACTIVE   │
+│ [7:1]          │ ACTIVE   │
+│ [7:1000]       │ ACTIVE   │
+│ [8:1]          │ ACTIVE   │
+│ [8:1000]       │ ACTIVE   │
+└────────────────┴──────────┘
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    QueryBaseConfig {
+    }
+  }
+  Command {
+    ReadStoragePool {
+      BoxId: 18446744073709551615
+    }
+  }
+  Rollback: true
+}

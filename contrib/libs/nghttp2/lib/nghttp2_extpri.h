@@ -28,7 +28,7 @@
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
-#endif /* HAVE_CONFIG_H */
+#endif /* defined(HAVE_CONFIG_H) */
 
 #include <nghttp2/nghttp2.h>
 
@@ -36,7 +36,7 @@
  * NGHTTP2_EXTPRI_INC_MASK is a bit mask to retrieve incremental bit
  * from a value produced by nghttp2_extpri_to_uint8.
  */
-#define NGHTTP2_EXTPRI_INC_MASK (1 << 7)
+#define NGHTTP2_EXTPRI_INC_MASK 0x80U
 
 /*
  * nghttp2_extpri_to_uint8 encodes |pri| into uint8_t variable.
@@ -62,4 +62,4 @@ void nghttp2_extpri_from_uint8(nghttp2_extpri *extpri, uint8_t u8extpri);
  */
 #define nghttp2_extpri_uint8_inc(PRI) (((PRI) & NGHTTP2_EXTPRI_INC_MASK) != 0)
 
-#endif /* NGHTTP2_EXTPRI_H */
+#endif /* !defined(NGHTTP2_EXTPRI_H) */

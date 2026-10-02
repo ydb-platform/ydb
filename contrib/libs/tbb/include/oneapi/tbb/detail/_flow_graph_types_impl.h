@@ -1,5 +1,6 @@
 /*
-    Copyright (c) 2005-2022 Intel Corporation
+    Copyright (c) 2005-2025 Intel Corporation
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -21,7 +22,7 @@
 #error Do not #include this internal file directly; use public TBB headers instead.
 #endif
 
-// included in namespace tbb::detail::d1
+// included in namespace tbb::detail::d2
 
 // the change to key_matching (adding a K and KHash template parameter, making it a class)
 // means we have to pass this data to the key_matching_port.  All the ports have only one
@@ -43,24 +44,24 @@ struct KeyTrait {
 };
 
 // wrap each element of a tuple in a template, and make a tuple of the result.
-template<int N, template<class> class PT, typename TypeTuple>
+template<template<class> class PortType, typename TypeTuple>
 struct wrap_tuple_elements;
 
 // A wrapper that generates the traits needed for each port of a key-matching join,
 // and the type of the tuple of input ports.
-template<int N, template<class> class PT, typename KeyTraits, typename TypeTuple>
+template<template<class> class PortType, typename KeyTraits, typename TypeTuple>
 struct wrap_key_tuple_elements;
 
-template<int N, template<class> class PT,  typename... Args>
-struct wrap_tuple_elements<N, PT, std::tuple<Args...> >{
-    typedef typename std::tuple<PT<Args>... > type;
+template<template<class> class PortType,  typename... Args>
+struct wrap_tuple_elements<PortType, std::tuple<Args...> >{
+    using type = std::tuple<PortType<Args>...>;
 };
 
-template<int N, template<class> class PT, typename KeyTraits, typename... Args>
-struct wrap_key_tuple_elements<N, PT, KeyTraits, std::tuple<Args...> > {
-    typedef typename KeyTraits::key_type K;
-    typedef typename KeyTraits::hash_compare_type KHash;
-    typedef typename std::tuple<PT<KeyTrait<K, KHash, Args> >... > type;
+template<template<class> class PortType, typename KeyTraits, typename... Args>
+struct wrap_key_tuple_elements<PortType, KeyTraits, std::tuple<Args...> > {
+    using key_type = typename KeyTraits::key_type;
+    using hash_compare_type = typename KeyTraits::hash_compare_type;
+    using type = std::tuple<PortType<KeyTrait<key_type, hash_compare_type, Args>>...>;
 };
 
 template< int... S > class sequence {};
@@ -73,40 +74,55 @@ struct make_sequence < 0, S... > {
     typedef sequence<S...> type;
 };
 
-//! type mimicking std::pair but with trailing fill to ensure each element of an array
-//* will have the correct alignment
-template<typename T1, typename T2, size_t REM>
-struct type_plus_align {
-    char first[sizeof(T1)];
-    T2 second;
-    char fill1[REM];
-};
-
-template<typename T1, typename T2>
-struct type_plus_align<T1,T2,0> {
-    char first[sizeof(T1)];
-    T2 second;
-};
-
 template<class U> struct alignment_of {
     typedef struct { char t; U    padded; } test_alignment;
     static const size_t value = sizeof(test_alignment) - sizeof(U);
 };
 
+template <typename... Types>
+struct max_alignment_helper;
+
+template <typename T1, typename... Types>
+struct max_alignment_helper<T1, Types...> {
+    using type = typename max_alignment_helper<T1, typename max_alignment_helper<Types...>::type>::type;
+};
+
+template <typename T1, typename T2>
+struct max_alignment_helper<T1, T2> {
+    using type = typename std::conditional<alignof(T1) < alignof(T2), T2, T1>::type;
+};
+
+template <typename... Types>
+using max_alignment_helper_t = typename max_alignment_helper<Types...>::type;
+
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
+#pragma warning(push)
+#pragma warning(disable: 4324) // warning C4324: structure was padded due to alignment specifier
+#endif
+
 // T1, T2 are actual types stored.  The space defined for T1 in the type returned
 // is a char array of the correct size.  Type T2 should be trivially-constructible,
 // T1 must be explicitly managed.
-template<typename T1, typename T2>
-struct aligned_pair {
-    static const size_t t1_align = alignment_of<T1>::value;
-    static const size_t t2_align = alignment_of<T2>::value;
-    typedef type_plus_align<T1, T2, 0 > just_pair;
-    static const size_t max_align = t1_align < t2_align ? t2_align : t1_align;
-    static const size_t extra_bytes = sizeof(just_pair) % max_align;
-    static const size_t remainder = extra_bytes ? max_align - extra_bytes : 0;
-public:
-    typedef type_plus_align<T1,T2,remainder> type;
-};  // aligned_pair
+
+template <typename T1, typename T2>
+struct alignas(alignof(max_alignment_helper_t<T1, T2>)) aligned_pair {
+    char first[sizeof(T1)];
+    T2 second;
+};
+
+#if __TBB_PREVIEW_FLOW_GRAPH_TRY_PUT_AND_WAIT
+template <typename T1, typename T2, typename T3>
+struct alignas(alignof(max_alignment_helper_t<T1, T2, T3>)) aligned_triple {
+    char first[sizeof(T1)];
+    T2 second;
+    T3 third;
+};
+#endif
+
+
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
+#pragma warning(pop) // warning 4324 is back
+#endif
 
 // support for variant type
 // type we use when we're not storing a value
@@ -293,31 +309,11 @@ struct do_if<T, false> {
 // the object can only be tested for type, and a read-only reference can be fetched by cast_to<T>().
 
 using tbb::detail::punned_cast;
-struct tagged_null_type {};
-template<typename TagType, typename T0, typename T1=tagged_null_type, typename T2=tagged_null_type, typename T3=tagged_null_type,
-                           typename T4=tagged_null_type, typename T5=tagged_null_type, typename T6=tagged_null_type,
-                           typename T7=tagged_null_type, typename T8=tagged_null_type, typename T9=tagged_null_type>
-class tagged_msg {
-    typedef std::tuple<T0, T1, T2, T3, T4
-                  //TODO: Should we reject lists longer than a tuple can hold?
-                  #if __TBB_VARIADIC_MAX >= 6
-                  , T5
-                  #endif
-                  #if __TBB_VARIADIC_MAX >= 7
-                  , T6
-                  #endif
-                  #if __TBB_VARIADIC_MAX >= 8
-                  , T7
-                  #endif
-                  #if __TBB_VARIADIC_MAX >= 9
-                  , T8
-                  #endif
-                  #if __TBB_VARIADIC_MAX >= 10
-                  , T9
-                  #endif
-                  > Tuple;
 
-private:
+template<typename TagType, typename... TN>
+class tagged_msg {
+    using Tuple = std::tuple<TN...>;
+    
     class variant {
         static const size_t N = std::tuple_size<Tuple>::value;
         typedef typename pick_tuple_max<N, Tuple, alignment_of>::type AlignType;
@@ -373,7 +369,6 @@ private:
 
     TagType my_tag;
     variant my_msg;
-
 public:
     tagged_msg(): my_tag(TagType(~0)), my_msg(){}
 
@@ -393,7 +388,7 @@ public:
     bool is_a() const {return my_msg.template variant_is_a<V>();}
 
     bool is_default_constructed() const {return my_msg.variant_is_default_constructed();}
-}; //class tagged_msg
+}; // class tagged_msg
 
 // template to simplify cast and test for tagged_msg in template contexts
 template<typename V, typename T>

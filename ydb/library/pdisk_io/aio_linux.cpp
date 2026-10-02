@@ -14,7 +14,7 @@
 #undef RWF_APPEND
 
 #if !defined(_musl_)
-#include <liburing.h>
+#include "liburing_compat.h"
 #endif
 #include <libaio.h>
 #if !defined(_musl_)
@@ -154,23 +154,33 @@ public:
     }
 
     EIoResult Destroy() override {
+        EIoResult result = EIoResult::Ok;
+
         int ret = io_destroy(IoContext);
         if (ret < 0) {
             switch (-ret) {
-                case EFAULT: return EIoResult::BadAddress;
-                case EINVAL: return EIoResult::InvalidArgument;
-                case ENOSYS: return EIoResult::FunctionNotImplemented;
-                default: Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret
-                                 << " strerror# " << strerror(-ret));
+                case EFAULT:
+                    result = EIoResult::BadAddress;
+                    break;
+                case EINVAL:
+                    result = EIoResult::InvalidArgument;
+                    break;
+                case ENOSYS:
+                    result = EIoResult::FunctionNotImplemented;
+                    break;
+                default:
+                    Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret << " strerror# " << strerror(-ret));
             }
         }
+
         if (File) {
             ret = File->Flock(LOCK_UN);
             Y_VERIFY_S(ret == 0, "Error in Flock(LOCK_UN), errno# " << errno << " strerror# " << strerror(errno));
             bool isOk = File->Close();
             Y_VERIFY_S(isOk, PDiskInfo << " error on file close, errno# " << errno << " strerror# " << strerror(errno));
         }
-        return EIoResult::Ok;
+
+        return result;
     }
 
     i64 GetEvents(ui64 minEvents, ui64 maxEvents, TAsyncIoOperationResult *events, TDuration timeout) override {
@@ -221,6 +231,7 @@ public:
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
                 case EREMOTEIO:   return EIoResult::RemoteIOError;
+                case ENODEV:    return EIoResult::NoDevice;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -241,7 +252,7 @@ public:
         io_prep_pwrite(cb, static_cast<FHANDLE>(*File), const_cast<void*>(source), size, offset);
     }
 
-    void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
+    void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperation*>(op)->IsTrim = true;
     }
@@ -286,7 +297,12 @@ public:
     int LockFile() {
         int ret = -1;
         errno = EWOULDBLOCK;
-        int retry = 2;
+        int retry = 5;
+
+        // Note, that previous process incarnation might still hold the
+        // lock to finish its I/O (especially when we use io_uring without SQPOLL).
+        // Even after waitpid() has returned for that process, lock is still held
+        // until all I/O is either cancelled or finished
         while (ret == -1 && errno == EWOULDBLOCK && retry > 0) {
             errno = 0;
             ret = File->Flock(LOCK_EX | LOCK_NB);
@@ -539,6 +555,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case ENOSPC:    return EIoResult::NoSpaceLeft;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -571,7 +588,7 @@ public:
         tOp->DataOffset = offset;
     }
 
-    void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
+    void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperationLiburing*>(op)->IsTrim = true;
     }

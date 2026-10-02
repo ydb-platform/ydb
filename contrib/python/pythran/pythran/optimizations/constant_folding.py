@@ -13,6 +13,7 @@ import builtins
 import gast as ast
 from copy import deepcopy
 import logging
+import numpy
 import sys
 
 logger = logging.getLogger('pythran')
@@ -57,12 +58,32 @@ class PythranBuiltins(object):
         return true_br if cond else false_br
 
     @staticmethod
+    def StaticIfReturn(val):
+        return (None, val, None)
+
+    @staticmethod
+    def StaticIfNoReturn(val):
+        return (None, val, None)
+
+    @staticmethod
+    def StaticIfCont(val):
+        return (None, val, None)
+
+    @staticmethod
+    def StaticIfBreak(val):
+        return (None, val, None)
+
+    @staticmethod
     def is_none(val):
         return val is None
 
     @staticmethod
     def make_shape(*args):
         return args
+
+    @staticmethod
+    def restrict_assign(expr, value):
+        numpy.copyto(expr, value)
 
 class BreakLoop(Exception):
     pass
@@ -86,7 +107,8 @@ class ConstEval(ast.NodeVisitor):
 
     # stmt
     def visit_Return(self, node):
-        self.locals['@'] = node.value and self.visit(node.value)
+        if '@' not in self.locals:
+            self.locals['@'] = node.value and self.visit(node.value)
 
     def visit_Delete(self, node):
         if isinstance(node, ast.Name):
@@ -317,15 +339,17 @@ class ConstEval(ast.NodeVisitor):
             elif type(op) is ast.LtE:
                 cond = curr <= right
             elif type(op) is ast.Gt:
-                cond = curr <= right
+                cond = curr > right
             elif type(op) is ast.GtE:
-                cond = curr <= right
+                cond = curr >= right
             elif type(op) is ast.Is:
-                cond = curr <= right
+                cond = curr is right
             elif type(op) is ast.IsNot:
-                cond = curr <= right
+                cond = curr is not right
             elif type(op) is ast.In:
-                cond = curr <= right
+                cond = curr in right
+            elif type(op) is ast.NotIn:
+                cond = curr not in right
             else:
                 raise ValueError("invalid compare op")
             if not cond:
@@ -387,7 +411,7 @@ class ConstEval(ast.NodeVisitor):
             assert not self.locals
 
 
-class ConstantFolding(Transformation):
+class ConstantFolding(Transformation[ConstantExpressions]):
 
     """
     Replace constant expression by their evaluation.
@@ -401,9 +425,6 @@ class ConstantFolding(Transformation):
     def foo():
         return 4
     """
-
-    def __init__(self):
-        Transformation.__init__(self, ConstantExpressions)
 
     def prepare(self, node):
         assert isinstance(node, ast.Module)
@@ -487,7 +508,7 @@ class ConstantFolding(Transformation):
         return Transformation.generic_visit(self, node)
 
 
-class PartialConstantFolding(Transformation):
+class PartialConstantFolding(Transformation[ConstantExpressions]):
 
     """
     Replace partially constant expression by their evaluation.
@@ -520,9 +541,6 @@ class PartialConstantFolding(Transformation):
     def foo(n, m):
         return (n, m, n)
     """
-
-    def __init__(self):
-        Transformation.__init__(self, ConstantExpressions)
 
     def fold_mult_left(self, node):
         if not isinstance(node.left, (ast.List, ast.Tuple)):

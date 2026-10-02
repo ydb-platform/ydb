@@ -37,9 +37,14 @@ TSyncSlruCacheBase<TKey, TValue, THash>::TSyncSlruCacheBase(
     : Config_(std::move(config))
     , Capacity_(Config_->Capacity)
     , YoungerSizeFraction_(Config_->YoungerSizeFraction)
+    , RejectOversizedItems_(Config_->RejectOversizedItems)
     , HitWeightCounter_(profiler.Counter("/hit"))
     , MissedWeightCounter_(profiler.Counter("/missed"))
     , DroppedWeightCounter_(profiler.Counter("/dropped"))
+    , RejectedOversizedCounter_(profiler.Counter("/rejected_oversized"))
+    , RejectedOversizedWeightCounter_(profiler.Counter("/rejected_oversized_weight"))
+    , EvictedCounter_(profiler.Counter("/evicted_count"))
+    , EvictedWeightCounter_(profiler.Counter("/evicted_weight"))
 {
     profiler.AddFuncGauge("/younger", MakeStrong(this), [this] {
         return YoungerWeightCounter_.load();
@@ -101,6 +106,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Reconfigure(const TSlruCacheDynami
 {
     Capacity_.store(config->Capacity.value_or(Config_->Capacity));
     YoungerSizeFraction_.store(config->YoungerSizeFraction.value_or(Config_->YoungerSizeFraction));
+    RejectOversizedItems_.store(config->RejectOversizedItems.value_or(Config_->RejectOversizedItems));
 
     for (int index = 0; index < Config_->ShardCount; ++index) {
         auto* shard = &Shards_[index];
@@ -113,6 +119,14 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Reconfigure(const TSlruCacheDynami
 template <class TKey, class TValue, class THash>
 typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
 TSyncSlruCacheBase<TKey, TValue, THash>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
+TSyncSlruCacheBase<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 {
     auto* shard = GetShardByKey(key);
 
@@ -163,6 +177,30 @@ i64 TSyncSlruCacheBase<TKey, TValue, THash>::GetCapacity() const
 }
 
 template <class TKey, class TValue, class THash>
+const NProfiling::TCounter& TSyncSlruCacheBase<TKey, TValue, THash>::GetRejectedOversizedCounter() const
+{
+    return RejectedOversizedCounter_;
+}
+
+template <class TKey, class TValue, class THash>
+const NProfiling::TCounter& TSyncSlruCacheBase<TKey, TValue, THash>::GetRejectedOversizedWeightCounter() const
+{
+    return RejectedOversizedWeightCounter_;
+}
+
+template <class TKey, class TValue, class THash>
+const NProfiling::TCounter& TSyncSlruCacheBase<TKey, TValue, THash>::GetEvictedCounter() const
+{
+    return EvictedCounter_;
+}
+
+template <class TKey, class TValue, class THash>
+const NProfiling::TCounter& TSyncSlruCacheBase<TKey, TValue, THash>::GetEvictedWeightCounter() const
+{
+    return EvictedWeightCounter_;
+}
+
+template <class TKey, class TValue, class THash>
 void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TValuePtr& value)
 {
     UpdateWeight(value->GetKey());
@@ -208,7 +246,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
         MissedWeightCounter_.Increment(weightDelta);
     }
 
-    OnWeightUpdated(weightDelta);
+    OnTotalWeightUpdated(weightDelta);
 
     Trim(shard, guard);
 }
@@ -233,13 +271,23 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryInsert(const TValuePtr& value, 
         return false;
     }
 
+    MissedWeightCounter_.Increment(weight);
+
+    if (RejectOversizedItems_.load() &&
+        weight > Capacity_.load() / Config_->ShardCount - shard->OlderWeightCounter)
+    {
+        RejectedOversizedCounter_.Increment();
+        RejectedOversizedWeightCounter_.Increment(weight);
+        return true;
+    }
+
     auto* item = new TItem(value);
     YT_VERIFY(shard->ItemMap.emplace(key, item).second);
     ++Size_;
 
-    MissedWeightCounter_.Increment(weight);
-
     PushToYounger(shard, item);
+
+    OnTotalWeightUpdated(item->CachedWeight);
 
     // NB: Releases the lock.
     Trim(shard, guard);
@@ -263,6 +311,8 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, NThreading::TW
         MoveToYounger(shard, item);
     }
 
+    i64 totalWeightDelta = 0;
+
     // Evict from younger.
     std::vector<TValuePtr> evictedValues;
     while (!shard->YoungerLruList.Empty() &&
@@ -278,8 +328,18 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, NThreading::TW
 
         evictedValues.emplace_back(std::move(item->Value));
 
+        totalWeightDelta -= item->CachedWeight;
+
         delete item;
     }
+
+    if (!evictedValues.empty()) {
+        EvictedCounter_.Increment(evictedValues.size());
+        if (totalWeightDelta < 0) {
+            EvictedWeightCounter_.Increment(-totalWeightDelta);
+        }
+    }
+    OnTotalWeightUpdated(totalWeightDelta);
 
     guard.Release();
 
@@ -309,6 +369,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TKey& key)
     --Size_;
 
     Pop(shard, item);
+
+    OnTotalWeightUpdated(-item->CachedWeight);
 
     delete item;
 
@@ -344,6 +406,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TValuePtr& value)
 
     Pop(shard, item);
 
+    OnTotalWeightUpdated(-item->CachedWeight);
+
     delete item;
 
     guard.Release();
@@ -354,7 +418,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TValuePtr& value)
 }
 
 template <class TKey, class TValue, class THash>
-auto TSyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const TKey& key) const -> TShard*
+template <class THeterogenousKey>
+auto TSyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const THeterogenousKey& key) const -> TShard*
 {
     return &Shards_[THash()(key) % Config_->ShardCount];
 }
@@ -402,7 +467,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& /*value
 { }
 
 template <class TKey, class TValue, class THash>
-void TSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64/*weightDelta*/)
+void TSyncSlruCacheBase<TKey, TValue, THash>::OnTotalWeightUpdated(i64 /*weightDelta*/)
 { }
 
 template <class TKey, class TValue, class THash>
@@ -494,25 +559,13 @@ TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::~TMemoryTrackingSyncSlruC
 }
 
 template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64 weightDelta)
+void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnTotalWeightUpdated(i64 weightDelta)
 {
     if (weightDelta > 0) {
         MemoryTracker_->Acquire(weightDelta);
     } else {
         MemoryTracker_->Release(-weightDelta);
     }
-}
-
-template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnAdded(const TValuePtr& value)
-{
-    MemoryTracker_->Acquire(this->GetWeight(value));
-}
-
-template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& value)
-{
-    MemoryTracker_->Release(this->GetWeight(value));
 }
 
 template <class TKey, class TValue, class THash>
@@ -546,6 +599,13 @@ int TSimpleLruCache<TKey, TValue, THash>::GetSize() const
 template <class TKey, class TValue, class THash>
 const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const TKey& key)
 {
+    return Get<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const THeterogenousKey& key)
+{
     auto it = ItemMap_.find(key);
     YT_VERIFY(it != ItemMap_.end());
     UpdateLruList(it);
@@ -554,6 +614,13 @@ const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {
@@ -565,6 +632,13 @@ TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TSimpleLruCache<TKey, TValue, THash>::FindNoTouch(const TKey& key)
+{
+    return FindNoTouch<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TSimpleLruCache<TKey, TValue, THash>::FindNoTouch(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {
@@ -654,6 +728,13 @@ int TMultiLruCache<TKey, TValue, THash>::GetSize() const
 template <class TKey, class TValue, class THash>
 const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const TKey& key)
 {
+    return Get<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const THeterogenousKey& key)
+{
     auto* value = Find(key);
     YT_VERIFY(value != nullptr);
     return *value;
@@ -661,6 +742,13 @@ const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TMultiLruCache<TKey, TValue, THash>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TMultiLruCache<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {

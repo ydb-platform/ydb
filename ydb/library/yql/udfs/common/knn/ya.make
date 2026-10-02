@@ -14,8 +14,8 @@ PEERDIR(
     library/cpp/dot_product
     library/cpp/l1_distance
     library/cpp/l2_distance
+    ydb/library/vector_distance
 )
-
 
 END()
 

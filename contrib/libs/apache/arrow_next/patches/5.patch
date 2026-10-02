@@ -1,0 +1,11 @@
+--- contrib/libs/apache/arrow_next/src/arrow/util/config.h	(index)
++++ contrib/libs/apache/arrow_next/src/arrow/util/config.h	(working tree)
+@@ -53,7 +53,7 @@
+ /* #undef ARROW_AZURE */
+ #define ARROW_ENABLE_THREADING
+ /* #undef ARROW_GCS */
+-#define ARROW_HDFS
++#undef ARROW_HDFS
+ /* #undef ARROW_S3 */
+ /* #undef ARROW_USE_GLOG */
+ #define ARROW_USE_NATIVE_INT128

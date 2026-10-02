@@ -11,6 +11,8 @@
 #include <aws/common/statistics.h>
 #include <aws/io/tls_channel_handler.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_crt_io_statistics_category {
     AWSCRT_STAT_CAT_SOCKET = AWS_CRT_STATISTICS_CATEGORY_BEGIN_RANGE(AWS_C_IO_PACKAGE_ID),
     AWSCRT_STAT_CAT_TLS,
@@ -74,5 +76,6 @@ AWS_IO_API
 void aws_crt_statistics_tls_reset(struct aws_crt_statistics_tls *stats);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_STATISTICS_H */

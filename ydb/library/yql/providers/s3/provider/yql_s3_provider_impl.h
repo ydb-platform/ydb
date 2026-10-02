@@ -23,4 +23,6 @@ THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr
 
 TExprNode::TPtr ExtractFormat(TExprNode::TListType& settings);
 
+bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TStructExprType* outputType, TS3Configuration::TPtr configuration, TString& error);
+
 } // namespace NYql

@@ -4,41 +4,60 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SHRED
+
 namespace NKikimr {
 
     class TSkeletonShredActor : public TActorBootstrapped<TSkeletonShredActor> {
         const TActorId Sender;
         const ui64 Cookie;
         const ui64 ShredGeneration;
-        THashSet<ui32> ChunksShredded;
-        THashSet<ui32> ChunksToShred;
-        TPDiskCtxPtr PDiskCtx;
-        const TActorId HugeKeeperId;
-        const TActorId DefragId;
-        TVDiskContextPtr VCtx;
-        TActorId SkeletonId;
+        THashSet<TChunkIdx> ChunksToShred;
+        TShredCtxPtr ShredCtx;
         NKikimrProto::EReplyStatus Status = NKikimrProto::EReplyStatus::ERROR;
         TString ErrorReason = "request aborted";
 
+        enum class EChunkType {
+            UNKNOWN,
+            HUGE_CHUNK,
+            SYNCLOG,
+            INDEX,
+            CHUNK_KEEPER,
+        };
+
+        THashMap<TChunkIdx, EChunkType> ChunkTypes;
+        THashSet<TChunkIdx> ChunksShredded;
+        THashSet<ui64> TablesToCompactLogoBlobs;
+        THashSet<ui64> TablesToCompactBlocks;
+        THashSet<ui64> TablesToCompactBarriers;
+        ui32 RepliesPending = 0;
+        bool SnapshotProcessed = false;
+        bool DefragCompleted = false;
+
     public:
-        TSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TPDiskCtxPtr pdiskCtx, TActorId hugeKeeperId,
-                TActorId defragId, TVDiskContextPtr vctx)
+        TSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TShredCtxPtr shredCtx)
             : Sender(ev->Sender)
             , Cookie(ev->Cookie)
             , ShredGeneration(ev->Get()->ShredGeneration)
             , ChunksToShred(ev->Get()->ChunksToShred.begin(), ev->Get()->ChunksToShred.end())
-            , PDiskCtx(std::move(pdiskCtx))
-            , HugeKeeperId(hugeKeeperId)
-            , DefragId(defragId)
-            , VCtx(std::move(vctx))
-        {}
+            , ShredCtx(std::move(shredCtx))
+        {
+            for (const TChunkIdx chunkId : ChunksToShred) {
+                ChunkTypes.emplace(chunkId, EChunkType::UNKNOWN);
+            }
+        }
 
-        void Bootstrap(TActorId skeletonId) {
-            SkeletonId = skeletonId;
+        void Bootstrap() {
             Become(&TThis::StateFunc);
+            YDB_LOG_DEBUG("TSkeletonShredActor bootstrap",
+                {"marker", "BSSV05"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()},
+                {"chunksToShred", ChunksToShred},
+                {"shredGeneration", ShredGeneration},
+                {"lsn", ShredCtx->Lsn});
             if (!ChunksToShred.empty()) {
-                Send(HugeKeeperId, new TEvHugeShredNotify({ChunksToShred.begin(), ChunksToShred.end()}));
-                Send(SkeletonId, new TEvTakeHullSnapshot(true)); // take index snapshot
+                Send(ShredCtx->HugeKeeperId, new TEvHugeShredNotify({ChunksToShred.begin(), ChunksToShred.end()}));
             }
             CheckIfDone();
         }
@@ -52,88 +71,206 @@ namespace NKikimr {
         }
 
         void HandleHugeShredNotifyResult() {
-            Send(DefragId, new TEvHullShredDefrag({ChunksToShred.begin(), ChunksToShred.end()}));
+            YDB_LOG_DEBUG("EvHugeShredNotifyResult received or timer hit",
+                {"marker", "BSSV06"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()});
+            Send(ShredCtx->DefragId, new TEvHullShredDefrag(ChunksToShred));
+            Send(ShredCtx->HugeKeeperId, new TEvListChunks(ChunksToShred));
+            Send(ShredCtx->SyncLogId, new TEvListChunks(ChunksToShred));
+            Send(ShredCtx->ChunkKeeperId, new TEvListChunks(ChunksToShred));
+            RepliesPending = 3;
+            SnapshotProcessed = false;
+            DefragCompleted = false;
         }
 
-        void HandleHullShredDefragResult() {
+        void Handle(TEvListChunksResult::TPtr ev) {
+            auto *msg = ev->Get();
+
+            YDB_LOG_DEBUG("TEvListChunksResult received",
+                {"marker", "BSSV07"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()},
+                {"chunksHuge", msg->ChunksHuge},
+                {"chunksSyncLog", msg->ChunksSyncLog});
+
+            auto update = [&](const auto& set, auto type) {
+                for (const TChunkIdx chunkId : set) {
+                    if (const auto it = ChunkTypes.find(chunkId); it != ChunkTypes.end()) {
+                        it->second = type;
+                        Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
+                    } else {
+                        Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
+                    }
+                }
+            };
+            update(msg->ChunksHuge, EChunkType::HUGE_CHUNK);
+            update(msg->ChunksSyncLog, EChunkType::SYNCLOG);
+            update(msg->ChunksChunkKeeper, EChunkType::CHUNK_KEEPER);
+
+            if (!--RepliesPending) {
+                Send(ShredCtx->SkeletonId, new TEvTakeHullSnapshot(true));
+            }
         }
 
         void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-            THullDsSnap& snap = ev->Get()->Snap;
-            TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TForwardIterator iter(snap.HullCtx, &snap.LogoBlobsSnap);
-            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&iter);
+            YDB_LOG_DEBUG("TEvTakeHullSnapshotResult received",
+                {"marker", "BSSV08"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()});
 
-            THashSet<TChunkIdx> chunksWithInlineBlobs;
-            THashSet<TChunkIdx> chunksWithHugeBlobs;
+            auto& snap = ev->Get()->Snap;
+            TablesToCompactLogoBlobs.clear();
+            TablesToCompactBlocks.clear();
+            TablesToCompactBarriers.clear();
+            Scan<true>(snap.HullCtx, snap.LogoBlobsSnap, TablesToCompactLogoBlobs);
+            Scan<false>(snap.HullCtx, snap.BlocksSnap, TablesToCompactBlocks);
+            Scan<false>(snap.HullCtx, snap.BarriersSnap, TablesToCompactBarriers);
+            SnapshotProcessed = true;
+            DropUnknownChunks();
+            CheckIfDone();
+            CheckDefragStage();
 
-            struct TMerger {
-                TBlobStorageGroupType GType;
-                const THashSet<TChunkIdx>& ChunksToShred;
-                THashSet<TChunkIdx>& ChunksWithInlineBlobs;
-                THashSet<TChunkIdx>& ChunksWithHugeBlobs;
-                TIndexRecordMerger<TKeyLogoBlob, TMemRecLogoBlob> BaseMerger{GType};
+            YDB_LOG_DEBUG("TEvTakeHullSnapshotResult processed",
+                {"marker", "BSSV09"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()},
+                {"tablesToCompactLogoBlobs", TablesToCompactLogoBlobs},
+                {"tablesToCompactBlocks", TablesToCompactBlocks},
+                {"tablesToCompactBarriers", TablesToCompactBarriers});
+        }
 
-                bool HaveToMergeData() const {
-                    return BaseMerger.HaveToMergeData();
-                }
-
-                void Clear() {
-                    BaseMerger.Clear();
-                }
-
-                void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                        ui64 circaLsn, const TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> *sst) {
-                    BaseMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
-                    ProcessData(memRec, outbound);
-                }
-
-                void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope *data, const TKeyLogoBlob& key, ui64 lsn) {
-                    BaseMerger.AddFromFresh(memRec, data, key, lsn);
-                    ProcessData(memRec, nullptr);
-                }
-
-                void ProcessData(TMemRecLogoBlob memRec, const TDiskPart *outbound) {
+        template<bool Blobs, typename TKey, typename TMemRec>
+        void Scan(const TIntrusivePtr<THullCtx>& hullCtx, TLevelIndexSnapshot<TKey, TMemRec>& snap,
+                THashSet<ui64>& tablesToCompact) {
+            auto scanHuge = [&](const TMemRec& memRec, const TDiskPart *outbound) {
+                if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
                     TDiskDataExtractor extr;
-                    switch (const auto type = memRec.GetType()) {
-                        case TBlobType::DiskBlob:
-                        case TBlobType::HugeBlob:
-                        case TBlobType::ManyHugeBlobs:
-                            memRec.GetDiskData(&extr, outbound);
-                            for (const TDiskPart *p = extr.Begin; p != extr.End; ++p) {
-                                if (p->ChunkIdx && ChunksToShred.contains(p->ChunkIdx)) {
-                                    auto *set = type == TBlobType::DiskBlob
-                                        ? &ChunksWithInlineBlobs
-                                        : &ChunksWithHugeBlobs;
-                                    set->insert(p->ChunkIdx);
-                                }
-                            }
-                            break;
+                    memRec.GetDiskData(&extr, outbound);
+                    for (const TDiskPart *p = extr.Begin; p != extr.End; ++p) {
+                        if (p->Empty()) {
+                            continue;
+                        }
+                        if (const auto it = ChunkTypes.find(p->ChunkIdx); it != ChunkTypes.end()) {
+                            it->second = EChunkType::HUGE_CHUNK;
+                        }
+                    }
+                }
+            };
 
-                        case TBlobType::MemBlob:
-                            break;
+            auto scanFresh = [&](const auto& seg) {
+                typename std::decay_t<decltype(seg)>::TIteratorWOMerge it(hullCtx, &seg);
+                for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                    scanHuge(it.GetUnmergedMemRec(), nullptr);
+                }
+            };
+            scanFresh(snap.FreshSnap.Cur);
+            scanFresh(snap.FreshSnap.Dreg);
+            scanFresh(snap.FreshSnap.Old);
+
+            typename TLevelSliceSnapshot<TKey, TMemRec>::TSstIterator sstIt(&snap.SliceSnap);
+            for (sstIt.SeekToFirst(); sstIt.Valid(); sstIt.Next()) {
+                const auto& p = sstIt.Get();
+                const auto& seg = *p.SstPtr;
+
+                for (const TChunkIdx chunkId : seg.AllChunks) {
+                    if (const auto it = ChunkTypes.find(chunkId); it != ChunkTypes.end()) {
+                        if (seg.HeapStripe.Empty()) {
+                            it->second = EChunkType::INDEX;
+                        } else if (it->second == EChunkType::UNKNOWN) {
+                            // Stripe-heap SSTs share the chunk with HugeKeeper.
+                            it->second = EChunkType::HUGE_CHUNK;
+                        }
+                        tablesToCompact.insert(seg.AssignedSstId);
+                        YDB_LOG_DEBUG("Going to compact SST",
+                            {"marker", "BSSV13"},
+                            {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                            {"sstId", seg.AssignedSstId},
+                            {"allChunks", seg.AllChunks});
+                        Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
+                    } else {
+                        Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     }
                 }
 
-                void Finish() {
-                    BaseMerger.Finish();
+                if constexpr (Blobs) {
+                    const TDiskPart *outbound = seg.GetOutbound();
+                    typename TLevelSegment<TKey, TMemRec>::TMemIterator memIt(&seg);
+                    for (memIt.SeekToFirst(); memIt.Valid(); memIt.Next()) {
+                        scanHuge(memIt.GetMemRec(), outbound);
+                    }
                 }
-            } merger{
-                .GType = VCtx->Top->GType,
-                .ChunksToShred = ChunksToShred,
-                .ChunksWithInlineBlobs = chunksWithInlineBlobs,
-                .ChunksWithHugeBlobs = chunksWithHugeBlobs,
-            };
+            }
+        }
 
-            heapIt.Walk(std::nullopt, &merger, [&](TKeyLogoBlob /*key*/, auto* /*merger*/) { return true; });
+        void DropUnknownChunks() {
+            for (auto it = ChunkTypes.begin(); it != ChunkTypes.end(); ) {
+                if (it->second == EChunkType::UNKNOWN) {
+                    const size_t num = ChunksToShred.erase(it->first);
+                    Y_VERIFY_DEBUG_S(num == 1, ShredCtx->VCtx->VDiskLogPrefix);
+                    ChunksShredded.insert(it->first);
+                    ChunkTypes.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void HandleHullShredDefragResult() {
+            YDB_LOG_DEBUG("EvHullShredDefragResult received",
+                {"marker", "BSSV14"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()});
+            DefragCompleted = true;
+            CheckDefragStage();
+        }
+
+        void CheckDefragStage() {
+            if (!SnapshotProcessed || !DefragCompleted) {
+                return;
+            }
+
+            if (!TablesToCompactLogoBlobs.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs,
+                    std::exchange(TablesToCompactLogoBlobs, {})));
+            } else if (!TablesToCompactBlocks.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::Blocks,
+                    std::exchange(TablesToCompactBlocks, {})));
+            } else if (!TablesToCompactBarriers.empty()) {
+                Send(ShredCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::Barriers,
+                    std::exchange(TablesToCompactBarriers, {})));
+            } else {
+                TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                    SelfId(), TActorId(), nullptr, 0));
+            }
+        }
+
+        void Handle(TEvCompactVDiskResult::TPtr /*ev*/) {
+            YDB_LOG_DEBUG("TEvCompactVDiskResult received",
+                {"marker", "BSSV11"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()});
+            CheckDefragStage();
         }
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {
-            for (ui32 chunkId : ev->Get()->Chunks) {
-                if (ChunksToShred.erase(chunkId)) {
-                    ChunksShredded.insert(chunkId);
+            YDB_LOG_DEBUG("TEvNotifyChunksDeleted received",
+                {"marker", "BSSV10"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()},
+                {"lsn", ev->Get()->Lsn},
+                {"chunks", ev->Get()->Chunks});
+
+            if (ShredCtx->Lsn < ev->Get()->Lsn) { // don't accept stale queries
+                for (ui32 chunkId : ev->Get()->Chunks) {
+                    if (ChunksToShred.erase(chunkId)) {
+                        ChunksShredded.insert(chunkId);
+                        ChunkTypes.erase(chunkId);
+                    }
                 }
+                TActivationContext::Send(IEventHandle::Forward(ev, ShredCtx->DefragId));
+                CheckIfDone();
             }
-            CheckIfDone();
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr ev) {
@@ -144,33 +281,83 @@ namespace NKikimr {
             std::ranges::sort(chunksShredded);
 
             TStringStream s;
-            s << "ShredGeneration# " << ShredGeneration
-                << " ChunksToShred# " << FormatList(chunksToShred)
-                << " ChunksShredded# " << FormatList(chunksShredded)
-                << "<br/>";
+            HTML(s) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        s << "Shred State";
+                    }
+                    DIV_CLASS("panel-body") {
+                        DIV() {
+                            s << "ShredGeneration# " << ShredGeneration << "<br/>";
+                        }
+                        DIV() {
+                            s << "ChunksToShred# [";
+                            for (const char *sp = ""; TChunkIdx chunkId : ChunksToShred) {
+                                const auto it = ChunkTypes.find(chunkId);
+                                Y_ABORT_UNLESS(it != ChunkTypes.end());
+                                const char *color = "gray";
+                                switch (it->second) {
+                                    case EChunkType::UNKNOWN:
+                                        break;
+
+                                    case EChunkType::HUGE_CHUNK:
+                                        color = "red";
+                                        break;
+
+                                    case EChunkType::INDEX:
+                                        color = "gold";
+                                        break;
+
+                                    case EChunkType::SYNCLOG:
+                                        color = "blue";
+                                        break;
+
+                                    case EChunkType::CHUNK_KEEPER:
+                                        color = "green";
+                                        break;
+                                }
+                                s << std::exchange(sp, " ") << "<font color=" << color << ">" << chunkId << "</font>";
+                            }
+                            s << "]<br/>";
+                        }
+                        DIV() {
+                            s << "ChunksShredded# " << FormatList(chunksShredded) << "<br/>";
+                        }
+                    }
+                }
+            }
             Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str(), ev->Get()->SubRequestId));
         }
 
         void PassAway() override {
-            Send(Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-                ShredGeneration, Status, std::move(ErrorReason)), 0, Cookie);
-            Send(SkeletonId, new TEvents::TEvGone);
+            YDB_LOG_INFO("Shredding finished",
+                {"marker", "BSSV12"},
+                {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
+                {"actorId", SelfId()},
+                {"status", Status},
+                {"errorReason", ErrorReason},
+                {"chunksShredded", ChunksShredded});
+            Send(Sender, new NPDisk::TEvShredVDiskResult(ShredCtx->PDiskCtx->Dsk->Owner,
+                ShredCtx->PDiskCtx->Dsk->OwnerRound, ShredGeneration, Status, std::move(ErrorReason)), 0, Cookie);
+            Send(ShredCtx->SkeletonId, new TEvents::TEvGone);
             TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
             cFunc(TEvBlobStorage::EvHugeShredNotifyResult, HandleHugeShredNotifyResult)
-            cFunc(TEvBlobStorage::EvHullShredDefragResult, HandleHullShredDefragResult)
+            hFunc(TEvListChunksResult, Handle)
             hFunc(TEvTakeHullSnapshotResult, Handle)
+            cFunc(TEvBlobStorage::EvHullShredDefragResult, HandleHullShredDefragResult)
+            hFunc(TEvCompactVDiskResult, Handle)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            cFunc(TEvents::TSystem::Wakeup, HandleHugeShredNotifyResult)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
     };
 
-    IActor *CreateSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TPDiskCtxPtr pdiskCtx, TActorId hugeKeeperId,
-            TActorId defragId, TVDiskContextPtr vctx) {
-        return new TSkeletonShredActor(ev, std::move(pdiskCtx), hugeKeeperId, defragId, std::move(vctx));
+    IActor *CreateSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TShredCtxPtr shredCtx) {
+        return new TSkeletonShredActor(ev, std::move(shredCtx));
     }
 
 } // NKikimr

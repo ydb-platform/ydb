@@ -1,7 +1,9 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     portion_info.proto
+    index.proto
 )
 
 PEERDIR(

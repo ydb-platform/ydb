@@ -10,7 +10,7 @@ namespace NYT::NAttributeValueConversionImpl {
 
 template <class T>
     requires (!CPrimitiveConvertible<T>)
-std::string TagInvoke(TTagInvokeTag<ToErrorAttributeValue>, const T& value)
+std::string TagInvoke(NMpl::TTagInvokeTag<ToErrorAttributeValue>, const T& value)
 {
     return std::string(NYson::ConvertToYsonString(value, NYson::EYsonFormat::Text).ToString());
 }

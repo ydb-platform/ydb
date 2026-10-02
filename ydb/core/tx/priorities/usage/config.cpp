@@ -1,5 +1,8 @@
 #include "config.h"
+
 #include <util/string/builder.h>
+
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NPrioritiesQueue {
 
@@ -22,4 +25,4 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-}
+}   // namespace NKikimr::NPrioritiesQueue

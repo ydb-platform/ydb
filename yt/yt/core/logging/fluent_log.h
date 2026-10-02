@@ -3,34 +3,28 @@
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TParent>
-class TOneShotFluentLogEventImpl
-    : public NYTree::TFluentYsonBuilder::TFluentFragmentBase<TOneShotFluentLogEventImpl, TParent, NYTree::TFluentMap>
+class TOneShotFluentLogEvent
+    : public NYTree::TFluentYsonBuilder::TFluentMapFragmentBase<NYTree::TFluentYsonVoid, TOneShotFluentLogEvent&&>
 {
 public:
-    using TThis = TOneShotFluentLogEventImpl;
-    using TBase = NYTree::TFluentYsonBuilder::TFluentFragmentBase<NLogging::TOneShotFluentLogEventImpl, TParent, NYTree::TFluentMap>;
+    using TThis = TOneShotFluentLogEvent;
+    using TBase = NYTree::TFluentYsonBuilder::TFluentMapFragmentBase<NYTree::TFluentYsonVoid, TThis&&>;
     using TStatePtr = TIntrusivePtr<NYTree::TFluentYsonWriterState>;
 
-    TOneShotFluentLogEventImpl(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
-    TOneShotFluentLogEventImpl(TOneShotFluentLogEventImpl&& other) = default;
-    TOneShotFluentLogEventImpl(const TOneShotFluentLogEventImpl& other) = delete;
+    TOneShotFluentLogEvent(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
+    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) noexcept = default;
+    TOneShotFluentLogEvent(const TOneShotFluentLogEvent& other) = delete;
 
-    ~TOneShotFluentLogEventImpl();
+    ~TOneShotFluentLogEvent();
 
-    TOneShotFluentLogEventImpl& operator=(TOneShotFluentLogEventImpl&& other) = default;
-    TOneShotFluentLogEventImpl& operator=(const TOneShotFluentLogEventImpl& other) = delete;
-
-    // TODO(max42): why these two methods must be re-implemented here? Maybe it is enough to replace TFluentYsonVoid with TFluentMap below?
-
-    NYTree::TFluentYsonBuilder::TAny<TThis&&> Item(TStringBuf key);
-
-    template <class T, class... TExtraArgs>
-    TThis& OptionalItem(TStringBuf key, const T& optionalValue, TExtraArgs&&... extraArgs);
+    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) noexcept = default;
+    TOneShotFluentLogEvent& operator=(const TOneShotFluentLogEvent& other) = delete;
 
 private:
     TStatePtr State_;
@@ -39,8 +33,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-using TOneShotFluentLogEvent = TOneShotFluentLogEventImpl<NYTree::TFluentYsonVoid>;
 
 TOneShotFluentLogEvent LogStructuredEventFluently(const NLogging::TLogger& logger, NLogging::ELogLevel level);
 
@@ -67,8 +59,8 @@ private:
     const i64 MaxBatchSize_;
     const ELogLevel Level_;
 
-    TString BatchYson_;
-    TStringOutput BatchOutputStream_{BatchYson_};
+    std::string BatchYson_;
+    TStdStringOutput BatchOutputStream_{BatchYson_};
     NYson::TYsonWriter BatchYsonWriter_{
         &BatchOutputStream_,
         NYson::EYsonFormat::Binary,
@@ -81,7 +73,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging
-
-#define FLUENT_LOG_INL_H_
-#include "fluent_log-inl.h"
-#undef FLUENT_LOG_INL_H_

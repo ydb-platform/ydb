@@ -3,6 +3,7 @@
 #include <library/cpp/monlib/metrics/labels.h>
 #include <library/cpp/monlib/metrics/metric_value.h>
 #include <library/cpp/monlib/metrics/metric_consumer.h>
+#include <library/cpp/monlib/metrics/metric_registry.h>
 
 #include <util/datetime/base.h>
 
@@ -26,6 +27,8 @@ namespace NMonitoring {
         // TODO(ivanzhukov@): rename to Type
         NMonitoring::EMetricType Kind{NMonitoring::EMetricType::UNKNOWN};
         THolder<NMonitoring::TMetricTimeSeries> Values;
+        NMonitoring::TMetricOpts Opts;
+        ui32 StartTimeSeconds{0};
     };
 
     template <typename TLabelsImpl>
@@ -40,6 +43,10 @@ namespace NMonitoring {
 
         void OnCommonTime(TInstant time) override {
             CommonTime = time;
+        }
+
+        void OnCommonStartTimeSeconds(ui32 startTimeSeconds) override {
+            CommonStartTimeSeconds = startTimeSeconds;
         }
 
         void OnMetricBegin(NMonitoring::EMetricType kind) override {
@@ -96,10 +103,19 @@ namespace NMonitoring {
             val->Add(time, snapshot.Get());
         }
 
+        virtual void OnMemOnly(bool isMemOnly) override{
+            Metrics.back().Opts.MemOnly = isMemOnly;
+        }
+
+        void OnStartTimeSeconds(ui32 startTimeSeconds) override {
+            Metrics.back().StartTimeSeconds = startTimeSeconds;
+        }
+
         bool DoMergeCommonLabels{false};
         TVector<TMetricData> Metrics;
         TLabelsImpl CommonLabels;
         TInstant CommonTime;
+        ui32 CommonStartTimeSeconds{0};
         bool InsideSensor{false};
     };
 

@@ -25,12 +25,6 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
     }
     {
-        auto result = DictionaryEncodingDiff.DeserializeFromRequestFeatures(features);
-        if (result.IsFail()) {
-            return result;
-        }
-    }
-    {
         auto status = Serializer.DeserializeFromRequest(features);
         if (status.IsFail()) {
             return status;
@@ -52,7 +46,6 @@ void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTable
         if (!!AccessorConstructor) {
             *column->MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
         }
-        *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
         if (DefaultValue) {
             column->SetDefaultValue(*DefaultValue);
         }

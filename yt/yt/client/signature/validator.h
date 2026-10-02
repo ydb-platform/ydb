@@ -10,11 +10,10 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ISignatureValidator
+struct ISignatureValidator
     : public TRefCounted
 {
-public:
-    virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
+    virtual TFuture<bool> Validate(const TSignaturePtr& signature) const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ISignatureValidator)

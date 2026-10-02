@@ -27,7 +27,7 @@ void TReadRequestComplexityOverrides::Validate(TReadRequestComplexity max) const
         if (override && *override > max) {
             error.SetCode(NYT::EErrorCode::Generic);
             error.SetMessage("Read request complexity limits too large");
-            error = error << TErrorAttribute(TString(fieldName), *override);
+            error = error.With(std::string(fieldName), *override);
         }
     };
 
@@ -41,8 +41,8 @@ void FromProto(
     TReadRequestComplexityOverrides* original,
     const NProto::TReadRequestComplexityLimits& serialized)
 {
-    original->NodeCount = YT_PROTO_OPTIONAL(serialized, node_count);
-    original->ResultSize = YT_PROTO_OPTIONAL(serialized, result_size);
+    original->NodeCount = YT_OPTIONAL_FROM_PROTO(serialized, node_count);
+    original->ResultSize = YT_OPTIONAL_FROM_PROTO(serialized, result_size);
 }
 
 void ToProto(
@@ -59,4 +59,4 @@ void ToProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT:NYTree
+} // namespace NYT::NYTree

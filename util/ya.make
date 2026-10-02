@@ -86,10 +86,11 @@ JOIN_SRCS(
     generic/array_size.cpp
     generic/bitmap.cpp
     generic/bitops.cpp
-    generic/bt_exception.cpp
     generic/buffer.cpp
     generic/cast.cpp
+    generic/constant_evaluation.cpp
     generic/deque.cpp
+    generic/enum_cast.cpp
     generic/explicit_type.cpp
     generic/fastqueue.cpp
     generic/flags.cpp
@@ -194,7 +195,6 @@ JOIN_SRCS(
     stream/aligned.cpp
     stream/buffer.cpp
     stream/buffered.cpp
-    stream/debug.cpp
     stream/direct_io.cpp
     stream/file.cpp
     stream/format.cpp
@@ -260,7 +260,6 @@ JOIN_SRCS(
     system/condvar.cpp
     system/daemon.cpp
     system/datetime.cpp
-    system/defaults.c
     system/direct_io.cpp
     system/dynlib.cpp
     system/env.cpp
@@ -322,6 +321,7 @@ JOIN_SRCS(
     system/sys_alloc.cpp
     system/sysstat.cpp
     system/tempfile.cpp
+    system/thread.cpp
     system/tls.cpp
     system/type_name.cpp
     system/unaligned_mem.cpp
@@ -335,7 +335,6 @@ JOIN_SRCS(
     all_system_4.cpp
     system/mem_info.cpp
     system/sem.cpp
-    system/thread.cpp
     system/types.cpp
 )
 ENDIF()
@@ -350,9 +349,9 @@ IF (OS_WINDOWS)
 ELSEIF (OS_CYGWIN OR OS_IOS)
     # no asm context switching on cygwin or iOS
 ELSE()
-    IF (ARCH_X86_64 OR ARCH_I386)
+    IF (ARCH_X86_64)
         SRCS(
-            system/context_x86.asm
+            system/context_x86.S
         )
     ENDIF()
     IF (ARCH_AARCH64 OR ARCH_ARM64)

@@ -15,8 +15,11 @@ protected:
     ::NMonitoring::TDynamicCounterPtr Root_;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseAccessDenyCounter_;
+    // HTTP monitoring observe-mode: would-deny for strict database tokens (request is not blocked).
+    ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseHttpAccessDenyCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseSchemeErrorCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseUnavailableCounter_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmptyDatabaseNameCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseRateLimitedCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConsumedRUCounter_;
     NMonitoring::THistogramPtr ThrottleDelayHistogram_;
@@ -35,8 +38,11 @@ public:
         }
 
         DatabaseAccessDenyCounter_ = group->GetCounter("databaseAccessDeny", true);
+        DatabaseHttpAccessDenyCounter_ = group->GetCounter("databaseHttpAccessDeny", true);
         DatabaseSchemeErrorCounter_ = group->GetCounter("databaseSchemeError", true);
         DatabaseUnavailableCounter_ = group->GetCounter("databaseUnavailable", true);
+
+        EmptyDatabaseNameCounter_ = group->GetCounter("emptyDatabaseName", true);
 
         DatabaseRateLimitedCounter_ = group->GetCounter("api.grpc.request.throughput_quota_exceeded_count", true);
 
@@ -57,6 +63,14 @@ public:
 
     void IncDatabaseUnavailableCounter() override {
         DatabaseUnavailableCounter_->Inc();
+    }
+
+    void IncEmptyDatabaseNameCounter() override {
+        EmptyDatabaseNameCounter_->Inc();
+    }
+
+    void IncDatabaseHttpAccessDenyCounter() override {
+        DatabaseHttpAccessDenyCounter_->Inc();
     }
 
     void IncDatabaseRateLimitedCounter() override {
@@ -272,6 +286,14 @@ public:
     void IncDatabaseUnavailableCounter() override {
         Common->IncDatabaseUnavailableCounter();
         Db->IncDatabaseUnavailableCounter();
+    }
+
+    void IncEmptyDatabaseNameCounter() override {
+        Common->IncEmptyDatabaseNameCounter();
+    }
+
+    void IncDatabaseHttpAccessDenyCounter() override {
+        Common->IncDatabaseHttpAccessDenyCounter();
     }
 
     void IncDatabaseRateLimitedCounter() override {

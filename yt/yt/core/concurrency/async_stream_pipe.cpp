@@ -9,45 +9,43 @@ struct TAsyncStreamPipeTag
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAsyncStreamPipe::TItem::TItem(TSharedRef sharedRef, TPromise<void> writeComplete)
-    : Data(std::move(sharedRef))
-    , WriteComplete(std::move(writeComplete))
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
 TFuture<void> TAsyncStreamPipe::Write(const TSharedRef& buffer)
 {
     if (!buffer) {
         // Empty buffer has special meaning in our queue, so we don't write it.
-        return VoidFuture;
+        return OKFuture;
     }
 
-    auto writeComplete = NewPromise<void>();
-    Queue_.Enqueue(TItem(TSharedRef::MakeCopy<TAsyncStreamPipeTag>(buffer), writeComplete));
-    return writeComplete;
+    auto promise = NewPromise<void>();
+    Queue_.Enqueue(TItem{
+        .Data = TSharedRef::MakeCopy<TAsyncStreamPipeTag>(buffer),
+        .WriteCompletePromise = promise,
+    });
+    return promise;
 }
 
 TFuture<TSharedRef> TAsyncStreamPipe::Read()
 {
-    auto result = Queue_.Dequeue();
-    return result.Apply(BIND([] (TItem item) {
-        item.WriteComplete.Set();
+    return Queue_.Dequeue().Apply(BIND([] (const TItem& item) {
+        item.WriteCompletePromise.Set();
         return item.Data;
     }));
 }
 
 TFuture<void> TAsyncStreamPipe::Close()
 {
-    Queue_.Enqueue(TItem(TSharedRef(), NewPromise<void>()));
-    return VoidFuture;
+    auto promise = NewPromise<void>();
+    Queue_.Enqueue(TItem{
+        .Data = {}, // sentinel
+        .WriteCompletePromise = promise,
+    });
+    return promise;
 }
 
 TFuture<void> TAsyncStreamPipe::Abort(const TError& error)
 {
-    auto writeComplete = NewPromise<void>();
     Queue_.Enqueue(error);
-    return writeComplete;
+    return OKFuture;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +58,7 @@ TFuture<void> TBoundedAsyncStreamPipe::Write(const TSharedRef& buffer)
 {
     if (!buffer) {
         // Empty buffer has special meaning in our queue, so we don't write it.
-        return VoidFuture;
+        return OKFuture;
     }
 
     if (Aborted_.load()) {
@@ -78,7 +76,7 @@ TFuture<void> TBoundedAsyncStreamPipe::Write(const TSharedRef& buffer)
         if (Aborted_.load()) {
             return MakeFuture(Error_);
         }
-        return VoidFuture;
+        return OKFuture;
     }));
 }
 
@@ -95,7 +93,7 @@ TFuture<TSharedRef> TBoundedAsyncStreamPipe::Read()
         return MakeFuture<TSharedRef>(Error_);
     }
 
-    return result.ApplyUnique(BIND([this, this_ = MakeStrong(this)] (TSharedRef&& data) -> TFuture<TSharedRef> {
+    return result.AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (TSharedRef&& data) -> TFuture<TSharedRef> {
         if (Aborted_.load()) {
             return MakeFuture<TSharedRef>(Error_);
         }

@@ -8,29 +8,32 @@
 #ifndef BOOST_MATH_POLICY_ERROR_HANDLING_HPP
 #define BOOST_MATH_POLICY_ERROR_HANDLING_HPP
 
+#include <boost/math/policies/policy.hpp>
 #include <boost/math/tools/config.hpp>
 #include <boost/math/tools/numeric_limits.hpp>
-#include <boost/math/tools/type_traits.hpp>
-#include <boost/math/tools/cstdint.hpp>
-#include <boost/math/tools/tuple.hpp>
-#include <boost/math/policies/policy.hpp>
 #include <boost/math/tools/precision.hpp>
+#include <boost/math/tools/tuple.hpp>
+#include <boost/math/tools/type_traits.hpp>
 
 #ifndef BOOST_MATH_HAS_NVRTC
 
-#include <iomanip>
-#include <string>
+#ifndef BOOST_MATH_NO_EXCEPTIONS
+#include <boost/math/tools/throw_exception.hpp>
+#endif
+
+#include <cerrno>
+#include <cmath>
+#include <complex>
+#include <cstdint>
 #include <cstring>
+#ifndef BOOST_MATH_NO_EXCEPTIONS
+#include <iomanip>
+#include <sstream>
+#include <stdexcept>
+#endif
+#include <string>
 #ifndef BOOST_MATH_NO_RTTI
 #include <typeinfo>
-#endif
-#include <cerrno>
-#include <complex>
-#include <cmath>
-#include <cstdint>
-#ifndef BOOST_MATH_NO_EXCEPTIONS
-#include <stdexcept>
-#include <boost/math/tools/throw_exception.hpp>
 #endif
 
 #ifdef _MSC_VER
@@ -43,7 +46,6 @@
 // Note that this only occurs when the compiler can deduce code is unreachable,
 // for example when policy macros are used to ignore errors rather than throw.
 #endif
-#include <sstream>
 
 namespace boost{ namespace math{
 
@@ -60,6 +62,11 @@ class rounding_error : public std::runtime_error
 public:
    explicit rounding_error(const std::string& s) : std::runtime_error(s){}
 };
+
+#else
+
+class evaluation_error {};
+class rounding_error {};
 
 #endif
 
@@ -88,18 +95,25 @@ T user_indeterminate_result_error(const char* function, const char* message, con
 namespace detail
 {
 
+#ifndef BOOST_MATH_NO_EXCEPTIONS
+// Only used to build exception messages; relies on <sstream>
 template <class T>
 inline std::string prec_format(const T& val)
 {
-   typedef typename boost::math::policies::precision<T, boost::math::policies::policy<> >::type prec_type;
-   std::stringstream ss;
+   using prec_type = typename boost::math::policies::precision<T, boost::math::policies::policy<> >::type;
+
+   std::stringstream strm { };
+
    if(prec_type::value)
    {
-      int prec = 2 + (prec_type::value * 30103UL) / 100000UL;
-      ss << std::setprecision(prec);
+      const std::streamsize prec { static_cast<std::streamsize>(2UL + (prec_type::value * 30103UL) / 100000UL) };
+
+      strm << std::setprecision(prec);
    }
-   ss << val;
-   return ss.str();
+
+   strm << val;
+
+   return strm.str();
 }
 
 #ifdef BOOST_MATH_USE_CHARCONV_FOR_CONVERSION
@@ -112,7 +126,9 @@ inline std::string prec_format<std::float128_t>(const std::float128_t& val)
    return std::string(buffer, r.ptr);
 }
 
-#endif
+#endif // BOOST_MATH_USE_CHARCONV_FOR_CONVERSION
+
+#endif // BOOST_MATH_NO_EXCEPTIONS
 
 inline void replace_all_in_string(std::string& result, const char* what, const char* with)
 {

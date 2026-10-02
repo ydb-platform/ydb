@@ -1,9 +1,12 @@
 #pragma once
 
+#include "build_info.h"
 #include "common.h"
+#include "client_command_options.h"
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -12,29 +15,47 @@
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 #include <util/string/type.h>
+#include <util/system/info.h>
 #include <string>
+#include <functional>
+#include <optional>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
 };
 
+struct TAiPresetConfig {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenConfig {
+    TString Token;
+    bool WasUpdated = false;
+};
+
 class TClientCommand {
+protected:
+    TClientCommand() = default;
 public:
     static bool TIME_REQUESTS; // measure time of requests
     static bool PROGRESS_REQUESTS; // display progress of long requests
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    TString CompletionDescription;
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
+    bool Local = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
-    NLastGetopt::TOpts Opts;
+    TClientCommandOptions Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
@@ -57,6 +78,7 @@ public:
 
     public:
         using TCredentialsGetter = std::function<std::shared_ptr<ICredentialsProviderFactory>(const TClientCommand::TConfig&)>;
+        using TUsageInfoGetter = std::function<TString(const std::vector<TString>&)>;
 
         class TArgSetting {
         public:
@@ -83,21 +105,12 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
-
         int ArgC;
         char** ArgV;
         int InitialArgC;
         char** InitialArgV;
-        NLastGetopt::TOpts* Opts;
-        const NLastGetopt::TOptsParseResult* ParseResult;
+        TClientCommandOptions* Opts = nullptr;
+        const TOptionsParseResult* ParseResult;
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
@@ -109,13 +122,29 @@ public:
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
-        TMap<TString, TVector<TConnectionParam>> ConnectionParams;
-        bool EnableSsl = false;
-        bool IsNetworkIntensive = false;
-        TString Oauth2KeyFile;
+        TString ClientCert;
+        TString ClientCertPrivateKey;
+        TString ClientCertPrivateKeyPassword;
+        TString ClientCertFile;
+        TString ClientCertPrivateKeyFile;
+        TString ClientCertPrivateKeyPasswordFile;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
-        size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
+        // Client cert initialization.
+        // Parses certificate from dirrefent formats.
+        // Can ask for password if private key is protected with password and it is not set in options.
+        void InitClientCert();
+
+        TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
+        bool EnableSsl = false;
+        bool SkipDiscovery = false;
+        bool IsNetworkIntensive = false;
+        bool UsePerChannelTcpConnection = false;
+        TString Oauth2KeyFile;
+        TString Oauth2KeyParams;
+
+        ui32 VerbosityLevel = 0;
+        size_t HelpCommandVerbosityLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -130,11 +159,13 @@ public:
         TString YCToken;
         bool UseMetadataCredentials = false;
         TString SaKeyFile;
+        TString SaKeyParams;
         TString IamEndpoint;
         TString YScope;
         TString ChosenAuthMethod;
 
         TString ProfileFile;
+        TString AiProfileFile = GetHomeDir() + "/.config/ydb/ai_profiles.yaml";
         bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
@@ -149,6 +180,17 @@ public:
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
+        bool EnableAiInteractive = false;
+        bool EnableInteractiveTransactions = false;
+        TUsageInfoGetter UsageInfoGetter;
+
+        // Filled by ValidateAndRun to point at the leaf command being executed
+        const TClientCommand* ActiveLeafCommand = nullptr;
+        // If non-empty, overrides the computed ydb-cli-... build info tag
+        TString BuildInfoCommandTag;
+
+        std::function<TYdbCliBuildInfo()> BuildInfoProvider;
+        const TYdbCliBuildInfo& GetBuildInfo();
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
@@ -160,7 +202,7 @@ public:
             , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
-            , HelpCommandVerbosiltyLevel(ParseHelpCommandVerbosilty(argc, argv))
+            , HelpCommandVerbosityLevel(ParseHelpCommandVerbosity(argc, argv))
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
@@ -182,10 +224,10 @@ public:
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
 
-        static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
+        static size_t ParseHelpCommandVerbosity(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {
@@ -246,12 +288,28 @@ public:
         }
 
         void PrintHelpAndExit() {
-            NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
+            NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
-            throw TMisuseWithHelpException();
+            throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
+        // Build a driver config WITHOUT any CLI build info; the underlying
+        // driver will only carry the default SDK build info.
+        // Use this method only if you want to use the driver without the CLI build info intentionally.
+        TDriverConfig CreateDriverConfig();
+
+        // Build a driver config and append CLI build info plus a command tag.
+        // If buildInfoCommandTag is empty, the tag is derived from the active
+        // command chain via GetBuildInfoCommandTag().
+        TDriverConfig CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag = "");
+
+        TString GetBuildInfoCommandTag() const;
+
+        size_t GetNetworkThreadNum() const;
+
     private:
+        std::optional<TYdbCliBuildInfo> CachedBuildInfo_;
+
         size_t GetParamsCount() {
             size_t result = 0;
             bool optionArgument = false;
@@ -278,9 +336,9 @@ public:
                         while (*end != '\0' && *end != '\'' && *end != '\"') {
                             ++end;
                         }
-                        opt = Opts->FindLongOption(TString(pos + 1, end));
+                        opt = Opts->GetOpts().FindLongOption(TString(pos + 1, end));
                     } else {
-                        opt = Opts->FindCharOption(*pos);
+                        opt = Opts->GetOpts().FindCharOption(*pos);
                     }
                     if (opt && opt->GetHasArg() == NLastGetopt::NO_ARGUMENT) {
                         optionArgument = false;
@@ -313,7 +371,10 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TOptsParseOneLevelResult : public TOptionsParseResult {
+        TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv);
+        static std::pair<int, const char**> GetArgv(TConfig& config);
+
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };
@@ -321,6 +382,7 @@ public:
     virtual ~TClientCommand() {}
 
     virtual int Process(TConfig& config);
+    void PrepareOptions(TConfig& config, bool validate = true);
     virtual void Prepare(TConfig& config);
     /*
       This method will be called after all child
@@ -336,6 +398,7 @@ public:
         Dangerous |= flags.Dangerous;
         OnlyExplicitProfile |= flags.OnlyExplicitProfile;
     }
+    virtual TClientCommand* FindNextCommand(TString cmd) const;
 
     enum RenderEntryType {
         BEGIN,
@@ -343,15 +406,22 @@ public:
         END
     };
 
-    void RenderOneCommandDescription(
+    virtual void RenderCommandDescription(
         TStringStream& stream,
+        bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
-        RenderEntryType type = BEGIN
+        RenderEntryType type = BEGIN,
+        TString prefix = {},
+        bool shortForm = false
     );
 
     void Hide();
     void MarkDangerous();
     void UseOnlyExplicitProfile();
+
+    const TString& GetCompletionDescription() const {
+        return CompletionDescription ? CompletionDescription : Description;
+    }
 
 protected:
     virtual void Config(TConfig& config);
@@ -364,7 +434,7 @@ protected:
     virtual void SetCustomUsage(TConfig& config);
 
 protected:
-    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
+    std::shared_ptr<TOptionsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);
@@ -372,6 +442,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -381,10 +454,14 @@ public:
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
-    void RenderCommandsDescription(
+    void RenderCommandDescription(
         TStringStream& stream,
-        const NColorizer::TColors& colors = NColorizer::TColors(false)
-    );
+        bool renderTree,
+        const NColorizer::TColors& colors = NColorizer::TColors(false),
+        RenderEntryType type = BEGIN,
+        TString prefix = {},
+        bool shortForm = false
+    ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 
@@ -399,6 +476,7 @@ protected:
             cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
         }
     }
+    TClientCommand* FindNextCommand(TString cmd) const override;
 
     TClientCommand* SelectedCommand;
 
@@ -406,6 +484,8 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {
@@ -424,5 +504,4 @@ protected:
     TString TopicName;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

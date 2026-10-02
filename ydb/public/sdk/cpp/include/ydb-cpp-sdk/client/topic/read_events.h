@@ -1,11 +1,14 @@
 #pragma once
 
 #include "codecs.h"
+#include "control_plane.h"
 #include "events_common.h"
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NTopic {
+#include <span>
+
+namespace NYdb::inline Dev::NTopic {
 
 //! Partition session.
 struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {
@@ -31,19 +34,44 @@ public:
         return TopicPath;
     }
 
+    //! Read session id.
+    const std::string& GetReadSessionId() const {
+        return ReadSessionId;
+    }
+
     //! Partition id.
     uint64_t GetPartitionId() const {
         return PartitionId;
     }
 
 protected:
+
     uint64_t PartitionSessionId;
     std::string TopicPath;
+    std::string ReadSessionId;
     uint64_t PartitionId;
+    std::optional<TPartitionLocation> Location;
+    /*TDirectReadId*/ std::int64_t NextDirectReadId = 1;
+    std::optional</*TDirectReadId*/ std::int64_t> LastDirectReadId;
 };
 
 template<>
 void TPrintable<TPartitionSession>::DebugString(TStringBuilder& res, bool) const;
+
+struct TPartitionSessionControl: public TPartitionSession {
+    //! Commit offsets range.
+    //! Can be used from TDataReceivedEvent or TDeferredCommit.
+    virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
+
+    //! Confirm partition session creation from TStartPartitionSessionEvent.
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset = std::nullopt) = 0;
+
+    //! Confirm partition session destruction from TStopPartitionSessionEvent.
+    virtual void ConfirmDestroy() = 0;
+
+    //! Confirm partition session end from TEndPartitionSessionEvent.
+    virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
+};
 
 //! Events for read session.
 struct TReadSessionEvent {
@@ -61,17 +89,18 @@ struct TReadSessionEvent {
 
     //! Event with new data.
     //! Contains batch of messages from single partition session.
-    struct TDataReceivedEvent : public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
+    struct TDataReceivedEvent: public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(uint64_t offset,
-                                std::string producerId,
+                                std::string_view producerId,
                                 uint64_t seqNo,
                                 TInstant createTime,
                                 TInstant writeTime,
                                 TWriteSessionMeta::TPtr meta,
                                 TMessageMeta::TPtr messageMeta,
                                 uint64_t uncompressedSize,
-                                std::string messageGroupId);
+                                std::string messageGroupId,
+                                uint64_t logicalMessageCount = 1);
             uint64_t Offset;
             std::string ProducerId;
             uint64_t SeqNo;
@@ -81,20 +110,25 @@ struct TReadSessionEvent {
             TMessageMeta::TPtr MessageMeta;
             uint64_t UncompressedSize;
             std::string MessageGroupId;
+            uint64_t LogicalMessageCount;
         };
 
-        class TMessageBase : public TPrintable<TMessageBase> {
+        class TMessageBase: public TPrintable<TMessageBase> {
         public:
             TMessageBase(const std::string& data, TMessageInformation info);
 
             virtual ~TMessageBase() = default;
 
             virtual const std::string& GetData() const;
+            virtual const std::string& GetBrokenData() const;
 
             virtual void Commit() = 0;
 
             //! Message offset.
             uint64_t GetOffset() const;
+
+            //! Number of logical messages covered by this message.
+            uint64_t GetLogicalMessageCount() const;
 
             //! Producer id.
             const std::string& GetProducerId() const;
@@ -132,6 +166,8 @@ struct TReadSessionEvent {
             //! User data.
             //! Throws decompressor exception if decompression failed.
             const std::string& GetData() const override;
+            //! Throws exception if decompression succeeded.
+            const std::string& GetBrokenData() const override;
 
             //! Commits single message.
             void Commit() override;
@@ -234,7 +270,7 @@ struct TReadSessionEvent {
         //! This means that from now the first available
         //! message offset in current partition
         //! for current consumer is this offset.
-        //! All messages before are committed and futher never be available.
+        //! All messages before are committed and further never be available.
         uint64_t GetCommittedOffset() const {
             return CommittedOffset;
         }
@@ -261,7 +297,7 @@ struct TReadSessionEvent {
         //! Confirm partition session creation.
         //! This signals that user is ready to receive data from this partition session.
         //! If maybe is empty then no rewinding
-        void Confirm(std::optional<uint64_t> readOffset = std::nullopt, std::optional<uint64_t> commitOffset = std::nullopt);
+        void Confirm(std::optional<uint64_t> readOffset = std::nullopt, std::optional<uint64_t> commitOffset = std::nullopt, std::optional<uint64_t> maxOffset = std::nullopt);
 
     private:
         uint64_t CommittedOffset;
@@ -437,4 +473,4 @@ void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool prin
 
 std::string DebugString(const TReadSessionEvent::TEvent& event);
 
-}
+} // namespace NYdb::NTopic

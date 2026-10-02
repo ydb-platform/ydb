@@ -14,5 +14,8 @@ def test_bunch():
 
 def test_bunch_dir():
     b = Bunch(x=5, y=10)
-    assert "x" in dir(b)
     assert "keys" in dir(b)
+    assert "x" in dir(b)
+    assert "z" not in dir(b)
+    b.z = 15
+    assert "z" in dir(b)

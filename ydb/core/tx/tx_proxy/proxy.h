@@ -5,7 +5,7 @@
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -15,6 +15,10 @@
 
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
+
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 
@@ -289,26 +293,29 @@ namespace NTxProxy {
                 return;
             }
 
-            AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit,
-                                                     "TxLimitControls.PerRequestDataSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
-                                                     "TxLimitControls.PerShardIncomingReadSetSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                     "TxLimitControls.DefaultTimeoutMs");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount,
-                                                     "TxLimitControls.MaxShardCount");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount,
-                                                     "TxLimitControls.MaxReadSetCount");
+            auto& icb = *AppData(ctx)->Icb;
+            TControlBoard::RegisterSharedControl(PerRequestDataSizeLimit,
+                                                 icb.TxLimitControls.PerRequestDataSizeLimit);
+            TControlBoard::RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
+                                                 icb.TxLimitControls.PerShardIncomingReadSetSizeLimit);
+            TControlBoard::RegisterSharedControl(DefaultTimeoutMs,
+                                                 icb.TxLimitControls.DefaultTimeoutMs);
+            TControlBoard::RegisterSharedControl(MaxShardCount,
+                                                 icb.TxLimitControls.MaxShardCount);
+            TControlBoard::RegisterSharedControl(MaxReadSetCount,
+                                                 icb.TxLimitControls.MaxReadSetCount);
 
             Registered = true;
         }
     };
 
-    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
+    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon,
+        const TRequestControls& requestControls, TIntrusivePtr<NACLib::TUserContext> userCtx);
     IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
+    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+        const TIntrusivePtr<TTxProxyMon>& mon, TIntrusivePtr<NACLib::TUserContext> userCtx);
 }
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators);

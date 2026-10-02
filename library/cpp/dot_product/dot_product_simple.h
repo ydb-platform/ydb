@@ -1,12 +1,14 @@
 #pragma once
 
+#include "common.h"
+
 #include <util/system/compiler.h>
 #include <util/system/types.h>
 
 #include <numeric>
 
 /**
- * Dot product implementation without SSE optimizations.
+ * Dot product implementation without SIMD optimizations.
  */
 Y_PURE_FUNCTION
 inline ui32 DotProductSimple(const ui8* lhs, const ui8* rhs, size_t length) noexcept {
@@ -33,8 +35,27 @@ Y_PURE_FUNCTION
 float DotProductSimple(const float* lhs, const float* rhs, size_t length) noexcept;
 
 Y_PURE_FUNCTION
+float DotProductSimple(const float* lhs, const i8* rhs, size_t length) noexcept;
+
+Y_PURE_FUNCTION
 double DotProductSimple(const double* lhs, const double* rhs, size_t length) noexcept;
 
 Y_PURE_FUNCTION
 ui32 DotProductUI4Simple(const ui8* lhs, const ui8* rhs, size_t lengtInBytes) noexcept;
 
+Y_PURE_FUNCTION
+TTriWayDotProduct<float> TriWayDotProductSimple(
+    const float* lhs,
+    const float* rhs,
+    size_t length,
+    bool computeRR) noexcept;
+
+TTriWayDotProductFloatI8 TriWayDotProductFloatI8Simple(
+    const float* lhs,
+    const i8* rhs,
+    size_t length) noexcept;
+
+TTriWayDotProduct<i32> TriWayDotProductI8Simple(
+    const i8* lhs,
+    const i8* rhs,
+    size_t length) noexcept;

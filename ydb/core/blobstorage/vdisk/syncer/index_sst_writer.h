@@ -1,0 +1,249 @@
+#pragma once
+
+#include "defs.h"
+#include "blobstorage_syncer_localwriter.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwriteindexsst.h>
+#include <ydb/core/util/stlog.h>
+
+namespace NKikimr {
+
+class TIndexSstWriterActor :
+    public TActor<TIndexSstWriterActor>
+{
+    TVDiskContextPtr VCtx;
+    TPDiskCtxPtr PDiskCtx;
+
+    TActorId SyncerJobActorId;
+
+    TIndexSstWriter<TKeyLogoBlob, TMemRecLogoBlob> LogoBlobWriter;
+    TIndexSstWriter<TKeyBlock, TMemRecBlock> BlockWriter;
+    TIndexSstWriter<TKeyBarrier, TMemRecBarrier> BarrierWriter;
+
+    bool Finished = false;
+
+    enum class EWriterType : ui64 {
+        LOGOBLOBS,
+        BLOCKS,
+        BARRIERS,
+    };
+
+    TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>> MsgQueue;
+
+    ui32 CommitsInFlight = 0;
+    ui32 ReservesInFlight = 0;
+    ui32 WritesInFlight = 0;
+    static const ui32 MaxWritesInFlight = 5; // TODO: config
+
+    void ProcessWrites() {
+        while (!MsgQueue.empty() && WritesInFlight < MaxWritesInFlight) {
+            std::unique_ptr<NPDisk::TEvChunkWrite> msg = std::move(MsgQueue.front());
+            YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Send TEvChunkWrite"),
+                {"marker", "BSFS12"},
+                {"msg", msg->ToString()});
+            MsgQueue.pop();
+
+            Send(PDiskCtx->PDiskId, msg.release()); // vdisk quoter?
+            ++WritesInFlight;
+        }
+
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: ProcessWrites"),
+            {"marker", "BSFS01"},
+            {"writesInFlight", WritesInFlight},
+            {"reservesInFlight", ReservesInFlight});
+
+        if (WritesInFlight == 0 && ReservesInFlight == 0) {
+            if (Finished) {
+                Commit();
+                return;
+            }
+            SendLocalSyncDataResponse();
+        }
+    }
+
+    void SendLocalSyncDataResponse() {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: SendLocalSyncDataResponse"),
+            {"marker", "BSFS02"});
+
+        auto msg = std::make_unique<TEvLocalSyncDataResult>(
+            NKikimrProto::OK,
+            TAppData::TimeProvider->Now(),
+            nullptr,
+            nullptr);
+        Send(SyncerJobActorId, msg.release());
+    }
+
+    void ReserveChunk(EWriterType type) {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Send ReserveChunk"),
+            {"marker", "BSFS03"},
+            {"type", (ui64)type});
+
+        auto msg = std::make_unique<NPDisk::TEvChunkReserve>(
+            PDiskCtx->Dsk->Owner,
+            PDiskCtx->Dsk->OwnerRound,
+            1);
+        Send(PDiskCtx->PDiskId, msg.release(), 0, (ui64)type);
+        ++ReservesInFlight;
+    }
+
+    void Commit() {
+        auto commit = [this]<class TWriter>(TWriter& writer) {
+            auto msg = writer.GenerateCommitMessage(SelfId());
+            if (msg) {
+                YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Send commit"),
+                    {"marker", "BSFS05"});
+
+                Send(writer.GetLevelIndexActorId(), msg.release());
+                ++CommitsInFlight;
+            }
+        };
+
+        commit(LogoBlobWriter);
+        commit(BlockWriter);
+        commit(BarrierWriter);
+
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Commit"),
+            {"marker", "BSFS05"},
+            {"commitsInFlight", CommitsInFlight});
+
+        if (CommitsInFlight == 0) {
+            Finish();
+        }
+    }
+
+    void Finish() {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Finish"),
+            {"marker", "BSFS06"});
+
+        Send(SyncerJobActorId, new TEvFullSyncFinished);
+        PassAway();
+    }
+
+    void Handle(TEvLocalSyncData::TPtr& ev) {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Handle TEvLocalSyncData"),
+            {"marker", "BSFS07"});
+
+        TEvLocalSyncData* msg = ev->Get();
+        if (msg->Extracted.LogoBlobs && !msg->Extracted.LogoBlobs->Empty()) {
+            if (!LogoBlobWriter.Push(msg->Extracted.LogoBlobs->Extract())) {
+                ReserveChunk(EWriterType::LOGOBLOBS);
+            }
+        }
+        if (msg->Extracted.Blocks && !msg->Extracted.Blocks->Empty()) {
+            if (!BlockWriter.Push(msg->Extracted.Blocks->Extract())) {
+                ReserveChunk(EWriterType::BLOCKS);
+            }
+        }
+        if (msg->Extracted.Barriers && !msg->Extracted.Barriers->Empty()) {
+            if (!BarrierWriter.Push(msg->Extracted.Barriers->Extract())) {
+                ReserveChunk(EWriterType::BARRIERS);
+            }
+        }
+
+        ProcessWrites();
+    }
+
+    void Handle(TEvLocalSyncFinished::TPtr& /*ev*/) {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Handle TEvLocalSyncFinished"),
+            {"marker", "BSFS08"});
+
+        LogoBlobWriter.Finish();
+        BlockWriter.Finish();
+        BarrierWriter.Finish();
+
+        Finished = true;
+        ProcessWrites();
+    }
+
+    void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev) {
+        CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
+
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Handle TEvChunkWriteResult"),
+            {"marker", "BSFS09"});
+
+        Y_VERIFY_S(WritesInFlight, VCtx->VDiskLogPrefix);
+        --WritesInFlight;
+        ProcessWrites();
+    }
+
+    void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev) {
+        CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
+
+        Y_VERIFY_S(ReservesInFlight, VCtx->VDiskLogPrefix);
+        --ReservesInFlight;
+
+        auto msg = ev->Get();
+        Y_VERIFY_S(msg->ChunkIds.size() == 1, VCtx->VDiskLogPrefix);
+        auto chunkId = msg->ChunkIds.front();
+        auto type = (EWriterType)ev->Cookie;
+
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Handle TEvChunkReserveResult"),
+            {"marker", "BSFS10"},
+            {"chunkId", chunkId},
+            {"type", (ui64)type});
+
+        switch (type) {
+            case EWriterType::LOGOBLOBS:
+                LogoBlobWriter.OnChunkReserved(chunkId);
+                break;
+            case EWriterType::BLOCKS:
+                BlockWriter.OnChunkReserved(chunkId);
+                break;
+            case EWriterType::BARRIERS:
+                BarrierWriter.OnChunkReserved(chunkId);
+                break;
+        }
+
+        ProcessWrites();
+    }
+
+    void Handle(TEvAddFullSyncSstsResult::TPtr& /*ev*/) {
+        YDB_LOG_DEBUG_COMP(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix, "TIndexSstWriterActor: Handle TEvAddFullSyncSstsResult"),
+            {"marker", "BSFS11"},
+            {"commitsInFlight", CommitsInFlight});
+
+        Y_VERIFY_S(CommitsInFlight, VCtx->VDiskLogPrefix);
+        if (--CommitsInFlight == 0) {
+            Finish();
+        }
+    }
+
+    void HandlePoison(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext &ctx) {
+        Die(ctx);
+    }
+
+    STRICT_STFUNC(MainFunc,
+        hFunc(TEvLocalSyncData, Handle)
+        hFunc(TEvLocalSyncFinished, Handle)
+        hFunc(NPDisk::TEvChunkReserveResult, Handle)
+        hFunc(NPDisk::TEvChunkWriteResult, Handle)
+        hFunc(TEvAddFullSyncSstsResult, Handle)
+        HFunc(TEvents::TEvPoisonPill, HandlePoison)
+    )
+
+    PDISK_TERMINATE_STATE_FUNC_DEF;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::BS_SYNC_SST_WRITER;
+    }
+
+    TIndexSstWriterActor(
+            TVDiskContextPtr vCtx,
+            TPDiskCtxPtr pdiskCtx,
+            TIntrusivePtr<TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>> levelIndexLogoBlob,
+            TIntrusivePtr<TLevelIndex<TKeyBlock, TMemRecBlock>> levelIndexBlock,
+            TIntrusivePtr<TLevelIndex<TKeyBarrier, TMemRecBarrier>> levelIndexBarrier)
+        : TActor(&TThis::MainFunc)
+        , VCtx(std::move(vCtx))
+        , PDiskCtx(std::move(pdiskCtx))
+        , LogoBlobWriter(VCtx, PDiskCtx, levelIndexLogoBlob, MsgQueue)
+        , BlockWriter(VCtx, PDiskCtx, levelIndexBlock, MsgQueue)
+        , BarrierWriter(VCtx, PDiskCtx, levelIndexBarrier, MsgQueue)
+    {}
+
+    void SetSyncerJobActorId(TActorId id) {
+        SyncerJobActorId = id;
+    }
+};
+
+} // NKikimr

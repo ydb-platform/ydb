@@ -2,7 +2,7 @@
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/keys.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
@@ -15,14 +15,14 @@
 namespace NKikimr::NSysView {
 
     template<typename TDerived, typename TEvResponse>
-    class TStorageScanBase : public TScanActorBase<TStorageScanBase<TDerived, TEvResponse>> {
-        using TBase = TScanActorBase<TStorageScanBase<TDerived, TEvResponse>>;
+    class TStorageScanBase : public TScanActorWithoutBackPressure<TStorageScanBase<TDerived, TEvResponse>> {
+        using TBase = TScanActorWithoutBackPressure<TStorageScanBase<TDerived, TEvResponse>>;
 
     public:
-        using TScanActorBase<TStorageScanBase>::TScanActorBase;
+        using TBase::TBase;
 
         STRICT_STFUNC(StateScan,
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, TBase::HandleAck);
             hFunc(TEvResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
@@ -34,21 +34,10 @@ namespace NKikimr::NSysView {
         using TFieldMap = std::unordered_map<NTable::TTag, std::vector<int>>;
 
     private:
-        void ProceedToScan() override {
-            TBase::Become(&TStorageScanBase::StateScan);
-            if (TBase::AckReceived) {
-                StartScan();
-            }
-        }
-
-        void StartScan() {
+        void StartScan() final {
             auto pipeCache = MakePipePerNodeCacheID(false);
             TBase::Send(pipeCache, new TEvPipeCache::TEvForward(static_cast<TDerived&>(*this).CreateQuery(),
                 MakeBSControllerID(), true), IEventHandle::FlagTrackDelivery);
-        }
-
-        void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-            StartScan();
         }
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {

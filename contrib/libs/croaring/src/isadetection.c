@@ -59,12 +59,17 @@ POSSIBILITY OF SUCH DAMAGE.
 #endif  // _MSC_VER == 1938
 #endif  // __clang__
 
+#ifdef __FILC__
+#error #include <stdfil.h>
+#endif
+
 // We need portability.h to be included first, see
 // https://github.com/RoaringBitmap/CRoaring/issues/394
 #include <roaring/portability.h>
 #if CROARING_REGULAR_VISUAL_STUDIO
 #include <intrin.h>
-#elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
+#elif (defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)) || \
+    defined(__FILC__)
 #include <cpuid.h>
 #endif  // CROARING_REGULAR_VISUAL_STUDIO
 #include <roaring/isadetection.h>
@@ -104,7 +109,7 @@ unsigned int CROARING_AVX512_REQUIRED =
      CROARING_AVX512VBMI2 | CROARING_AVX512BITALG | CROARING_AVX512VPOPCNTDQ);
 #endif
 
-#if defined(__x86_64__) || defined(_M_AMD64)  // x64
+#if CROARING_IS_X64  // x64
 
 static inline void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
                          uint32_t *edx) {
@@ -115,7 +120,8 @@ static inline void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
     *ebx = cpu_info[1];
     *ecx = cpu_info[2];
     *edx = cpu_info[3];
-#elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
+#elif (defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)) || \
+    defined(__FILC__)
     uint32_t level = *eax;
     __get_cpuid(level, eax, ebx, ecx, edx);
 #else
@@ -131,6 +137,8 @@ static inline void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
 static inline uint64_t xgetbv(void) {
 #if defined(_MSC_VER)
     return _xgetbv(0);
+#elif defined(__FILC__)
+    return zxgetbv();
 #else
     uint32_t xcr0_lo, xcr0_hi;
     __asm__("xgetbv\n\t" : "=a"(xcr0_lo), "=d"(xcr0_hi) : "c"(0));
@@ -249,7 +257,7 @@ static inline uint32_t dynamic_croaring_detect_supported_architectures(void) {
 
 #endif  // end SIMD extension detection code
 
-#if defined(__x86_64__) || defined(_M_AMD64)  // x64
+#if CROARING_IS_X64  // x64
 
 #if CROARING_ATOMIC_IMPL == CROARING_ATOMIC_IMPL_CPP
 static inline uint32_t croaring_detect_supported_architectures(void) {
@@ -331,7 +339,7 @@ int croaring_hardware_support(void) {
 }
 #endif
 
-#endif  // defined(__x86_64__) || defined(_M_AMD64) // x64
+#endif  // CROARING_IS_X64 // x64
 #ifdef __cplusplus
 }
 }

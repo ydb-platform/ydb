@@ -58,7 +58,7 @@ pkgs: attrs: with pkgs; with attrs; rec {
       "-DARROW_CSV=ON"
       "-DARROW_USE_GLOG=OFF"
       "-DARROW_WITH_BROTLI=ON"
-      "-DARROW_WITH_BACKTRACE=OFF"
+      "-DARROW_WITH_BACKTRACE=ON"
 
       # build only C++ part of the library
       "../cpp"

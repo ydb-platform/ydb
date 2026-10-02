@@ -7,6 +7,7 @@
 #include "opaque_path_description.h"
 #include "replica.h"
 
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -26,14 +27,10 @@
 #include <util/generic/variant.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_REPLICA
+
 namespace NKikimr {
 namespace NSchemeBoard {
-
-#define SBR_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_REPLICA, "" << SelfId() << " " << stream)
-#define SBR_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_REPLICA, "" << SelfId() << " " << stream)
-#define SBR_LOG_I(stream) SB_LOG_I(SCHEME_BOARD_REPLICA, "" << SelfId() << " " << stream)
-#define SBR_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_REPLICA, "" << SelfId() << " " << stream)
-#define SBR_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_REPLICA, "" << SelfId() << " " << stream)
 
 class TReplica: public TMonitorableActor<TReplica> {
     using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult;
@@ -66,6 +63,10 @@ class TReplica: public TMonitorableActor<TReplica> {
     };
 
 public:
+    explicit TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
+        : Info(info)
+    {}
+
     enum ESubscriptionType {
         SUBSCRIPTION_UNSPECIFIED, // for filtration
         SUBSCRIPTION_BY_PATH,
@@ -308,9 +309,10 @@ public:
                 << ": self# " << ToString()
                 << ", other# " << other.ToString());
 
-            SBR_LOG_T("Merge descriptions"
-                << ": self# " << ToLogString()
-                << ", other# " << other.ToLogString());
+            YDB_LOG_TRACE("Merge descriptions",
+                {"selfId", SelfId()},
+                {"self", ToLogString()},
+                {"other", other.ToLogString()});
 
             UntrackMemory();
             other.UntrackMemory();
@@ -433,6 +435,10 @@ public:
             }
 
             notify->Record.SetVersion(GetVersion());
+            Y_ABORT_UNLESS(Owner);
+            if (Owner->Info) {
+                TClusterState(Owner->Info.Get()).ToProto(*notify->Record.MutableClusterState());
+            }
 
             if (!IsEmpty() || IsExplicitlyDeleted() || forceStrong) {
                 notify->Record.SetStrong(true);
@@ -516,38 +522,40 @@ private:
     // register empty entry by path OR pathId
     template <typename TPath>
     TDescription& UpsertDescription(const TPath& path) {
-        SBR_LOG_I("Upsert description"
-            << ": path# " << path);
+        YDB_LOG_INFO("Upsert description",
+            {"selfId", SelfId()},
+            {"path", path});
 
         return Descriptions.Upsert(path, TDescription(this, path));
     }
 
     // register empty entry by path AND pathId both
     TDescription& UpsertDescription(const TString& path, const TPathId& pathId) {
-        SBR_LOG_I("Upsert description"
-            << ": path# " << path
-            << ", pathId# " << pathId);
+        YDB_LOG_INFO("Upsert description",
+            {"selfId", SelfId()},
+            {"path", path},
+            {"pathId", pathId});
 
         return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId));
     }
 
     // upsert description only by pathId
     TDescription& UpsertDescriptionByPathId(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
-        SBR_LOG_I("Upsert description"
-            << ": pathId# " << pathId
-            << ", pathDescription# " << pathDescription.ToString()
-        );
+        YDB_LOG_INFO("Upsert description",
+            {"selfId", SelfId()},
+            {"pathId", pathId},
+            {"pathDescription", pathDescription});
 
         return Descriptions.Upsert(pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
 
     // upsert description by path AND pathId both
     TDescription& UpsertDescription(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
-        SBR_LOG_I("Upsert description"
-            << ": path# " << path
-            << ", pathId# " << pathId
-            << ", pathDescription# " << pathDescription.ToString()
-        );
+        YDB_LOG_INFO("Upsert description",
+            {"selfId", SelfId()},
+            {"path", path},
+            {"pathId", pathId},
+            {"pathDescription", pathDescription});
 
         return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
@@ -570,9 +578,10 @@ private:
 
         auto path = desc->GetPath();
 
-        SBR_LOG_I("Delete description"
-            << ": path# " << path
-            << ", pathId# " << pathId);
+        YDB_LOG_INFO("Delete description",
+            {"selfId", SelfId()},
+            {"path", path},
+            {"pathId", pathId});
 
         if (TDescription* descByPath = Descriptions.FindPtr(path)) {
             if (descByPath != desc && !descByPath->IsEmpty()) {
@@ -582,12 +591,13 @@ private:
                     auto domainId = desc->GetDomainId();
 
                     if (curDomainId == pathId) { // Deletion from GSS
-                        SBR_LOG_N("Delete description by GSS"
-                            << ": path# " << path
-                            << ", pathId# " << pathId
-                            << ", domainId# " << domainId
-                            << ", curPathId# " << curPathId
-                            << ", curDomainId# " << curDomainId);
+                        YDB_LOG_NOTICE("Delete description by GSS",
+                            {"selfId", SelfId()},
+                            {"path", path},
+                            {"pathId", pathId},
+                            {"domainId", domainId},
+                            {"curPathId", curPathId},
+                            {"curDomainId", curDomainId});
 
                         Descriptions.DeleteIndex(path);
                         UpsertDescription(path, pathId);
@@ -639,11 +649,12 @@ private:
         TDescription* desc = Descriptions.FindPtr(path);
         Y_ABORT_UNLESS(desc);
 
-        SBR_LOG_I("Subscribe"
-            << ": subscriber# " << subscriber
-            << ", path# " << path
-            << ", domainOwnerId# " << domainOwnerId
-            << ", capabilities# " << capabilities.ShortDebugString());
+        YDB_LOG_INFO("Subscribe",
+            {"selfId", SelfId()},
+            {"subscriber", subscriber},
+            {"path", path},
+            {"domainOwnerId", domainOwnerId},
+            {"capabilities", capabilities.ShortDebugString()});
 
         desc->Subscribe(subscriber, path, domainOwnerId, capabilities);
 
@@ -657,9 +668,10 @@ private:
         TDescription* desc = Descriptions.FindPtr(path);
         Y_ABORT_UNLESS(desc);
 
-        SBR_LOG_I("Unsubscribe"
-            << ": subscriber# " << subscriber
-            << ", path# " << path);
+        YDB_LOG_INFO("Unsubscribe",
+            {"selfId", SelfId()},
+            {"subscriber", subscriber},
+            {"path", path});
 
         desc->Unsubscribe(subscriber);
         Subscribers.erase(subscriber);
@@ -747,8 +759,10 @@ private:
     }
 
     void Handle(NInternalEvents::TEvHandshakeRequest::TPtr& ev) {
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         const auto& record = ev->Get()->Record;
         const ui64 owner = record.GetOwner();
@@ -756,17 +770,19 @@ private:
 
         TPopulatorInfo& info = Populators[owner];
         if (generation < info.PendingGeneration) {
-            SBR_LOG_E("Reject handshake from stale populator"
-                << ": sender# " << ev->Sender
-                << ", owner# " << owner
-                << ", generation# " << generation
-                << ", pending generation# " << info.PendingGeneration);
+            YDB_LOG_ERROR("Reject handshake from stale populator",
+                {"selfId", SelfId()},
+                {"sender", ev->Sender},
+                {"owner", owner},
+                {"generation", generation},
+                {"pendingGeneration", info.PendingGeneration});
             return;
         }
 
-        SBR_LOG_N("Successful handshake"
-            << ": owner# " << owner
-            << ", generation# " << generation);
+        YDB_LOG_NOTICE("Successful handshake",
+            {"selfId", SelfId()},
+            {"owner", owner},
+            {"generation", generation});
 
         info.PendingGeneration = generation;
         info.PopulatorActor = ev->Sender;
@@ -775,11 +791,12 @@ private:
     }
 
     void Handle(NInternalEvents::TEvUpdate::TPtr& ev) {
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie
-            << ", event size# " << ev->Get()->GetCachedByteSize()
-        );
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"size", ev->Get()->GetCachedByteSize()});
 
         const TString& path = ev->Get()->GetPath();
         const TPathId& pathId = ev->Get()->GetPathId();
@@ -791,18 +808,20 @@ private:
 
             const auto populatorIt = Populators.find(owner);
             if (populatorIt == Populators.end()) {
-                SBR_LOG_E("Reject update from unknown populator"
-                    << ": sender# " << ev->Sender
-                    << ", owner# " << owner
-                    << ", generation# " << generation);
+                YDB_LOG_ERROR("Reject update from unknown populator",
+                    {"selfId", SelfId()},
+                    {"sender", ev->Sender},
+                    {"owner", owner},
+                    {"generation", generation});
                 return;
             }
             if (generation != populatorIt->second.PendingGeneration) {
-                SBR_LOG_E("Reject update from stale populator"
-                    << ": sender# " << ev->Sender
-                    << ", owner# " << owner
-                    << ", generation# " << generation
-                    << ", pending generation# " << populatorIt->second.PendingGeneration);
+                YDB_LOG_ERROR("Reject update from stale populator",
+                    {"selfId", SelfId()},
+                    {"sender", ev->Sender},
+                    {"owner", owner},
+                    {"generation", generation},
+                    {"pendingGeneration", populatorIt->second.PendingGeneration});
                 return;
             }
 
@@ -816,10 +835,11 @@ private:
                 return AckUpdate(ev);
             }
 
-            SBR_LOG_N("Update description"
-                << ": path# " << path
-                << ", pathId# " << pathId
-                << ", deletion# " << (record.GetIsDeletion() ? "true" : "false"));
+            YDB_LOG_NOTICE("Update description",
+                {"selfId", SelfId()},
+                {"path", path},
+                {"pathId", pathId},
+                {"deletion", (record.GetIsDeletion() ? "true" : "false")});
 
             if (record.GetIsDeletion()) {
                 SoftDeleteDescription(pathId, true);
@@ -829,9 +849,10 @@ private:
 
         if (TDescription* desc = Descriptions.FindPtr(pathId)) {
             if (desc->IsExplicitlyDeleted()) {
-                SBR_LOG_N("Path was explicitly deleted, ignoring"
-                    << ": path# " << path
-                    << ", pathId# " << pathId);
+                YDB_LOG_NOTICE("Path was explicitly deleted, ignoring",
+                    {"selfId", SelfId()},
+                    {"path", path},
+                    {"pathId", pathId});
 
                 return AckUpdate(ev);
             }
@@ -876,12 +897,13 @@ private:
         const auto& domainId = pathDescription.SubdomainPathId;
 
         auto log = [&](const TString& message) {
-            SBR_LOG_N("" << message
-                << ": path# " << path
-                << ", pathId# " << pathId
-                << ", domainId# " << domainId
-                << ", curPathId# " << curPathId
-                << ", curDomainId# " << curDomainId);
+            YDB_LOG_NOTICE(message,
+                {"selfId", SelfId()},
+                {"path", path},
+                {"pathId", pathId},
+                {"domainId", domainId},
+                {"curPathId", curPathId},
+                {"curDomainId", curDomainId});
         };
 
         if (curPathId == domainId) { // Update from TSS, GSS->TSS
@@ -926,7 +948,7 @@ private:
             }
 
             if (curPathId < pathId) {
-                log("Update description by newest path form tenant schemeshard");
+                log("Update description by newest path from tenant schemeshard");
                 SoftDeleteDescription(desc->GetPathId());
                 Descriptions.DeleteIndex(path);
                 RelinkSubscribers(desc, path);
@@ -934,7 +956,7 @@ private:
 
             UpsertDescription(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
-        } else if (curDomainId < domainId) {
+        } else if (PathIdLessThan(curDomainId, domainId)) {
             log("Update description by newest path with newer domainId");
             Descriptions.DeleteIndex(path);
             RelinkSubscribers(desc, path);
@@ -954,8 +976,10 @@ private:
     }
 
     void Handle(NInternalEvents::TEvCommitRequest::TPtr& ev) {
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         const auto& record = ev->Get()->Record;
         const ui64 owner = record.GetOwner();
@@ -963,26 +987,29 @@ private:
 
         auto it = Populators.find(owner);
         if (it == Populators.end()) {
-            SBR_LOG_E("Reject commit from unknown populator"
-                << ": sender# " << ev->Sender
-                << ", owner# " << owner
-                << ", generation# " << generation);
+            YDB_LOG_ERROR("Reject commit from unknown populator",
+                {"selfId", SelfId()},
+                {"sender", ev->Sender},
+                {"owner", owner},
+                {"generation", generation});
             return;
         }
 
         TPopulatorInfo& info = it->second;
         if (generation != info.PendingGeneration) {
-            SBR_LOG_E("Reject commit from stale populator"
-                << ": sender# " << ev->Sender
-                << ", owner# " << owner
-                << ", generation# " << generation
-                << ", pending generation# " << info.PendingGeneration);
+            YDB_LOG_ERROR("Reject commit from stale populator",
+                {"selfId", SelfId()},
+                {"sender", ev->Sender},
+                {"owner", owner},
+                {"generation", generation},
+                {"pendingGeneration", info.PendingGeneration});
             return;
         }
 
-        SBR_LOG_N("Commit generation"
-            << ": owner# " << owner
-            << ", generation# " << generation);
+        YDB_LOG_NOTICE("Commit generation",
+            {"selfId", SelfId()},
+            {"owner", owner},
+            {"generation", generation});
 
         info.Generation = info.PendingGeneration;
         info.IsCommited = true;
@@ -994,19 +1021,23 @@ private:
     }
 
     void Handle(TEvPrivate::TEvSendStrongNotifications::TPtr& ev) {
-        SBR_LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()});
 
         const auto owner = ev->Get()->Owner;
         if (!IsPopulatorCommited(owner)) {
-            SBR_LOG_N("Populator is not commited"
-                << ": owner# " << owner);
+            YDB_LOG_NOTICE("Populator is not commited",
+                {"selfId", SelfId()},
+                {"owner", owner});
             return;
         }
 
         auto itSubscribers = WaitStrongNotifications.find(owner);
         if (itSubscribers == WaitStrongNotifications.end()) {
-            SBR_LOG_E("Invalid owner"
-                << ": owner# " << owner);
+            YDB_LOG_ERROR("Invalid owner",
+                {"selfId", SelfId()},
+                {"owner", owner});
             return;
         }
 
@@ -1057,8 +1088,10 @@ private:
         const ui64 domainOwnerId = record.GetDomainOwnerId();
         const auto& capabilities = record.GetCapabilities();
 
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         if (record.HasPath()) {
             SubscribeBy(ev->Sender, record.GetPath(), domainOwnerId, capabilities);
@@ -1071,8 +1104,10 @@ private:
     void Handle(NInternalEvents::TEvUnsubscribe::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         if (record.HasPath()) {
             UnsubscribeBy(ev->Sender, record.GetPath());
@@ -1085,8 +1120,10 @@ private:
     void Handle(NInternalEvents::TEvNotifyAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         auto it = Subscribers.find(ev->Sender);
         if (it == Subscribers.end()) {
@@ -1116,16 +1153,18 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
         }
     }
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         auto it = Subscribers.find(ev->Sender);
         if (it == Subscribers.end()) {
@@ -1138,7 +1177,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, TClusterState(Info.Get())), 0, ev->Cookie);
             return;
         }
 
@@ -1160,7 +1199,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
@@ -1227,11 +1266,23 @@ private:
         Send(ev->Sender, new TSchemeBoardMonEvents::TEvDescribeResponse(json), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr ev) {
+        YDB_LOG_INFO("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()});
+
+        Info = ev->Get()->SchemeBoardConfig;
+        Y_ABORT_UNLESS(!ev->Get()->GroupConfig);
+        Y_ABORT_UNLESS(!ev->Get()->BoardConfig);
+    }
+
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 nodeId = ev->Get()->NodeId;
 
-        SBR_LOG_D("Handle " << ev->Get()->ToString()
-            << ": nodeId# " << nodeId);
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"nodeId", nodeId});
 
         auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0));
         while (it != Subscribers.end() && it->first.NodeId() == nodeId) {
@@ -1250,6 +1301,8 @@ private:
     }
 
     void PassAway() override {
+        YDB_LOG_TRACE("PassAway",
+            {"selfId", SelfId()});
         for (const auto& [_, info] : Populators) {
             if (const auto& actorId = info.PopulatorActor) {
                 Send(actorId, new TEvStateStorage::TEvReplicaShutdown());
@@ -1269,6 +1322,8 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_TRACE("Bootstrap",
+            {"selfId", SelfId()});
         TMonitorableActor::Bootstrap();
         auto localNodeId = SelfId().NodeId();
         auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
@@ -1290,6 +1345,8 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
 
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
+
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
@@ -1300,13 +1357,14 @@ private:
     TDoubleIndexedMap<TString, TPathId, TDescription, TMerger, THashMap, TMap> Descriptions;
     TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers;
     THashMap<ui64, TSet<TActorId>> WaitStrongNotifications;
+    TIntrusivePtr<TStateStorageInfo> Info;
 
 }; // TReplica
 
 } // NSchemeBoard
 
-IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32) {
-    return new NSchemeBoard::TReplica();
+IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>& info, ui32) {
+    return new NSchemeBoard::TReplica(info);
 }
 
 } // NKikimr

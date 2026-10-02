@@ -141,7 +141,6 @@ namespace NPrivate {
 
     void TTestEnv::ReInitialize() {
         IsRunningFromTest = false;
-        ArcadiaTestsDataDir = "";
         SourceRoot = "";
         BuildRoot = "";
         WorkPath = "";
@@ -169,11 +168,6 @@ namespace NPrivate {
             value = context.GetValueByPath("runtime.build_root");
             if (value) {
                 BuildRoot = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.atd_root");
-            if (value) {
-                ArcadiaTestsDataDir = value->GetStringSafe("");
             }
 
             value = context.GetValueByPath("runtime.work_path");
@@ -230,7 +224,12 @@ namespace NPrivate {
                     while (file.ReadLine(ljson) > 0) {
                         NJson::ReadJsonTree(ljson, &envVar);
                         for (const auto& entry : envVar.GetMap()) {
-                            SetEnv(entry.first, entry.second.GetStringSafe(""));
+                            auto value = entry.second;
+                            if (value.GetType() == NJson::JSON_NULL) {
+                                UnsetEnv(entry.first);
+                            } else {
+                                SetEnv(entry.first, value.GetStringSafe(""));
+                            }
                         }
                     }
                 }
@@ -247,10 +246,6 @@ namespace NPrivate {
 
         if (!BuildRoot) {
             BuildRoot = GetEnv("ARCADIA_BUILD_ROOT");
-        }
-
-        if (!ArcadiaTestsDataDir) {
-            ArcadiaTestsDataDir = GetEnv("ARCADIA_TESTS_DATA_DIR");
         }
 
         if (!WorkPath) {

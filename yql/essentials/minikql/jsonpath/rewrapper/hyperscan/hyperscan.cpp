@@ -4,42 +4,43 @@
 #include <library/cpp/regex/hyperscan/hyperscan.h>
 #include <util/charset/utf8.h>
 
-namespace NReWrapper {
-namespace NHyperscan {
+namespace NReWrapper::NHyperscan {
 
 namespace {
 
-class THyperscan : public IRe {
+class THyperscan: public IRe {
 public:
-    THyperscan(::NHyperscan::TDatabase&& db)
-        : Database(std::move(db))
-    { }
+    explicit THyperscan(::NHyperscan::TDatabase&& db)
+        : Database_(std::move(db))
+    {
+    }
 
     bool Matches(const TStringBuf& text) const override {
-        if (!Scratch) {
-            Scratch = ::NHyperscan::MakeScratch(Database);
+        if (!Scratch_) {
+            Scratch_ = ::NHyperscan::MakeScratch(Database_);
         }
-        return ::NHyperscan::Matches(Database, Scratch, text);
+        return ::NHyperscan::Matches(Database_, Scratch_, text);
     }
 
     TString Serialize() const override {
         // Compatibility with old versions
-        return ::NHyperscan::Serialize(Database);
-/*
- *       TSerialization proto;
- *       proto.SetHyperscan(::NHyperscan::Serialize(Database));
- *       TString data;
- *       auto res = proto.SerializeToString(&data);
- *       Y_ABORT_UNLESS(res);
- *       return data;
- */
+        return ::NHyperscan::Serialize(Database_);
+        /*
+         *       TSerialization proto;
+         *       proto.SetHyperscan(::NHyperscan::Serialize(Database));
+         *       TString data;
+         *       auto res = proto.SerializeToString(&data);
+         *       Y_ABORT_UNLESS(res);
+         *       return data;
+         */
     }
+
 private:
-    ::NHyperscan::TDatabase Database;
-    mutable ::NHyperscan::TScratch Scratch;
+    ::NHyperscan::TDatabase Database_;
+    mutable ::NHyperscan::TScratch Scratch_;
 };
 
-}
+} // namespace
 
 IRePtr Compile(const TStringBuf& regex, unsigned int flags) {
     unsigned int hyperscanFlags = 0;
@@ -65,5 +66,4 @@ IRePtr Deserialize(const TSerialization& proto) {
 
 REGISTER_RE_LIB(TSerialization::kHyperscan, Compile, Deserialize)
 
-}
-}
+} // namespace NReWrapper::NHyperscan

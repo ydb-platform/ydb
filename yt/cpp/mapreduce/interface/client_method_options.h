@@ -20,24 +20,25 @@ namespace NYT {
 /// Type of the cypress node.
 enum ENodeType : int
 {
-    NT_STRING               /* "string_node" */,
-    NT_INT64                /* "int64_node" */,
-    NT_UINT64               /* "uint64_node" */,
-    NT_DOUBLE               /* "double_node" */,
-    NT_BOOLEAN              /* "boolean_node" */,
-    NT_MAP                  /* "map_node" */,
-    NT_LIST                 /* "list_node" */,
-    NT_FILE                 /* "file" */,
-    NT_TABLE                /* "table" */,
-    NT_DOCUMENT             /* "document" */,
-    NT_REPLICATED_TABLE     /* "replicated_table" */,
-    NT_TABLE_REPLICA        /* "table_replica" */,
-    NT_USER                 /* "user" */,
-    NT_SCHEDULER_POOL       /* "scheduler_pool" */,
-    NT_LINK                 /* "link" */,
-    NT_GROUP                /* "group" */,
-    NT_PORTAL               /* "portal_entrance" */,
-    NT_CHAOS_TABLE_REPLICA  /* "chaos_table_replica" */,
+    NT_STRING              =  0  /* "string_node" */,
+    NT_INT64               =  1  /* "int64_node" */,
+    NT_UINT64              =  2  /* "uint64_node" */,
+    NT_DOUBLE              =  3  /* "double_node" */,
+    NT_BOOLEAN             =  4  /* "boolean_node" */,
+    NT_MAP                 =  5  /* "map_node" */,
+    NT_LIST                =  6  /* DEPRECATED */,
+    NT_FILE                =  7  /* "file" */,
+    NT_TABLE               =  8  /* "table" */,
+    NT_DOCUMENT            =  9  /* "document" */,
+    NT_REPLICATED_TABLE    = 10  /* "replicated_table" */,
+    NT_TABLE_REPLICA       = 11  /* "table_replica" */,
+    NT_USER                = 12  /* "user" */,
+    NT_SCHEDULER_POOL      = 13  /* "scheduler_pool" */,
+    NT_LINK                = 14  /* "link" */,
+    NT_GROUP               = 15  /* "group" */,
+    NT_PORTAL              = 16  /* "portal_entrance" */,
+    NT_CHAOS_TABLE_REPLICA = 17  /* "chaos_table_replica" */,
+    NT_TABLE_COLLOCATION   = 18  /* "table_collocation" */,
 };
 
 ///
@@ -50,11 +51,78 @@ enum class EComplexTypeMode : int
     Positional /* "positional" */,
 };
 
+/// Base class for options dealing with access tracking suppression.
+template <typename TDerived>
+struct TSuppressableAccessTrackingOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Whether to disable update of access_time on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressAccessTracking, false);
+
+    /// @brief Whether to disable update of modification on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressModificationTracking, false);
+};
+
+///
+/// @brief Expected revision of a Cypress node, used as a precondition.
+///
+/// The command fails if the node at @ref Path has a revision different from @ref Revision.
+struct TPrerequisiteRevision
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TPrerequisiteRevision;
+    /// @endcond
+
+    /// @brief Cypress node's path.
+    FLUENT_FIELD_OPTION(TYPath, Path);
+
+    /// @brief Expected revision.
+    FLUENT_FIELD_OPTION(ui64, Revision);
+};
+
+/// Base class for options dealing with prerequisite transactions.
+template <typename TDerived>
+struct TPrerequisiteTransactionsOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Transactions that must be alive.
+    FLUENT_VECTOR_FIELD(TTransactionId, PrerequisiteTransactionId);
+};
+
+/// Base class for options dealing with prerequisite revisions.
+template <typename TDerived>
+struct TPrerequisiteRevisionsOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Cypress nodes whose current revisions must match the expected ones.
+    FLUENT_VECTOR_FIELD(TPrerequisiteRevision, PrerequisiteRevision);
+};
+
+///
+/// @brief Server-side preconditions checked before the request is processed.
+///
+/// If any of the listed prerequisites is not satisfied, the command fails.
+template <typename TDerived>
+struct TPrerequisiteOptions
+    : public TPrerequisiteRevisionsOptions<TDerived>
+    , public TPrerequisiteTransactionsOptions<TDerived>
+{ };
+
 ///
 /// @brief Options for @ref NYT::ICypressClient::Create
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#create
 struct TCreateOptions
+    : public TPrerequisiteOptions<TCreateOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TCreateOptions;
@@ -71,6 +139,12 @@ struct TCreateOptions
     FLUENT_FIELD_DEFAULT(bool, IgnoreExisting, false);
 
     ///
+    /// @brief Ignore type mismatch with existing node.
+    ///
+    /// Only valid when IgnoreExisting=true.
+    FLUENT_FIELD_DEFAULT(bool, IgnoreTypeMismatch, false);
+
+    ///
     /// @brief Recreate node if it exists.
     ///
     /// Force and IgnoreExisting MUST NOT be used simultaneously.
@@ -85,6 +159,7 @@ struct TCreateOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#remove
 struct TRemoveOptions
+    : public TPrerequisiteOptions<TRemoveOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TRemoveOptions;
@@ -118,8 +193,9 @@ struct TMasterReadOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
 struct TExistsOptions
     : public TMasterReadOptions<TExistsOptions>
-{
-};
+    , public TSuppressableAccessTrackingOptions<TExistsOptions>
+    , public TPrerequisiteOptions<TExistsOptions>
+{ };
 
 ///
 /// @brief Options for @ref NYT::ICypressClient::Get
@@ -127,6 +203,8 @@ struct TExistsOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#get
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
+    , public TSuppressableAccessTrackingOptions<TGetOptions>
+    , public TPrerequisiteOptions<TGetOptions>
 {
     /// @brief Attributes that should be fetched with each node.
     FLUENT_FIELD_OPTION(TAttributeFilter, AttributeFilter);
@@ -140,6 +218,8 @@ struct TGetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#set
 struct TSetOptions
+    : public TSuppressableAccessTrackingOptions<TSetOptions>
+    , public TPrerequisiteOptions<TSetOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSetOptions;
@@ -157,6 +237,8 @@ struct TSetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
+    : public TSuppressableAccessTrackingOptions<TMultisetAttributesOptions>
+    , public TPrerequisiteOptions<TMultisetAttributesOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMultisetAttributesOptions;
@@ -171,6 +253,8 @@ struct TMultisetAttributesOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list
 struct TListOptions
     : public TMasterReadOptions<TListOptions>
+    , public TSuppressableAccessTrackingOptions<TListOptions>
+    , public TPrerequisiteOptions<TListOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TListOptions;
@@ -188,6 +272,7 @@ struct TListOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#copy
 struct TCopyOptions
+    : public TPrerequisiteOptions<TCopyOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TCopyOptions;
@@ -211,6 +296,7 @@ struct TCopyOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#move
 struct TMoveOptions
+    : public TPrerequisiteOptions<TMoveOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMoveOptions;
@@ -234,6 +320,7 @@ struct TMoveOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#link
 struct TLinkOptions
+    : public TPrerequisiteOptions<TLinkOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TLinkOptions;
@@ -277,6 +364,7 @@ struct TConcatenateOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#read_blob_table
 struct TBlobTableReaderOptions
+    : public TSuppressableAccessTrackingOptions<TBlobTableReaderOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TBlobTableReaderOptions;
@@ -477,6 +565,7 @@ struct TIOOptions
 /// @brief Options for reading file from YT.
 struct TFileReaderOptions
     : public TIOOptions<TFileReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TFileReaderOptions>
 {
     ///
     /// @brief Offset to start reading from.
@@ -489,6 +578,17 @@ struct TFileReaderOptions
     ///
     /// By default file is read until the end.
     FLUENT_FIELD_OPTION(i64, Length);
+};
+
+/// Options for @ref NYT::IClient::CreateFilePartitionReader
+struct TFilePartitionReaderOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TFilePartitionReaderOptions;
+    /// @endcond
+
+    /// @brief Advanced options for reader, see @ref NYT::TIOOptions::Config
+    FLUENT_FIELD_OPTION(TNode, Config);
 };
 
 /// @brief Options that control how server side of YT stores data.
@@ -568,6 +668,13 @@ struct TFileWriterOptions
     /// @see NYT::TWriterOptions
     FLUENT_FIELD_OPTION(TWriterOptions, WriterOptions);
 };
+
+///
+/// @brief Options for writing file fragment in distributed session.
+///
+/// @see NYT::IIOClient::CreateFileFragmentWriter
+struct TFileFragmentWriterOptions
+{ };
 
 class TSkiffRowHints
 {
@@ -670,12 +777,38 @@ public:
 /// Options for @ref NYT::IClient::CreateTableReader
 struct TTableReaderOptions
     : public TIOOptions<TTableReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TTableReaderOptions>
 {
     /// @deprecated Size of internal client buffer.
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
 
     ///
-    /// @brief Allows to fine tune format that is used for reading tables.
+    /// @brief Allows fine-tuning of the format used for reading tables.
+    ///
+    /// Has no effect when used with raw-reader.
+    FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
+
+    ///
+    /// @brief Allows to tune which attributes are added to rows while reading tables.
+    ///
+    FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+
+    ///
+    /// @brief Allows to skip rows that the user does not have access to.
+    ///
+    FLUENT_FIELD_DEFAULT(bool, OmitInaccessibleRows, false);
+};
+
+/// Options for @ref NYT::IClient::CreatePartitionTableReader
+struct TTablePartitionReaderOptions
+    : public TSuppressableAccessTrackingOptions<TTablePartitionReaderOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TTablePartitionReaderOptions;
+    /// @endcond
+
+    ///
+    /// @brief Allows fine-tuning of the format used for reading tables.
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
@@ -738,10 +871,18 @@ struct TTableWriterOptions
 };
 
 ///
+/// @brief Options for writing table fragment in distributed session.
+///
+/// @see NYT::IIOClient::CreateTableFragmentWriter
+struct TTableFragmentWriterOptions
+{ };
+
+///
 /// @brief Options for @ref NYT::IClient::StartTransaction
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#start_tx
 struct TStartTransactionOptions
+    : public TPrerequisiteTransactionsOptions<TStartTransactionOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TStartTransactionOptions;
@@ -833,6 +974,7 @@ enum ELockMode : int
 /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks
 /// @see NYT::ITransaction::Lock
 struct TLockOptions
+    : public TPrerequisiteOptions<TLockOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TLockOptions;
@@ -871,9 +1013,22 @@ struct TLockOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks_compatibility
 struct TUnlockOptions
+    : public TPrerequisiteOptions<TUnlockOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TUnlockOptions;
+    /// @endcond
+};
+
+///
+/// @brief Options for @ref NYT::ITransaction::Commit
+///
+/// @see https://ytsaurus.tech/docs/api/commands#commit_tx
+struct TCommitTransactionOptions
+    : public TPrerequisiteOptions<TCommitTransactionOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TCommitTransactionOptions;
     /// @endcond
 };
 
@@ -1005,7 +1160,7 @@ struct TLookupRowsOptions
     FLUENT_FIELD_DEFAULT(bool, KeepMissingRows, false);
 
     /// If set to true returned values will have "timestamp" attribute.
-    FLUENT_FIELD_OPTION(bool, Versioned);
+    FLUENT_FIELD_DEFAULT(bool, Versioned, false);
 };
 
 ///
@@ -1013,6 +1168,7 @@ struct TLookupRowsOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands#select_rows
 struct TSelectRowsOptions
+    : public TSuppressableAccessTrackingOptions<TSelectRowsOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSelectRowsOptions;
@@ -1118,6 +1274,10 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Job proxy unix domain socket used for connection.
+    /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
+    FLUENT_FIELD_OPTION(TString, JobProxySocketPath);
 };
 
 ///
@@ -1183,6 +1343,24 @@ enum class ETableReplicaMode
     Async   /* "async" */,
 };
 
+///
+/// @brief Row lock type used by modify-rows commands.
+///
+/// Controls the lock acquired on each touched row at the dynamic table tablet level.
+/// Mirrors a subset of NYT::NTableClient::ELockType.
+///
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables#conflicts
+enum class ELockType
+{
+    /// Exclusive write lock on the row (default for modify-rows commands).
+    Exclusive   /* "exclusive" */,
+
+    /// Shared-write lock. Multiple concurrent shared-write writers to the same
+    /// aggregate column coexist without conflict; their aggregate values fold
+    /// commutatively. Conflicts with Exclusive.
+    SharedWrite /* "shared_write" */,
+};
+
 /// Base class for options dealing with io to dynamic tables.
 template <typename TDerived>
 struct TTabletTransactionOptions
@@ -1243,6 +1421,13 @@ struct TInsertRowsOptions
     /// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#write
     /// Default value is 'false'. So insertion into table without sync replicas fails.
     FLUENT_FIELD_OPTION(bool, RequireSyncReplica);
+
+    ///
+    /// @brief Row lock mode acquired on each modified row.
+    ///
+    /// Defaults to NYT::ELockType::Exclusive (server-side default). Set to
+    /// NYT::ELockType::SharedWrite for concurrent aggregate-column writers.
+    FLUENT_FIELD_OPTION(ELockType, LockType);
 };
 
 ///
@@ -1350,6 +1535,9 @@ enum class EPermission : int
 
     /// Applies to: operations.
     Manage       /* "manage" */,
+
+    /// Applies to: tables.
+    FullRead     /* "full_read" */,
 };
 
 /// Whether permission is granted or denied.
@@ -1467,6 +1655,35 @@ struct TGetTablePartitionsOptions
     ///
     /// |True| by default.
     FLUENT_FIELD_DEFAULT(bool, AdjustDataWeightPerPartition, true);
+
+    ///
+    /// @brief Enable partition cookies in response.
+    ///
+    /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
+
+    ///
+    /// @brief Enable partition node descriptors serialization in cookie.
+    ///
+    /// Increases cookie size but likely reduces read latency in @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, FetchCookieNodeDescriptors, false);
+};
+
+///
+/// @brief Options for @ref NYT::IClient::GetFilePartitions
+///
+struct TGetFilePartitionsOptions
+    : public TSuppressableAccessTrackingOptions<TGetFilePartitionsOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetFilePartitionsOptions;
+    /// @endcond
+
+    ///
+    /// @brief Enable partition node descriptors serialization in cookie.
+    ///
+    /// Increases cookie size but likely reduces read latency in @ref NYT::IClientBase::CreateFilePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, FetchCookieNodeDescriptors, true);
 };
 
 ///
@@ -1501,6 +1718,26 @@ struct TSkyShareTableOptions
 
     /// @brief Custom pool.
     FLUENT_FIELD_OPTION(TString, Pool);
+};
+
+///
+/// @brief Options for @ref NYT::IClient::CheckClusterLiveness
+///
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#check_cluster_liveness
+struct TCheckClusterLivenessOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TCheckClusterLivenessOptions;
+    /// @endcond
+
+    /// Check primary master.
+    FLUENT_FIELD_DEFAULT(bool, CheckCypressRoot, true);
+
+    /// Check secondary master.
+    FLUENT_FIELD_DEFAULT(bool, CheckSecondaryMasterCells, true);
+
+    /// Check the given tablet cell bundle's health.
+    FLUENT_FIELD_OPTION(TString, CheckTabletCellBundle);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

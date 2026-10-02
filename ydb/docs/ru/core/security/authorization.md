@@ -6,8 +6,8 @@
 
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
-* [Право доступа](../concepts/glossary.md#access-right)
-* [Список доступов](../concepts/glossary.md#access-acl)
+* [Права доступа](../concepts/glossary.md#access-right)
+* [Список доступов](../concepts/glossary.md#access-control-list)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
 * [Группа](../concepts/glossary.md#access-group)
@@ -18,7 +18,12 @@
 
 ## Пользователь {#user}
 
-Для создания, изменения и удаления пользователей {{ ydb-short-name }} есть команды:
+Пользователи в {{ ydb-short-name }} могут создаваться в разных источниках:
+
+- локальные пользователи в базах данных {{ ydb-short-name }};
+- внешние пользователи из сторонних служб доступа к каталогам.
+
+Для создания, изменения и удаления [локальных пользователей](../concepts/glossary.md#access-user) {{ ydb-short-name }} есть команды:
 
 * [{#T}](../yql/reference/syntax/create-user.md)
 * [{#T}](../yql/reference/syntax/alter-user.md)
@@ -32,17 +37,19 @@
 
 Подробнее про первоначальное развертывание:
 
-* [Ansible](../devops/ansible/initial-deployment.md)
-* [Kubernetes](../devops/kubernetes/initial-deployment.md)
-* [Вручную](../devops/manual/initial-deployment.md)
+* [Ansible](../devops/deployment-options/ansible/initial-deployment/index.md)
+* [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
+* [Вручную](../devops/deployment-options/manual/initial-deployment/index.md)
 * [{#T}](./builtin-security.md)
 
 {% endnote %}
 
+### SID {#sid}
+
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются [SID](../concepts/glossary.md#access-sid) с использованием суффикса.
 
-Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) имена пользователей будут `user1@ldap` и `user2@ldap`.<br/>
-Если имя пользователя указано без суффикса, то имеется в виду локальный пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
+Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) SID'ы пользователей будут `user1@ldap` и `user2@ldap`.<br/>
+У локальных пользователей пустой auth-domain. Если SID пользователя не содержит суффикса, то имеется в виду локальный пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
 
 ## Группа {#group}
 
@@ -63,11 +70,11 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Право {#right}
+## Права доступа {#right}
 
-[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 
-У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
+У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 
 По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
 
@@ -108,3 +115,37 @@
 Сменить владельца можно с помощью CLI команды [`chown`](../reference/ydb-cli/commands/scheme-permissions.md#chown).
 
 Просматривать владельца объекта можно с помощью CLI команды [`describe`](../reference/ydb-cli/commands/scheme-describe.md).
+
+## Списки уровней доступа {#access-level-lists}
+
+В дополнение к [спискам прав](../concepts/glossary.md#access-control-list), управляющим доступом к конкретным [схемным объектам](../concepts/glossary.md#scheme-object), {{ ydb-short-name }} использует [списки уровней доступа](../concepts/glossary.md#access-level-list) для определения иерархических уровней доступа к общекластерным операциям.
+
+Для операций, в которых одновременно проверяются [списки прав](../concepts/glossary.md#access-control-list) и [списки уровней доступа](../concepts/glossary.md#access-level-list), оба механизма применяются совместно: действие доступно только если обе проверки его разрешают, и недоступно, если хотя бы одна проверка не пройдена. Для остальных операций применяется только соответствующий механизм проверки.
+
+### Иерархия уровней доступа
+
+Списки уровней доступа образуют иерархию, которая используется в [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer и во многих других общекластерных действиях (порядок от меньших привилегий к большим):
+
+- `database_allowed_sids` (`Database`) - доступ к операциям в контексте конкретной базы;
+- `viewer_allowed_sids` (`Viewer`) - доступ к просмотру общекластерного состояния;
+- `monitoring_allowed_sids` (`Monitoring`) - доступ к операционным действиям в {{ ydb-ui-name }};
+- `administration_allowed_sids` (`Administration`) - административные действия с кластером и базами.
+
+Более высокий уровень автоматически включает все более низкие, поэтому субъекту достаточно присутствовать только в одном списке. Например, наличие в `administration_allowed_sids` автоматически даёт привилегии `monitoring`, `viewer` и `database`.
+Подробности по каждому уровню — в разделе [Описание уровней доступа](#access-level-descriptions).
+
+Дополнительно существуют два отдельных списка уровней доступа для специфических операций:
+
+- `bootstrap_allowed_sids` — разрешает операции начальной инициализации кластера;
+- `register_dynamic_node_allowed_sids` — разрешает регистрацию узлов в кластере.
+
+### Описание уровней доступа {#access-level-descriptions}
+
+Списки уровней доступа настраиваются в [конфигурации безопасности](../reference/configuration/security_config.md#security-access-levels) и определяют привилегии для:
+
+- **Database** (наличие в `database_allowed_sids`) — доступ только в контексте конкретной базы данных. Можно открыть {{ ydb-ui-name }} и работать с данными этой базы, но нельзя выполнять общекластерные запросы (например, просматривать список узлов кластера). Запросы без указания базы запрещены.
+- **Viewer** (наличие в `viewer_allowed_sids`) — доступ только на чтение для общекластерного состояния: можно просматривать страницы [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) и диагностическую информацию, но нельзя запускать действия, изменяющие состояние системы.
+- **Monitoring** (наличие в `monitoring_allowed_sids`) — доступ к операционным действиям в {{ ydb-ui-name }}, включая действия, которые могут менять состояние системы. Например, запуск резервного копирования, восстановление базы или выполнение YQL-запросов через {{ ydb-ui-name }}.
+- **Administration** (наличие в `administration_allowed_sids`) — даёт право выполнять административные действия с базами данных или кластером. Полный административный доступ к кластеру и его базам данных. Также используется для изменения конфигурации, схемных операций, требующих административных прав, и других административных проверок.
+- **Register node** (наличие в `register_dynamic_node_allowed_sids`) — отдельный (неиерархический) уровень для регистрации динамических узлов в кластере. Не даёт автоматически прав `database`/`viewer`/`monitoring`/`administration`. По техническим причинам, если список задан (не пуст), он должен включать `root@builtin`.
+- **Bootstrap** (наличие в `bootstrap_allowed_sids`) — отдельный (неиерархический) уровень только для операций начальной инициализации кластера. Используется в неинициализированном состоянии, когда подсистема аутентификации ещё не функционирует. Начальная инициализация разрешена, если субъект входит в `bootstrap_allowed_sids` или `administration_allowed_sids`, при этом сам по себе `bootstrap` не выдаёт полные административные привилегии.

@@ -5,6 +5,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 
@@ -54,20 +55,22 @@ auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 t
 auto GetChangeRecordDetails(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
     auto protoValue = GetValueFromLocalDb(runtime, sender, tabletId, R"((
         (let range '( '('Order (Uint64 '0) (Void) )))
-        (let columns '('Order 'Kind 'Body) )
+        (let columns '('Order 'Kind 'Body 'UserSID 'UserTraceId) )
         (let result (SelectRange 'ChangeRecordDetails range columns '()))
         (return (AsList (SetResult 'Result result) ))
     ))");
     auto value = NClient::TValue::Create(protoValue);
     const auto& result = value["Result"]["List"];
 
-    TVector<std::tuple<ui64, TChangeRecord::EKind, TString>> records;
+    TVector<std::tuple<ui64, TChangeRecord::EKind, TString, TString, TString>> records;
     for (size_t i = 0; i < result.Size(); ++i) {
         const auto& item = result[i];
         records.emplace_back(
             item["Order"],
             static_cast<TChangeRecord::EKind>(ui8(item["Kind"])),
-            item["Body"]
+            item["Body"],
+            item["UserSID"],
+            item["UserTraceId"]
         );
     }
 
@@ -91,6 +94,14 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
             it = result.emplace(pathId, TVector<TChangeRecord>()).first;
         }
 
+        NWilson::TTraceId traceId;
+        const auto& traceIdData = std::get<4>(detail);
+        if (!traceIdData.empty()) {
+            NActorsProto::TTraceId serializedTraceId;
+            serializedTraceId.SetData(traceIdData);
+            traceId = NWilson::TTraceId(serializedTraceId);
+        }
+
         it->second.push_back(
             *TChangeRecordBuilder(std::get<1>(detail))
                 .WithOrder(std::get<0>(record))
@@ -100,6 +111,10 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
+                .WithUserCtx(NACLib::TUserContextBuilder()
+                    .WithUserSID(std::get<3>(detail))
+                    .WithUserTraceId(traceId)
+                    .Build())
                 .Build()
         );
     }
@@ -159,6 +174,8 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
 
 template <typename SK>
 struct TStructRecordBase {
+    TChangeRecord::EKind Kind;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     NTable::ERowOp Rop;
     TStructKey<SK> Key;
     TStructValue Update;
@@ -167,11 +184,13 @@ struct TStructRecordBase {
 
     TStructRecordBase() = default;
 
-    TStructRecordBase(NTable::ERowOp rop, const TStructKey<SK>& key,
+    TStructRecordBase(TChangeRecord::EKind kind, NTable::ERowOp rop,
+            const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
             const TStructValue& newImage = {})
-        : Rop(rop)
+        : Kind(kind)
+        , Rop(rop)
         , Key(key)
         , Update(update)
         , OldImage(oldImage)
@@ -179,8 +198,34 @@ struct TStructRecordBase {
     {
     }
 
+    TStructRecordBase(TChangeRecord::EKind kind, TIntrusivePtr<NACLib::TUserContext> userCtx, NTable::ERowOp rop,
+            const TStructKey<SK>& key,
+            const TStructValue& update = {},
+            const TStructValue& oldImage = {},
+            const TStructValue& newImage = {})
+        : Kind(kind)
+        , UserCtx(userCtx)
+        , Rop(rop)
+        , Key(key)
+        , Update(update)
+        , OldImage(oldImage)
+        , NewImage(newImage)
+    {
+    }
+
+    TString GetUserSID() const {
+        return UserCtx != nullptr ? UserCtx->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
+    }
+
+    NWilson::TTraceId GetUserTraceId() const {
+        return (UserCtx != nullptr && UserCtx->GetUserTraceId()) ? UserCtx->GetUserTraceId().Clone() : NWilson::TTraceId();
+    }
+
     bool operator==(const TStructRecordBase<SK>& rhs) const {
-        return Rop == rhs.Rop
+        return Kind == rhs.Kind
+            && GetUserSID() == rhs.GetUserSID()
+            && GetUserTraceId().GetHexTraceId() == rhs.GetUserTraceId().GetHexTraceId()
+            && Rop == rhs.Rop
             && Key == rhs.Key
             && Update == rhs.Update
             && OldImage == rhs.OldImage
@@ -189,18 +234,29 @@ struct TStructRecordBase {
 
     void Out(IOutputStream& out) const {
         out << "{"
+            << " Kind: " << Kind
             << " Rop: " << Rop
             << " Key: " << Key
             << " Update: " << Update
             << " OldImage: " << OldImage
-            << " NewImage: " << NewImage
-        << " }";
+            << " NewImage: " << NewImage;
+        if (UserCtx != nullptr) {
+            if (!UserCtx->GetUserSID().empty()) {
+                out << " UserSID: " << UserCtx->GetUserSID();
+            }
+            if (UserCtx->GetUserTraceId()) {
+                out << " UserTraceId: " << UserCtx->GetUserTraceId().GetHexTraceId();
+            }
+        }
+        out << " }";
     }
 
-    static TStructRecordBase<SK> Parse(const NKikimrChangeExchange::TDataChange& proto,
+    static TStructRecordBase<SK> Parse(TChangeRecord::EKind kind,
+            const NKikimrChangeExchange::TDataChange& proto,
             const THashMap<NTable::TTag, TString>& tagToName)
     {
         TStructRecordBase<SK> record;
+        record.Kind = kind;
 
         Parse<SK>(proto.GetKey(), tagToName, [&record](const TString& name, SK value) {
             record.Key.emplace_back(name, value);
@@ -236,10 +292,13 @@ struct TStructRecordBase {
         return record;
     }
 
-    static TStructRecordBase<SK> Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
+    static TStructRecordBase<SK> Parse(const TChangeRecord& record, const THashMap<NTable::TTag, TString>& tagToName) {
+        const auto& serializedProto = record.GetBody();
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
-        return Parse(proto, tagToName);
+        auto result = Parse(record.GetKind(), proto, tagToName);
+        result.UserCtx = record.GetUserCtx();
+        return result;
     }
 
 private:
@@ -284,14 +343,24 @@ private:
     }
 };
 
-using TStructRecord = TStructRecordBase<ui32>;
-
 template <typename SK>
 using TStructRecords = THashMap<TString, TVector<TStructRecordBase<SK>>>;
 
 } // anonymous
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
+    class TStructRecord: public TStructRecordBase<ui32> {
+    public:
+        TStructRecord(NTable::ERowOp rop,
+                const TStructKey<ui32>& key,
+                const TStructValue& update = {},
+                const TStructValue& oldImage = {},
+                const TStructValue& newImage = {})
+            : TStructRecordBase<ui32>(TChangeRecord::EKind::AsyncIndex, rop, key, update, oldImage, newImage)
+        {
+        }
+    };
+
     template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {
         const auto pathParts = SplitPath(path);
@@ -358,7 +427,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i), tagToName));
                 UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
@@ -657,6 +726,28 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     using TCdcStream = TShardedTableOptions::TCdcStream;
 
+    class TStructRecord: public TStructRecordBase<ui32> {
+    public:
+        TStructRecord(NTable::ERowOp rop,
+                const TStructKey<ui32>& key,
+                const TStructValue& update = {},
+                const TStructValue& oldImage = {},
+                const TStructValue& newImage = {})
+            : TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, rop, key, update, oldImage, newImage)
+        {
+        }
+
+        TStructRecord(TIntrusivePtr<NACLib::TUserContext> userCtx,
+                NTable::ERowOp rop,
+                const TStructKey<ui32>& key,
+                const TStructValue& update = {},
+                const TStructValue& oldImage = {},
+                const TStructValue& newImage = {})
+            : TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, userCtx, rop, key, update, oldImage, newImage)
+        {
+        }
+    };
+
     NKikimrPQ::TPQConfig WithProtoSourceIdInfo() {
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnableProtoSourceIdInfo(true);
@@ -670,7 +761,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts, TIntrusivePtr<NACLib::TUserContext> userCtx, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
@@ -725,7 +816,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
                 RebootTablet(runtime, tabletIds[0], sender);
             } else {
-                ExecSQL(server, sender, query);
+                ExecSQL(server, sender, query, !query.Contains("ALTER"), userCtx);
             }
         }
 
@@ -763,10 +854,23 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i).GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i), tagToName));
+                auto expectedSchemaVersion = entry.TableId.SchemaVersion;
+                if (actual.at(i).GetKind() == TChangeRecord::EKind::CdcSchemaChange) {
+                    expectedSchemaVersion += 1;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), expectedSchemaVersion);
             }
         }
+    }
+
+    template <typename SK = ui32>
+    void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
+            const TShardedTableOptions& opts,
+            const TVector<TCdcStream>& streams,
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
+    {
+        Run(sharedCacheConfig, path, opts, NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build(), streams, queries, expectedRecords);
     }
 
     const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
@@ -786,6 +890,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
+    }
+
+    template <typename SK = ui32>
+    void Run(const TString& path, const TShardedTableOptions& opts,
+            TIntrusivePtr<NACLib::TUserContext> userCtx,
+            const TVector<TCdcStream>& streams,
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
+    {
+        Run(DefaultCacheParams(), path, opts, userCtx, streams, queries, expectedRecords);
     }
 
     template <typename SK = ui32>
@@ -855,7 +968,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(InsertSingleUuidRow) {
         Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-0000-47b2-ae56-3c023da6ee8c\"), 10);", {
-            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-0000-47b2-ae56-3c023da6ee8c")}})}},
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(TChangeRecord::EKind::CdcDataChange, NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-0000-47b2-ae56-3c023da6ee8c")}})}},
         });
     }
 
@@ -933,6 +1046,48 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
+    void CheckPassUserContext(TIntrusivePtr<NACLib::TUserContext> userCtx) {
+        Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",
+            "DELETE FROM `/Root/path` WHERE key = 1;",
+            "INSERT INTO `/Root/path` (key, value) VALUES (2, 10);",
+            "UPDATE `/Root/path` SET value=20 WHERE key=2;",
+            "REPLACE INTO `/Root/path` (key, value) VALUES (3, 30);",
+        }, {
+            {"new_and_old_images", {
+                TStructRecord(userCtx, NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
+                TStructRecord(userCtx, NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(userCtx, NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 20}}, {}),
+                TStructRecord(userCtx, NTable::ERowOp::Upsert, {{"key", 2}}, {}, {}, {{"value", 10}}),
+                TStructRecord(userCtx, NTable::ERowOp::Upsert, {{"key", 2}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(userCtx, NTable::ERowOp::Absent, {{"key", 3}}, {}, {}, {{"value", 30}}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(PassUserSID) {
+        auto userCtx = NACLib::TUserContextBuilder().WithUserSID("cdcuser@test").Build();
+        CheckPassUserContext(userCtx);
+    }
+
+    namespace {
+        const static NWilson::TTraceId TestTraceId = NWilson::TTraceId::NewTraceId(15, 4095);
+    }
+
+    Y_UNIT_TEST(PassUserTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder().WithUserTraceId(TestTraceId).Build();
+        CheckPassUserContext(userCtx);
+    }
+
+    Y_UNIT_TEST(PassUserSIDAndTraceId) {
+        auto userCtx = NACLib::TUserContextBuilder()
+            .WithUserSID("cdcuser@test")
+            .WithUserTraceId(TestTraceId)
+            .Build();
+        CheckPassUserContext(userCtx);
+    }
+
     TShardedTableOptions IndexedTable() {
         return TShardedTableOptions()
             .Columns({
@@ -946,8 +1101,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(IndexAndStreamUpsert) {
         Run("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
-            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
-            {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
+            {"by_ikey", {TStructRecordBase<ui32>(TChangeRecord::EKind::AsyncIndex, NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
+            {"updates_stream", {TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
         });
     }
 
@@ -958,7 +1113,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(PageFaults) {
         constexpr ui32 count = 1000;
-        TVector<TStructRecord> expectedRecords(Reserve(count + 2));
+        TVector<TStructRecordBase<ui32>> expectedRecords(Reserve(count + 2));
         auto bigUpsert = TStringBuilder() << "UPSERT INTO `/Root/path` (key, value) VALUES ";
 
         for (ui32 i = 1; i <= count; ++i) {
@@ -1023,11 +1178,30 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
+    Y_UNIT_TEST(SchemaChanges) {
+        const auto stream = TCdcStream{
+            .Name = "with_schema_changes",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .SchemaChanges = true,
+        };
+
+        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{stream}, TVector<TString>{
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10)",
+            "ALTER TABLE `/Root/path` ADD COLUMN `extra` Uint64",
+        }, {
+            {"with_schema_changes", {
+                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}, {}, {}),
+                TStructRecordBase<ui32>(TChangeRecord::EKind::CdcSchemaChange, NTable::ERowOp::Absent, {}, {}, {}, {}),
+            }},
+        });
+    }
+
 } // CdcStreamChangeCollector
 
 } // NKikimr
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecord, out, value) {
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecordBase<ui32>, out, value) {
     return value.Out(out);
 }
 

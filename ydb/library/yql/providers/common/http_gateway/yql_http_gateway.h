@@ -2,20 +2,41 @@
 
 #include "yql_http_header.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
+#include <util/generic/hash.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <contrib/libs/curl/include/curl/curl.h>
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
 
-#include <contrib/libs/curl/include/curl/curl.h>
-
 #include <atomic>
-#include <variant>
 #include <functional>
 
 namespace NYql {
+
+class THttpGatewayConfig;
+
+struct IHttpRequestContext : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IHttpRequestContext>;
+
+    virtual ~IHttpRequestContext() = default;
+    virtual NDq::TWorkScope GetWorkScope() const = 0;
+};
+
+class TDefaultHttpRequestContext final : public IHttpRequestContext {
+public:
+    explicit TDefaultHttpRequestContext(NDq::TWorkScope scope)
+        : Scope(std::move(scope)) {}
+
+    NDq::TWorkScope GetWorkScope() const override { return Scope; }
+
+private:
+    const NDq::TWorkScope Scope;
+};
 
 class IHTTPGateway {
 public:
@@ -82,13 +103,15 @@ public:
         TString body,
         TOnResult callback,
         bool put = false,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     virtual void Delete(
         TString url,
         THeaders headers,
         TOnResult callback,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     virtual void Download(
         TString url,
@@ -97,11 +120,12 @@ public:
         std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     class TCountedContent : public TContentBase {
     public:
-        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter);
+        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold);
         ~TCountedContent();
 
         TCountedContent(TCountedContent&&) = default;
@@ -109,8 +133,12 @@ public:
 
         TString Extract();
     private:
+        void BeforeRelease();
+
         const std::shared_ptr<std::atomic_size_t> Counter;
         const ::NMonitoring::TDynamicCounters::TCounterPtr InflightCounter;
+        std::weak_ptr<CURLM> Handle;
+        const size_t Threshold;
     };
 
     using TOnDownloadStart = std::function<void(CURLcode, long)>; // http code.
@@ -126,9 +154,14 @@ public:
         TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+        IHttpRequestContext::TPtr context = nullptr) = 0;
         
     virtual ui64 GetBuffersSizePerStream() = 0;
+
+    virtual void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t> caps) = 0;
+
+    static constexpr const char* DefaultPoolId = "default";
 
     static THeaders MakeYcHeaders(
         const TString& requestId,
@@ -138,4 +171,4 @@ public:
         const TString& awsSigV4 = {});
 };
 
-}
+} // namespace NYql

@@ -5,7 +5,11 @@
 #include <util/stream/output.h>
 
 namespace NSc {
-    struct TValue::TScCore : TAtomicRefCount<TScCore, TDestructor>, TNonCopyable {
+    struct TScCoreDestructor {
+        static void Destroy(TValue::TScCore* core) noexcept;
+    };
+
+    struct TValue::TScCore : TAtomicRefCount<TScCore, TScCoreDestructor>, TNonCopyable {
         TPoolPtr Pool;
         double FloatNumber = 0;
         i64 IntNumber = 0;
@@ -232,6 +236,10 @@ namespace NSc {
             return IsArray() && Array.size() > key ? &Array[key] : nullptr;
         }
 
+        const TValue* GetNoAdd(size_t key) const {
+            return IsArray() && Array.size() > key ? &Array[key] : nullptr;
+        }
+
         TValue& GetOrAdd(size_t key) {
             SetArray();
             for (size_t i = Array.size(); i <= key; ++i) {
@@ -268,7 +276,7 @@ namespace NSc {
                 return TValue::DefaultValue();
             }
 
-            TValue v = Array[key];
+            TValue v = std::move(Array[key]);
             Array.erase(Array.begin() + key);
             return v;
         }
@@ -283,6 +291,14 @@ namespace NSc {
         }
 
         TValue* GetNoAdd(TStringBuf key) {
+            if (!IsDict()) {
+                return nullptr;
+            }
+
+            return Dict.FindPtr(key);
+        }
+
+        const TValue* GetNoAdd(TStringBuf key) const {
             if (!IsDict()) {
                 return nullptr;
             }
@@ -321,11 +337,18 @@ namespace NSc {
                 return TValue::DefaultValue();
             }
 
-            TValue v = it->second;
+            TValue v = std::move(it->second);
             Dict.erase(key);
             return v;
         }
     };
+
+    inline void TScCoreDestructor::Destroy(TValue::TScCore* core) noexcept {
+        // TScCore is allocated inside its own Pool. Keep that pool alive until
+        // the whole object destructor, including base destructors, has returned.
+        const TValue::TPoolPtr poolGuard = core->Pool;
+        core->~TScCore();
+    }
 
     TValue::TScCore* TValue::NewCore(TPoolPtr& p) {
         return new (p->Pool.Allocate<TScCore>()) TScCore(p);
@@ -571,12 +594,20 @@ namespace NSc {
         return CoreMutable().GetNoAdd(idx);
     }
 
+    const TValue* TValue::GetNoAdd(size_t idx) const {
+        return Core().GetNoAdd(idx);
+    }
+
     const TValue& TValue::Get(TStringBuf idx) const {
         return Core().Get(idx);
     }
 
     TValue* TValue::GetNoAdd(TStringBuf key) {
         return CoreMutable().GetNoAdd(key);
+    }
+
+    const TValue* TValue::GetNoAdd(TStringBuf key) const {
+        return Core().GetNoAdd(key);
     }
 
     TValue& TValue::Back() {

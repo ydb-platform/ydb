@@ -1,11 +1,13 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/public/config.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -50,13 +52,19 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
 void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volume, TTxState& txState,
                    const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
                    TOperationContext& context) {
-    Y_ABORT_UNLESS(volume->VolumeConfig.GetTabletVersion() <= 2);
+    Y_ABORT_UNLESS(volume->VolumeConfig.GetTabletVersion() <= 3);
     ui64 count = volume->DefaultPartitionCount;
     txState.Shards.reserve(count + 1);
 
     for (ui64 i = 0; i < count; ++i) {
         TShardIdx shardIdx;
-        if (volume->VolumeConfig.GetTabletVersion() == 2) {
+        if (volume->VolumeConfig.GetTabletVersion() == 3) {
+            shardIdx = context.SS->RegisterShardInfo(
+                TShardInfo::BlockStorePartitionDirectInfo(txId, pathId)
+                    .WithBindedChannels(partitionChannels));
+            context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT].Add(1);
+            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartitionDirect, TTxState::CreateParts);
+        } else if (volume->VolumeConfig.GetTabletVersion() == 2) {
             shardIdx = context.SS->RegisterShardInfo(
                 TShardInfo::BlockStorePartition2Info(txId, pathId)
                     .WithBindedChannels(partitionChannels));
@@ -76,12 +84,22 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
         volume->Shards[shardIdx] = std::move(part);
     }
 
-    const auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::BlockStoreVolumeInfo(txId, pathId)
-            .WithBindedChannels(volumeChannels));
-    context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Add(1);
-    txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, TTxState::CreateParts);
-    volume->VolumeShardIdx = shardIdx;
+    if (volume->VolumeConfig.GetTabletVersion() == 3) {
+        const auto shardIdx = context.SS->RegisterShardInfo(
+            TShardInfo::BlockStoreVolumeDirectInfo(txId, pathId)
+                .WithBindedChannels(volumeChannels));
+        context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Add(1);
+        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolumeDirect, TTxState::CreateParts);
+        volume->VolumeShardIdx = shardIdx;
+    } else {
+        const auto shardIdx = context.SS->RegisterShardInfo(
+            TShardInfo::BlockStoreVolumeInfo(txId, pathId)
+                .WithBindedChannels(volumeChannels));
+        context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Add(1);
+        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, TTxState::CreateParts);
+        volume->VolumeShardIdx = shardIdx;
+    }
+
 }
 
 TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
@@ -123,9 +141,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
 
     TBlockStoreVolumeInfo::TPtr emptyVolume = new TBlockStoreVolumeInfo();
     emptyVolume->Shards.swap(volume->Shards);
-    context.SS->BlockStoreVolumes[pathId] = emptyVolume;
-    context.SS->BlockStoreVolumes[pathId]->AlterData = volume;
-    context.SS->IncrementPathDbRefCount(pathId);
+    emptyVolume->AlterData = volume;
+    context.SS->BlockStoreVolumes.Set(pathId, emptyVolume);
 
     context.SS->PersistBlockStoreVolume(db, pathId, emptyVolume);
     context.SS->PersistAddBlockStoreVolumeAlter(db, pathId, volume);
@@ -147,6 +164,7 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
 
 
 class TCreateBlockStoreVolume: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateBlockStoreVolume"; }
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -184,7 +202,7 @@ class TCreateBlockStoreVolume: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& operation = Transaction.GetCreateBlockStoreVolume();
@@ -197,11 +215,9 @@ public:
                 operation.GetVolumeConfig());
         const ui64 shardsToCreate = defaultPartitionCount + 1;
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -244,7 +260,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -371,16 +387,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateBlockStoreVolume");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateBlockStoreVolume AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBlockStoreVolume AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -424,3 +440,5 @@ ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

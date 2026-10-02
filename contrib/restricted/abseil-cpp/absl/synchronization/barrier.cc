@@ -14,6 +14,7 @@
 
 #include "absl/synchronization/barrier.h"
 
+#include "absl/base/config.h"
 #include "absl/base/internal/raw_logging.h"
 #include "absl/synchronization/mutex.h"
 
@@ -26,7 +27,7 @@ static bool IsZero(void *arg) {
 }
 
 bool Barrier::Block() {
-  MutexLock l(&this->lock_);
+  MutexLock l(this->lock_);
 
   this->num_to_block_--;
   if (this->num_to_block_ < 0) {

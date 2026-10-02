@@ -310,6 +310,11 @@ TString PrintPath(const IEventBase* ev, const NKikimrSchemeBoard::TEvNotify& rec
 
 struct TEvNotify: public TEventPreSerializedPB<TEvNotify, NKikimrSchemeBoard::TEvNotify, TSchemeBoardEvents::EvNotify> {
     TEvNotify() = default;
+    explicit TEvNotify(const TClusterState& clusterState) {
+        if (clusterState) {
+            clusterState.ToProto(*Record.MutableClusterState());
+        }
+    }
 
     TString ToString() const override {
         return PrintPath(this, Record);
@@ -362,15 +367,24 @@ struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSche
 struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSchemeBoard::TEvSyncVersionResponse, TSchemeBoardEvents::EvSyncVersionResponse> {
     TEvSyncVersionResponse() = default;
 
-    explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false) {
+    explicit TEvSyncVersionResponse(const ui64 version) {
         Record.SetVersion(version);
-        Record.SetPartial(partial);
+        Record.SetPartial(true);
+    }
+
+    explicit TEvSyncVersionResponse(const ui64 version, const TClusterState& clusterState) {
+        Record.SetVersion(version);
+        Record.SetPartial(false);
+        if (clusterState) {
+            clusterState.ToProto(*Record.MutableClusterState());
+        }
     }
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
             << " Version: " << Record.GetVersion()
             << " Partial: " << Record.GetPartial()
+            << " Cluster State: { " << Record.GetClusterState().ShortDebugString() << " }"
         << " }";
     }
 };

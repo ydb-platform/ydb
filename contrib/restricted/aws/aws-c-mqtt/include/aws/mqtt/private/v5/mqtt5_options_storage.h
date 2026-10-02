@@ -12,6 +12,7 @@
 #include <aws/common/logging.h>
 #include <aws/common/ref_count.h>
 #include <aws/http/proxy.h>
+#include <aws/io/host_resolver.h>
 #include <aws/io/retry_strategy.h>
 #include <aws/io/socket.h>
 #include <aws/io/tls_channel_handler.h>
@@ -21,7 +22,6 @@
 
 struct aws_client_bootstrap;
 struct aws_mqtt5_client;
-struct aws_mqtt5_client_options;
 struct aws_mqtt5_operation;
 struct aws_string;
 
@@ -41,6 +41,8 @@ struct aws_mqtt5_operation_vtable {
     int (*aws_mqtt5_operation_validate_vs_connection_settings_fn)(
         const void *operation_packet_view,
         const struct aws_mqtt5_client *client);
+
+    uint32_t (*aws_mqtt5_operation_get_ack_timeout_override_fn)(const struct aws_mqtt5_operation *operation);
 };
 
 /* Flags that indicate the way in which an operation is currently affecting the statistics of the client */
@@ -63,6 +65,7 @@ struct aws_mqtt5_operation {
     const struct aws_mqtt5_operation_vtable *vtable;
     struct aws_ref_count ref_count;
     uint64_t ack_timeout_timepoint_ns;
+    struct aws_priority_queue_node priority_queue_node;
     struct aws_linked_list_node node;
 
     enum aws_mqtt5_packet_type packet_type;
@@ -98,6 +101,8 @@ struct aws_mqtt5_operation_puback {
     struct aws_allocator *allocator;
 
     struct aws_mqtt5_packet_puback_storage options_storage;
+
+    struct aws_mqtt5_manual_publish_acknowledgement_completion_options completion_options;
 };
 
 struct aws_mqtt5_operation_disconnect {
@@ -137,7 +142,7 @@ struct aws_mqtt5_client_options_storage {
     struct aws_allocator *allocator;
 
     struct aws_string *host_name;
-    uint16_t port;
+    uint32_t port;
     struct aws_client_bootstrap *bootstrap;
     struct aws_socket_options socket_options;
 
@@ -162,20 +167,24 @@ struct aws_mqtt5_client_options_storage {
     uint64_t max_reconnect_delay_ms;
     uint64_t min_connected_time_to_reset_reconnect_delay_ms;
 
-    uint64_t ack_timeout_seconds;
+    uint32_t ack_timeout_seconds;
 
     uint32_t ping_timeout_ms;
     uint32_t connack_timeout_ms;
 
     struct aws_mqtt5_client_topic_alias_options topic_aliasing_options;
 
-    struct aws_mqtt5_packet_connect_storage connect;
+    struct aws_mqtt5_packet_connect_storage *connect;
 
     aws_mqtt5_client_connection_event_callback_fn *lifecycle_event_handler;
     void *lifecycle_event_handler_user_data;
 
     aws_mqtt5_client_termination_completion_fn *client_termination_handler;
     void *client_termination_handler_user_data;
+
+    struct aws_host_resolution_config host_resolution_override;
+
+    struct aws_mqtt_iot_metrics_storage *metrics_storage;
 };
 
 AWS_EXTERN_C_BEGIN
@@ -205,11 +214,14 @@ AWS_MQTT_API int aws_mqtt5_operation_validate_vs_connection_settings(
     const struct aws_mqtt5_operation *operation,
     const struct aws_mqtt5_client *client);
 
+AWS_MQTT_API uint32_t aws_mqtt5_operation_get_ack_timeout_override(const struct aws_mqtt5_operation *operation);
+
 /* Connect */
 
 AWS_MQTT_API struct aws_mqtt5_operation_connect *aws_mqtt5_operation_connect_new(
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_connect_view *connect_options);
+    const struct aws_mqtt5_packet_connect_view *connect_options,
+    const struct aws_mqtt5_client_options_storage *option_storage);
 
 AWS_MQTT_API int aws_mqtt5_packet_connect_view_validate(const struct aws_mqtt5_packet_connect_view *connect_view);
 
@@ -254,9 +266,6 @@ AWS_MQTT_API struct aws_mqtt5_operation_publish *aws_mqtt5_operation_publish_new
 
 AWS_MQTT_API int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish_view *publish_view);
 
-AWS_MQTT_API int aws_mqtt5_packet_publish_view_validate_vs_iot_core(
-    const struct aws_mqtt5_packet_publish_view *publish_view);
-
 AWS_MQTT_API void aws_mqtt5_packet_publish_view_log(
     const struct aws_mqtt5_packet_publish_view *publish_view,
     enum aws_log_level level);
@@ -265,7 +274,8 @@ AWS_MQTT_API void aws_mqtt5_packet_publish_view_log(
 
 AWS_MQTT_API struct aws_mqtt5_operation_puback *aws_mqtt5_operation_puback_new(
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_puback_view *puback_options);
+    const struct aws_mqtt5_packet_puback_view *puback_options,
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options);
 
 AWS_MQTT_API void aws_mqtt5_packet_puback_view_log(
     const struct aws_mqtt5_packet_puback_view *puback_view,
@@ -280,9 +290,6 @@ AWS_MQTT_API struct aws_mqtt5_operation_subscribe *aws_mqtt5_operation_subscribe
     const struct aws_mqtt5_subscribe_completion_options *completion_options);
 
 AWS_MQTT_API int aws_mqtt5_packet_subscribe_view_validate(const struct aws_mqtt5_packet_subscribe_view *subscribe_view);
-
-AWS_MQTT_API int aws_mqtt5_packet_subscribe_view_validate_vs_iot_core(
-    const struct aws_mqtt5_packet_subscribe_view *subscribe_view);
 
 AWS_MQTT_API void aws_mqtt5_packet_subscribe_view_log(
     const struct aws_mqtt5_packet_subscribe_view *subscribe_view,
@@ -303,9 +310,6 @@ AWS_MQTT_API struct aws_mqtt5_operation_unsubscribe *aws_mqtt5_operation_unsubsc
     const struct aws_mqtt5_unsubscribe_completion_options *completion_options);
 
 AWS_MQTT_API int aws_mqtt5_packet_unsubscribe_view_validate(
-    const struct aws_mqtt5_packet_unsubscribe_view *unsubscribe_view);
-
-AWS_MQTT_API int aws_mqtt5_packet_unsubscribe_view_validate_vs_iot_core(
     const struct aws_mqtt5_packet_unsubscribe_view *unsubscribe_view);
 
 AWS_MQTT_API void aws_mqtt5_packet_unsubscribe_view_log(

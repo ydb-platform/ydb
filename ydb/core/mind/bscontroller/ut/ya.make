@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
 SRCS(
+    database_space_ut.cpp
     grouper_ut.cpp
     group_mapper_ut.cpp
     mv_object_map_ut.cpp
@@ -9,9 +10,9 @@ SRCS(
 FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

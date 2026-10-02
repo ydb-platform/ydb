@@ -1,0 +1,12 @@
+$a = [
+    <|key: 1, left: 21, right: 12|>,
+    <|key: 2, left: 42, right: 24|>,
+    <|key: 3, left: 63, right: 36|>,
+    <|key: 4, left: 84, right: 48|>,
+];
+
+SELECT
+    left + right
+FROM
+    AS_TABLE($a)
+;

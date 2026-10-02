@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOGCUTTER
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -24,13 +26,10 @@ namespace NKikimr {
             Y_UNUSED(ev);
 
             const ui64 lsn = HullDs->GetFirstLsnToKeep();
-            LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                    VDISKP(VCtx->VDiskLogPrefix,
-                        "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s",
-                        lsn, PreviousCutLsnToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s", lsn, PreviousCutLsnToString().data()));
 
             if (lsn != ui64(-1)) {
-                Y_ABORT_UNLESS(!PreviousCutLsn || *PreviousCutLsn <= lsn);
+                Y_VERIFY_S(!PreviousCutLsn || *PreviousCutLsn <= lsn, VCtx->VDiskLogPrefix);
                 if (!PreviousCutLsn || PreviousCutLsn < lsn) {
                     ctx.Send(LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Hull, lsn));
                     PreviousCutLsn = lsn;
@@ -72,7 +71,7 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TActorId &logCutterId,
             TIntrusivePtr<THullDs> hullDs) {
-        Y_ABORT_UNLESS(logCutterId);
+        Y_VERIFY_S(logCutterId, vctx->VDiskLogPrefix);
         return new THullLogCutterNotifier(vctx, logCutterId, hullDs);
     }
 

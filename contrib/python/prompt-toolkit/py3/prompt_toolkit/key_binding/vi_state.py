@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from prompt_toolkit.clipboard import ClipboardData
 
 if TYPE_CHECKING:
-    from .key_bindings.vi import TextObject
+    from .bindings.vi import TextObject
     from .key_processor import KeyPressEvent
 
 __all__ = [

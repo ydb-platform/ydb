@@ -36,6 +36,8 @@ namespace NKikimr::NTestShard {
         TTestShard(const TActorId& tablet, TTabletStorageInfo *info)
             : TKeyValueFlat(tablet, info)
         {
+            SetActivityType(ActorActivityType());
+
             using TKeyValueCounters = TProtobufTabletCounters<
                 NKeyValue::ESimpleCounters_descriptor,
                 NKeyValue::ECumulativeCounters_descriptor,
@@ -62,7 +64,6 @@ namespace NKikimr::NTestShard {
         }
 
         bool HandleHook(STFUNC_SIG) override {
-            SetActivityType(NKikimrServices::TActivity::TEST_SHARD_ACTOR);
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvControlRequest, Handle);
                 HFunc(TEvSwitchMode, Handle);
@@ -77,6 +78,10 @@ namespace NKikimr::NTestShard {
             switch (record.GetCommandCase()) {
                 case NKikimrClient::TTestShardControlRequest::kInitialize:
                     Execute(CreateTxInitialize(record.GetInitialize(), ev->Sender, ev->Cookie), ctx);
+                    break;
+
+                case NKikimrClient::TTestShardControlRequest::kNbsDbgLikeLoadControl:
+                    // This command belongs to the load service, never to a TestShard tablet.
                     break;
 
                 case NKikimrClient::TTestShardControlRequest::COMMAND_NOT_SET:

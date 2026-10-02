@@ -14,8 +14,8 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 class TestSelectLimit(object):
     @yq_v1
+    @pytest.mark.skip("Skip until streaming disposition is implemented YQ-589")
     def test_select_same(self, kikimr, client):
-        pytest.skip("Skip until streaming disposition is implemented YQ-589")
 
         self.init_topics("select_same", create_output=False)
 
@@ -55,8 +55,8 @@ class TestSelectLimit(object):
         assert rs.rows[1].items[0].bytes_value == messages[1]
 
     @yq_v1
+    @pytest.mark.skip("does not work as expected, need attention")
     def test_select_sequence(self, kikimr, client):
-        pytest.skip("does not work as expected, need attention")
         self.init_topics("select_sequence", create_output=False)
 
         create_read_rule(self.input_topic, self.consumer_name)

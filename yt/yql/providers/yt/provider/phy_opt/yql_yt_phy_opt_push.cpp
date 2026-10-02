@@ -30,14 +30,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(T
         return node;
     }
 
-    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid(); })) {
+    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid() || !path.QLFilter().Maybe<TCoVoid>().IsValid(); })) {
         return node;
     }
 
     for (auto path: section.Paths()) {
         TYtPathInfo pathInfo(path);
-        // Dynamic tables don't support range selectors
-        if (pathInfo.Table->Meta->IsDynamic) {
+        // Dynamic and RLS tables don't support range selectors
+        if (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS) {
             return node;
         }
     }
@@ -69,6 +69,60 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(T
             .Build()
         .Build()
         .Settings(updatedSettings)
+        .Done();
+}
+
+TExprBase TYtPhysicalOptProposalTransformer::RebuildKeyFilterAfterPushDown(TExprBase filter, size_t usedKeysCount, TExprContext& ctx) const {
+    auto origBoundTupleType = filter.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TTupleExprType>();
+    auto origBoundTupleKeyCount = origBoundTupleType->GetSize() - 1;
+
+    auto origBoundTupleArg = ctx.NewArgument(filter.Pos(), "boundTuple");
+    TExprNode::TListType newBoundTupleItems;
+    for (size_t i = 0; i < usedKeysCount; i++) {
+        newBoundTupleItems.push_back(
+            Build<TCoNth>(ctx, filter.Pos())
+                .Tuple(origBoundTupleArg)
+                .Index(ctx.NewAtom(filter.Pos(), i))
+            .Done()
+            .Ptr()
+        );
+    }
+    newBoundTupleItems.push_back(
+        Build<TCoNth>(ctx, filter.Pos())
+            .Tuple(origBoundTupleArg)
+            .Index(ctx.NewAtom(filter.Pos(), origBoundTupleKeyCount))
+        .Done()
+        .Ptr()
+    );
+
+    auto handleBoundTuple = Build<TCoLambda>(ctx, filter.Pos())
+        .Args({origBoundTupleArg})
+        .Body<TExprList>()
+            .Add(std::move(newBoundTupleItems))
+        .Build()
+        .Done();
+
+    return Build<TCoMap>(ctx, filter.Pos())
+        .Input(filter)
+        .Lambda<TCoLambda>()
+            .Args({"boundTuple"})
+            .Body<TExprList>()
+                .Add<TExprApplier>()
+                    .Apply(handleBoundTuple)
+                    .With<TCoNth>(0)
+                        .Tuple("boundTuple")
+                        .Index(ctx.NewAtom(filter.Pos(), 0))
+                    .Build()
+                .Build()
+                .Add<TExprApplier>()
+                    .Apply(handleBoundTuple)
+                    .With<TCoNth>(0)
+                        .Tuple("boundTuple")
+                        .Index(ctx.NewAtom(filter.Pos(), 1))
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
         .Done();
 }
 
@@ -172,6 +226,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
             const auto kfColumns = GetKeyFilterColumns(section, kfType);
             YQL_ENSURE(!kfColumns.empty());
             for (auto path: section.Paths()) {
+                auto pathRowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
+
                 if (auto maybeOp = getInnerOpForUpdate(path, kfColumns)) {
                     auto innerOp = maybeOp.Cast();
                     if (kfType == EYtSettingType::KeyFilter2) {
@@ -203,16 +259,59 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
                     }
 
                     auto innerOpSection = innerOp.Input().Item(0);
-                    auto updatedSection = Build<TYtSection>(ctx, innerOpSection.Pos())
-                        .InitFrom(innerOpSection)
-                        .Settings(NYql::MergeSettings(innerOpSection.Settings().Ref(), *NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2, ctx), ctx))
-                        .Done();
+                    TExprNode::TPtr updatedSection;
+                    if (kfType == EYtSettingType::KeyFilter2 && State_->Configuration->DropUnusedKeysFromKeyFilter.Get().GetOrElse(DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER)) {
+                        for (auto innerOpPath: innerOpSection.Paths()) {
+                            auto innerOpPathRowSpec = TYtTableBaseInfo::GetRowSpec(innerOpPath.Table());
+
+                            YQL_ENSURE(kfColumns.size() <= innerOpPathRowSpec->SortedBy.size());
+                            for (size_t i = 0; i < kfColumns.size(); i++) {
+                                YQL_ENSURE(innerOpPathRowSpec->SortedBy[i] == pathRowSpec->SortedBy[i]);
+                            }
+                        }
+
+                        TExprNode::TListType rebuiltKeyFilters;
+                        for (auto filter : keyFilters) {
+                            YQL_ENSURE(filter->ChildrenSize() == 2);
+                            auto rebuiltFilter = RebuildKeyFilterAfterPushDown(TExprBase(filter->HeadPtr()), kfColumns.size(), ctx);
+                            rebuiltKeyFilters.push_back(Build<TCoNameValueTuple>(ctx, innerOpSection.Settings().Pos())
+                                .Name().Build("keyFilter2")
+                                .Value<TExprList>()
+                                    .Add(rebuiltFilter)
+                                    .Add(filter->Child(1))
+                                .Build()
+                                .Done()
+                                .Ptr()
+                            );
+                        }
+
+                        updatedSection = Build<TYtSection>(ctx, innerOpSection.Pos())
+                            .InitFrom(innerOpSection)
+                            .Settings(NYql::MergeSettings(innerOpSection.Settings().Ref(), *ctx.NewList(innerOpSection.Settings().Pos(), std::move(rebuiltKeyFilters)), ctx))
+                            .Done()
+                            .Ptr();
+
+                    } else {
+                        updatedSection = Build<TYtSection>(ctx, innerOpSection.Pos())
+                            .InitFrom(innerOpSection)
+                            .Settings(NYql::MergeSettings(innerOpSection.Settings().Ref(), *NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2, ctx), ctx))
+                            .Done()
+                            .Ptr();
+                    }
 
                     auto updatedSectionList = Build<TYtSectionList>(ctx, innerOp.Input().Pos()).Add(updatedSection).Done();
                     auto updatedInnerOp = ctx.ChangeChild(innerOp.Ref(), TYtTransientOpBase::idx_Input, updatedSectionList.Ptr());
+                    auto innerWorld = innerOp.World().Ptr();
                     if (!syncList.empty()) {
-                        updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, ApplySyncListToWorld(innerOp.World().Ptr(), syncList, ctx));
+                        innerWorld = ApplySyncListToWorld(innerWorld, syncList, ctx);
                     }
+                    if (!op.World().Ref().IsWorld()) {
+                        innerWorld = Build<TCoSync>(ctx, op.Pos())
+                            .Add(innerWorld)
+                            .Add(op.World())
+                            .Done().Ptr();
+                    }
+                    updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, std::move(innerWorld));
 
                     updatedPaths.push_back(
                         Build<TYtPath>(ctx, path.Pos())
@@ -359,6 +458,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
         paths.push_back(std::move(newPath));
     }
@@ -380,4 +480,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

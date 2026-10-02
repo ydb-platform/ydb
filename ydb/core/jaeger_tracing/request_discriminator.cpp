@@ -44,6 +44,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Table.ReadRows", ERequestType::TABLE_READROWS},
     {"Table.DescribeExternalDataSource", ERequestType::TABLE_DESCRIBEEXTERNALDATASOURCE},
     {"Table.DescribeExternalTable", ERequestType::TABLE_DESCRIBEEXTERNALTABLE},
+    {"Table.DescribeSystemView", ERequestType::TABLE_DESCRIBESYSTEMVIEW},
 
     {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
     {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},
@@ -66,9 +67,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"RateLimiter.DescribeResource", ERequestType::RATELIMITER_DESCRIBE_RESOURCE},
     {"RateLimiter.AcquireResource", ERequestType::RATELIMITER_ACQUIRE_RESOURCE},
 
-    {"BSConfig.ReplaceStorageConfig", ERequestType::BSCONFIG_REPLACESTORAGECONFIG},
-    {"BSConfig.FetchStorageConfig", ERequestType::BSCONFIG_FETCHSTORAGECONFIG},
-    {"BSConfig.Bootstrap", ERequestType::BSCONFIG_BOOTSTRAP},
+    {"Config.ReplaceConfig", ERequestType::CONFIG_REPLACECONFIG},
+    {"Config.FetchConfig", ERequestType::CONFIG_FETCHCONFIG},
+    {"Config.Bootstrap", ERequestType::CONFIG_BOOTSTRAP},
 
     {"Topic.StreamWrite", ERequestType::TOPIC_STREAMWRITE},
     {"Topic.StreamWrite.Init", ERequestType::TOPIC_STREAMWRITE_INIT},
@@ -88,6 +89,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.StreamDirectRead.StartDirectReadPartitionSession", ERequestType::TOPIC_STREAMDIRECTREAD_START_DIRECT_READ_PARTITION_SESSION},
     {"Topic.StreamDirectRead.UpdateToken", ERequestType::TOPIC_STREAMDIRECTREAD_UPDATE_TOKEN},
     {"Topic.CommitOffset", ERequestType::TOPIC_COMMITOFFSET},
+    {"Topic.ResetOffset", ERequestType::TOPIC_RESETOFFSET},
     {"Topic.UpdateOffsetsInTransaction", ERequestType::TOPIC_UPDATEOFFSETSINTRANSACTION},
     {"Topic.CreateTopic", ERequestType::TOPIC_CREATETOPIC},
     {"Topic.DescribeTopic", ERequestType::TOPIC_DESCRIBETOPIC},
@@ -95,6 +97,13 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.DescribeConsumer", ERequestType::TOPIC_DESCRIBECONSUMER},
     {"Topic.AlterTopic", ERequestType::TOPIC_ALTERTOPIC},
     {"Topic.DropTopic", ERequestType::TOPIC_DROPTOPIC},
+    {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
+
+    {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
+    {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
+
+    {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
+    {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

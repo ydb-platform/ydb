@@ -57,7 +57,7 @@ from hypothesis.strategies._internal.ipaddress import ip_addresses
 from hypothesis.strategies._internal.misc import just, none, nothing
 from hypothesis.strategies._internal.numbers import floats, integers
 from hypothesis.strategies._internal.strategies import one_of
-from hypothesis.strategies._internal.utils import _strategies
+from hypothesis.strategies._internal.utils import _all_strategies
 
 # The implementation of all of these lives in `_strategies.py`, but we
 # re-export them via this module to avoid exposing implementation details
@@ -65,6 +65,9 @@ from hypothesis.strategies._internal.utils import _strategies
 
 
 __all__ = [
+    "DataObject",
+    "DrawFn",
+    "SearchStrategy",
     "binary",
     "booleans",
     "builds",
@@ -72,13 +75,11 @@ __all__ = [
     "complex_numbers",
     "composite",
     "data",
-    "DataObject",
     "dates",
     "datetimes",
     "decimals",
     "deferred",
     "dictionaries",
-    "DrawFn",
     "emails",
     "fixed_dictionaries",
     "floats",
@@ -112,7 +113,6 @@ __all__ = [
     "timezones",
     "tuples",
     "uuids",
-    "SearchStrategy",
 ]
 
 
@@ -122,7 +122,7 @@ def _check_exports(_public):
     # Verify that all exported strategy functions were registered with
     # @declares_strategy.
 
-    existing_strategies = set(_strategies) - {"_maybe_nil_uuids"}
+    existing_strategies = set(_all_strategies) - {"_maybe_nil_uuids"}
 
     exported_strategies = set(__all__) - {
         "DataObject",

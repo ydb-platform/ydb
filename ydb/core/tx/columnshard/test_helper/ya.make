@@ -3,11 +3,18 @@ LIBRARY()
 PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/protos
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
+    ydb/library/formats/arrow/protos
+    yql/essentials/minikql
+    yql/essentials/minikql/invoke_builtins
+    yql/essentials/core/arrow_kernels/request
     ydb/core/tx/columnshard
+    ydb/core/tx/long_tx_service/public
     ydb/core/wrappers
+    ydb/public/lib/value
 )
 
 SRCS(
@@ -16,6 +23,8 @@ SRCS(
     columnshard_ut_common.cpp
     shard_reader.cpp
     shard_writer.cpp
+    kernels_wrapper.cpp
+    program_constructor.cpp
 )
 
 IF (OS_WINDOWS)

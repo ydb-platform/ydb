@@ -5,8 +5,7 @@
 #include <util/generic/hash.h>
 #include <util/folder/path.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 /*
   Resembles sandbox for external UDFs
@@ -22,12 +21,11 @@ public:
     void Destroy();
 
 private:
-    TFsPath Dir;
-    TRandGuid RandGuid;
-    THashMap<TString, TString> Mapping;
+    TFsPath Dir_;
+    TRandGuid RandGuid_;
+    THashMap<TString, TString> Mapping_;
 };
 
 THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir);
 
-}
-}
+} // namespace NYql::NCommon

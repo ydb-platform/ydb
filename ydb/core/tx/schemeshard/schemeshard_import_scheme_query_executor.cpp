@@ -1,15 +1,19 @@
-#include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
+
+#include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
 
 using namespace NKikimr::NKqp;
 
@@ -29,6 +33,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             TString(DefaultKikimrPublicClusterName), // cluster
             Database, // database
             "", // database id
+            UserToken->GetUserSID(), // user sid
             SchemeQuery, // query text
             querySettings, // query settings
             nullptr, // query parameter types
@@ -71,9 +76,9 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty compile response");
         }
 
-        LOG_D("TSchemeQueryExecutor HandleCompileResponse"
-            << ", self: " << SelfId()
-            << ", status: " << result->Status;
+        YDB_LOG_DEBUG("TSchemeQueryExecutor HandleCompileResponse",
+            {"self", SelfId()},
+            {"status", result->Status},
         );
 
         if (result->Status != Ydb::StatusIds::SUCCESS) {
@@ -89,26 +94,47 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         if (!transactions[0].HasSchemeOperation()) {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "no scheme operations");
         }
-        if (!transactions[0].GetSchemeOperation().HasCreateView()) {
-            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no create view operation");
+
+        if (transactions[0].GetSchemeOperation().HasCreateView()) {
+            const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
+            return Finish(result->Status, createView);
+        } else if (transactions[0].GetSchemeOperation().HasCreateReplication()) {
+            const auto& createReplication = transactions[0].GetSchemeOperation().GetCreateReplication();
+            return Finish(result->Status, createReplication);
+        } else if (transactions[0].GetSchemeOperation().HasCreateTransfer()) {
+            const auto& createTransfer = transactions[0].GetSchemeOperation().GetCreateTransfer();
+            return Finish(result->Status, createTransfer);
+        } else if (transactions[0].GetSchemeOperation().HasCreateExternalDataSource()) {
+            const auto& createExternalDataSource = transactions[0].GetSchemeOperation().GetCreateExternalDataSource();
+            return Finish(result->Status, createExternalDataSource);
+        } else if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
+            const auto& createExternalTable = transactions[0].GetSchemeOperation().GetCreateExternalTable();
+            return Finish(result->Status, createExternalTable);
         }
-        const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
-        Finish(result->Status, createView);
+
+        return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
-        auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
-            << ", self: " << SelfId()
-            << ", success: " << status;
-        LOG_I(logMessage);
+        YDB_LOG_INFO("TSchemeQueryExecutor Reply",
+            {"self", SelfId()},
+            {"status", status},
+        );
 
         std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
-                logMessage << ", error: " << value;
+                YDB_LOG_DEBUG("TSchemeQueryExecutor Reply",
+                    {"self", SelfId()},
+                    {"status", status},
+                    {"error", value},
+                );
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
-                logMessage << ", prepared query: " << value.ShortDebugString().Quote();
+                YDB_LOG_DEBUG("TSchemeQueryExecutor Reply",
+                    {"self", SelfId()},
+                    {"status", status},
+                    {"preparedQuery", value.ShortDebugString().Quote()},
+                );
             }
-            LOG_D(logMessage);
             Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 
@@ -176,3 +202,5 @@ IActor* CreateSchemeQueryExecutor(NActors::TActorId replyTo, ui64 importId, ui32
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

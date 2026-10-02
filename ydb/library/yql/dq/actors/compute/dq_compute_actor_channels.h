@@ -83,7 +83,7 @@ public:
 
 public:
     TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const TDqTaskSettings& task, bool retryOnUndelivery,
-        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
+        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, NActors::TActorActivityType actorActivityType);
 
 private:
     STATEFN(WorkState);
@@ -103,7 +103,6 @@ private:
     void HandlePoison(NActors::TEvents::TEvPoison::TPtr&);
 
 private:
-    TInstant Now() const;
     void RuntimeError(const TString& message);
     void InternalError(const TString& message);
     void PassAway() override;
@@ -117,12 +116,15 @@ public:
     void SendChannelData(TChannelDataOOB&& channelData, const bool needAck);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
-    bool CheckInFlight(const TString& prefix);
+    bool CheckInFlight(const TString& prefix) const;
     bool FinishInputChannels();
-    bool ShouldSkipData(ui64 channelId);
+    bool ShouldSkipData(ui64 channelId) const;
     const TPeerState& GetOutputChannelInFlightState(ui64 channelId);
     const TInputChannelStats* GetInputChannelStats(ui64 channelId);
     const TOutputChannelStats* GetOutputChannelStats(ui64 channelId);
+    TInstant GetLastOutputMessageTime() const {
+        return LastOutputMessageTime;
+    }
 
 private:
     struct TChannelRetryState {
@@ -155,12 +157,11 @@ private:
         bool Finished = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, i64 freeSpace)
-                : SeqNo(seqNo)
-                , FreeSpace(freeSpace) {}
+            TInFlightMessage() = default;
+            explicit TInFlightMessage(i64 freeSpace)
+                : FreeSpace(freeSpace) {}
 
-            const ui64 SeqNo;
-            const i64 FreeSpace;
+            i64 FreeSpace;
         };
         TMap<ui64, TInFlightMessage> InFlight;
 
@@ -192,12 +193,10 @@ private:
         bool EarlyFinish = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, TChannelDataOOB&& data, bool finished)
-                : SeqNo(seqNo)
-                , Data(std::move(data))
+            TInFlightMessage(TChannelDataOOB&& data, bool finished)
+                : Data(std::move(data))
                 , Finished(finished) {}
 
-            const ui64 SeqNo;
             const TChannelDataOOB Data;
             const bool Finished;
         };
@@ -229,6 +228,7 @@ private:
     THashSet<ui32> TrackingNodes;
     THashMap<ui64, TInputChannelState> InputChannelsMap;
     THashMap<ui64, TOutputChannelState> OutputChannelsMap;
+    TInstant LastOutputMessageTime;
 };
 
 } // namespace NYql::NDq

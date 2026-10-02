@@ -1,5 +1,4 @@
 #include "protobuf_helpers.h"
-#include "mpl.h"
 
 #include <yt/yt/core/compression/codec.h>
 
@@ -10,6 +9,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -27,7 +28,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
+[[maybe_unused]] static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };
@@ -40,7 +41,7 @@ i32 CheckedCastToI32(ui64 length)
 {
     if (length >= std::numeric_limits<i32>::max()) {
         THROW_ERROR_EXCEPTION("Protobuf message size exceeds 2GB")
-            << TErrorAttribute("length", length);
+            .With("length", length);
     }
     return static_cast<i32>(length);
 }
@@ -54,8 +55,8 @@ void SerializeProtoToRef(
 {
 #ifdef YT_VALIDATE_REQUIRED_PROTO_FIELDS
     if (!partial && !message.IsInitialized()) {
-        YT_LOG_FATAL("Missing required protobuf fields (Error: %v)",
-            message.InitializationErrorString());
+        YT_TLOG_FATAL("Missing required protobuf fields")
+            .With("Error", message.InitializationErrorString());
     }
 #endif
     auto* begin = reinterpret_cast<google::protobuf::uint8*>(ref.begin());
@@ -182,7 +183,9 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
+    TEnvelopeFixedHeader fixedHeaderStorage;
+    ::memcpy(&fixedHeaderStorage, data.Begin(), sizeof(fixedHeaderStorage));
+    const auto* fixedHeader = &fixedHeaderStorage;
     const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
     if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
@@ -332,7 +335,7 @@ public:
         return it == ExtensionTagToExtensionDescriptor_.end() ? nullptr : &it->second;
     }
 
-    const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) override
+    const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) override
     {
         EnsureInitialized();
 
@@ -349,11 +352,11 @@ private:
     };
 
     std::atomic<EState> State_ = EState::Uninitialized;
-    NThreading::TSpinLock InitializationLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
-    THashMap<TString, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
+    THashMap<std::string, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
 
     void EnsureInitialized()
     {
@@ -454,8 +457,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
 {
     auto mapNode = node->AsMap();
     for (const auto& [name, value] : mapNode->GetChildren()) {
-        // TODO(babenko): migrate to std::string
-        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(TString(name));
+        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(name);
         // Do not parse unknown extensions.
         if (!extensionDescriptor) {
             continue;
@@ -475,7 +477,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -556,7 +558,7 @@ THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source)
     return tags;
 }
 
-std::optional<TString> FindExtensionName(int tag)
+std::optional<std::string> FindExtensionName(int tag)
 {
     const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByTag(tag);
     if (!extensionDescriptor) {

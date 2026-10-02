@@ -2,6 +2,8 @@
 #include "incrhuge_keeper_common.h"
 #include "incrhuge_keeper_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 namespace NKikimr {
     namespace NIncrHuge {
 
@@ -96,8 +98,9 @@ namespace NKikimr {
                                     s << (i ? " " : "") << o.GetOwner() << ": " << o.GetSeqNo();
                                 }
                                 s << "]";
-                                LOG_DEBUG(ctx, NKikimrServices::BS_INCRHUGE, "IncrHugeDelete# Lsn# %" PRIu64 " %s",
-                                        item.Lsn, s.Str().data());
+                                YDB_LOG_DEBUG_CTX(ctx, "Dump lsn, incrHugeDelete",
+                                    {"lsn", item.Lsn},
+                                    {"incrHugeDelete", s.Str().data()});
 
                                 DeleteMerger(record);
                             }

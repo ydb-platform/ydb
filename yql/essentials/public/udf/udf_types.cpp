@@ -1,13 +1,12 @@
 #include "udf_types.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-ITypeVisitor::ITypeVisitor()
-{}
+ITypeVisitor::ITypeVisitor(ui16 compatibilityVersion)
+    : TBase(compatibilityVersion)
+{
+}
 
-ITypeInfoHelper::ITypeInfoHelper()
-{}
+ITypeInfoHelper::ITypeInfoHelper() = default;
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NYql::NUdf

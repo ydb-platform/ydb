@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+
 #include <queue>
 
 namespace NKikimr::NSchemeShard {
@@ -11,6 +12,7 @@ struct TMigrationInfo {
     bool CreateSVP = false;
     bool CreateSA = false;
     bool CreateBCT = false;
+    bool CreateWCC = false;
 };
 
 THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,

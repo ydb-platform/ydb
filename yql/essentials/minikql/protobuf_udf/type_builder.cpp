@@ -11,22 +11,21 @@
 
 #include <optional>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 namespace {
 
 using namespace NProtoBuf;
 
 class TTypeBuilder {
 public:
-     TTypeBuilder(EEnumFormat enumFormat,
-                  ERecursionTraits recursion,
-                  bool ytMode,
-                  bool optionalLists,
-                  bool syntaxAware,
-                  bool useJsonName,
-                  EProtoStringYqlType stringType,
-                  IFunctionTypeInfoBuilder& builder);
+    TTypeBuilder(EEnumFormat enumFormat,
+                 ERecursionTraits recursion,
+                 bool ytMode,
+                 bool optionalLists,
+                 bool syntaxAware,
+                 bool useJsonName,
+                 EProtoStringYqlType stringType,
+                 IFunctionTypeInfoBuilder& builder);
     ~TTypeBuilder();
 
     void Build(const Descriptor* descriptor, TProtoInfo* info);
@@ -37,14 +36,21 @@ private:
     TType* GetBytesType();
     TType* GetInt64Type();
     TType* GetYsonType();
-    TType* GetType(const FieldDescriptor* fd, bool defaultYtSerialize);
+    // Get type without optional/repeated/required modifier.
+    TType* GetUnderlyingType(const FieldDescriptor* fd, bool defaultYtSerialize);
+    // Wrap |type| based on modifiers.
+    TType* WrapTypeFromModifiers(TType* type,
+                                 const FieldDescriptor* fd,
+                                 EFieldContext fieldContext,
+                                 const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts,
+                                 TFlags<EFieldFlag>& flags,
+                                 bool recursive);
     TType* GetOptionalType(TType* type);
-    TType* GetListType(TType* type);
+    TType* GetListType(TType* type, const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts, TFlags<EFieldFlag>& flags);
 
-private:
     using TTypeMap = THashMap<TType*, TType*>;
 
-    EEnumFormat  EnumFormat_;
+    EEnumFormat EnumFormat_;
     ERecursionTraits Recursion_;
     bool YtMode_;
     bool OptionalLists_;
@@ -52,13 +58,13 @@ private:
     bool UseJsonName_;
     EProtoStringYqlType StringType_;
     IFunctionTypeInfoBuilder&
-                 Builder_;
-    TProtoInfo*  Info_;
-    TType*       BasicTypes_[FieldDescriptor::Type::MAX_TYPE + 1];
-    TType*       YsonType;
+        Builder_;
+    TProtoInfo* Info_;
+    std::array<TType*, FieldDescriptor::Type::MAX_TYPE + 1> BasicTypes_;
+    TType* YsonType_;
     TSet<TString> KnownMessages_;
-    TTypeMap     Optionals_;
-    TTypeMap     Lists_;
+    TTypeMap Optionals_;
+    TTypeMap Lists_;
 };
 
 TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
@@ -66,7 +72,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
                            bool ytMode,
                            bool optionalLists,
                            bool syntaxAware,
-                            bool useJsonName,
+                           bool useJsonName,
                            EProtoStringYqlType stringType,
                            IFunctionTypeInfoBuilder& builder)
     : EnumFormat_(enumFormat)
@@ -78,22 +84,21 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     , StringType_(stringType)
     , Builder_(builder)
     , Info_(nullptr)
-    , YsonType(nullptr)
+    , YsonType_(nullptr)
 {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(BasicTypes_); ++i) {
-        BasicTypes_[i] = nullptr;
+    for (auto& basicType : BasicTypes_) {
+        basicType = nullptr;
     }
 }
 
-TTypeBuilder::~TTypeBuilder()
-{ }
+TTypeBuilder::~TTypeBuilder() = default;
 
 void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
     Info_ = info;
     Info_->EnumFormat = EnumFormat_;
     Info_->Recursion = Recursion_;
     Info_->YtMode = YtMode_;
-    Info_->StructType = GenerateTypeInfo(descriptor, false);
+    Info_->StructType = GenerateTypeInfo(descriptor, /*defaultYtSerialize=*/false);
     Info_->OptionalLists = OptionalLists_;
     Info_->SyntaxAware = SyntaxAware_;
     Info_->StringType = StringType_;
@@ -101,7 +106,7 @@ void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
 }
 
 TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool defaultYtSerialize) {
-    auto fullName = descriptor->full_name();
+    const auto& fullName = descriptor->full_name();
 
     if (KnownMessages_.find(fullName) != KnownMessages_.end()) {
         auto mi = Info_->Messages.find(fullName);
@@ -111,6 +116,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                     ythrow yexception() << "can't handle recursive types: "
                                         << fullName;
                 case ERecursionTraits::Bytes:
+                case ERecursionTraits::BytesV2:
                 case ERecursionTraits::Ignore:
                     return nullptr;
             }
@@ -122,9 +128,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
 
     std::shared_ptr<TMessageInfo> message = std::make_shared<TMessageInfo>();
 
-    auto makeField = [&](ui32& pos, TFlags<EFieldFlag>& flags, const IStructTypeBuilder::TPtr& structType, const FieldDescriptor* fd, std::optional<bool> fromVariant) {
-        bool isMessageField = fd->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE;
-
+    auto makeField = [&](ui32& pos, TFlags<EFieldFlag>& flags, const IStructTypeBuilder::TPtr& structType, const FieldDescriptor* fd, EFieldContext fieldContext) {
         auto name = fd->name();
         if (UseJsonName_) {
             Y_ASSERT(!fd->json_name().empty());
@@ -136,8 +140,13 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
         // Создаём тип поля
         TType* type = nullptr;
         std::optional<NYT::NDetail::TProtobufFieldOptions> ytOpts;
-
-        auto wrapRecursiveType = [&](TType* type, TFlags<EFieldFlag>& flags) {
+        if (YtMode_) {
+            ytOpts = NYT::NDetail::GetFieldOptions(fd,
+                                                   defaultYtSerialize
+                                                       ? MakeMaybe<NYT::NDetail::TProtobufFieldOptions>(NYT::NDetail::TProtobufFieldOptions{.SerializationMode = NYT::NDetail::EProtobufSerializationMode::Yt})
+                                                       : Nothing());
+        }
+        auto wrapRecursiveType = [&](TType* type, TFlags<EFieldFlag>& flags, bool wrapWithModifiers) {
             if (type) {
                 return type;
             }
@@ -145,43 +154,39 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                 flags |= EFieldFlag::Void;
                 return Builder_.Void();
             }
-            Y_ENSURE(Recursion_ == ERecursionTraits::Bytes);
+            Y_ENSURE(Recursion_ == ERecursionTraits::Bytes || Recursion_ == ERecursionTraits::BytesV2);
             flags |= EFieldFlag::Binary;
             type = GetBytesType();
-            if (fromVariant && !*fromVariant) {
-                type = GetOptionalType(type);
+            if (!wrapWithModifiers) {
+                return type;
             }
-            return type;
+            return WrapTypeFromModifiers(type, fd, fieldContext, ytOpts, flags, /*recursive=*/true);
         };
 
         if (YtMode_) {
-            ytOpts = NYT::NDetail::GetFieldOptions(fd,
-                defaultYtSerialize
-                    ? MakeMaybe<NYT::NDetail::TProtobufFieldOptions>(NYT::NDetail::TProtobufFieldOptions{.SerializationMode = NYT::NDetail::EProtobufSerializationMode::Yt})
-                    : Nothing());
             if (fd->is_map()) {
                 auto mapMessage = fd->message_type();
                 switch (ytOpts->MapMode) {
-                case NYT::NDetail::EProtobufMapMode::ListOfStructsLegacy:
-                case NYT::NDetail::EProtobufMapMode::ListOfStructs:
-                    type = GenerateTypeInfo(mapMessage, NYT::NDetail::EProtobufMapMode::ListOfStructs == ytOpts->MapMode);
-                    break;
-                case NYT::NDetail::EProtobufMapMode::Dict:
-                case NYT::NDetail::EProtobufMapMode::OptionalDict:
-                    Y_ENSURE(mapMessage->field_count() == 2);
-                    flags |= EFieldFlag::Dict;
-                    type = Builder_.Dict()
-                        ->Key(GetType(mapMessage->map_key(), false))
-                        .Value(wrapRecursiveType(GetType(mapMessage->map_value(), true), flags))
-                        .Build();
-                    message->DictTypes[fd->number()] = type;
-                    if (NYT::NDetail::EProtobufMapMode::OptionalDict == ytOpts->MapMode) {
-                        flags |= EFieldFlag::OptionalContainer;
-                        type = GetOptionalType(type);
-                    }
-                    break;
+                    case NYT::NDetail::EProtobufMapMode::ListOfStructsLegacy:
+                    case NYT::NDetail::EProtobufMapMode::ListOfStructs:
+                        type = GenerateTypeInfo(mapMessage, NYT::NDetail::EProtobufMapMode::ListOfStructs == ytOpts->MapMode);
+                        break;
+                    case NYT::NDetail::EProtobufMapMode::Dict:
+                    case NYT::NDetail::EProtobufMapMode::OptionalDict:
+                        Y_ENSURE(mapMessage->field_count() == 2);
+                        flags |= EFieldFlag::Dict;
+                        type = Builder_.Dict()
+                                   ->Key(GetUnderlyingType(mapMessage->map_key(), /*defaultYtSerialize=*/false))
+                                   .Value(wrapRecursiveType(GetUnderlyingType(mapMessage->map_value(), /*defaultYtSerialize=*/true), flags, /*wrapWithModifiers=*/false))
+                                   .Build();
+                        message->DictTypes[fd->number()] = type;
+                        if (NYT::NDetail::EProtobufMapMode::OptionalDict == ytOpts->MapMode) {
+                            flags |= EFieldFlag::OptionalContainer;
+                            type = GetOptionalType(type);
+                        }
+                        break;
                 }
-            } else if (isMessageField && ytOpts->SerializationMode == NYT::NDetail::EProtobufSerializationMode::Protobuf) {
+            } else if (fd->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE && ytOpts->SerializationMode == NYT::NDetail::EProtobufSerializationMode::Protobuf) {
                 type = GetBytesType();
                 flags |= EFieldFlag::Binary;
             } else if (ytOpts->Type) {
@@ -211,35 +216,17 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                                             << ", field: " << fd->name();
                 }
             } else {
-                type = GetType(fd, false);
+                type = GetUnderlyingType(fd, /*defaultYtSerialize=*/false);
             }
         } else {
-            type = GetType(fd, false);
+            type = GetUnderlyingType(fd, /*defaultYtSerialize=*/false);
         }
 
         if (!flags.HasFlags(EFieldFlag::Dict)) {
             if (type) {
-                if (fd->is_repeated()) {
-                    // Преобразуем базовый тип к списку
-                    type = GetListType(type);
-                    // и к nullable, если это необходимо.
-                    if (OptionalLists_ || (ytOpts && NYT::NDetail::EProtobufListMode::Optional == ytOpts->ListMode)) {
-                        flags |= EFieldFlag::OptionalContainer;
-                        type = GetOptionalType(type);
-                    }
-                } else {
-                    if (fromVariant) {
-                        if (!*fromVariant) {
-                            // For 'variant as separate fields' always make optional type
-                            // Otherwise always ignore optionality
-                            type = GetOptionalType(type);
-                        }
-                    } else if (fd->is_optional() && (isMessageField || !AvoidOptionalScalars(SyntaxAware_, fd))) {
-                        type = GetOptionalType(type);
-                    }
-                }
+                type = WrapTypeFromModifiers(type, fd, fieldContext, ytOpts, flags, /*recursive=*/false);
             } else {
-                type = wrapRecursiveType(type, flags);
+                type = wrapRecursiveType(type, flags, /*wrapWithModifiers=*/true);
             }
         }
 
@@ -253,6 +240,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
     THashMap<const OneofDescriptor*, ui32> visitedOneofs;
     for (int i = 0, end = descriptor->field_count(); i < end; ++i) {
         const FieldDescriptor* fd = descriptor->field(i);
+        EFieldContext fieldContext = GetFieldContext(fd, YtMode_);
         if (auto oneofDescriptor = fd->containing_oneof(); YtMode_ && oneofDescriptor) {
             if (!visitedOneofs.contains(oneofDescriptor)) {
                 auto oneofOptions = NYT::NDetail::GetOneofOptions(oneofDescriptor);
@@ -260,7 +248,8 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                     case NYT::NDetail::EProtobufOneofMode::SeparateFields:
                         for (int i = 0; i < oneofDescriptor->field_count(); ++i) {
                             auto& field = message->Fields[oneofDescriptor->field(i)->number()];
-                            makeField(field.Pos, field.Flags, structType, oneofDescriptor->field(i), false);
+                            Y_ENSURE(fieldContext == EFieldContext::InsideOneofYtSeparateFields);
+                            makeField(field.Pos, field.Flags, structType, oneofDescriptor->field(i), fieldContext);
                         }
                         visitedOneofs.emplace(oneofDescriptor, Max<ui32>());
                         break;
@@ -269,8 +258,9 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                         for (int i = 0; i < oneofDescriptor->field_count(); ++i) {
                             auto fdOneof = oneofDescriptor->field(i);
                             auto& field = message->Fields[fdOneof->number()];
+                            Y_ENSURE(fieldContext == EFieldContext::InsideOneofYtVariant);
                             field.Flags |= EFieldFlag::Variant;
-                            makeField(message->VariantIndicies[fdOneof->number()], field.Flags, varStructType, fdOneof, true);
+                            makeField(message->VariantIndicies[fdOneof->number()], field.Flags, varStructType, fdOneof, fieldContext);
                         }
                         structType->AddField(oneofOptions.VariantFieldName, Builder_.Optional()->Item(Builder_.Variant()->Over(varStructType->Build()).Build()).Build(), &visitedOneofs[oneofDescriptor]);
                         break;
@@ -280,7 +270,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
         } else {
             // Запоминаем поле по соответствующему тегу из proto
             auto& field = message->Fields[fd->number()];
-            makeField(field.Pos, field.Flags, structType, fd, std::nullopt);
+            makeField(field.Pos, field.Flags, structType, fd, fieldContext);
         }
     }
 
@@ -295,7 +285,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
     message->FieldsCount = structTypeInspector.GetMembersCount();
 
     // Позиции становятся известны после вызова Build()
-    for (auto [oneofDescriptor, pos]: visitedOneofs) {
+    for (auto [oneofDescriptor, pos] : visitedOneofs) {
         if (pos != Max<ui32>()) {
             for (int i = 0; i < oneofDescriptor->field_count(); ++i) {
                 message->Fields[oneofDescriptor->field(i)->number()].Pos = pos;
@@ -305,8 +295,7 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
 
     // Зарегистрируем созданное сообщение в дескрипторе типа.
     Info_->Messages.insert(
-        std::make_pair(descriptor->full_name(), message)
-    );
+        std::make_pair(descriptor->full_name(), message));
 
     return message->StructType;
 }
@@ -326,13 +315,13 @@ TType* TTypeBuilder::GetInt64Type() {
 }
 
 TType* TTypeBuilder::GetYsonType() {
-    if (YsonType == nullptr) {
-        YsonType = Builder_.SimpleType<TYson>();
+    if (YsonType_ == nullptr) {
+        YsonType_ = Builder_.SimpleType<TYson>();
     }
-    return YsonType;
+    return YsonType_;
 }
 
-TType* TTypeBuilder::GetType(const FieldDescriptor* fd, bool defaultYtSerialize) {
+TType* TTypeBuilder::GetUnderlyingType(const FieldDescriptor* fd, bool defaultYtSerialize) {
     FieldDescriptor::Type type = fd->type();
 
     // Unify types
@@ -363,8 +352,7 @@ TType* TTypeBuilder::GetType(const FieldDescriptor* fd, bool defaultYtSerialize)
             break;
         case FieldDescriptor::TYPE_MESSAGE:
             return GenerateTypeInfo(fd->message_type(), defaultYtSerialize);
-        default:
-            ;
+        default:;
     }
 
     if (BasicTypes_[type] == nullptr) {
@@ -416,6 +404,35 @@ TType* TTypeBuilder::GetType(const FieldDescriptor* fd, bool defaultYtSerialize)
     return BasicTypes_[type];
 }
 
+TType* TTypeBuilder::WrapTypeFromModifiers(TType* type,
+                                           const FieldDescriptor* fd,
+                                           EFieldContext fieldContext,
+                                           const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts,
+                                           TFlags<EFieldFlag>& flags,
+                                           bool recursiveType) {
+    if (fd->is_repeated()) {
+        // Преобразуем базовый тип к списку
+        return GetListType(type, ytOpts, flags);
+    } else if (fieldContext == EFieldContext::InsideOneofYtSeparateFields) {
+        // For 'one of as separate fields' always make optional type
+        // Otherwise always ignore optionality.
+        return GetOptionalType(type);
+    } else if (fieldContext == EFieldContext::InsideOneofYtVariant) {
+        // Do not wrap type for 'one of as variant'.
+    } else if (fd->is_optional() && (fd->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE || !AvoidOptionalScalars(SyntaxAware_, fd))) {
+        if (!recursiveType || Recursion_ == ERecursionTraits::BytesV2) {
+            return GetOptionalType(type);
+        }
+        // Needs for backward compatability.
+        // We cannot just wrap optional to not break old queries.
+        flags |= EFieldFlag::RecursiveOptionalUnwrapped;
+        return type;
+    } else if (fd->is_required()) {
+        // Do not wrap required type.
+    }
+    return type;
+}
+
 TType* TTypeBuilder::GetOptionalType(TType* type) {
     auto ti = Optionals_.find(type);
     if (ti != Optionals_.end()) {
@@ -427,18 +444,59 @@ TType* TTypeBuilder::GetOptionalType(TType* type) {
     }
 }
 
-TType* TTypeBuilder::GetListType(TType* type) {
+TType* TTypeBuilder::GetListType(TType* type, const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts, TFlags<EFieldFlag>& flags) {
     auto ti = Lists_.find(type);
     if (ti != Lists_.end()) {
-        return ti->second;
+        type = ti->second;
     } else {
         auto listType = Builder_.List()->Item(type).Build();
         Lists_.insert(std::make_pair(type, listType));
-        return listType;
+        type = listType;
     }
+
+    if (OptionalLists_ || (ytOpts && NYT::NDetail::EProtobufListMode::Optional == ytOpts->ListMode)) {
+        flags |= EFieldFlag::OptionalContainer;
+        type = GetOptionalType(type);
+    }
+    return type;
 }
 
 } // namespace
+
+EFieldContext GetFieldContext(const NProtoBuf::FieldDescriptor* fieldDescriptor, bool ytMode) {
+    Y_ABORT_UNLESS(fieldDescriptor);
+
+    // Check if the field is part of a map (key or value)
+    if (fieldDescriptor->containing_type()->map_key() == fieldDescriptor) {
+        return EFieldContext::MapKey;
+    } else if (fieldDescriptor->containing_type()->map_value() == fieldDescriptor) {
+        return EFieldContext::MapValue;
+    }
+
+    // Check if the field is part of a oneof
+    if (fieldDescriptor->containing_oneof() != nullptr) {
+        if (!ytMode) {
+            return EFieldContext::InsideOneofProtobufSeparateFields;
+        }
+        switch (NYT::NDetail::GetOneofOptions(fieldDescriptor->containing_oneof()).Mode) {
+            case NYT::NDetail::EProtobufOneofMode::SeparateFields:
+                return EFieldContext::InsideOneofYtSeparateFields;
+            case NYT::NDetail::EProtobufOneofMode::Variant:
+                return EFieldContext::InsideOneofYtVariant;
+        }
+    }
+
+    // Determine if the field is optional, required, or repeated
+    if (fieldDescriptor->is_optional()) {
+        return EFieldContext::SeparateOptional;
+    } else if (fieldDescriptor->is_required()) {
+        return EFieldContext::SeparateRequired;
+    } else if (fieldDescriptor->is_repeated()) {
+        return EFieldContext::SeparateRepeated;
+    }
+
+    Y_ABORT("Unhandled field type case");
+}
 
 void ProtoTypeBuild(const NProtoBuf::Descriptor* descriptor,
                     const EEnumFormat enumFormat,
@@ -452,12 +510,12 @@ void ProtoTypeBuild(const NProtoBuf::Descriptor* descriptor,
                     const bool ytMode)
 {
     TTypeBuilder(enumFormat, recursion, ytMode, optionalLists, syntaxAware, useJsonName,
-                 stringType, builder).Build(descriptor, info);
+                 stringType, builder)
+        .Build(descriptor, info);
 }
 
 bool AvoidOptionalScalars(bool syntaxAware, const FieldDescriptor* fd) {
     return syntaxAware && fd->file()->syntax() == FileDescriptor::SYNTAX_PROTO3;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

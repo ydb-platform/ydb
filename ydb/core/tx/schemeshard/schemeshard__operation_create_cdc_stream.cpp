@@ -1,19 +1,14 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-
-#include "schemeshard_utils.h"  // for TransactionTemplate
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -22,21 +17,17 @@ namespace NCdc {
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NewCdcStream TPropose"
-            << " opId# " << OperationId << " ";
-    }
-
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -49,8 +40,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -69,7 +61,7 @@ public:
         context.SS->PersistCreateStep(db, pathId, step);
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId] = stream->AlterData;
+        context.SS->CdcStreams.Set(pathId, stream->AlterData);
 
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
         context.SS->ClearDescribePathCaches(path);
@@ -112,16 +104,18 @@ class TNewCdcStream: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    virtual const char* Name() const override final { return "TNewCdcStream"; }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TNewCdcStream Propose"
-            << ": opId# " << OperationId
-            << ", stream# " << workingDir << "/" << streamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"stream", workingDir + "/" + streamName},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -168,7 +162,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .PathsLimit()
                     .DirChildrenLimit();
             }
@@ -272,6 +266,27 @@ public:
             }
         }
 
+        if (streamDesc.GetSchemaChanges()) {
+            switch (streamDesc.GetFormat()) {
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "SCHEMA_CHANGES incompatible with specified stream format");
+                return result;
+            }
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            const auto& families = context.SS->Tables.at(tablePath.Base()->PathId)->PartitionConfig().GetColumnFamilies();
+            for (const auto& family : families) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
+        }
+
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
@@ -283,11 +298,6 @@ public:
             !userAttrs->CheckLimits(errStr))
         {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
-
-        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && op.GetTopicAutoPartitioning()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Topic autopartitioning for CDC is disabled");
             return result;
         }
 
@@ -313,6 +323,11 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
+        txState.CdcPathId = streamPath.Base()->PathId;
+        YDB_LOG_DEBUG_CTX(context.Ctx, "DoNewStream: Set CdcPathId",
+            {"cdcPathId", streamPath.Base()->PathId},
+            {"streamName", streamPath.Base()->Name},
+        );
         txState.State = TTxState::Propose;
 
         streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate;
@@ -321,8 +336,7 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->CdcStreams[pathId] = stream;
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->CdcStreams.Set(pathId, stream);
 
         streamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -333,15 +347,15 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TNewCdcStream AbortPropose"
-            << ": opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TNewCdcStream AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStream AbortUnsafe",
+            {"opId", OperationId},
+            {"txId", txId},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -352,6 +366,15 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
+
+        // Override table schema version with coordinated version from AlterData
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+        auto table = context.SS->Tables.at(pathId);
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
     }
 
 public:
@@ -364,6 +387,8 @@ public:
     using NCdcStreamState::TProposeAtTable::TProposeAtTable;
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
         if (!NCdcStreamState::TProposeAtTable::HandleReply(ev, context)) {
             return false;
         }
@@ -386,18 +411,18 @@ public:
     {
         auto events = AllIncomingEvents();
         events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
-        IgnoreMessages(DebugHint(), events);
+        IgnoreMessages(events);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         if (!TDone::Process(context)) {
             return false;
@@ -487,6 +512,8 @@ class TNewCdcStreamAtTable: public TSubOperation {
     }
 
 public:
+    virtual const char* Name() const override final { return "TNewCdcStreamAtTable"; }
+
     explicit TNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan)
         : TSubOperation(id, tx)
         , InitialScan(initialScan)
@@ -499,15 +526,15 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& tableName = op.GetTableName();
         const auto& streamName = op.GetStreamDescription().GetName();
 
-        LOG_N("TNewCdcStreamAtTable Propose"
-            << ": opId# " << OperationId
-            << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"stream", workingDir + "/" + tableName + "/" + streamName},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -564,7 +591,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         const auto txType = InitialScan
             ? TTxState::TxCreateCdcStreamAtTableWithInitialScan
@@ -573,6 +599,16 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
+
+        // Set CdcPathId for continuous backup detection
+        auto streamPath = tablePath.Child(streamName);
+        if (streamPath.IsResolved()) {
+            txState.CdcPathId = streamPath.Base()->PathId;
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Set CdcPathId",
+                {"cdcPathId", streamPath.Base()->PathId},
+                {"streamName", streamName},
+            );
+        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
@@ -587,15 +623,15 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TNewCdcStreamAtTable AbortPropose"
-            << ": opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TNewCdcStreamAtTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable AbortUnsafe",
+            {"opId", OperationId},
+            {"txId", txId},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -670,11 +706,11 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && IsReplicationSupportTopicAutopartitioning(op)) {
+    if (IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(1);
-        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 10, 50));
+        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
+        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -763,7 +799,7 @@ void DoCreateStream(
 
 namespace {
 
-ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
+ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
     const auto checks = streamPath.Check();
     checks
         .IsAtLocalSchemeShard();
@@ -781,7 +817,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
 
     if (checks) {
         checks
-            .IsValidLeafName()
+            .IsValidLeafName(context.UserToken.Get())
             .PathsLimit()
             .DirChildrenLimit();
     }
@@ -814,7 +850,10 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
         } else {
-            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+            const auto& parentPath = tablePath.Parent();
+            if (!parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
+                && !parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree))
+            {
                 return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Cannot add changefeed to index table");
             }
@@ -849,9 +888,9 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
         boundaries.reserve(partitions.size() - 1);
 
         for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& partition = partitions.at(i);
+            const auto* partition = partitions.at(i);
             if (i != partitions.size() - 1) {
-                boundaries.push_back(partition.EndOfRange);
+                boundaries.push_back(partition->EndOfRange);
             }
         }
     }
@@ -862,6 +901,7 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 } // anonymous
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationContext& context,
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TString& tableName,
@@ -869,13 +909,13 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     bool acceptExisted,
     bool restore)
 {
-    const auto tablePath = workingDirPath.Child(tableName);
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
         return reject;
     }
 
     const auto streamPath = tablePath.Child(streamName);
-    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+    if (auto reject = RejectOnCdcChecks(context, opId, streamPath, acceptExisted)) {
         return reject;
     }
 
@@ -905,9 +945,16 @@ ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxStat
 TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
 
-    LOG_D("CreateNewCdcStream"
-        << ": opId# " << opId
-        << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CreateNewCdcStream",
+        {"opId", opId},
+        {"tx", tx.ShortDebugString()},
+        {"schemeshard", context.SS->TabletID()},
+    );
+
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
+    }
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetCreateCdcStream();
@@ -916,7 +963,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
+    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -974,7 +1021,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         DoCreateLock(result, opId, workingDirPath, tablePath);
     }
 
-    if (workingDirPath.IsTableIndex()) {
+    if (workingDirPath.IsTableIndex() && !streamName.EndsWith("_continuousBackupImpl")) {
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
@@ -997,3 +1044,5 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

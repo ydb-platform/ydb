@@ -44,5 +44,18 @@ namespace NKikimr {
             }
         }
 
+        void THistograms::UpdateCounters(TInstant now) {
+            for (const auto& histogram : {
+                     VGetAsyncLatencyHistogram,
+                     VGetFastLatencyHistogram,
+                     VGetDiscoverLatencyHistogram,
+                     VGetLowLatencyHistogram,
+                     VPutTabletLogLatencyHistogram,
+                     VPutUserDataLatencyHistogram,
+                     VPutAsyncBlobLatencyHistogram}) {
+                histogram->UpdateCounters(now);
+            }
+        }
+
     } // NVDiskMon
 } // NKikimr

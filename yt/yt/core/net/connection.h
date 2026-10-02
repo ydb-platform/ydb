@@ -65,8 +65,8 @@ DEFINE_REFCOUNTED_TYPE(IConnectionWriter)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IConnection
-    : public IConnectionReader
-    , public IConnectionWriter
+    : public virtual IConnectionReader
+    , public virtual IConnectionWriter
 {
     virtual TConnectionId GetId() const = 0;
 
@@ -96,29 +96,32 @@ DEFINE_REFCOUNTED_TYPE(IConnection)
 std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(NConcurrency::IPollerPtr poller);
 
 //! File descriptor must be in nonblocking mode.
+//! Takes ownership of fd even if the function throws.
 IConnectionPtr CreateConnectionFromFD(
     TFileDescriptor fd,
     const TNetworkAddress& localAddress,
     const TNetworkAddress& remoteAddress,
     NConcurrency::IPollerPtr poller);
 
+//! File descriptor must refer to a FIFO and be in nonblocking mode.
+//! Takes ownership of fd even if the function throws.
 IConnectionReaderPtr CreateInputConnectionFromFD(
     TFileDescriptor fd,
-    TString pipePath,
+    const std::string& pipePath,
     NConcurrency::IPollerPtr poller,
     const TRefCountedPtr& pipeHolder);
 
 IConnectionReaderPtr CreateInputConnectionFromPath(
-    TString pipePath,
+    std::string pipePath,
     NConcurrency::IPollerPtr poller,
-    const TRefCountedPtr& pipeHolder);
+    TRefCountedPtr pipeHolder);
 
 IConnectionWriterPtr CreateOutputConnectionFromPath(
-    TString pipePath,
+    std::string pipePath,
     NConcurrency::IPollerPtr poller,
-    const TRefCountedPtr& pipeHolder,
+    TRefCountedPtr pipeHolder,
     std::optional<int> capacity = {},
-    bool useDeliveryFence = false);
+    EDeliveryFencedMode deliveryFencedMode = EDeliveryFencedMode::None);
 
 ////////////////////////////////////////////////////////////////////////////////
 

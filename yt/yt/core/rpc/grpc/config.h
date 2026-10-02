@@ -12,12 +12,16 @@ namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
-public:
     int DispatcherThreadCount;
     int GrpcThreadCount;
+    int GrpcEventEngineThreadCount;
+
+    NLogging::ELogLevel GrpcInternalMinLogLevel;
+
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TDispatcherConfig);
 
@@ -28,10 +32,23 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSslPemKeyCertPairConfig
+struct TDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
+    std::optional<NLogging::ELogLevel> GrpcInternalMinLogLevel;
+
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSslPemKeyCertPairConfig
+    : public NYTree::TYsonStruct
+{
     NCrypto::TPemBlobConfigPtr PrivateKey;
     NCrypto::TPemBlobConfigPtr CertChain;
 
@@ -54,10 +71,9 @@ DEFINE_ENUM(EClientCertificateRequest,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerCredentialsConfig
+struct TServerCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PemRootCerts;
     std::vector<TSslPemKeyCertPairConfigPtr> PemKeyCertPairs;
     EClientCertificateRequest ClientCertificateRequest;
@@ -71,11 +87,10 @@ DEFINE_REFCOUNTED_TYPE(TServerCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerAddressConfig
+struct TServerAddressConfig
     : public NYTree::TYsonStruct
 {
-public:
-    TString Address;
+    std::string Address;
     TServerCredentialsConfigPtr Credentials;
 
     REGISTER_YSON_STRUCT(TServerAddressConfig);
@@ -87,14 +102,13 @@ DEFINE_REFCOUNTED_TYPE(TServerAddressConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public NYTree::TYsonStruct
 {
-public:
-    TString ProfilingName;
+    std::string ProfilingName;
 
     std::vector<TServerAddressConfigPtr> Addresses;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -105,10 +119,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelCredentialsConfig
+struct TChannelCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PemRootCerts;
     TSslPemKeyCertPairConfigPtr PemKeyCertPair;
     bool VerifyServerCert;
@@ -122,27 +135,25 @@ DEFINE_REFCOUNTED_TYPE(TChannelCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelConfigTemplate
+struct TChannelFactoryConfig
     : public NYTree::TYsonStruct
 {
-public:
     TChannelCredentialsConfigPtr Credentials;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
-    REGISTER_YSON_STRUCT(TChannelConfigTemplate);
+    REGISTER_YSON_STRUCT(TChannelFactoryConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TChannelConfigTemplate)
+DEFINE_REFCOUNTED_TYPE(TChannelFactoryConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelConfig
-    : public TChannelConfigTemplate
+struct TChannelConfig
+    : public TChannelFactoryConfig
 {
-public:
-    TString Address;
+    std::string Address;
 
     REGISTER_YSON_STRUCT(TChannelConfig);
 

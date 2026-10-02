@@ -1,5 +1,4 @@
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -1212,8 +1211,19 @@ class MinidumpLinuxMapsList : public MinidumpStream {
 // at the time the minidump was generated.
 class MinidumpCrashpadInfo : public MinidumpStream {
  public:
+  struct AnnotationObject {
+    uint16_t type;
+    std::string name;
+    std::vector<uint8_t> value;
+  };
+
   const MDRawCrashpadInfo* crashpad_info() const {
     return valid_ ? &crashpad_info_ : NULL;
+  }
+
+  const std::vector<std::vector<AnnotationObject>>*
+  GetModuleCrashpadInfoAnnotationObjects() const {
+    return valid_ ? &module_crashpad_info_annotation_objects_ : NULL;
   }
 
   // Print a human-readable representation of the object to stdout.
@@ -1234,6 +1244,9 @@ class MinidumpCrashpadInfo : public MinidumpStream {
   std::vector<std::vector<std::string>> module_crashpad_info_list_annotations_;
   std::vector<std::map<std::string, std::string>>
       module_crashpad_info_simple_annotations_;
+  std::vector<std::vector<AnnotationObject>>
+      module_crashpad_info_annotation_objects_;
+
   std::map<std::string, std::string> simple_annotations_;
 };
 
@@ -1343,6 +1356,10 @@ class Minidump {
   bool ReadSimpleStringDictionary(
       off_t offset,
       std::map<std::string, std::string>* simple_string_dictionary);
+
+  bool ReadCrashpadAnnotationsList(
+      off_t offset,
+      std::vector<MinidumpCrashpadInfo::AnnotationObject>* annotations_list);
 
   // SeekToStreamType positions the file at the beginning of a stream
   // identified by stream_type, and informs the caller of the stream's

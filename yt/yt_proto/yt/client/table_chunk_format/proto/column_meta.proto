@@ -1,5 +1,7 @@
 package NYT.NTableChunkFormat.NProto;
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/table_chunk_format";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TSegmentMeta

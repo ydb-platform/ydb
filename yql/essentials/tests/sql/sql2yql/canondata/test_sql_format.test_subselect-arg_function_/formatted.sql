@@ -1,0 +1,10 @@
+$x = ListLength(
+    (
+        SELECT
+            [1, 2, 3]
+    )
+);
+
+SELECT
+    $x
+;

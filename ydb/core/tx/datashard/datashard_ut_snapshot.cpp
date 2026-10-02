@@ -1198,7 +1198,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     Cerr << record.DebugString() << Endl;
                     if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
                         NKikimrTxDataShard::TDataTransaction tx;
-                        Y_ABORT_UNLESS(tx.ParseFromString(record.GetTxBody()));
+                        Y_ENSURE(tx.ParseFromString(record.GetTxBody()));
                         Cerr << "TxBody (original):" << Endl;
                         Cerr << tx.DebugString() << Endl;
                         if (tx.HasMiniKQL()) {
@@ -1208,50 +1208,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                             auto node = DeserializeRuntimeNode(tx.GetMiniKQL(), typeEnv);
                             Cerr << "MiniKQL:" << Endl;
                             Cerr << PrintNode(node.GetNode()) << Endl;
-                        }
-                        if (tx.HasKqpTransaction()) {
-                            if (InjectClearTasks && tx.GetKqpTransaction().TasksSize() > 0) {
-                                tx.MutableKqpTransaction()->ClearTasks();
-                                TString txBody;
-                                Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
-                                record.SetTxBody(txBody);
-                                Cerr << "TxBody: cleared Tasks" << Endl;
-                            }
-                            if (InjectLocks) {
-                                auto* protoLocks = tx.MutableKqpTransaction()->MutableLocks();
-                                protoLocks->SetOp(InjectLocks->Op);
-                                protoLocks->ClearLocks();
-                                TSet<ui64> shards;
-                                for (auto& lock : InjectLocks->Locks) {
-                                    auto* protoLock = protoLocks->AddLocks();
-                                    protoLock->SetLockId(lock.LockId);
-                                    protoLock->SetDataShard(lock.DataShard);
-                                    protoLock->SetGeneration(lock.Generation);
-                                    protoLock->SetCounter(lock.Counter);
-                                    protoLock->SetSchemeShard(lock.SchemeShard);
-                                    protoLock->SetPathId(lock.PathId);
-                                    shards.insert(lock.DataShard);
-                                }
-                                protoLocks->ClearSendingShards();
-                                for (ui64 shard : shards) {
-                                    protoLocks->AddSendingShards(shard);
-                                    protoLocks->AddReceivingShards(shard);
-                                }
-                                TString txBody;
-                                Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
-                                record.SetTxBody(txBody);
-                                Cerr << "TxBody: injected Locks" << Endl;
-                            }
-                            for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
-                                if (task.HasProgram() && task.GetProgram().GetRaw()) {
-                                    using namespace NKikimr::NMiniKQL;
-                                    TScopedAlloc alloc(__LOCATION__);
-                                    TTypeEnvironment typeEnv(alloc);
-                                    auto node = DeserializeRuntimeNode(task.GetProgram().GetRaw(), typeEnv);
-                                    Cerr << "Task program:" << Endl;
-                                    Cerr << PrintNode(node.GetNode()) << Endl;
-                                }
-                            }
                         }
                         Last = {};
                         if (tx.GetLockTxId()) {
@@ -1263,7 +1219,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                                 tx.SetLockNodeId(Inject.LockNodeId);
                             }
                             TString txBody;
-                            Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
+                            Y_ENSURE(tx.SerializeToString(&txBody));
                             record.SetTxBody(txBody);
                             Cerr << "TxBody: injected LockId" << Endl;
                         }
@@ -1278,9 +1234,75 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     }
                     break;
                 }
+                case NKikimr::NEvents::TDataEvents::TEvWrite::EventType: {
+                    auto& record = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>()->Record;
+                    Cerr << "TEvWrite:" << Endl;
+                    Cerr << record.DebugString() << Endl;
+                    if (InjectClearTasks) {
+                        record.ClearOperations();
+                    }
+                    if (InjectLocks) {
+                        auto* protoLocks = record.MutableLocks();
+                        protoLocks->SetOp(InjectLocks->Op);
+                        protoLocks->ClearLocks();
+                        TSet<ui64> shards;
+                        for (auto& lock : InjectLocks->Locks) {
+                            auto* protoLock = protoLocks->AddLocks();
+                            protoLock->SetLockId(lock.LockId);
+                            protoLock->SetDataShard(lock.DataShard);
+                            protoLock->SetGeneration(lock.Generation);
+                            protoLock->SetCounter(lock.Counter);
+                            protoLock->SetSchemeShard(lock.SchemeShard);
+                            protoLock->SetPathId(lock.PathId);
+                            shards.insert(lock.DataShard);
+                        }
+                        protoLocks->ClearSendingShards();
+                        for (ui64 shard : shards) {
+                            protoLocks->AddSendingShards(shard);
+                            protoLocks->AddReceivingShards(shard);
+                        }
+                        Cerr << "TEvWrite: injected Locks" << Endl;
+                    }
+                    Last = {};
+                    if (record.GetLockTxId()) {
+                        Last.LockId = record.GetLockTxId();
+                        Last.LockNodeId = record.GetLockNodeId();
+                    } else if (Inject.LockId) {
+                        record.SetLockTxId(Inject.LockId);
+                        if (Inject.LockNodeId) {
+                            record.SetLockNodeId(Inject.LockNodeId);
+                        }
+                        Cerr << "TEvWrite: injected LockId" << Endl;
+                    }
+                    if (record.HasMvccSnapshot()) {
+                        Last.MvccSnapshot.Step = record.GetMvccSnapshot().GetStep();
+                        Last.MvccSnapshot.TxId = record.GetMvccSnapshot().GetTxId();
+                    } else if (Inject.MvccSnapshot) {
+                        record.MutableMvccSnapshot()->SetStep(Inject.MvccSnapshot.Step);
+                        record.MutableMvccSnapshot()->SetTxId(Inject.MvccSnapshot.TxId);
+                        Cerr << "TEvWrite: injected MvccSnapshot" << Endl;
+                    }
+                    break;
+                }
                 case TEvDataShard::TEvProposeTransactionResult::EventType: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransactionResult>()->Record;
                     Cerr << "TEvProposeTransactionResult:" << Endl;
+                    Cerr << record.DebugString() << Endl;
+                    LastLocks.clear();
+                    for (auto& protoLock : record.GetTxLocks()) {
+                        auto& lock = LastLocks.emplace_back();
+                        lock.LockId = protoLock.GetLockId();
+                        lock.DataShard = protoLock.GetDataShard();
+                        lock.Generation = protoLock.GetGeneration();
+                        lock.Counter = protoLock.GetCounter();
+                        lock.SchemeShard = protoLock.GetSchemeShard();
+                        lock.PathId = protoLock.GetPathId();
+                    }
+                    break;
+                }
+                case NKikimr::NEvents::TDataEvents::TEvWriteResult::EventType: {
+                    auto& record = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    Cerr << "TEvWriteResult:" << Endl;
                     Cerr << record.DebugString() << Endl;
                     LastLocks.clear();
                     for (auto& protoLock : record.GetTxLocks()) {
@@ -1377,8 +1399,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
-        Y_ABORT_UNLESS(snapshot.LockId != 0);
-        Y_ABORT_UNLESS(snapshot.MvccSnapshot);
+        Y_ENSURE(snapshot.LockId != 0);
+        Y_ENSURE(snapshot.MvccSnapshot);
 
         // Perform an immediate write, pretending it happens as part of the above snapshot tx
         observer.Inject = snapshot;
@@ -1471,8 +1493,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
-        Y_ABORT_UNLESS(snapshot.LockId != 0);
-        Y_ABORT_UNLESS(snapshot.MvccSnapshot);
+        Y_ENSURE(snapshot.LockId != 0);
+        Y_ENSURE(snapshot.MvccSnapshot);
 
         // Perform an immediate write, pretending it happens as part of the above snapshot tx
         // We expect read lock to be upgraded to write lock and become persistent
@@ -2195,7 +2217,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             rows->emplace_back(serializedKey, serializedValues);
 
             auto upsertSender = runtime.AllocateEdgeActor();
-            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root/table-1", types, rows);
+            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root", "/Root/table-1", types, rows);
             runtime.Register(actor);
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(upsertSender);
@@ -2585,6 +2607,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Note: disable volatile transactions, since this test verifies lock
         // freezing and volatile transactions work without them.
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
 
         // Commit changes in tx 123
         observer.BlockReadSets = true;
@@ -2736,6 +2759,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // until readsets arrive, and this test relies on tx cross blocking,
         // which doesn't happen with volatile transactions.
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
 
         // Commit changes in tx 123 (we expect locks to be ready for sending)
         observer.BlockReadSets = true;
@@ -3236,15 +3260,16 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto locks2 = observer.LastLocks;
         observer.Inject = {};
 
-        // Write uncommitted changes to key 2 with tx 345
+        // Write uncommitted changes to key 1 and 2 with tx 345
+        // We expect write to key 1 to also be rolled back
         observer.Inject.LockId = 345;
         observer.Inject.LockNodeId = runtime.GetNodeId(0);
         observer.Inject.MvccSnapshot = snapshot;
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
-                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 23)
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 13), (2, 23)
                 )")),
-            "ERROR: GENERIC_ERROR");
+            "ERROR: INTERNAL_ERROR");
         observer.Inject = {};
 
         // Abort tx 234, this would allow adding one more change to key 2
@@ -4869,7 +4894,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetEnableDataShardWriteAlwaysVolatile(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5097,6 +5123,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
 
@@ -5735,9 +5764,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -5914,6 +5940,78 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Reboot the original table shard and sleep a little
         // The bug was causing shard to crash in UndoShardLock
+        RebootTablet(runtime, shards.at(0), sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(ShardRestartAfterDropTableAndAbort) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        // The bug was discovered in 24-4 that doesn't have in-memory state migration
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Uint32, value Uint32, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (1, 11);");
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 22);
+
+                SELECT key, value FROM `/Root/table`
+                WHERE key <= 5
+                ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
+
+        // Copy table (this will prevent shard deletion)
+        {
+            auto senderCopy = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-copy", "/Root/table");
+            WaitTxNotification(server, senderCopy, txId);
+        }
+
+        // Drop the original table
+        {
+            auto senderDrop = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncDropTable(server, senderDrop, "/Root", "table");
+            WaitTxNotification(server, senderDrop, txId);
+        }
+
+        TBlockEvents<TEvLongTxService::TEvLockStatus> blockedLockStatus(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+            "ERROR: UNAVAILABLE");
+
+        runtime.WaitFor("blocked lock status", [&]{ return blockedLockStatus.size() > 0; });
+        blockedLockStatus.Stop().clear();
+
+        // Reboot the original table shard and sleep a little
+        // The bug was causing shard to crash in RemoveSubscribedLock
         RebootTablet(runtime, shards.at(0), sender);
         runtime.SimulateSleep(TDuration::Seconds(1));
     }

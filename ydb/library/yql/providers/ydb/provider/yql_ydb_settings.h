@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
@@ -27,7 +28,7 @@ struct TClusterMainSettings {
 struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYdbConfiguration>;
 
-    TYdbConfiguration();
+    explicit TYdbConfiguration(bool strictConfigValidation = false);
     TYdbConfiguration(const TYdbConfiguration&) = delete;
 
     void Init(

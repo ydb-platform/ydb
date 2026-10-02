@@ -11,6 +11,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
+#include <util/string/escape.h>
 
 namespace NMonitoring {
     namespace {
@@ -169,13 +170,17 @@ namespace NMonitoring {
                         break;
 
                     case EMetricValueType::UNKNOWN:
-                        ythrow yexception() << "unknown metric value type";
+                        ythrow TJsonEncodeError() << "unknown metric value type";
                 }
             }
 
             void WriteLabel(TStringBuf name, TStringBuf value) {
-                Y_ENSURE(IsUtf(name), "label name is not valid UTF-8 string");
-                Y_ENSURE(IsUtf(value), "label value is not valid UTF-8 string");
+                if (!IsUtf(name)) {
+                    ythrow TJsonEncodeError() << "label name is not valid UTF-8 string: '" << EscapeC(name.SubStr(0, 100)) << "'";
+                } else if (!IsUtf(value)) {
+                    ythrow TJsonEncodeError() << "label value is not valid UTF-8 string, name: '" << name << "', value: '" << EscapeC(value.SubStr(0, 100)) << "'";
+                }
+
                 if (Style_ == EJsonStyle::Cloud && name == MetricNameLabel_) {
                     CurrentMetricName_ = value;
                 } else {
@@ -199,7 +204,7 @@ namespace NMonitoring {
                     return;
                 }
                 if (CurrentMetricName_.empty()) {
-                    ythrow yexception() << "label '" << MetricNameLabel_ << "' is not defined";
+                    ythrow TJsonEncodeError() << "label '" << MetricNameLabel_ << "' is not defined";
                 }
                 Buf_.WriteKey("name");
                 Buf_.WriteString(CurrentMetricName_);
@@ -218,7 +223,7 @@ namespace NMonitoring {
                     case EMetricType::IGAUGE:
                         return TStringBuf("IGAUGE");
                     default:
-                        ythrow yexception() << "metric type '" << type << "' is not supported by cloud json format";
+                        ythrow TJsonEncodeError() << "metric type '" << type << "' is not supported by cloud json format";
                 }
             }
 
@@ -274,6 +279,14 @@ namespace NMonitoring {
                 WriteMetricType(type);
             }
 
+            void OnMemOnly(bool isMemOnly) override {
+                State_.Expect(TEncoderState::EState::METRIC);
+                if (isMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(isMemOnly);
+                }
+            }
+
             void OnMetricEnd() override {
                 State_.Switch(TEncoderState::EState::METRIC, TEncoderState::EState::ROOT);
                 if (!Buf_.KeyExpected()) {
@@ -308,8 +321,6 @@ namespace NMonitoring {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
                 Buf_.BeginObject();
-
-                EmptyLabels_ = true;
             }
 
             void OnLabelsEnd() override {
@@ -321,7 +332,6 @@ namespace NMonitoring {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
 
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
                 Buf_.EndObject();
                 if (State_ == TEncoderState::EState::METRIC) {
                     WriteName();
@@ -334,8 +344,6 @@ namespace NMonitoring {
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
-
-                EmptyLabels_ = false;
             }
 
             void OnDouble(TInstant time, double value) override {
@@ -412,7 +420,6 @@ namespace NMonitoring {
             TEncoderState State_;
             TTypedPoint LastPoint_;
             bool TimeSeries_ = false;
-            bool EmptyLabels_ = false;
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -428,26 +435,6 @@ namespace NMonitoring {
 
             ~TBufferedJsonEncoder() override {
                 Close();
-            }
-
-            void OnLabelsBegin() override {
-                TBufferedEncoderBase::OnLabelsBegin();
-                EmptyLabels_ = true;
-            }
-
-            void OnLabel(TStringBuf name, TStringBuf value) override {
-                TBufferedEncoderBase::OnLabel(name, value);
-                EmptyLabels_ = false;
-            }
-
-            void OnLabel(ui32 name, ui32 value) override {
-                TBufferedEncoderBase::OnLabel(name, value);
-                EmptyLabels_ = false;
-            }
-
-            void OnLabelsEnd() override {
-                TBufferedEncoderBase::OnLabelsEnd();
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
             }
 
             void Close() final {
@@ -493,6 +480,7 @@ namespace NMonitoring {
                 Buf_.WriteKey(TStringBuf("labels"));
                 WriteLabels(metric.Labels, false);
 
+                WriteFlags(metric);
                 metric.TimeSeries.SortByTs();
                 if (metric.TimeSeries.Size() == 1) {
                     const auto& point = metric.TimeSeries[0];
@@ -532,9 +520,15 @@ namespace NMonitoring {
                 }
             }
 
+            void WriteFlags(const TMetric& metric) {
+                if (metric.IsMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(true);
+                }
+            }
+
         private:
             bool Closed_{false};
-            bool EmptyLabels_ = false;
         };
     }
 

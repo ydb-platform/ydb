@@ -7,7 +7,6 @@ from parameterized import parameterized
 
 import __res as res
 
-
 NAMESPACE_PREFIX = b"py/namespace/"
 TEST_SOURCE_ROOT = "/home/arcadia"
 
@@ -18,7 +17,7 @@ class ImporterMocks:
         self._mock_resources = mock_resources
         self._patchers = [
             patch("__res.iter_keys", wraps=self._iter_keys),
-            patch("__res.__resource.find", wraps=self._resource_find),
+            patch("__res.find", wraps=self._resource_find),
             patch("__res._path_isfile", wraps=self._path_isfile),
             patch("__res._os.listdir", wraps=self._os_listdir),
             patch("__res._os.lstat", wraps=self._os_lstat),

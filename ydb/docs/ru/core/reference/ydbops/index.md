@@ -2,7 +2,7 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-Утилита `ydbops` облегчает выполнение объемных сценариев на кластерах {{ ydb-short-name }}. Утилита поддерживает кластеры, развернутые с помощью [Ansible](../../devops/ansible/index.md), [Kubernetes](../../devops/kubernetes/index.md) или [вручную](../../devops/manual/index.md).
+Утилита `ydbops` облегчает выполнение объемных сценариев на кластерах {{ ydb-short-name }}. Утилита поддерживает кластеры, развернутые с помощью [Ansible](../../devops/deployment-options/ansible/index.md), [Kubernetes](../../devops/deployment-options/kubernetes/index.md) или [вручную](../../devops/deployment-options/manual/index.md).
 
 ## Смотрите также
 

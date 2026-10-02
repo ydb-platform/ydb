@@ -172,7 +172,7 @@ namespace detail
 template < class Graph, class P, class T, class R >
 void cycle_canceling(Graph& g, const bgl_named_params< P, T, R >& params)
 {
-    cycle_canceling_dispatch1(g,
+    detail::cycle_canceling_dispatch1(g,
         choose_const_pmap(get_param(params, edge_weight), g, edge_weight),
         choose_const_pmap(get_param(params, edge_reverse), g, edge_reverse),
         choose_pmap(get_param(params, edge_residual_capacity), g,

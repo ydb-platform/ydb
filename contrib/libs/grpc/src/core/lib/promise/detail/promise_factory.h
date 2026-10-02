@@ -18,7 +18,6 @@
 #include <grpc/support/port_platform.h>
 
 #include <memory>
-#include <type_traits>
 #include <utility>
 
 #include "y_absl/meta/type_traits.h"
@@ -169,7 +168,7 @@ y_absl::enable_if_t<IsVoidCallable<ResultOf<F()>>::value,
                   PromiseLike<decltype(std::declval<F>()())>>
 PromiseFactoryImpl(F&& f) {
   return f();
-};
+}
 
 template <typename A, typename F>
 class OncePromiseFactory {

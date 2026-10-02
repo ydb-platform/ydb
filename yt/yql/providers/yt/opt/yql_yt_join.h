@@ -55,9 +55,9 @@ const TTypeAnnotationNode* AsDictKeyType(const TVector<const TTypeAnnotationNode
 void SwapJoinType(TPositionHandle pos, TExprNode::TPtr& joinType, TExprContext& ctx);
 const TStructExprType* MakeOutputJoinColumns(const THashMap<TString, const TTypeAnnotationNode*>& columnTypes,
     const TJoinLabel& label, TExprContext& ctx);
-const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx);
+const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 TVector<const TTypeAnnotationNode*> UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& left,
-    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx);
+    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 TExprNode::TPtr RemapNonConvertibleItems(const TExprNode::TPtr& input, const TJoinLabel& label,
     const TExprNode& keys, const TVector<const TTypeAnnotationNode*>& unifiedKeyTypes,
     TExprNode::TListType& columnNodes, TExprNode::TListType& columnNodesForSkipNull, TExprContext& ctx);
@@ -75,6 +75,10 @@ TCommonJoinCoreLambdas MakeCommonJoinCoreLambdas(TPositionHandle pos, TExprConte
     ui32 tableIndex, bool useSortedReduce, ui32 sortIndex,
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
     bool myData, bool otherData, const TVector<TString>& ytReduceByColumns);
+
+// Flatten one {keys, _yql_sort, _yql_join_payload: Variant} row into the flat CommonJoinCoreInputType.
+TExprNode::TPtr FlattenCommonJoinPayloadRow(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& row,
+    const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne);
 TExprNode::TPtr PrepareForCommonJoinCore(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& input,
     const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne);
 

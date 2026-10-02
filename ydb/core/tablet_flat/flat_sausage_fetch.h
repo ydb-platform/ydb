@@ -1,41 +1,22 @@
 #pragma once
 
-#include "flat_sausage_gut.h"
+#include "flat_sausage_solid.h"
 
+#include <util/generic/xrange.h>
 #include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {
 
-    struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages, NWilson::TTraceId traceId = {})
-            : Cookie(cookie)
-            , PageCollection(std::move(pageCollection))
-            , Pages(std::move(pages))
-            , TraceId(std::move(traceId))
-        {
-
-        }
-
-        void Describe(IOutputStream &out) const noexcept
-        {
-            out
-                << "Fetch{" << Pages.size() << " pages"
-                << " " << PageCollection->Label() << "}";
-        }
-
-        const ui64 Cookie = Max<ui64>();
-
-        TIntrusiveConstPtr<IPageCollection> PageCollection;
-        TVector<ui32> Pages;
-        NWilson::TTraceId TraceId;
+    struct TPagesWaitPad : public TThrRefBase {
+        ui64 PendingRequests = 0;
     };
 
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(ui32 page, TSharedData data)
-            : PageId(page)
+        TLoadedPage(TPageLocation location, TSharedData data)
+            : Location(location)
             , Data(std::move(data))
         {
 
@@ -43,10 +24,30 @@ namespace NPageCollection {
 
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<ui32>();
+            return Data && bool(Location);
         }
 
-        ui32 PageId = Max<ui32>();
+        TPageLocation Location;
+        TSharedData Data;
+    };
+
+    // Lightweight: offset+data only; Size/Type/Crc32 are authoritative in the cache's PageSet.
+    struct TLoadedPageData {
+        TLoadedPageData() = default;
+
+        TLoadedPageData(TPageOffset offset, TSharedData data)
+            : Offset(offset)
+            , Data(std::move(data))
+        {
+
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return Data && bool(Offset);
+        }
+
+        TPageOffset Offset;
         TSharedData Data;
     };
 

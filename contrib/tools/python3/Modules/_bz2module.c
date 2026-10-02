@@ -1,12 +1,14 @@
 /* _bz2 - Low-level Python interface to libbzip2. */
 
-#define PY_SSIZE_T_CLEAN
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
 
 #include <bzlib.h>
 #include <stdio.h>
+#include <stddef.h>               // offsetof()
 
 // Blocks output buffer wrappers
 #include "pycore_blocks_output_buffer.h"
@@ -114,7 +116,8 @@ typedef struct {
 typedef struct {
     PyObject_HEAD
     bz_stream bzs;
-    char eof;           /* T_BOOL expects a char */
+    int bzerror;
+    char eof;           /* Py_T_BOOL expects a char */
     PyObject *unused_data;
     char needs_input;
     char *input_buffer;
@@ -453,8 +456,11 @@ decompress_buf(BZ2Decompressor *d, Py_ssize_t max_length)
 
         d->bzs_avail_in_real += bzs->avail_in;
 
-        if (catch_bz2_error(bzret))
+        if (catch_bz2_error(bzret)) {
+            d->bzerror = bzret;
+            d->needs_input = 0;
             goto error;
+        }
         if (bzret == BZ_STREAM_END) {
             d->eof = 1;
             break;
@@ -587,6 +593,7 @@ decompress(BZ2Decompressor *d, char *data, size_t len, Py_ssize_t max_length)
     return result;
 
 error:
+    bzs->next_in = NULL;
     Py_XDECREF(result);
     return NULL;
 }
@@ -599,32 +606,40 @@ _bz2.BZ2Decompressor.decompress
 
 Decompress *data*, returning uncompressed data as bytes.
 
-If *max_length* is nonnegative, returns at most *max_length* bytes of
-decompressed data. If this limit is reached and further output can be
-produced, *self.needs_input* will be set to ``False``. In this case, the next
-call to *decompress()* may provide *data* as b'' to obtain more of the output.
+If *max_length* is nonnegative, returns at most *max_length* bytes
+of decompressed data.  If this limit is reached and further output
+can be produced, *self.needs_input* will be set to ``False``.  In
+this case, the next call to *decompress()* may provide *data* as b''
+to obtain more of the output.
 
-If all of the input data was decompressed and returned (either because this
-was less than *max_length* bytes, or because *max_length* was negative),
-*self.needs_input* will be set to True.
+If all of the input data was decompressed and returned (either
+because this was less than *max_length* bytes, or because
+*max_length* was negative), *self.needs_input* will be set to True.
 
-Attempting to decompress data after the end of stream is reached raises an
-EOFError.  Any data found after the end of the stream is ignored and saved in
-the unused_data attribute.
+Attempting to decompress data after the end of stream is reached
+raises an EOFError.  Any data found after the end of the stream is
+ignored and saved in the unused_data attribute.
 [clinic start generated code]*/
 
 static PyObject *
 _bz2_BZ2Decompressor_decompress_impl(BZ2Decompressor *self, Py_buffer *data,
                                      Py_ssize_t max_length)
-/*[clinic end generated code: output=23e41045deb240a3 input=52e1ffc66a8ea624]*/
+/*[clinic end generated code: output=23e41045deb240a3 input=7f68faa9ff7a1b51]*/
 {
     PyObject *result = NULL;
 
     ACQUIRE_LOCK(self);
-    if (self->eof)
+    if (self->eof) {
         PyErr_SetString(PyExc_EOFError, "End of stream already reached");
-    else
+    }
+    else if (self->bzerror) {
+        // Re-entering BZ2_bzDecompress() after an error can write out of bounds.
+        PyErr_SetString(PyExc_ValueError,
+                        "Decompressor is unusable after a previous error");
+    }
+    else {
         result = decompress(self, data->buf, data->len, max_length);
+    }
     RELEASE_LOCK(self);
     return result;
 }
@@ -658,6 +673,7 @@ _bz2_BZ2Decompressor_impl(PyTypeObject *type)
         return NULL;
     }
 
+    self->bzerror = 0;
     self->needs_input = 1;
     self->bzs_avail_in_real = 0;
     self->input_buffer = NULL;
@@ -716,11 +732,11 @@ PyDoc_STRVAR(BZ2Decompressor_needs_input_doc,
 "True if more input is needed before more decompressed data can be produced.");
 
 static PyMemberDef BZ2Decompressor_members[] = {
-    {"eof", T_BOOL, offsetof(BZ2Decompressor, eof),
-     READONLY, BZ2Decompressor_eof__doc__},
-    {"unused_data", T_OBJECT_EX, offsetof(BZ2Decompressor, unused_data),
-     READONLY, BZ2Decompressor_unused_data__doc__},
-    {"needs_input", T_BOOL, offsetof(BZ2Decompressor, needs_input), READONLY,
+    {"eof", Py_T_BOOL, offsetof(BZ2Decompressor, eof),
+     Py_READONLY, BZ2Decompressor_eof__doc__},
+    {"unused_data", Py_T_OBJECT_EX, offsetof(BZ2Decompressor, unused_data),
+     Py_READONLY, BZ2Decompressor_unused_data__doc__},
+    {"needs_input", Py_T_BOOL, offsetof(BZ2Decompressor, needs_input), Py_READONLY,
      BZ2Decompressor_needs_input_doc},
     {NULL}
 };
@@ -800,6 +816,7 @@ _bz2_free(void *module)
 static struct PyModuleDef_Slot _bz2_slots[] = {
     {Py_mod_exec, _bz2_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

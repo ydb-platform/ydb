@@ -2,7 +2,9 @@
 #include "dq_compute_actor_async_io.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_actor_metrics.h"
-#include "dq_compute_actor_watermarks.h"
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
@@ -22,44 +24,28 @@ struct TComputeActorAsyncInputHelper {
     TIssuesBuffer IssuesBuffer;
     bool Finished = false;
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
+    const TDuration WatermarksIdleTimeout = TDuration::Max();
     const NKikimr::NMiniKQL::TType* ValueType = nullptr;
-    TMaybe<TInstant> PendingWatermark = Nothing();
     TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 public:
     TComputeActorAsyncInputHelper(
         const TString& logPrefix,
         ui64 index,
-        NDqProto::EWatermarksMode watermarksMode)
+        NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout)
         : LogPrefix(logPrefix)
         , Index(index)
         , IssuesBuffer(IssuesBufferSize)
-        , WatermarksMode(watermarksMode) {}
-
-    bool IsPausedByWatermark() const {
-        return PendingWatermark.Defined();
-    }
-
-    void Pause(TInstant watermark) {
-        YQL_ENSURE(WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
-        PendingWatermark = watermark;
-    }
-
-    void ResumeByWatermark(TInstant watermark) {
-        YQL_ENSURE(watermark == PendingWatermark);
-        PendingWatermark = Nothing();
-    }
+        , WatermarksMode(watermarksMode)
+        , WatermarksIdleTimeout(watermarksIdleTimeout)
+    {}
 
     virtual i64 GetFreeSpace() const = 0;
-    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) = 0;
+    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) = 0;
 
-    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, TDqComputeActorWatermarks& watermarksTracker, i64 asyncInputPushLimit) {
+    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, i64 asyncInputPushLimit) {
         if (Finished) {
             CA_LOG_T("Skip polling async input[" << Index << "]: finished");
-            return {};
-        }
-
-        if (IsPausedByWatermark()) {
-            CA_LOG_T("Skip polling async input[" << Index << "]: paused");
             return {};
         }
 
@@ -75,20 +61,14 @@ public:
                 << ", read from async input: " << space << " bytes, "
                 << batch.RowCount() << " rows, finished: " << finished);
 
+            if (space >= freeSpace) {
+                CA_LOG_D("Poll async input " << Index << ", stop input by back pressure (initial free space: " << freeSpace << ", read from async input: " << space << " bytes)");
+            }
+
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
-            if (watermark) {
-                const auto inputWatermarkChanged = watermarksTracker.NotifyAsyncInputWatermarkReceived(
-                    Index,
-                    *watermark);
-
-                if (inputWatermarkChanged) {
-                    CA_LOG_T("Pause async input " << Index << " because of watermark " << *watermark);
-                    Pause(*watermark);
-                }
-            }
             const bool emptyBatch = batch.empty();
-            AsyncInputPush(std::move(batch), space, finished);
+            AsyncInputPush(std::move(batch), watermark, space, finished);
             if (!emptyBatch) {
                 // If we have read some data, we must run such reading again
                 // to process the case when async input notified us about new data
@@ -108,19 +88,22 @@ public:
     }
 };
 
-//Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
-struct TComputeActorAsyncInputHelperSync: public TComputeActorAsyncInputHelper
-{
+// Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
+struct TComputeActorAsyncInputHelperSync : public TComputeActorAsyncInputHelper {
 public:
     using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
 
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) override {
         Buffer->Push(std::move(batch), space);
+        if (watermark) {
+            Buffer->Push(*watermark);
+        }
         if (finished) {
             Buffer->Finish();
             Finished = true;
         }
     }
+
     i64 GetFreeSpace() const override{
         return Buffer->GetFreeSpace();
     }

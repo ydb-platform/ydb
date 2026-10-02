@@ -1,0 +1,2 @@
+use plato;
+select key.kk, subkey, value from Input

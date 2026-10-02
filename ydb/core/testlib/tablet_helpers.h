@@ -6,6 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
@@ -50,8 +51,8 @@ namespace NKikimr {
     }
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
 
     const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 
@@ -126,7 +127,7 @@ namespace NKikimr {
                 : DomainKey(domainKey)
             {}
         };
-        
+
         struct TEvRequestDomainInfoReply: public TEventLocal<TEvRequestDomainInfoReply, EvRequestDomainInfoReply> {
             NHive::TDomainInfo DomainInfo;
 
@@ -137,10 +138,21 @@ namespace NKikimr {
 
     };
 
+
+    // partial mirror of NHive::ETabletState states from ydb/core/mind/hive/hive.h
+    enum class ETabletState : ui64 {
+        Unknown = 0,        // THive::ETabletState::Unknown
+        Stopped = 100,      // THive::ETabletState::Stopped
+        ReadyToWork = 200,  // THive::ETabletState::ReadyToWork
+    };
+
     struct TFakeHiveTabletInfo {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
         TActorId BootstrapperActorId;
+        TMap<ui32, TActorId> FollowerLaunchers; // keyed by followerId
+        ETabletState State = ETabletState::Unknown;
+        TSubDomainKey ObjectDomain;  // what subdomain tablet belongs to
 
         TChannelsBindings BoundChannels;
         ui32 ChannelsProfile;

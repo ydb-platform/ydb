@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 

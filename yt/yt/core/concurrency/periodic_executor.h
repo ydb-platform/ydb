@@ -26,7 +26,7 @@ public:
 
     void ProcessResult();
 
-    TInstant KickstartDeadline();
+    TInstant GenerateKickstartDeadline();
 
     bool IsEnabled();
 
@@ -38,11 +38,16 @@ public:
 
     void SetOptions(std::optional<TDuration> period);
 
-    TInstant NextDeadline();
+    TInstant GenerateNextDeadline();
 
     bool IsOutOfBandProhibited();
 
     void Reset();
+
+private:
+    //! Deadline of the most recently scheduled invocation; used by
+    //! EPeriodicExecutorDelayMode::FromPreviousStart to measure the next delay start-to-start.
+    TInstant LastDeadline_;
 };
 
 } // namespace NDetail

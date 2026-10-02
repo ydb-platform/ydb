@@ -43,7 +43,7 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
     }
 
     if (depthBeforeLeaf && !leafs.empty()) {
-        for (size_t pos: leafs) {
+        for (size_t pos : leafs) {
             ui32 depth = depthBeforeLeaf;
             auto parent = std::get<3>(issues.at(pos));
             while (depth && parent) {
@@ -64,7 +64,7 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
     leafs.clear();
 
     TIssue result;
-    for (auto& i: issues) {
+    for (auto& i : issues) {
         const auto srcIssue = std::get<0>(i);
         auto& targetIssue = std::get<1>(i);
         const auto level = std::get<2>(i);
@@ -102,4 +102,4 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
     return result;
 }
 
-} // namspace NYql
+} // namespace NYql

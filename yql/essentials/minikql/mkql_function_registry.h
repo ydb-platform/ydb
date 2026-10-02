@@ -2,6 +2,8 @@
 
 #include "mkql_function_metadata.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/public/udf/udf_registrator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
@@ -14,14 +16,14 @@
 #include <map>
 
 #ifdef _win_
-#   define MKQL_UDF_LIB_PREFIX ""
-#   define MKQL_UDF_LIB_SUFFIX ".dll"
+    #define MKQL_UDF_LIB_PREFIX ""
+    #define MKQL_UDF_LIB_SUFFIX ".dll"
 #elif defined(_darwin_)
-#   define MKQL_UDF_LIB_PREFIX "lib"
-#   define MKQL_UDF_LIB_SUFFIX ".dylib"
+    #define MKQL_UDF_LIB_PREFIX "lib"
+    #define MKQL_UDF_LIB_SUFFIX ".dylib"
 #else
-#   define MKQL_UDF_LIB_PREFIX "lib"
-#   define MKQL_UDF_LIB_SUFFIX ".so"
+    #define MKQL_UDF_LIB_PREFIX "lib"
+    #define MKQL_UDF_LIB_SUFFIX ".so"
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -29,47 +31,46 @@
 //////////////////////////////////////////////////////////////////////////////
 class IOutputStream;
 
-namespace NKikimr {
-    namespace NMiniKQL {
-        class IMutableFunctionRegistry;
-        class TTypeEnvironment;
-        struct TFunctionTypeInfo;
-        class TStatus;
-        class TType;
-    }
-}
+namespace NKikimr::NMiniKQL {
+class IMutableFunctionRegistry;
+class TTypeEnvironment;
+struct TFunctionTypeInfo;
+class TStatus;
+class TType;
+} // namespace NKikimr::NMiniKQL
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TUdfModuleRemappings = THashMap<TString, TString>; // old => new
-using TUdfModulePathsMap = THashMap<TString, TString>; // module name => udf path
+using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf path
 
 //////////////////////////////////////////////////////////////////////////////
 // IFunctionRegistry
 //////////////////////////////////////////////////////////////////////////////
-class IFunctionRegistry: public TThrRefBase
-{
+class IFunctionRegistry: public TThrRefBase {
 public:
-    typedef TIntrusivePtr<IFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IFunctionRegistry>;
 
-    virtual ~IFunctionRegistry() = default;
+    ~IFunctionRegistry() override = default;
 
     virtual const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const = 0;
 
     virtual void AllowUdfPatch() = 0;
 
     virtual TStatus FindFunctionTypeInfo(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            NUdf::ICountersProvider* countersProvider,
-            const TStringBuf& name,
-            TType* userType,
-            const TStringBuf& typeConfig,
-            ui32 flags,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider,
-            TFunctionTypeInfo* funcInfo) const = 0;
+        NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        NUdf::ICountersProvider* countersProvider,
+        const TStringBuf& name,
+        TType* userType,
+        const TStringBuf& typeConfig,
+        ui32 flags,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider,
+        TFunctionTypeInfo* funcInfo) const = 0;
 
     virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0;
 
@@ -83,9 +84,12 @@ public:
 
     virtual TIntrusivePtr<IMutableFunctionRegistry> Clone() const = 0;
 
-    struct TFunctionProperties { bool IsTypeAwareness = false; };
+    struct TFunctionProperties {
+        bool IsTypeAwareness = false;
+        TMaybe<TString> PolyArgs;
+    };
 
-    typedef std::map<TString, TFunctionProperties> TFunctionsMap;
+    using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
 
@@ -95,22 +99,21 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 // IMutableFunctionRegistry
 //////////////////////////////////////////////////////////////////////////////
-class IMutableFunctionRegistry: public IFunctionRegistry
-{
+class IMutableFunctionRegistry: public IFunctionRegistry {
 public:
     virtual void SetBackTraceCallback(NUdf::TBackTraceCallback callback) = 0;
 
     virtual void LoadUdfs(
-            const TString& libraryPath,
-            const TUdfModuleRemappings& remmapings,
-            ui32 flags = 0,
-            const TString& customUdfPrefix = {},
-            THashSet<TString>* modules = nullptr) = 0;
+        const TString& libraryPath,
+        const TUdfModuleRemappings& remmapings,
+        ui32 flags = 0,
+        const TString& customUdfPrefix = {},
+        THashSet<TString>* modules = nullptr) = 0;
 
     virtual void AddModule(
-            const TStringBuf& libraryPath,
-            const TStringBuf& moduleName,
-            NUdf::TUniquePtr<NUdf::IUdfModule> module) = 0;
+        const TStringBuf& libraryPath,
+        const TStringBuf& moduleName,
+        NUdf::TUniquePtr<NUdf::IUdfModule> module) = 0;
 
     virtual void SetSystemModulePaths(const TUdfModulePathsMap& paths) = 0;
 };
@@ -121,11 +124,11 @@ public:
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins);
 
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
-        NKikimr::NUdf::TBackTraceCallback backtraceCallback,
-        IBuiltinFunctionRegistry::TPtr&& builtins,
-        bool allowUdfPatch,
-        const TVector<TString>& udfsPaths,
-        ui32 flags = 0); // see NUdf::IRegistrator::TFlags
+    NKikimr::NUdf::TBackTraceCallback backtraceCallback,
+    IBuiltinFunctionRegistry::TPtr&& builtins,
+    bool allowUdfPatch,
+    const TVector<TString>& udfsPaths,
+    ui32 flags = 0); // see NUdf::IRegistrator::TFlags
 
 //////////////////////////////////////////////////////////////////////////////
 // helper functions
@@ -133,11 +136,12 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
 void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths);
 
 bool SplitModuleAndFuncName(
-        const TStringBuf& name, TStringBuf& module, TStringBuf& func);
+    const TStringBuf& name, TStringBuf& module, TStringBuf& func);
 TString FullName(const TStringBuf& module, const TStringBuf& func);
 
 inline TStringBuf ModuleName(const TStringBuf& name) {
-    TStringBuf moduleName, _;
+    TStringBuf moduleName;
+    TStringBuf _;
     if (SplitModuleAndFuncName(name, moduleName, _)) {
         return moduleName;
     }
@@ -148,5 +152,4 @@ const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

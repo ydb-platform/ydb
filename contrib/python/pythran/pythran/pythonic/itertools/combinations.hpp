@@ -17,8 +17,7 @@ namespace itertools
     template <class T>
     template <class Iter>
     combination_iterator<T>::combination_iterator(Iter &&pool, long r)
-        : pool(pool.begin(), pool.end()), indices(r), r(r),
-          stopped(r > long(this->pool.size()))
+        : pool(pool.begin(), pool.end()), indices(r), r(r), stopped(r > long(this->pool.size()))
     {
       assert(r >= 0 && "r must be non-negative");
       if (!stopped) {
@@ -33,8 +32,7 @@ namespace itertools
     }
 
     template <class T>
-    types::dynamic_tuple<typename T::value_type>
-    combination_iterator<T>::operator*() const
+    types::dynamic_tuple<typename T::value_type> combination_iterator<T>::operator*() const
     {
       assert(!stopped && "! stopped");
       return {result.begin(), result.end()};
@@ -72,24 +70,21 @@ namespace itertools
     }
 
     template <class T>
-    bool
-    combination_iterator<T>::operator!=(combination_iterator const &other) const
+    bool combination_iterator<T>::operator!=(combination_iterator const &other) const
     {
       assert(stopped || other.stopped);
       return !(*this == other);
     }
 
     template <class T>
-    bool
-    combination_iterator<T>::operator==(combination_iterator const &other) const
+    bool combination_iterator<T>::operator==(combination_iterator const &other) const
     {
       assert(stopped || other.stopped);
       return other.stopped == stopped;
     }
 
     template <class T>
-    bool
-    combination_iterator<T>::operator<(combination_iterator const &other) const
+    bool combination_iterator<T>::operator<(combination_iterator const &other) const
     {
       return stopped != other.stopped;
     }
@@ -121,9 +116,8 @@ namespace itertools
   } // namespace details
 
   template <typename T0>
-  details::combination<
-      typename std::remove_cv<typename std::remove_reference<T0>::type>::type>
-  combinations(T0 &&iter, long num_elts)
+  details::combination<std::remove_cv_t<std::remove_reference_t<T0>>> combinations(T0 &&iter,
+                                                                                   long num_elts)
   {
     return {std::forward<T0>(iter), num_elts};
   }

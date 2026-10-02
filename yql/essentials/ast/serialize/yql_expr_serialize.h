@@ -16,4 +16,3 @@ TExprNode::TPtr DeserializeGraph(TPositionHandle pos, TStringBuf buffer, TExprCo
 TExprNode::TPtr DeserializeGraph(TPosition pos, TStringBuf buffer, TExprContext& ctx);
 
 } // namespace NYql
-

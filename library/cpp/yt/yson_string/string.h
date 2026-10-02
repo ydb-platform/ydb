@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/string/format.h>
 
+#include <library/cpp/containers/cow_string/cow_string.h>
+
 #include <variant>
 
 namespace NYT::NYson {
@@ -21,11 +23,11 @@ public:
     TYsonStringBuf();
 
     //! Constructs an instance from TYsonString.
-    TYsonStringBuf(const TYsonString& ysonString);
+    TYsonStringBuf(const TYsonString& ysonString Y_LIFETIME_BOUND);
 
     //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(
-        const TString& data,
+        const TString& data Y_LIFETIME_BOUND,
         EYsonType type = EYsonType::Node);
 
     //! Constructs a non-null instance with given type and content.
@@ -37,7 +39,7 @@ public:
     //! (without this overload there is no way to construct TYsonStringBuf from
     //! string literal).
     explicit TYsonStringBuf(
-        const char* data,
+        const char* data Y_LIFETIME_BOUND,
         EYsonType type = EYsonType::Node);
 
     //! Returns |true| if the instance is not null.
@@ -59,13 +61,13 @@ protected:
 
 //! An owning version of TYsonStringBuf.
 /*!
- *  Internally captures the data either via TString or a polymorphic ref-counted holder.
+ *  Internally captures the data either via TCowString or a polymorphic ref-counted holder.
  */
 class TYsonString
 {
 public:
     //! Constructs a null instance.
-    TYsonString();
+    TYsonString() = default;
 
     //! Constructs an instance from TYsonStringBuf.
     //! Copies the data into a ref-counted payload.
@@ -81,6 +83,18 @@ public:
     //! Zero-copy for CoW TString: retains the reference to TString in payload.
     explicit TYsonString(
         const TString& data,
+        EYsonType type = EYsonType::Node);
+
+    //! Constructs an instance from TCowString.
+    //! Zero-copy: retains the reference to TCowString in payload.
+    explicit TYsonString(
+        TCowString data,
+        EYsonType type = EYsonType::Node);
+
+    //! Constructs an instance from std::string.
+    //! Moves #data into a ref-counted payload.
+    explicit TYsonString(
+        std::string data,
         EYsonType type = EYsonType::Node);
 
     //! Constructs an instance from TSharedRef.
@@ -117,11 +131,11 @@ private:
     struct TNullPayload
     { };
 
-    std::variant<TNullPayload, TSharedRangeHolderPtr, TString> Payload_;
+    std::variant<TNullPayload, TSharedRangeHolderPtr, TCowString> Payload_;
 
-    const char* Begin_;
-    ui64 Size_ : 56;
-    EYsonType Type_ : 8;
+    const char* Begin_ = nullptr;
+    ui64 Size_ : 56 = 0;
+    EYsonType Type_ : 8 = EYsonType::Node;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

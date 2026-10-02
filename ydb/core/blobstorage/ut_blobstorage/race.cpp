@@ -1,7 +1,11 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
 
-std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
+#include <optional>
+
+constexpr ui32 NumRequiredWorkingVDisks = 6;
+
+std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
     std::vector<ui32> res;
 
@@ -12,6 +16,9 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
     }
 
     for (const ui32 nodeId : env.Runtime->GetNodes()) {
+        if (nodeId == partitionedNode) {
+            continue;
+        }
         bool badGroups = false;
         for (const auto& group : config.GetGroup()) {
             ui32 numFullyWorking = 0;
@@ -19,7 +26,7 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
                 auto *slot = slots.at({id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()});
                 numFullyWorking += slot->GetReady() && nodeId != id.GetNodeId();
             }
-            if (numFullyWorking < 6) {
+            if (numFullyWorking < NumRequiredWorkingVDisks) {
                 badGroups = true;
                 break;
             }
@@ -32,7 +39,7 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env) {
     return res;
 }
 
-bool IssueReassignQuery(TEnvironmentSetup& env) {
+std::optional<NKikimrBlobStorage::TReassignGroupDisk> IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
 
     std::map<std::tuple<ui32, ui32, ui32>, const NKikimrBlobStorage::TBaseConfig::TVSlot*> slots;
@@ -48,16 +55,19 @@ bool IssueReassignQuery(TEnvironmentSetup& env) {
         std::vector<const NKikimrBlobStorage::TBaseConfig::TVSlot*> all, notready;
         for (const auto& id : group.GetVSlotId()) {
             auto *slot = slots.at(std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()));
-            all.push_back(slot);
             if (slot->GetReady()) {
                 ++numFullyWorking;
-            } else {
-                notready.push_back(slot);
+            }
+            if (id.GetNodeId() != partitionedNode) {
+                all.push_back(slot);
+                if (!slot->GetReady()) {
+                    notready.push_back(slot);
+                }
             }
         }
-        if (numFullyWorking > 6) {
+        if (numFullyWorking > NumRequiredWorkingVDisks) {
             options.insert(options.end(), all.begin(), all.end());
-        } else if (numFullyWorking == 6) {
+        } else if (numFullyWorking == NumRequiredWorkingVDisks) {
             options.insert(options.end(), notready.begin(), notready.end());
         }
     }
@@ -65,7 +75,7 @@ bool IssueReassignQuery(TEnvironmentSetup& env) {
     Cerr << "NumOptions# " << options.size() << Endl;
 
     if (options.empty()) {
-        return false;
+        return std::nullopt;
     }
 
     const NKikimrBlobStorage::TBaseConfig::TVSlot *slot = options[RandomNumber(options.size())];
@@ -133,7 +143,32 @@ bool IssueReassignQuery(TEnvironmentSetup& env) {
     auto response = env.Invoke(request);
     UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-    return true;
+    return *reassign;
+}
+
+bool IsReassignedGroupUsable(TEnvironmentSetup& env, const NKikimrBlobStorage::TReassignGroupDisk& reassign, ui32 partitionedNode) {
+    const auto config = env.FetchBaseConfig();
+    ui32 numFullyWorking = 0;
+    bool reassignApplied = false;
+    for (const auto& slot : config.GetVSlot()) {
+        if (slot.GetGroupId() != reassign.GetGroupId()) {
+            continue;
+        }
+        reassignApplied |= slot.GetGroupGeneration() != reassign.GetGroupGeneration();
+        numFullyWorking += slot.GetReady() && slot.GetVSlotId().GetNodeId() != partitionedNode;
+    }
+    return reassignApplied && numFullyWorking >= NumRequiredWorkingVDisks;
+}
+
+void WaitForReassignedGroup(TEnvironmentSetup& env, const NKikimrBlobStorage::TReassignGroupDisk& reassign, ui32 partitionedNode) {
+    constexpr size_t MaxAttempts = 60;
+    for (size_t attempt = 0; attempt < MaxAttempts; ++attempt) {
+        if (IsReassignedGroupUsable(env, reassign, partitionedNode)) {
+            return;
+        }
+        env.Sim(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "Reassigned group did not become usable: " << SingleLineProto(reassign));
 }
 
 void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
@@ -156,7 +191,7 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
         .Cache = cache,
     });
     auto& runtime = env.Runtime;
-    runtime->SetLogPriority(NActorsServices::TEST, NLog::PRI_DEBUG);
+    runtime->SetLogPriority(NActorsServices::TEST, NLog::PRI_NOTICE);
 
     ui32 partCounter = 0;
     runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
@@ -209,7 +244,7 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
     while (counter) {
         // restart node at random basis
         if (counter % 30 == 15) {
-            auto nodes = GetRestartableNodes(env);
+            auto nodes = GetRestartableNodes(env, partitionedNode);
             if (!nodes.empty()) {
                 auto it = nodes.begin();
                 std::advance(it, RandomNumber(nodes.size()));
@@ -219,9 +254,8 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
                 --counter;
                 continue;
             }
-        } else if (IssueReassignQuery(env)) {
-            const TDuration delay = TDuration::MilliSeconds(1 + RandomNumber<ui64>(200));
-            env.Sim(delay);
+        } else if (const auto reassign = IssueReassignQuery(env, partitionedNode)) {
+            WaitForReassignedGroup(env, *reassign, partitionedNode);
             --counter;
             continue;
         }

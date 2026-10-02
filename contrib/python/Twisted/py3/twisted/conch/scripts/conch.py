@@ -16,7 +16,7 @@ import signal
 import struct
 import sys
 import tty
-from typing import List, Tuple
+from typing import Any
 
 from twisted.conch.client import connect, default
 from twisted.conch.client.options import ConchOptions
@@ -73,8 +73,8 @@ class ClientOptions(ConchOptions):
         ],
     )
 
-    localForwards: List[Tuple[int, Tuple[int, int]]] = []
-    remoteForwards: List[Tuple[int, Tuple[int, int]]] = []
+    localForwards: list[tuple[int, tuple[int, int]]] = []
+    remoteForwards: list[tuple[int, tuple[int, int]]] = []
 
     def opt_escape(self, esc):
         """
@@ -113,7 +113,7 @@ class ClientOptions(ConchOptions):
 
 
 # Rest of code in "run"
-options = None
+options: Any = None
 conn = None
 exitStatus = 0
 old = None
@@ -198,20 +198,21 @@ def _stopReactor():
         pass
 
 
-def doConnect():
+def doConnect() -> None:
     if "@" in options["host"]:
         options["user"], options["host"] = options["host"].split("@", 1)
     if not options.identitys:
         options.identitys = ["~/.ssh/id_rsa", "~/.ssh/id_dsa"]
-    host = options["host"]
+
     if not options["user"]:
         options["user"] = getpass.getuser()
     if not options["port"]:
         options["port"] = 22
     else:
         options["port"] = int(options["port"])
-    host = options["host"]
-    port = options["port"]
+
+    host: str = options["host"]
+    port: int = options["port"]
     vhk = default.verifyHostKey
     if not options["host-key-algorithms"]:
         options["host-key-algorithms"] = default.getHostKeyAlgorithms(host, options)

@@ -20,6 +20,10 @@ public:
         Session = Client->CreateSession(sessionSettings);
     }
 
+    ~TUaEventsWriter() override {
+        Close();
+    }
+
     void Write(const TString& data) override
     {
         Session->Send(NUnifiedAgent::TClientMessage{data, Nothing(), Nothing()});
@@ -43,6 +47,10 @@ public:
         : OutputFile(TFile(outputFileName, OpenAlways | WrOnly))
         , OutStream(OutputFile)
     {}
+
+    ~TFileEventsWriter() override {
+        Close();
+    }
 
     void Write(const TString& data) override
     {
@@ -69,6 +77,10 @@ public:
     TNullEventsWriter()
     {}
 
+    ~TNullEventsWriter() override {
+        Close();
+    }
+
     void Write(const TString&) override
     {}
 
@@ -89,4 +101,13 @@ IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateEventsWriter(const NKi
             return new TNullEventsWriter();
     }
     return new TNullEventsWriter();
+}
+
+IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateCloudEventsWriter(const NKikimrConfig::TSqsConfig& config, const NMonitoring::TDynamicCounterPtr& counters) const {
+    const auto& cloudEventsCfg = config.GetCloudEventsConfig();
+    if (cloudEventsCfg.HasUnifiedAgentUri()) {
+        return new TUaEventsWriter(cloudEventsCfg.GetUnifiedAgentUri(), counters);
+    } else {
+        return new TNullEventsWriter();
+    }
 }

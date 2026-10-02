@@ -1,0 +1,14 @@
+{
+    "/Root/t1": {
+        "n_rows": 228,
+        "byte_size": 6666
+    },
+    "/Root/t2": {
+        "n_rows": 1337,
+        "byte_size": 148228
+    },
+    "/Root/t3": {
+        "n_rows": 228228,
+        "byte_size": 1337
+    }
+}

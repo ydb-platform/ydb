@@ -87,6 +87,10 @@
         GROUPS(), \
         TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
         NAMES("scope", "user", "bindingId", "latencyMs", "size", "success", "timeout")) \
+    PROBE(DeleteFolderResourcesRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TDuration, i64, bool, bool), \
+        NAMES("scope", "user", "latencyMs", "size", "success", "timeout")) \
 
 // YQ_CONTROL_PLANE_PROXY_PROVIDER
 

@@ -12,16 +12,13 @@ namespace numpy
   namespace random
   {
     template <class pS, class P>
-    types::ndarray<long, pS> choice(long max, pS const &shape, bool replace,
-                                    P const &p);
+    types::ndarray<long, pS> choice(long max, pS const &shape, bool replace, P const &p);
 
     template <class P>
-    types::ndarray<long, types::pshape<long>> choice(long max, long size,
-                                                     bool replace, P &&p);
+    types::ndarray<long, types::pshape<long>> choice(long max, long size, bool replace, P &&p);
 
     template <class T>
-    auto choice(long max,
-                T &&size) -> decltype(randint(0, max, std::forward<T>(size)));
+    auto choice(long max, T &&size) -> decltype(randint(0, max, std::forward<T>(size)));
 
     long choice(long max);
 
@@ -32,16 +29,15 @@ namespace numpy
     types::ndarray<typename T::dtype, pS> choice(T const &a, pS const &shape);
 
     template <class T>
-    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a,
-                                                                  long size);
+    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a, long size);
 
     template <class T, class pS, class P>
-    types::ndarray<typename T::dtype, pS> choice(T const &a, pS const &shape,
-                                                 bool replace, P const &p);
+    types::ndarray<typename T::dtype, pS> choice(T const &a, pS const &shape, bool replace,
+                                                 P const &p);
 
     template <class T, class P>
-    types::ndarray<typename T::dtype, types::pshape<long>>
-    choice(T &&a, long size, bool replace, P &&p);
+    types::ndarray<typename T::dtype, types::pshape<long>> choice(T &&a, long size, bool replace,
+                                                                  P &&p);
 
     DEFINE_FUNCTOR(pythonic::numpy::random, choice);
   } // namespace random

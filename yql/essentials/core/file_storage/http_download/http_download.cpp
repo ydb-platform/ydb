@@ -1,76 +1,82 @@
 #include "http_download.h"
 
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
-#include <yql/essentials/core/file_storage/http_download/proto/http_download.pb.h>
 #include <yql/essentials/core/file_storage/download/download_stream.h>
+#include <yql/essentials/core/file_storage/download/download_output_file_stream.h>
 #include <yql/essentials/core/file_storage/download/download_config.h>
 #include <yql/essentials/core/file_storage/defs/downloader.h>
+#include <yql/essentials/utils/fetch/proto/fetch_config.pb.h>
 #include <yql/essentials/utils/fetch/fetch.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/md5_stream.h>
 #include <yql/essentials/utils/retry.h>
 #include <yql/essentials/utils/yql_panic.h>
-
+#include <yql/essentials/utils/log/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/http/misc/httpcodes.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/yexception.h>
-#include <util/stream/file.h>
 #include <util/system/file.h>
 #include <util/system/env.h>
 
-
 namespace NYql {
 
-class THttpDownloader: public TDownloadConfig<THttpDownloader, THttpDownloaderConfig>, public NYql::NFS::IDownloader {
+class THttpDownloader: public TDownloadConfig<THttpDownloader, TFetchConfig>, public NYql::NFS::IDownloader {
 public:
     THttpDownloader(const TFileStorageConfig& config)
         : UseFakeChecksums(GetEnv("YQL_LOCAL") == "1")
     {
         Configure(config, "http");
-
     }
     ~THttpDownloader() = default;
 
-    void DoConfigure(const THttpDownloaderConfig& cfg) {
-        SocketTimeoutMs = cfg.GetSocketTimeoutMs();
+    void DoConfigure(const TFetchConfig& cfg) {
+        Policy_ = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+            DefaultClassifyHttpCode,
+            TDuration::MilliSeconds(cfg.GetMinDelayMs()),
+            TDuration::MilliSeconds(cfg.GetMinLongDelayMs()),
+            TDuration::MilliSeconds(cfg.GetMaxDelayMs()),
+            cfg.GetMaxRetries(),
+            TDuration::MilliSeconds(cfg.GetMaxTotalDelayTimeMs()),
+            cfg.GetScale());
+        Redirects_ = cfg.GetMaxRedirects();
+        TimeoutMs = cfg.GetTimeoutMs();
     }
 
     bool Accept(const THttpURL& url) final {
         switch (url.GetScheme()) {
-        case NUri::TScheme::SchemeHTTP:
-        case NUri::TScheme::SchemeHTTPS:
-            return true;
-        default:
-            break;
+            case NUri::TScheme::SchemeHTTP:
+            case NUri::TScheme::SchemeHTTPS:
+                return true;
+            default:
+                break;
         }
         return false;
     }
 
-    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified) final {
-        TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, SocketTimeoutMs);
+    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, TDownloadLimiter limiter) final {
+        TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, TimeoutMs, Redirects_, Policy_);
         switch (fr1->GetRetCode()) {
-        case HTTP_NOT_MODIFIED:
-            return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
-        case HTTP_OK:
-            break;
-        default:
-            ythrow yexception() << "Url " << url.PrintS() << " cannot be accessed, code: " << fr1->GetRetCode();
+            case HTTP_NOT_MODIFIED:
+                return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
+            case HTTP_OK:
+                break;
+            default:
+                ythrow yexception() << "Url " << url.PrintS() << " cannot be accessed, code: " << fr1->GetRetCode();
         }
 
         auto pair = ExtractETagAndLastModified(*fr1);
 
-        auto puller = [urlStr = url.PrintS(), fr1, useFakeChecksums = UseFakeChecksums](const TFsPath& dstPath) -> std::pair<ui64, TString> {
-            return CopyToFile(urlStr, *fr1, dstPath, useFakeChecksums);
+        auto puller = [urlStr = url.PrintS(), fr1, useFakeChecksums = UseFakeChecksums, limiter](const TFsPath& dstPath) -> std::pair<ui64, TString> {
+            return CopyToFile(urlStr, *fr1, dstPath, useFakeChecksums, limiter);
         };
 
         return std::make_tuple(puller, pair.first, pair.second);
     }
 
 private:
-    static TFetchResultPtr FetchWithETagAndLastModified(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, ui32 socketTimeoutMs) {
+    static TFetchResultPtr FetchWithETagAndLastModified(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, ui32 timeoutMs, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
         // more details about ETag and ModifiedSince: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26
         THttpHeaders headers;
         if (!token.empty()) {
@@ -85,30 +91,28 @@ private:
         }
 
         try {
-            return Fetch(url, headers, TDuration::MilliSeconds(socketTimeoutMs));
+            return Fetch(url, headers, TDuration::MilliSeconds(timeoutMs), redirects, policy);
         } catch (const std::exception& e) {
             // remap exception type to leverage retry logic
             throw TDownloadError() << e.what();
         }
     }
 
-    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile, bool useFakeChecksums) {
+    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile, bool useFakeChecksums, TDownloadLimiter limiter) {
         TFile outFile(dstFile, CreateAlways | ARW | AX);
         THttpInput& httpStream = src.GetStream();
         TDownloadStream input(httpStream);
         ui64 size = 0;
         TString md5;
+        TDownloadOutputFileStream out(outFile, limiter);
         if (useFakeChecksums) {
-            TFileOutput out(outFile);
             size = TransferData(&input, &out);
-            out.Finish();
         } else {
-            TUnbufferedFileOutput out(outFile);
             TMd5OutputStream md5Out(out);
             size = TransferData(&input, &md5Out);
             md5 = md5Out.Finalize();
-            out.Finish();
         }
+        out.Finish();
         outFile.Close();
 
         ui64 contentLength = 0;
@@ -152,11 +156,13 @@ private:
 
 private:
     const bool UseFakeChecksums = false;
-    ui32 SocketTimeoutMs = 300000;
+    IRetryPolicy<unsigned>::TPtr Policy_;
+    ui32 TimeoutMs = 300000;
+    size_t Redirects_ = 10;
 };
 
 NYql::NFS::IDownloaderPtr MakeHttpDownloader(const TFileStorageConfig& config) {
     return MakeIntrusive<THttpDownloader>(config);
 }
 
-} // NYql
+} // namespace NYql

@@ -3,9 +3,10 @@ LIBRARY()
 PEERDIR(
     library/cpp/string_utils/parse_size
     yql/essentials/minikql
-    yql/essentials/sql
     yql/essentials/utils
+    yql/essentials/core
     yql/essentials/utils/log
+    yql/essentials/providers/common/provider
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/proto
     yql/essentials/core/dq_integration

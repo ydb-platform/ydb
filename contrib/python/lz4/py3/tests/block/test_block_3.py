@@ -18,6 +18,7 @@ def data(request):
     return request.param
 
 
+@pytest.mark.thread_unsafe
 def test_block_decompress_mem_usage(data):
     tracemalloc = pytest.importorskip('tracemalloc')
 

@@ -4,6 +4,7 @@ PEERDIR(
     ydb/library/actors/protos
     library/cpp/monlib/service/pages
     ydb/core/base
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/protos
     ydb/core/protos
@@ -11,6 +12,7 @@ PEERDIR(
 
 SRCS(
     align.h
+    blob_header_mode.h
     blobstorage_cost_tracker.cpp
     blobstorage_dblogcutter.cpp
     blobstorage_dblogcutter.h
@@ -23,6 +25,7 @@ SRCS(
     defs.h
     disk_part.h
     sublog.h
+    vdisk_compaction_priority.h
     vdisk_config.cpp
     vdisk_config.h
     vdisk_context.cpp
@@ -44,12 +47,16 @@ SRCS(
     vdisk_hulllogctx.h
     vdisk_log.cpp
     vdisk_log.h
+    vdisk_log_context.cpp
+    vdisk_log_context.h
     vdisk_lsnmngr.h
+    vdisk_events_quoter.h
     vdisk_mon.h
     vdisk_mongroups.cpp
     vdisk_mongroups.h
     vdisk_outofspace.cpp
     vdisk_outofspace.h
+    vdisk_operation_broker.cpp
     vdisk_performance_params.cpp
     vdisk_performance_params.h
     vdisk_pdisk_error.h
@@ -61,6 +68,7 @@ SRCS(
     vdisk_response.cpp
     vdisk_response.h
     vdisk_syncneighbors.h
+    vdisk_operation_broker.h
 )
 
 END()

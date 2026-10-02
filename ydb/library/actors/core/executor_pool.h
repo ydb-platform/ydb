@@ -1,5 +1,6 @@
 #pragma once
 
+#include "async_frame_cache.h"
 #include "event.h"
 #include "executor_pool_jail.h"
 #include "scheduler_queue.h"
@@ -101,8 +102,8 @@ namespace NActors {
         virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         // for actorsystem
-        virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
-        virtual bool SpecificSend(TAutoPtr<IEventHandle>& ev) = 0;
+        virtual bool Send(std::unique_ptr<IEventHandle>& ev) = 0;
+        virtual bool SpecificSend(std::unique_ptr<IEventHandle>& ev) = 0;
         virtual void ScheduleActivation(TMailbox* mailbox) = 0;
         virtual void SpecificScheduleActivation(TMailbox* mailbox) = 0;
         virtual void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) = 0;
@@ -117,6 +118,12 @@ namespace NActors {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
+        }
+
+        // Adds idle coroutine frames retained by the worker threads of this pool.
+        // Safe from any thread; approximate while the workers are running.
+        virtual void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
+            Y_UNUSED(stats);
         }
 
         virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {

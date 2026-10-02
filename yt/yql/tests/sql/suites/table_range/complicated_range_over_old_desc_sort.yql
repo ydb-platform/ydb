@@ -1,0 +1,9 @@
+use plato;
+pragma yt.UseNativeDescSort;
+
+select *
+from (
+    select TableName() AS name,
+    from range("", "Input1", "Input3")
+)
+group by name

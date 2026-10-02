@@ -1,0 +1,5 @@
+/* custom error: USE statement is missing or cluster not specified in MATERIALIZE */
+
+-- No USE and no ON clause - should fail with a clear error.
+MATERIALIZE plato.Input INTO $result;
+SELECT * FROM $result;

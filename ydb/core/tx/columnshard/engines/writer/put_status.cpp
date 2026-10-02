@@ -1,5 +1,3 @@
 #include "put_status.h"
 
-namespace NKikimr::NColumnShard {
-
-}
+namespace NKikimr::NColumnShard {}

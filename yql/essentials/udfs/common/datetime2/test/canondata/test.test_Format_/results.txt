@@ -28,6 +28,11 @@
                     ];
                     [
                         [
+                            "% year 1970 monthFullName January monthShortName Jan month 01 day 01 hours 00 minutes 00 seconds 00 tz +0000 tzname UTC text"
+                        ]
+                    ];
+                    [
+                        [
                             "% year 2018 monthFullName December monthShortName Dec month 12 day 01 hours 01 minutes 02 seconds 03.456789 tz +0300 tzname Europe/Moscow text"
                         ]
                     ];

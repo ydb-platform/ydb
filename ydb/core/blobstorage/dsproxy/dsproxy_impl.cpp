@@ -29,12 +29,14 @@ namespace NKikimr {
         , Controls(std::move(params.Controls))
     {}
 
-    IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
-        return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
+    IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TControlWrapper& dormantTimeoutMinutes) {
+        return new TBlobStorageGroupProxy(groupId, true, nodeMon,
                 TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = TControlWrapper(false, false, true),
                         .EnableVPatch = TControlWrapper(false, false, true),
+                        .DormantTimeoutMinutes = dormantTimeoutMinutes,
                     }
                 }
         );
@@ -74,10 +76,11 @@ namespace NKikimr {
             case NKikimrProto::BLOCKED:
             case NKikimrProto::DEADLINE:
             case NKikimrProto::RACE:
-            case NKikimrProto::ERROR:
                 return NActors::NLog::EPriority::PRI_INFO;
             case NKikimrProto::NODATA:
                 return NActors::NLog::EPriority::PRI_NOTICE;
+            case NKikimrProto::ERROR:
+                return NActors::NLog::EPriority::PRI_ERROR;
             default:
                 return NActors::NLog::EPriority::PRI_ERROR;
         }
@@ -95,6 +98,18 @@ namespace NKikimr {
                 return NActors::NLog::EPriority::PRI_INFO;
             default:
                 return NActors::NLog::EPriority::PRI_ERROR;
+        }
+    }
+
+    TString TBlobStorageGroupProxy::UnconfiguredStateReasonStr(EUnconfiguredStateReason reason) {
+        switch (reason) {
+            case EUnconfiguredStateReason::UnknownGroup:
+                return "UnknownGroup";
+            case EUnconfiguredStateReason::GenerationChanged:
+                return "GenerationChanged";
+            default:
+                Y_DEBUG_ABORT_S("Unknown EUnconfiguredStateReason value# " << static_cast<ui32>(reason));
+                return "UnknownReason";
         }
     }
 

@@ -13,14 +13,12 @@ namespace numpy
   namespace random
   {
     template <class pS>
-    types::ndarray<double, pS> uniform(double low, double high,
-                                       pS const &array_shape);
+    types::ndarray<double, pS> uniform(double low, double high, pS const &array_shape);
 
     auto uniform(double low, double high, long size)
         -> decltype(uniform(low, high, types::array_tuple<long, 1>{{size}}));
 
-    double uniform(double low = 0.0, double high = 1.0,
-                   types::none_type size = {});
+    double uniform(double low = 0.0, double high = 1.0, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, uniform);
   } // namespace random

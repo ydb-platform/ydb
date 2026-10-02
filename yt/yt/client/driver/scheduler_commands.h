@@ -33,8 +33,8 @@ public:
                 !operationId && !command->OperationAlias.has_value())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
-                    << TErrorAttribute("operation_id", command->OperationId)
-                    << TErrorAttribute("operation_alias", command->OperationAlias);
+                    .With("operation_id", command->OperationId)
+                    .With("operation_alias", command->OperationAlias);
             }
 
             if (command->OperationId) {
@@ -51,7 +51,7 @@ protected:
 
 private:
     NScheduler::TOperationId OperationId;
-    std::optional<TString> OperationAlias;
+    std::optional<std::string> OperationAlias;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -147,6 +147,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
+    NJobTrackerClient::TJobId JobId;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -163,6 +165,20 @@ public:
 private:
     NJobTrackerClient::TJobId JobId;
 
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListOperationEventsCommand
+    : public TSimpleOperationCommandBase<NApi::TListOperationEventsOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListOperationEventsCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -195,6 +211,40 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListJobTracesCommand
+    : public TSimpleOperationCommandBase<NApi::TListJobTracesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListJobTracesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCheckOperationPermissionCommand
+    : public TSimpleOperationCommandBase<NApi::TCheckOperationPermissionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckOperationPermissionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    std::string User;
+    NYTree::EPermission Permission;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -243,9 +293,29 @@ public:
 private:
     NJobTrackerClient::TJobId JobId;
     NYTree::INodePtr Parameters;
-    std::optional<TString> ShellName;
+    // TODO(bystrovserg): Move ShellName to options parameter.
+    std::optional<std::string> ShellName;
 
     void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRunJobShellCommandCommand
+    : public TTypedCommand<NApi::TRunJobShellCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRunJobShellCommandCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    // TODO(bystrovserg): Move ShellName to options parameter.
+    std::optional<std::string> ShellName;
+    std::string Command;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -303,10 +373,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStartOperationCommand
+struct TStartOperationCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TStartOperationCommand);
 
     static void Register(TRegistrar registrar);
@@ -314,10 +383,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMapCommand
+struct TMapCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMapCommand);
 
     static void Register(TRegistrar registrar);
@@ -325,10 +393,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMergeCommand
+struct TMergeCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMergeCommand);
 
     static void Register(TRegistrar registrar);
@@ -336,10 +403,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSortCommand
+struct TSortCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TSortCommand);
 
     static void Register(TRegistrar registrar);
@@ -347,10 +413,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEraseCommand
+struct TEraseCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TEraseCommand);
 
     static void Register(TRegistrar registrar);
@@ -358,10 +423,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReduceCommand
+struct TReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -369,10 +433,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJoinReduceCommand
+struct TJoinReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TJoinReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -380,10 +443,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMapReduceCommand
+struct TMapReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMapReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -391,10 +453,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteCopyCommand
+struct TRemoteCopyCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TRemoteCopyCommand);
 
     static void Register(TRegistrar registrar);

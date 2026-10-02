@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/minikql/dom/json.h>
 
@@ -36,10 +36,10 @@ public:
     TString ContainerToJsonText(const TContainerCursor& cursor);
 
 protected:
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
-    TMemoryUsageInfo MemInfo;
-    THolderFactory HolderFactory;
-    TDefaultValueBuilder ValueBuilder;
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry_;
+    TScopedAlloc Alloc_;
+    TTypeEnvironment Env_;
+    TMemoryUsageInfo MemInfo_;
+    THolderFactory HolderFactory_;
+    TDefaultValueBuilder ValueBuilder_;
 };

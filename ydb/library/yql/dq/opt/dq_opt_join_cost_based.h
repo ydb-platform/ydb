@@ -1,12 +1,12 @@
 #pragma once
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql::NDq {
 
-using TProviderCollectFunction = 
+using TProviderCollectFunction =
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>;
 
 /*
@@ -24,7 +24,9 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    const TOptimizerHints& hints = {}
+    const TOptimizerHints& hints = {},
+    bool enableShuffleElimination = false,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -35,9 +37,24 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
-    const TOptimizerHints& hints = {}
+    const TOptimizerHints& hints = {},
+    bool enableShuffleElimination = false,
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
 );
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx);
+void CollectInterestingOrderingsFromJoinTree(
+    const NYql::NNodes::TExprBase& equiJoinNode,
+    TFDStorage& fdStorage,
+    TTypeAnnotationContext& typeCtx
+);
+
+IOptimizerNew* MakeNativeOptimizerNew(
+    IProviderContext& ctx,
+    const TCBOSettings& settings,
+    TExprContext& ectx,
+    bool enableShuffleElimination,
+    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = nullptr,
+    TTableAliasMap* tableAliases = nullptr
+);
 
 } // namespace NYql::NDq

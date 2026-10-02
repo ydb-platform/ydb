@@ -26,6 +26,16 @@ inline void SetAuthToken(TEv& ev, const IRequestCtx& ctx) {
     }
 }
 
+inline std::optional<TString> GetUserSID(const IRequestCtx& ctx) {
+    if (const auto& serializedToken = ctx.GetSerializedToken()) {
+        if (NACLibProto::TUserToken userToken; userToken.ParseFromString(serializedToken)) {
+            return userToken.GetUserSID();
+        }
+    }
+
+    return std::nullopt;
+}
+
 template<typename TEv>
 inline void SetClientIdentitySettings(TEv& ev, const IRequestCtx& ctx) {
     ev->Record.SetClientAddress(ctx.GetPeerName());

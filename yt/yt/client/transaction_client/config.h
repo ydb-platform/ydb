@@ -10,11 +10,10 @@ namespace NYT::NTransactionClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteTimestampProviderConfig
+struct TRemoteTimestampProviderConfig
     : public NRpc::TBalancingChannelConfig
     , public NRpc::TRetryingChannelConfig
 {
-public:
     //! Timeout for RPC requests to timestamp provider.
     TDuration RpcTimeout;
 
@@ -29,6 +28,9 @@ public:
     TDuration TimestampProviderDiscoveryPeriod;
     TDuration TimestampProviderDiscoveryPeriodSplay;
 
+    TRemoteTimestampProviderConfigPtr ApplyDynamic(
+        const TRemoteTimestampProviderDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TRemoteTimestampProviderConfig);
 
     static void Register(TRegistrar registrar);
@@ -38,10 +40,23 @@ DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlienTimestampProviderConfig
+struct TRemoteTimestampProviderDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+    std::optional<TDuration> BatchPeriod;
+
+    REGISTER_YSON_STRUCT(TRemoteTimestampProviderDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TAlienTimestampProviderConfig
     : public  NYTree::TYsonStruct
 {
-public:
     //! Clock server cell tag
     NObjectClient::TCellTag ClockClusterTag;
 
@@ -53,8 +68,6 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TAlienTimestampProviderConfig)
-
-DECLARE_REFCOUNTED_CLASS(TAlienTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,9 +1,10 @@
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, Union, overload
 
 from allure_commons._core import plugin_manager
 from allure_commons.types import LabelType, LinkType, ParameterMode
 from allure_commons.utils import uuid4
+from allure_commons.utils import format_exception, format_traceback
 from allure_commons.utils import func_parameters, represent
 
 _TFunc = TypeVar("_TFunc", bound=Callable[..., Any])
@@ -125,7 +126,7 @@ class Dynamic:
         Dynamic.label(LabelType.TAG, *tags)
 
     @staticmethod
-    def id(id):  # noqa: A003,A002
+    def id(id):  # noqa: A002
         Dynamic.label(LabelType.ID, id)
 
     @staticmethod
@@ -133,7 +134,7 @@ class Dynamic:
         plugin_manager.hook.add_link(url=url, link_type=link_type, name=name)
 
     @staticmethod
-    def parameter(name, value, excluded=None, mode: ParameterMode = None):
+    def parameter(name, value, excluded=None, mode: Union[ParameterMode, None] = None):
         plugin_manager.hook.add_parameter(name=name, value=value, excluded=excluded, mode=mode)
 
     @staticmethod
@@ -159,6 +160,16 @@ class Dynamic:
     @staticmethod
     def manual():
         return Dynamic.label(LabelType.MANUAL, True)
+
+
+@overload
+def step(title: str) -> "StepContext":
+    ...
+
+
+@overload
+def step(title: _TFunc) -> _TFunc:
+    ...
 
 
 def step(title):
@@ -191,7 +202,7 @@ class StepContext:
             with StepContext(self.title.format(*args, **params), params):
                 return func(*a, **kw)
 
-        return impl
+        return impl  # type: ignore
 
 
 class Attach:
@@ -204,6 +215,48 @@ class Attach:
 
 
 attach = Attach()
+
+
+class GlobalAttach:
+
+    def __call__(self, body, name=None, attachment_type=None, extension=None):
+        plugin_manager.hook.global_attach_data(
+            body=body,
+            name=name,
+            attachment_type=attachment_type,
+            extension=extension,
+        )
+
+    def file(self, source, name=None, attachment_type=None, extension=None):
+        plugin_manager.hook.global_attach_file(
+            source=source,
+            name=name,
+            attachment_type=attachment_type,
+            extension=extension,
+        )
+
+
+global_attach = GlobalAttach()
+
+
+@overload
+def global_error(value: BaseException) -> None:
+    ...
+
+
+@overload
+def global_error(value: str, trace: Union[str, None] = None) -> None:
+    ...
+
+
+def global_error(value, trace=None):
+    message = None
+    if isinstance(value, BaseException):
+        message = format_exception(type(value), value)
+        trace = format_traceback(value.__traceback__)
+    else:
+        message = value
+    plugin_manager.hook.global_error(message=message, trace=trace)
 
 
 class fixture:

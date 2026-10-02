@@ -3,6 +3,8 @@
 #include "data.h"
 #include "blocks.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TBarrierServer::TTxCollectGarbage : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
@@ -31,8 +33,11 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT77, "TTxCollectGarbage::Execute", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie));
+            YDB_LOG_DEBUG("TTxCollectGarbage::Execute",
+                {"marker", "BDT77"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie});
 
             Y_ABORT_UNLESS(Self->Data->IsLoaded());
 
@@ -50,8 +55,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Finished, Finished), (MoreData, MoreData));
+            YDB_LOG_DEBUG("TTxCollectGarbage::Complete",
+                {"marker", "BDT78"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"finished", Finished},
+                {"moreData", MoreData});
 
             Self->Data->CommitTrash(this);
 
@@ -84,6 +94,14 @@ namespace NKikimr::NBlobDepot {
             const bool hard = record.GetHard();
             const TGenStep genCtr(record.GetGeneration(), record.GetPerGenerationCounter());
             const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
+
+            if (Self->BlocksManager->IsTabletDeleted(tabletId)) {
+                // The tablet has been deleted for good: TTxDeleteTabletData has dropped all of its
+                // keys and UpdateKey refuses to create new ones, so there is nothing left for this
+                // barrier to collect. Do not remember it either -- Hive retries the delete barrier,
+                // and recording it would resurrect the row OnTabletDeleted has just purged.
+                return true;
+            }
 
             const auto key = std::make_tuple(tabletId, channel);
             TBarrier& barrier = Self->BarrierServer->Barriers[key];
@@ -127,7 +145,11 @@ namespace NKikimr::NBlobDepot {
 
             const ui64 tabletId = record.GetTabletId();
             const ui32 generation = record.GetGeneration();
-            if (!Self->BlocksManager->CheckBlock(tabletId, generation)) {
+            const bool isCompleteDeletion = generation == Max<ui32>() &&
+                                            record.GetPerGenerationCounter() == Max<ui32>() &&
+                                            record.GetCollectGeneration() == Max<ui32>() &&
+                                            record.GetCollectStep() == Max<ui32>();
+            if (!record.GetIgnoreBlock() && !isCompleteDeletion && !Self->BlocksManager->CheckBlock(tabletId, generation)) {
                 Finish("block race detected", NKikimrProto::BLOCKED);
                 return false;
             }
@@ -175,8 +197,12 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
+            YDB_LOG_DEBUG("TTxCollectGarbage::Finish",
+                {"marker", "BDT82"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"error", error});
             TActivationContext::Send(response.release());
             Finished = true;
         }
@@ -194,6 +220,12 @@ namespace NKikimr::NBlobDepot {
 
     bool TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,
             ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        if (Self->BlocksManager->IsTabletDeleted(barrier.TabletId)) {
+            // blocks are assimilated before any barrier, so we already know this tablet is gone and
+            // none of its blobs will be taken in -- there is nothing for this barrier to guard
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         const auto key = std::make_tuple(barrier.TabletId, barrier.Channel);
@@ -214,21 +246,30 @@ namespace NKikimr::NBlobDepot {
                         NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrierGenCtr)), \
                         NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrierCollect)) \
                     ); \
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT45, "replaced " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDB_LOG_DEBUG("replaced " #TYPE " barrier through decommission", \
+                        {"Marker", "BDT45"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } else { \
-                    STLOG(PRI_ERROR, BLOB_DEPOT, BDT36, "decreasing " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDB_LOG_ERROR("decreasing " #TYPE " barrier through decommission", \
+                        {"Marker", "BDT36"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } \
             } else if (current.TYPE##GenCtr == barrierGenCtr && current.TYPE != barrierCollect) { \
-                STLOG(PRI_ERROR, BLOB_DEPOT, BDT43, "barrier value mismatch through decommission", \
-                    (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                    (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                    (Barrier, barrier)); \
+                YDB_LOG_ERROR("barrier value mismatch through decommission", \
+                    {"Marker", "BDT43"}, \
+                    {"TabletId", barrier.TabletId}, \
+                    {"Channel", int(barrier.Channel)}, \
+                    {"GenCtr", current.TYPE##GenCtr}, \
+                    {"Collect", current.TYPE}, \
+                    {"Barrier", barrier}); \
             } \
         }
 
@@ -242,18 +283,27 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()),
-            (Sender, ev->Sender), (Cookie, ev->Cookie), (Msg, record));
+        YDB_LOG_DEBUG("TBarrierServer::Handle(TEvCollectGarbage)",
+            {"marker", "BDT74"},
+            {"id", Self->GetLogId()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"msg", record});
         if (Self->Data->IsLoaded()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
                 std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
         } else {
-            const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
-            Barriers[key].ProcessingQ.emplace_back(ev.Release());
+            PendingRequests.emplace_back(ev.Release());
         }
     }
 
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
+        if (Self->BlocksManager->IsTabletDeleted(id.TabletID())) {
+            // the tablet has been deleted for good, so every channel of it counts as fully collected
+            // even though we may never see the matching hard barrier
+            *underSoft = *underHard = true;
+            return;
+        }
         const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;
@@ -261,9 +311,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBarrierServer::OnDataLoaded() {
-        for (auto& [key, barrier] : Barriers) {
-            for (auto& ev : std::exchange(barrier.ProcessingQ, {})) {
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(ev)));
+        for (auto& ev : std::exchange(PendingRequests, {})) {
+            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(ev)));
+        }
+    }
+
+    void TBlobDepot::TBarrierServer::OnTabletDeleted(ui64 tabletId, NTabletFlatExecutor::TTransactionContext& txc) {
+        NIceDb::TNiceDb db(txc.DB);
+        for (ui32 index = 0; index <= Max<ui8>(); ++index) {
+            const ui8 channel = index;
+            if (Barriers.erase(std::make_tuple(tabletId, channel))) {
+                db.Table<Schema::Barriers>().Key(tabletId, channel).Delete();
             }
         }
     }

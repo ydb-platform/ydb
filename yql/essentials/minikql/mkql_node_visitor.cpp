@@ -3,8 +3,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -57,6 +56,11 @@ void TThrowingNodeVisitor::Visit(TListType& node) {
 }
 
 void TThrowingNodeVisitor::Visit(TOptionalType& node) {
+    Y_UNUSED(node);
+    ThrowUnexpectedNodeType();
+}
+
+void TThrowingNodeVisitor::Visit(TLinearType& node) {
     Y_UNUSED(node);
     ThrowUnexpectedNodeType();
 }
@@ -225,6 +229,10 @@ void TEmptyNodeVisitor::Visit(TOptionalType& node) {
     Y_UNUSED(node);
 }
 
+void TEmptyNodeVisitor::Visit(TLinearType& node) {
+    Y_UNUSED(node);
+}
+
 void TEmptyNodeVisitor::Visit(TDictType& node) {
     Y_UNUSED(node);
 }
@@ -366,6 +374,11 @@ void TExploringNodeVisitor::Visit(TOptionalType& node) {
     AddChildNode(&node, *node.GetItemType());
 }
 
+void TExploringNodeVisitor::Visit(TLinearType& node) {
+    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetItemType());
+}
+
 void TExploringNodeVisitor::Visit(TDictType& node) {
     AddChildNode(&node, *node.GetType());
     AddChildNode(&node, *node.GetKeyType());
@@ -460,8 +473,9 @@ void TExploringNodeVisitor::Visit(TCallable& node) {
         AddChildNode(&node, *node.GetInput(i).GetNode());
     }
 
-    if (node.HasResult())
+    if (node.HasResult()) {
         AddChildNode(&node, *node.GetResult().GetNode());
+    }
 }
 
 void TExploringNodeVisitor::Visit(TAny& node) {
@@ -511,39 +525,39 @@ void TExploringNodeVisitor::Visit(TMultiType& node) {
 }
 
 void TExploringNodeVisitor::AddChildNode(TNode* parent, TNode& child) {
-    Stack->push_back(&child);
+    Stack_->push_back(&child);
 
-    if (BuildConsumersMap) {
+    if (BuildConsumersMap_) {
         if (parent != nullptr) {
-            ConsumersMap[&child].push_back(parent);
+            ConsumersMap_[&child].push_back(parent);
         } else {
-            ConsumersMap[&child] = {};
+            ConsumersMap_[&child] = {};
         }
     }
 }
 
 void TExploringNodeVisitor::Clear() {
-    NodeList.clear();
-    Stack = nullptr;
-    ConsumersMap.clear();
+    NodeList_.clear();
+    Stack_ = nullptr;
+    ConsumersMap_.clear();
 }
 
-void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
-    bool buildConsumersMap, size_t nodesCountHint)
+void TExploringNodeVisitor::Walk(TNode* root, std::vector<TNode*>& nodeStack, const std::vector<TNode*>& terminalNodes,
+                                 bool buildConsumersMap, size_t nodesCountHint)
 {
-    BuildConsumersMap = buildConsumersMap;
+    BuildConsumersMap_ = buildConsumersMap;
 
     Clear();
 
-    if (BuildConsumersMap && nodesCountHint) {
-        ConsumersMap.reserve(nodesCountHint);
+    if (BuildConsumersMap_ && nodesCountHint) {
+        ConsumersMap_.reserve(nodesCountHint);
     }
 
-    Stack = &env.GetNodeStack();
-    Stack->clear();
-    AddChildNode(nullptr, *root);
-    while (!Stack->empty()) {
-        auto node = Stack->back();
+    Stack_ = &nodeStack;
+    Stack_->clear();
+    AddChildNode(/*parent=*/nullptr, *root);
+    while (!Stack_->empty()) {
+        auto node = Stack_->back();
 
         if (node->GetCookie() == 0) {
             node->SetCookie(IS_NODE_ENTERED);
@@ -553,38 +567,43 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
             }
         } else {
             if (node->GetCookie() == IS_NODE_ENTERED) {
-                NodeList.push_back(node);
+                NodeList_.push_back(node);
                 node->SetCookie(IS_NODE_EXITED);
             } else {
                 Y_ABORT_UNLESS(node->GetCookie() <= IS_NODE_EXITED, "TNode graph should not be reused");
             }
 
-            Stack->pop_back();
+            Stack_->pop_back();
             continue;
         }
     }
 
-    for (auto node : NodeList) {
+    for (auto node : NodeList_) {
         node->SetCookie(0);
     }
 
-    Stack = nullptr;
+    Stack_ = nullptr;
+}
+
+void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
+                                 bool buildConsumersMap, size_t nodesCountHint) {
+    Walk(root, env.GetNodeStack(), terminalNodes, buildConsumersMap, nodesCountHint);
 }
 
 const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {
-    return NodeList;
+    return NodeList_;
 }
 
 const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(TNode& node) {
-    Y_ABORT_UNLESS(BuildConsumersMap);
-    const auto consumers = ConsumersMap.find(&node);
-    Y_ABORT_UNLESS(consumers != ConsumersMap.cend());
+    Y_ABORT_UNLESS(BuildConsumersMap_);
+    const auto consumers = ConsumersMap_.find(&node);
+    Y_ABORT_UNLESS(consumers != ConsumersMap_.cend());
     return consumers->second;
 }
 
 template <bool InPlace>
 TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisitor& explorer,
-    const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)
+                                          const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)
 {
     auto& nodes = explorer.GetNodes();
 
@@ -647,7 +666,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
 }
 
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,
-    const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges) {
+                                      const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges) {
     if (inPlace) {
         return SinglePassVisitCallablesImpl<true>(root, explorer, funcProvider, env, wereChanges);
     } else {
@@ -655,5 +674,4 @@ TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& 
     }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

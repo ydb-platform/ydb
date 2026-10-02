@@ -32,14 +32,31 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonWhiteboardRequest(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
+    std::vector<TNodeId> GetNodeIdsFromParams() const {
         std::vector<TNodeId> nodeIds;
-        SplitIds(params.Get("node_id"), ',', nodeIds);
+        SplitIds(TBase::Params.Get("node_id"), ',', nodeIds);
+        std::replace(nodeIds.begin(),
+                     nodeIds.end(),
+                     (TNodeId)0,
+                     TlsActivationContext->ActorSystem()->NodeId);
+        return nodeIds;
+    }
+
+    void Bootstrap() override {
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
+        if (TBase::IsStrictDatabaseOnlyRequest()) {
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
+                return;
+            }
+        }
+
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {
                 TBase::RequestSettings.FilterNodeIds = nodeIds;
@@ -55,8 +72,32 @@ public:
                 }
             }
         }
+        if (TBase::IsDatabaseRequest()) {
+            auto nodes = TBase::GetDatabaseNodes();
+            if (TBase::RequestSettings.FilterNodeIds.empty()) {
+                TBase::RequestSettings.FilterNodeIds = std::move(nodes);
+            } else {
+                auto nodesSet = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+                TBase::RequestSettings.FilterNodeIds.erase(
+                    std::remove_if(TBase::RequestSettings.FilterNodeIds.begin(), TBase::RequestSettings.FilterNodeIds.end(),
+                    [&nodesSet](TNodeId nodeId) { return nodesSet.count(nodeId) == 0; }),
+                    TBase::RequestSettings.FilterNodeIds.end());
+                if (TBase::RequestSettings.FilterNodeIds.empty()) {
+                    return ReplyAndPassAway();
+                }
+            }
+            if (TBase::RequestSettings.FilterNodeIds.empty() && TBase::IsStrictDatabaseOnlyRequest()) {
+                // If a database has no registered nodes, a strict database-only user gets
+                // 200 with an empty response, not the nodes of the whole cluster.
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to ask",
+                    {"logPrefix", TBase::GetLogPrefix()},
+                    {"user", TBase::GetUserSID()},
+                    {"database", TBase::Database});
+                return ReplyAndPassAway();
+            }
+        }
         {
-            TString merge = params.Get("merge");
+            TString merge = TBase::Params.Get("merge");
             if (merge.empty() || merge == "1" || merge == "true") {
                 TBase::RequestSettings.MergeFields = TWhiteboardInfo<TResponseType>::GetDefaultMergeField();
             } else if (merge == "0" || merge == "false") {
@@ -65,28 +106,28 @@ public:
                 TBase::RequestSettings.MergeFields = merge;
             }
         }
-        TBase::RequestSettings.ChangedSince = FromStringWithDefault<ui64>(params.Get("since"), 0);
-        TBase::RequestSettings.AliveOnly = FromStringWithDefault<bool>(params.Get("alive"), TBase::RequestSettings.AliveOnly);
-        TBase::RequestSettings.GroupFields = params.Get("group");
-        TBase::RequestSettings.FilterFields = params.Get("filter");
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        JsonSettings.EmptyRepeated = FromStringWithDefault<bool>(params.Get("empty_repeated"), false);
-        TBase::RequestSettings.AllEnums = FromStringWithDefault<bool>(params.Get("all"), false);
-        TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        TBase::RequestSettings.Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
-        TBase::RequestSettings.RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), TBase::RequestSettings.RetryPeriod.MilliSeconds()));
-        if (params.Has("static")) {
-            TBase::RequestSettings.StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static"), false);
+        TBase::RequestSettings.ChangedSince = FromStringWithDefault<ui64>(TBase::Params.Get("since"), 0);
+        TBase::RequestSettings.AliveOnly = FromStringWithDefault<bool>(TBase::Params.Get("alive"), TBase::RequestSettings.AliveOnly);
+        TBase::RequestSettings.GroupFields = TBase::Params.Get("group");
+        TBase::RequestSettings.FilterFields = TBase::Params.Get("filter");
+        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(TBase::Params.Get("enums"), false);
+        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(TBase::Params.Get("ui64"), false);
+        JsonSettings.EmptyRepeated = FromStringWithDefault<bool>(TBase::Params.Get("empty_repeated"), false);
+        TBase::RequestSettings.AllEnums = FromStringWithDefault<bool>(TBase::Params.Get("all"), false);
+        TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(TBase::Params.Get("timeout"), 10000);
+        TBase::RequestSettings.Retries = FromStringWithDefault<ui32>(TBase::Params.Get("retries"), 0);
+        TBase::RequestSettings.RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(TBase::Params.Get("retry_period"), TBase::RequestSettings.RetryPeriod.MilliSeconds()));
+        if (TBase::Params.Has("static")) {
+            TBase::RequestSettings.StaticNodesOnly = FromStringWithDefault<bool>(TBase::Params.Get("static"), false);
         }
-        if (params.Has("fields_required")) {
-            if (params.Get("fields_required") == "all") {
+        if (TBase::Params.Has("fields_required")) {
+            if (TBase::Params.Get("fields_required") == "all") {
                 TBase::RequestSettings.FieldsRequired = {-1};
             } else {
-                SplitIds(params.Get("fields_required"), ',', TBase::RequestSettings.FieldsRequired);
+                SplitIds(TBase::Params.Get("fields_required"), ',', TBase::RequestSettings.FieldsRequired);
             }
         }
-        TBase::RequestSettings.Format = params.Get("format");
+        TBase::RequestSettings.Format = TBase::Params.Get("format");
         TBase::Bootstrap();
     }
 

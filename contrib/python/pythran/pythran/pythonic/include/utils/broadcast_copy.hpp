@@ -22,15 +22,14 @@ namespace utils
   };
 
   template <class T>
-  struct dim_of<T,
-                typename std::enable_if<std::is_fundamental<T>::value>::type> {
+  struct dim_of<T, std::enable_if_t<std::is_fundamental<T>::value>> {
     static const size_t value = 0;
   };
 
-#define SPECIALIZE_DIM_OF(TYPE)                                                \
-  template <>                                                                  \
-  struct dim_of<TYPE> {                                                        \
-    static const size_t value = 0;                                             \
+#define SPECIALIZE_DIM_OF(TYPE)                                                                    \
+  template <>                                                                                      \
+  struct dim_of<TYPE> {                                                                            \
+    static const size_t value = 0;                                                                 \
   }
 
   SPECIALIZE_DIM_OF(std::complex<float>);

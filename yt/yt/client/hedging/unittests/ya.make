@@ -1,4 +1,4 @@
-GTEST()
+GTEST(unittester-client-hedging)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

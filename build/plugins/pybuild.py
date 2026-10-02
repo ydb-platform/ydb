@@ -1,12 +1,18 @@
 import collections
 import json
 import os
-import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
-
+from _common import (
+    stripext,
+    rootrel_arc_src,
+    listid,
+    pathid,
+    lazy,
+    get_no_lint_value,
+    resolve_common_const,
+)
 
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
@@ -55,9 +61,9 @@ def uniq_suffix(path, unit):
     return '.{}'.format(pathid(upath)[:4])
 
 
-def pb2_arg(suf, path, mod, unit):
+def pb2_arg(suf, path, mod, py_ver, unit):
     return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=py_ver
     )
 
 
@@ -73,8 +79,8 @@ def ev_cc_arg(path, unit):
     return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
 
 
-def ev_arg(path, mod, unit):
-    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
+def ev_arg(path, mod, py_ver, unit):
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), py_ver, mod)
 
 
 def mangle(name):
@@ -83,7 +89,7 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None):
+def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
     def normpath(*args):
         return os.path.normpath(os.path.join(*args))
 
@@ -99,7 +105,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = [six.ensure_str(x) for x in ymake.parse_cython_includes(f.read())]
+        includes = [x.decode('utf-8') for x in ymake.parse_cython_includes(f.read())]
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include
@@ -112,15 +118,16 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
             incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
             yield (incname, incpath)
             # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen):
+            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3):
                 yield e
         else:
             # There might be arcadia root or cython relative include.
             # Don't treat such file as missing, because there must be PEERDIR on py_library
             # which contains it.
+            cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
             for path in [
                 source_root,
-                source_root + "/contrib/tools/cython/Cython/Includes",
+                source_root + cython_dir + "Cython/Includes",
             ]:
                 if os.path.exists(normpath(path, incfile)):
                     break
@@ -136,23 +143,18 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
-@lazy
-def get_ruff_configs(unit):
-    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
-    arc_config_path = unit.resolve_arc_path(rel_config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    with open(abs_config_path, 'r') as fd:
-        return list(json.load(fd).values())
-
-
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():
         resolved_files = []
         for path in files:
-            resolved = unit.resolve_arc_path([path])
-            if resolved.startswith('$S'):  # path was resolved as source file.
+            resolved = resolve_common_const(path)  # files can come from glob (ALL_PY_EXTRA_LINT_FILES macro)
+            if resolved.startswith('$S'):
                 resolved_files.append(resolved)
+            else:
+                resolved = unit.resolve_arc_path([path])
+                if resolved.startswith('$S'):  # path was resolved as source file.
+                    resolved_files.append(resolved)
         return resolved_files
 
     upath = unit.path()[3:]
@@ -167,12 +169,16 @@ def add_python_lint_checks(unit, py_ver, files):
             "taxi/uservices/",
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
+            "market/robotics/contrib/",  # Robotics contrib
+            "market/sre",  # YMAKE-626 -> MARKET-???
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
             "sdg/sdc/third_party/",  # SDC contrib
+            "smart_devices/third_party/",  # smart_devices contrib
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
             "yt/python_py2/",
+            "cml/comrade_agent/src/contrib/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):
@@ -187,10 +193,11 @@ def add_python_lint_checks(unit, py_ver, files):
 
 
 def is_py3(unit):
-    return unit.get("PYTHON3") == "yes"
+    return unit.get("PYTHON2") != "yes"
 
 
-def on_py_program(unit, *args):
+@ymake.macro
+def _PY_PROGRAM(unit: ymake.Unit, *args: str):
     py_program(unit, is_py3(unit))
 
 
@@ -198,25 +205,29 @@ def py_program(unit, py3):
     """
     Documentation: https://wiki.yandex-team.ru/devtools/commandsandvars/py_srcs/#modulpyprogramimakrospymain
     """
-    if py3:
-        peers = ['library/python/runtime_py3/main']
-        if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python3/Modules/_sqlite')
-    else:
-        peers = ['library/python/runtime/main']
-        if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python/src/Modules/_sqlite')
-    unit.onpeerdir(peers)
+    arcadia_python = unit.get('USE_ARCADIA_PYTHON') == 'yes'
+    if arcadia_python:
+        if py3:
+            peers = ['library/python/runtime_py3/main']
+            if unit.get('PYTHON_SQLITE3') != 'no':
+                peer = unit.get('PYTHON3_TOOL_PEERDIR') + '/Modules/_sqlite'
+                peers.append(peer)
+        else:
+            peers = ['library/python/runtime/main']
+            if unit.get('PYTHON_SQLITE3') != 'no':
+                peers.append('contrib/tools/python/src/Modules/_sqlite')
+        unit.onpeerdir(peers)
 
     # DEVTOOLSSUPPORT-53161
-    if os.name == 'nt':
+    if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 
 
-def onpy_srcs(unit, *args):
+@ymake.macro
+def PY_SRCS(unit: ymake.Unit, *args: str):
     """
     @usage PY_SRCS({| CYTHONIZE_PY} {| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
@@ -246,6 +257,14 @@ def onpy_srcs(unit, *args):
 
     upath = unit.path()[3:]
     py3 = is_py3(unit)
+
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_SRCS[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+        py_ver = 'py3' if py3 else 'py2'
+
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
@@ -284,6 +303,7 @@ def onpy_srcs(unit, *args):
     pyxs_c_api_h = []
     pyxs_cpp = []
     pyxs_cpp_h = []
+    pyxs_cpp_api_h = []
     pyxs = pyxs_cpp
     swigs_c = []
     swigs_cpp = []
@@ -323,6 +343,8 @@ def onpy_srcs(unit, *args):
             pyxs = pyxs_cpp
         elif arg == 'CYTHON_CPP_H':
             pyxs = pyxs_cpp_h
+        elif arg == 'CYTHON_CPP_API_H':
+            pyxs = pyxs_cpp_api_h
         elif arg == 'CYTHON_DIRECTIVE':
             cython_directives += ['-X', next(args)]
         elif arg == 'CYTHONIZE_PY':
@@ -445,7 +467,7 @@ def onpy_srcs(unit, *args):
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
                 # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S')):
+                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), None, py3):
                     py_files2res.add(entry)
                     include_arc_rel = entry[0]
                     include_map[filename].add(include_arc_rel)
@@ -456,13 +478,15 @@ def onpy_srcs(unit, *args):
                 pass
 
         obj_suff = unit.get('OBJ_SUF')
+        cython_suff = unit.get('CYTHON_SUFFIX')
         assert obj_suff is not None
         for pyxs, cython, out_suffix, with_ext in [
-            (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", obj_suff),
-            (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", None),
-            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", None),
-            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", obj_suff),
-            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, ".cpp", None),
+            (pyxs_c, unit.on_buildwith_cython_c_dep, f"{cython_suff}.c", obj_suff),
+            (pyxs_c_h, unit.on_buildwith_cython_c_h, f"{cython_suff}.c", None),
+            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, f"{cython_suff}.c", None),
+            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, f"{cython_suff}.cpp", obj_suff),
+            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, f"{cython_suff}.cpp", None),
+            (pyxs_cpp_api_h, unit.on_buildwith_cython_cpp_api_h, f"{cython_suff}.cpp", None),
         ]:
             for path, mod in pyxs:
                 filename = rootrel_arc_src(path, unit)
@@ -508,14 +532,15 @@ def onpy_srcs(unit, *args):
                 unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            data = ['DONT_COMPRESS']
-            prefix = 'resfs/cython/include'
-            for line in sorted(
-                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
-                for filename, files in six.iteritems(include_map)
-            ):
-                data += ['-', line]
-            unit.onresource(data)
+            for cython in ['cython' if py3 else 'cython_py2']:
+                data = ['DONT_COMPRESS']
+                prefix = f'resfs/{cython}/include'
+                for line in sorted(
+                    '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
+                    for filename, files in include_map.items()
+                ):
+                    data += ['-', line]
+                unit.onresource(data)
 
     for swigs, on_swig_python in [
         (swigs_c, unit.on_swig_python_c),
@@ -526,8 +551,8 @@ def onpy_srcs(unit, *args):
             prefix = path[: path.rfind('/') + 1] + mod.rsplit('.', 1)[-1]
             swg_py = '{}/{}/{}.py'.format('${ARCADIA_BUILD_ROOT}', upath, prefix)
             on_swig_python([path, prefix])
-            onpy_register(unit, mod + '_swg')
-            onpy_srcs(unit, swg_py + '=' + mod)
+            PY_REGISTER(unit, mod + '_swg')
+            PY_SRCS(unit, swg_py + '=' + mod)
 
     if pys:
         pys_seen = set()
@@ -539,11 +564,10 @@ def onpy_srcs(unit, *args):
 
         if py3:
             mod_list_md5 = md5()
-            compress = False
             resfs_mocks = []
 
             for path, mod in pys:
-                mod_list_md5.update(six.ensure_binary(mod))
+                mod_list_md5.update(mod.encode('utf-8'))
                 dest = 'py/' + mod.replace('.', '/') + '.py'
                 # In external_py_files mode we want to build python binaries without embedded python files.
                 # The application will still be able to load them from the file system.
@@ -562,8 +586,6 @@ def onpy_srcs(unit, *args):
                         dst = path + uniq_suffix(path, unit)
                         unit.on_py3_compile_bytecode([root_rel_path + '-', path, dst])
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
-                    if not compress and ugly_conftest_exception(path):
-                        compress = True
 
             if resfs_mocks:
                 unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
@@ -578,7 +600,7 @@ def onpy_srcs(unit, *args):
                 unit.onresource(ns_res)
 
             _split_macro_call(
-                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=compress
+                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=False
             )
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
@@ -588,7 +610,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)
@@ -635,7 +657,7 @@ def onpy_srcs(unit, *args):
         unit.on_generate_py_protos_internal(proto_paths)
         unit.onpy_srcs(
             [
-                pb2_arg(py_suf, path, mod, unit)
+                pb2_arg(py_suf, path, mod, py_ver, unit)
                 for path, mod in protos
                 for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
             ]
@@ -647,7 +669,7 @@ def onpy_srcs(unit, *args):
     if evs:
         unit.onpeerdir([cpp_runtime_path])
         unit.on_generate_py_evs_internal([path for path, mod in evs])
-        unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
+        unit.onpy_srcs([ev_arg(path, mod, py_ver, unit) for path, mod in evs])
 
     if fbss:
         unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
@@ -669,7 +691,8 @@ def _check_test_srcs(*args):
         )
 
 
-def ontest_srcs(unit, *args):
+@ymake.macro
+def TEST_SRCS(unit: ymake.Unit, *args: str):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
         namespace = "__tests__"
@@ -679,7 +702,8 @@ def ontest_srcs(unit, *args):
         unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
-def onpy_doctests(unit, *args):
+@ymake.macro
+def PY_DOCTESTS(unit: ymake.Unit, *args: str):
     """
     @usage PY_DOCTESTS(Packages...)
 
@@ -697,7 +721,8 @@ def py_register(unit, func, py3):
         unit.on_py_register([func])
 
 
-def onpy_register(unit, *args):
+@ymake.macro
+def PY_REGISTER(unit: ymake.Unit, *args: str):
     """
     @usage: PY_REGISTER([package.]module_name)
 
@@ -713,6 +738,12 @@ def onpy_register(unit, *args):
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
     """
 
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_REGISTER[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+
     py3 = is_py3(unit)
 
     for name in args:
@@ -724,6 +755,8 @@ def onpy_register(unit, *args):
                 unit.oncflags(['-DPyInit_{}=PyInit_{}'.format(shortname, mangle(name))])
             else:
                 unit.oncflags(['-Dinit{}=init{}'.format(shortname, mangle(name))])
+            # BOOST_PYTHON_MODULE case
+            unit.oncflags(['-Dinit_module_{}=init_module_{}'.format(shortname, mangle(name))])
 
 
 def py_main(unit, arg):
@@ -735,7 +768,8 @@ def py_main(unit, arg):
     unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format(arg)])
 
 
-def onpy_main(unit, arg):
+@ymake.macro
+def PY_MAIN(unit: ymake.Unit, arg: str):
     """
     @usage: PY_MAIN(package.module[:func])
 
@@ -743,6 +777,11 @@ def onpy_main(unit, arg):
 
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain
     """
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_MAIN[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
 
     arg = arg.replace('/', '.')
 
@@ -752,7 +791,8 @@ def onpy_main(unit, arg):
     py_main(unit, arg)
 
 
-def onpy_constructor(unit, arg):
+@ymake.macro
+def PY_CONSTRUCTOR(unit: ymake.Unit, arg: str):
     """
     @usage: PY_CONSTRUCTOR(package.module[:func])
 
@@ -763,11 +803,12 @@ def onpy_constructor(unit, arg):
     if ':' not in arg:
         arg = arg + '=init'
     else:
-        arg[arg.index(':')] = '='
+        arg = arg.replace(':', '=', 1)
     unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 
-def onpy_enums_serialization(unit, *args):
+@ymake.macro
+def PY_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: str):
     ns = ''
     args = iter(args)
     for arg in args:
@@ -779,12 +820,13 @@ def onpy_enums_serialization(unit, *args):
             unit.on_py_enum_serialization_to_py(arg)
             filename = arg.rsplit('.', 1)[0] + '.py'
             if len(ns) != 0:
-                onpy_srcs(unit, 'NAMESPACE', ns, filename)
+                PY_SRCS(unit, 'NAMESPACE', ns, filename)
             else:
-                onpy_srcs(unit, filename)
+                PY_SRCS(unit, filename)
 
 
-def oncpp_enums_serialization(unit, *args):
+@ymake.macro
+def CPP_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: str):
     args = iter(args)
     for arg in args:
         # Namespace directives.

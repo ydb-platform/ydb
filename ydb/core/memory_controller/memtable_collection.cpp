@@ -12,10 +12,10 @@ ui64 TMemTableMemoryConsumer::GetConsumption() const {
     return Consumption;
 }
 
-void TMemTableMemoryConsumer::SetConsumption(ui64 consumption) {
-    ui64 before = Consumption.exchange(consumption);
+void TMemTableMemoryConsumer::SetReport(TConsumerReport report) {
+    ui64 before = Consumption.exchange(report.Used);
     if (auto t = Collection.lock()) {
-        t->ChangeTotalConsumption(consumption - before);
+        t->ChangeTotalConsumption(report.Used - before);
     }
 }
 

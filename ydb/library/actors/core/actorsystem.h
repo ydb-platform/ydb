@@ -3,11 +3,12 @@
 #include "defs.h"
 
 #include "config.h"
+#include "async_frame_cache.h"
 #include "event.h"
 #include "executor_pool.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
-#include "cpu_manager.h"
+#include "subsystem.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -15,6 +16,12 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
+
+#include <type_traits>
+
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
 
 namespace NActors {
     class IActor;
@@ -84,8 +91,25 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
     };
 
+    class TRdmaAllocatorWithFallback : public IRcBufAllocator {
+    public:
+        TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept;
+        TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept override;
+        TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept override;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() noexcept {
+            return RdmaMemPool;
+        }
+    private:
+        template<bool pageAligned>
+        std::optional<TRcBuf> TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+    };
+
     struct TActorSystemSetup {
         ui32 NodeId = 0;
+
+        // Idle coroutine allocation bytes per worker; zero disables retention.
+        size_t AsyncFrameCacheSizeBytes = TAsyncFrameCache::DefaultSizeBytes;
 
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;
@@ -96,11 +120,17 @@ namespace NActors {
         TAutoPtr<ISchedulerThread> Scheduler;
 
         TInterconnectSetup Interconnect;
+        bool InterconnectCollectSubscriptionStackTrace = false;
 
         bool MonitorStuckActors = false;
 
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
+
+        std::shared_ptr<IRcBufAllocator> RcBufAllocator;
+        TSubSystems SubSystems;
+
+        std::vector<std::function<void(TActorSystem*)>> OnActorSystemCreated;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -127,6 +157,11 @@ namespace NActors {
                 return CpuManager.GetThreadsOptional(poolId);
             }
         }
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
+        }
     };
 
     class TActorSystem : TNonCopyable {
@@ -135,7 +170,12 @@ namespace NActors {
     public:
         const ui32 NodeId;
 
+        size_t GetAsyncFrameCacheSizeBytes() const noexcept {
+            return AsyncFrameCacheSizeBytes;
+        }
+
     private:
+        const size_t AsyncFrameCacheSizeBytes;
         THolder<TCpuManager> CpuManager;
         const ui32 ExecutorPoolCount;
 
@@ -152,6 +192,8 @@ namespace NActors {
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
+        mutable IRcBufAllocator* RcBufAllocator;
+
         friend class TExecutorThread;
 
         THolder<TActorSystemSetup> SystemSetup;
@@ -161,10 +203,12 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
+        TSubSystems SubSystems;
+        std::vector<size_t> SubSystemOrder;
 
-        bool StartExecuted;
-        bool StopExecuted;
-        bool CleanupExecuted;
+        std::atomic_bool StartExecuted = false;
+        std::atomic_bool StopExecuted = false;
+        std::atomic_bool CleanupExecuted = false;
 
         std::deque<std::function<void()>> DeferredPreStop;
     public:
@@ -176,6 +220,8 @@ namespace NActors {
         void Stop();
         void Cleanup();
 
+        static bool IsStopped();
+
         template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
@@ -183,17 +229,20 @@ namespace NActors {
         bool MonitorStuckActors() const { return SystemSetup->MonitorStuckActors; }
 
     private:
-        typedef bool (IExecutorPool::*TEPSendFunction)(TAutoPtr<IEventHandle>& ev);
+        typedef bool (IExecutorPool::*TEPSendFunction)(std::unique_ptr<IEventHandle>& ev);
 
         template <TEPSendFunction EPSpecificSend>
-        bool GenericSend(TAutoPtr<IEventHandle> ev) const;
+        bool GenericSend(std::unique_ptr<IEventHandle>&& ev) const;
 
     public:
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
 
-        bool SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const;
-        bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(std::unique_ptr<IEventHandle>&& ev) const;
+
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev, ESendingType sendingType) const;
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev) const;
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
@@ -285,11 +334,6 @@ namespace NActors {
             return LoggerSettings0.Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStats) const;
-
-        THarmonizerStats GetHarmonizerStats() const;
-
         std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {
                 return {};
@@ -297,16 +341,38 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
+        float GetPoolMaxThreadsCount(ui32 poolId) const;
+
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
-        TVector<IExecutorPool*> GetBasicExecutorPools() const {
-            return CpuManager->GetBasicExecutorPools();
+        TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
+        // Idle coroutine frames retained by this actor system's worker threads.
+        // Safe from any thread; approximate while workers allocate or release.
+        TAsyncFrameCache::TProcessStats GetAsyncFrameCacheStats() const;
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            Y_ABORT_UNLESS(!StartExecuted.load(), "cannot register subsystem after actor system start");
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
         }
 
-        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
-        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
+        template<class T>
+        T* GetSubSystem() {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
 
+        template<class T>
+        const T* GetSubSystem() const {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
+
+        IRcBufAllocator* GetRcBufAllocator() const {
+            return RcBufAllocator;
+        }
     };
 }

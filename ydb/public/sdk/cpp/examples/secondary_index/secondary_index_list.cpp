@@ -246,7 +246,7 @@ int RunListSeries(TDriver& driver, const std::string& prefix, int argc, char** a
     uint64_t lastSeriesId = -1;
     uint64_t lastViews = -1;
 
-    opts.AddLongOption("by-views", "Sort by views").NoArgument().SetFlag(&byViews);
+    opts.AddLongOption("by-views", "Sort by views").StoreTrue(&byViews);
     opts.AddLongOption("limit", "Maximum number of rows").Optional().RequiredArgument("NUM")
         .StoreResult(&limit);
     opts.AddLongOption("last-id", "Resume from this last series id").Optional().RequiredArgument("NUM")

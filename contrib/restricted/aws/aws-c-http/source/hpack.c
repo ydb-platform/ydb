@@ -103,7 +103,7 @@ void aws_hpack_static_table_init(struct aws_allocator *allocator) {
     }
 }
 
-void aws_hpack_static_table_clean_up() {
+void aws_hpack_static_table_clean_up(void) {
     aws_hash_table_clean_up(&s_static_header_reverse_lookup);
     aws_hash_table_clean_up(&s_static_header_reverse_lookup_name_only);
 }

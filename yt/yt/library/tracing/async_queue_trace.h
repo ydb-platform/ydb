@@ -26,7 +26,7 @@ namespace NYT::NTracing {
 class TAsyncQueueTrace
 {
 public:
-    TAsyncQueueTrace(bool lazy = true);
+    explicit TAsyncQueueTrace(bool lazy = true);
 
     //! Join notifies queue that context is blocked by background processing up to queueIndex.
     //
@@ -37,7 +37,7 @@ public:
     void Join(i64 queueIndex);
 
     //! StartSpan creates span that traces background work in the queue.
-    std::pair<TTraceContextPtr, bool> StartSpan(i64 startIndex, const TString& spanName);
+    std::pair<TTraceContextPtr, bool> StartSpan(i64 startIndex, const std::string& spanName);
 
     //! Notify that trace is finished.
     void FinishSpan(const TTraceContextPtr& traceContext);
@@ -45,7 +45,7 @@ public:
     //! Notify that all future calls to StartSpan will have startIndex > endIndex.
     void Commit(i64 endIndex);
 
-    TAsyncQueueTraceGuard CreateTraceGuard(const TString& spanName, i64 startIndex, std::optional<i64> endIndex);
+    TAsyncQueueTraceGuard CreateTraceGuard(const std::string& spanName, i64 startIndex, std::optional<i64> endIndex);
 
 private:
     const bool Lazy_;
@@ -61,11 +61,11 @@ class TAsyncQueueTraceGuard
 {
 public:
     TAsyncQueueTraceGuard(TAsyncQueueTrace* queueTrace, const TTraceContextPtr& traceContext, std::optional<i64> endIndex);
-    TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other);
+    TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other) noexcept;
     ~TAsyncQueueTraceGuard();
 
     // Support only move construction. Delete all other copy/move operators.
-    TAsyncQueueTraceGuard operator = (TAsyncQueueTraceGuard&& other) = delete;
+    TAsyncQueueTraceGuard operator=(TAsyncQueueTraceGuard&& other) = delete;
 
     void OnError();
 

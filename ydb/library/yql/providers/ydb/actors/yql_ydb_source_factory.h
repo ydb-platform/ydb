@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -9,6 +9,8 @@
 
 namespace NYql::NDq {
 
-void RegisterYdbReadActorFactory(NYql::NDq::TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterYdbReadActorFactory(NYql::NDq::TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "guid.h"
-#include "mpl.h"
 #include "object_pool.h"
 #include "serialize.h"
 
@@ -11,6 +10,8 @@
 #include <yt/yt_proto/yt/core/misc/proto/protobuf_helpers.pb.h>
 
 #include <library/cpp/yt/memory/ref.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
@@ -123,6 +124,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap);
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -144,16 +150,21 @@ void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap);
+
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class T, class TTag>
-void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void FromProto(TStrongTypedef<T, TTag, Options>* original, const TSerialized& serialized);
 
-template <class TSerialized, class T, class TTag>
-void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag, Options>& original);
 
-template <class T, class TTag>
-struct TProtoTraits<TStrongTypedef<T, TTag>>
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TProtoTraits<TStrongTypedef<T, TTag, Options>>
 {
     using TSerialized = T;
 };
@@ -179,15 +190,15 @@ struct TToProtoResult<TToProtoAutoDerivedSerializedTag, TOriginal>
 
 //! A simple heuristic to distinguish between `ToProto(original)` and `ToProto(&original, serialized)`.
 template <class T>
-concept CToProtoOriginal = !std::is_pointer_v<T>;
+concept CToProtoOriginal = !std::is_pointer_v<std::remove_cvref_t<T>>;
 
 } // namespace NDetail
 
 template <class TSerialized = NYT::NDetail::TToProtoAutoDerivedSerializedTag, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
-auto ToProto(const TOriginal& original, TArgs&&... args);
+auto ToProto(TOriginal&& original, TArgs&&... args);
 
 template <class TOriginal, class TSerialized, class... TArgs>
-TOriginal FromProto(const TSerialized& serialized, TArgs&&... args);
+TOriginal FromProto(TSerialized&& serialized, TArgs&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -347,7 +358,7 @@ struct TProtobufExtensionDescriptor
 {
     const google::protobuf::Descriptor* MessageDescriptor;
     const int Tag;
-    const TString Name;
+    const std::string Name;
 };
 
 struct IProtobufExtensionRegistry
@@ -368,14 +379,14 @@ struct IProtobufExtensionRegistry
     virtual const TProtobufExtensionDescriptor* FindDescriptorByTag(int tag) = 0;
 
     //! Finds a descriptor by name.
-    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) = 0;
+    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) = 0;
 
     //! Returns the singleton instance.
     static IProtobufExtensionRegistry* Get();
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_STATIC_INITIALIZER( \
+    YT_STATIC_INITIALIZER({ \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
             ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
@@ -383,7 +394,8 @@ struct IProtobufExtensionRegistry
                 .Tag = tag, \
                 .Name = #name, \
             });\
-        }));
+        }); \
+    })
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.
@@ -427,7 +439,7 @@ NYT::NProto::TExtensionSet FilterProtoExtensions(
 ////////////////////////////////////////////////////////////////////////////////
 
 THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source);
-std::optional<TString> FindExtensionName(int tag);
+std::optional<std::string> FindExtensionName(int tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -440,9 +452,9 @@ class TRefCountedProto
 public:
     TRefCountedProto() = default;
     TRefCountedProto(const TRefCountedProto<TProto>& other);
-    TRefCountedProto(TRefCountedProto<TProto>&& other);
+    TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept;
     explicit TRefCountedProto(const TProto& other);
-    explicit TRefCountedProto(TProto&& other);
+    explicit TRefCountedProto(TProto&& other) noexcept;
     ~TRefCountedProto();
 
     i64 GetSize() const;
@@ -464,13 +476,31 @@ google::protobuf::Timestamp GetProtoNow();
 //! field. Macro accepts desired target type as optional third parameter.
 //! Usage:
 //!     // Get as is.
-//!     int instantInt = YT_PROTO_OPTIONAL(message, instant);
+//!     int instantInt = YT_OPTIONAL_FROM_PROTO(message, instant);
 //!     // Get with conversion.
-//!     TInstant instant = YT_PROTO_OPTIONAL(message, instant, TInstant);
-#define YT_PROTO_OPTIONAL(message, field, ...) \
+//!     TInstant instant = YT_OPTIONAL_FROM_PROTO(message, instant, TInstant);
+#define YT_OPTIONAL_FROM_PROTO(message, field, ...) \
     (((message).has_##field()) \
-        ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
+        ? std::optional(YT_OPTIONAL_FROM_PROTO_CONVERT(__VA_ARGS__)((message).field())) \
         : std::nullopt)
+
+#define YT_OPTIONAL_TO_PROTO(message, field, original) \
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            ToProto(message_->mutable_##field(), *original_);\
+        } else {\
+            message_->clear_##field();\
+        }\
+    }((message), (original))
+
+#define YT_OPTIONAL_SET_PROTO(message, field, original) \
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            message_->set_##field(ToProto(*original_));\
+        } else {\
+            message_->clear_##field();\
+        }\
+    }((message), (original))
 
 // TODO(cherepashka): to remove after std::optional::and_then is here.
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.

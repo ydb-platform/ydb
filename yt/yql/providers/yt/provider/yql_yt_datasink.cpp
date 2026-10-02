@@ -37,36 +37,41 @@ using namespace NNodes;
 
 class TYtDataSinkTrackableNodeProcessor : public TTrackableNodeProcessorBase {
 public:
-    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectNodes)
-        : CollectNodes(collectNodes)
-        , CleanupTransformer(collectNodes ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
+    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectTempData, bool collectSnapshotLocks)
+        : CollectTempData(collectTempData)
+        , CollectSnapshotLocks(collectSnapshotLocks)
+        , CleanupTransformer(collectTempData ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
     {
     }
 
-    void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
+    void GetUsedNodes(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) override {
         usedNodeIds.clear();
-        if (!CollectNodes) {
-            return;
+
+        if (CollectSnapshotLocks) {
+            ScanForUsedInputTables(input, usedNodeIds);
         }
 
-        if (TMaybeNode<TYtOutputOpBase>(&input)) {
-            for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input.ChildrenSize(); ++i) {
-                ScanForUsedOutputTables(*input.Child(i), usedNodeIds);
+        if (CollectTempData) {
+            if (TMaybeNode<TYtOutputOpBase>(input)) {
+                for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input->ChildrenSize(); ++i) {
+                    ScanForUsedOutputTables(input->Child(i), usedNodeIds);
+                }
+            } else if (TMaybeNode<TYtPublish>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Input), usedNodeIds);
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Settings), usedNodeIds);
+            } else if (TMaybeNode<TYtStatOut>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtStatOut::idx_Input), usedNodeIds);
             }
-        } else if (TMaybeNode<TYtPublish>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtPublish::idx_Input), usedNodeIds);
-        } else if (TMaybeNode<TYtStatOut>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtStatOut::idx_Input), usedNodeIds);
         }
     }
 
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
         created.clear();
-        if (!CollectNodes) {
+        if (!CollectTempData) {
             return;
         }
 
-        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
+        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(node)) {
             TString clusterName = TString{maybeOp.Cast().DataSink().Cast<TYtDSink>().Cluster().Value()};
             auto clusterPtr = maybeOp.Cast().DataSink().Ptr();
             for (auto table: maybeOp.Cast().Output()) {
@@ -83,11 +88,12 @@ public:
     }
 
     IGraphTransformer& GetCleanupTransformer() override {
-        return CollectNodes ? *CleanupTransformer : NullTransformer_;
+        return CollectTempData ? *CleanupTransformer : NullTransformer_;
     }
 
 private:
-    const bool CollectNodes;
+    const bool CollectTempData;
+    const bool CollectSnapshotLocks;
     THolder<IGraphTransformer> CleanupTransformer;
 };
 
@@ -111,9 +117,11 @@ public:
         })
         , FinalizingTransformer_([this]() { return CreateYtDataSinkFinalizingTransformer(State_); })
         , TrackableNodeProcessor_([this]() {
-            auto mode = GetReleaseTempDataMode(*State_->Configuration);
-            bool collectNodes = mode == EReleaseTempDataMode::Immediate;
-            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectNodes);
+            auto dataMode = GetReleaseTempDataMode(*State_->Configuration);
+            auto locksMode = GetReleaseSnapshotLocksMode(*State_->Configuration);
+            bool collectTempData = dataMode == EReleaseTempDataMode::Immediate;
+            bool collectLocks = locksMode == EReleaseSnapshotLocksMode::Immediate;
+            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectTempData, collectLocks);
         })
     {
     }
@@ -213,6 +221,17 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    if (to_lower(*cluster) == "default") {
+                        cluster = State_->Gateway->GetDefaultClusterName();
+                        node.ChildRef(1) = ctx.NewAtom(node.Pos(), *cluster);
+                        return true;
+                    }
+
+                    const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
+                    if (validate && *cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));
+                        return false;
+                    }
                 }
 
                 return true;
@@ -234,7 +253,12 @@ public:
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
         callables.insert(TYtWriteTable::CallableName());
         callables.insert(TYtDropTable::CallableName());
+        callables.insert(TYtCreateSymlink::CallableName());
+        callables.insert(TYtDropSymlink::CallableName());
+        callables.insert(TYtDropView::CallableName());
         callables.insert(TYtConfigure::CallableName());
+        callables.insert(TYtCreateTable::CallableName());
+        callables.insert(TYtCreateView::CallableName());
     }
 
     bool IsWrite(const TExprNode& node) override {
@@ -242,21 +266,108 @@ public:
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        if (auto leftMaterialize = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoLeft>(ctx, node->Pos())
+                .Input(ctx.RenameNode(leftMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+        if (auto rightMaterialize = TMaybeNode<TCoRight>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoRight>(ctx, node->Pos())
+                .Input(ctx.RenameNode(rightMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+
         YQL_ENSURE(TMaybeNode<TYtWrite>(node).DataSink());
-        auto mode = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode);
-        if (mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Drop) {
+        std::optional<EYtWriteMode> mode;
+        if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {
+            mode = FromString<EYtWriteMode>(m->Tail().Content());
+        }
+
+        const auto rewriteDrop = [&] (TStringBuf callableName) -> TExprNode::TPtr {
             if (!node->Child(3)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
                     << "Expected Void, but got: " << node->Child(3)->Content()));
                 return {};
             }
 
-            TExprNode::TListType children = node->ChildrenList();
-            children.resize(3);
-            return ctx.NewCallable(node->Pos(), TYtDropTable::CallableName(), std::move(children));
+            auto children = node->ChildrenList();
+            children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
+            children.resize(4);
+            return ctx.NewCallable(node->Pos(), callableName, std::move(children));
+        };
+
+        if (mode && IsCreateSymlinkMode(*mode)) {
+            if (!TYtTable::Match(node->Child(3))) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
+                    << "Expected " << TYtTable::CallableName() << ", but got: " << node->Child(3)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            return ctx.NewCallable(node->Pos(), TYtCreateSymlink::CallableName(), std::move(children));
+        } else if (mode && IsDropSymlinkMode(*mode)) {
+            return rewriteDrop(TYtDropSymlink::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
+            return rewriteDrop(TYtDropTable::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+            return rewriteDrop(TYtDropView::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::Create || *mode == EYtWriteMode::CreateIfNotExists)) {
+            if (!node->Child(3U)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3U)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children.resize(6U);
+            const auto settings = node->Child(4U);
+            const auto columns = NYql::GetSetting(*settings, EYtSettingType::Columns);
+            children[3U] = columns ? columns->TailPtr() : ctx.NewList(node->Pos(), {});
+            const auto keys = NYql::GetSetting(*settings, EYtSettingType::OrderBy);
+            children[4U] = keys ? keys->TailPtr() : ctx.NewList(node->Pos(), {});
+            children.back() = NYql::RemoveSettings(*settings, EYtSettingType::Columns | EYtSettingType::OrderBy, ctx);
+            return ctx.NewCallable(node->Pos(), TYtCreateTable::CallableName(), std::move(children));
+        } else if (mode && (*mode == EYtWriteMode::CreateObject || *mode == EYtWriteMode::CreateObjectIfNotExists)) {
+            if (!node->Child(3U)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3U)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children.resize(6U);
+
+            const auto settings = node->Child(4U);
+            TExprNode::TPtr queryText;
+            TExprNode::TPtr queryAst;
+            if (const auto features = NYql::GetSetting(*settings, EYtSettingType::Features)) {
+                for (auto i = 0U; i < features->Tail().ChildrenSize(); ++i) {
+                    if (const auto feature = features->Tail().Child(i); feature->IsList()) {
+                        if (feature->Head().IsAtom({"query_text", "__query_text"}))
+                            queryText = feature->TailPtr();
+                        else if (feature->Head().IsAtom({"query_ast", "__query_ast"}))
+                            queryAst = feature->TailPtr();
+                        else {
+                            ctx.AddError(TIssue(ctx.GetPosition(feature->Pos()), "Unexpected feature."));
+                            return {};
+                        }
+                    }
+                }
+            }
+
+            if (!queryText || !queryAst) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()),  "The view does not contain a query."));
+                return {};
+            }
+
+            children[3U] = std::move(queryText);
+            children[4U] = std::move(queryAst);
+
+            children.back() = NYql::RemoveSetting(*settings, EYtSettingType::Features, ctx);
+            return ctx.NewCallable(node->Pos(), TYtCreateView::CallableName(), std::move(children));
         } else {
             auto res = ctx.RenameNode(*node, TYtWriteTable::CallableName());
-            if ((!mode || FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Renew) && NYql::HasSetting(*node->Child(4), EYtSettingType::KeepMeta)) {
+            if ((!mode || *mode == EYtWriteMode::Renew) && NYql::HasSetting(*node->Child(4), EYtSettingType::KeepMeta)) {
                 auto settings = NYql::AddSetting(
                     *NYql::RemoveSettings(*node->Child(4), EYtSettingType::Mode | EYtSettingType::KeepMeta, ctx),
                     EYtSettingType::Mode,
@@ -358,6 +469,7 @@ public:
                 }
             } else if (TMaybeNode<TYtPublish>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Input), children);
+                ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Settings), children);
             } else if (TMaybeNode<TYtStatOut>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtStatOut::idx_Input), children);
             }
@@ -405,6 +517,7 @@ public:
                 op.Maybe<TYtReduce>() || op.Maybe<TYtSort>() || op.Maybe<TYtEquiJoin>())
             {
                 TSet<TString> keyFilterColumns;
+                TSet<TString> qlFilterColumns;
                 for (auto section: op.Input()) {
                     for (auto col : GetKeyFilterColumns(section, EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
                         keyFilterColumns.insert(TString(col));
@@ -426,6 +539,12 @@ public:
                             YQL_ENSURE(keyLength <= rowSpec->SortedBy.size());
                             keyFilterColumns.insert(rowSpec->SortedBy.begin(), rowSpec->SortedBy.begin() + keyLength);
                         }
+                        if (auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                            const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                            for (const auto& item : qlFilterType->GetItems()) {
+                                qlFilterColumns.emplace(item->GetName());
+                            }
+                        }
                     }
                 }
 
@@ -433,6 +552,16 @@ public:
                     writer.OnKeyedItem("InputKeyFilterColumns");
                     writer.OnBeginList();
                     for (auto column : keyFilterColumns) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(column);
+                    }
+                    writer.OnEndList();
+                }
+
+                if (!qlFilterColumns.empty()) {
+                    writer.OnKeyedItem("InputQLFilterColumns");
+                    writer.OnBeginList();
+                    for (auto column : qlFilterColumns) {
                         writer.OnListItem();
                         writer.OnStringScalar(column);
                     }
@@ -622,6 +751,10 @@ public:
 
     IYtflowOptimization* GetYtflowOptimization() override {
         return State_->YtflowOptimization_.Get();
+    }
+
+    bool IsFullCaptureReady() override {
+        return State_->FullCapture_ ? State_->FullCapture_->IsReady() : false;
     }
 
 private:

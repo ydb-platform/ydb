@@ -9,8 +9,8 @@ template <class TQueueImpl>
 TSingleQueueSchedulerThread<TQueueImpl>::TSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    TString threadGroupName,
-    TString threadName,
+    std::string threadGroupName,
+    std::string threadName,
     NThreading::TThreadOptions options)
     : TSchedulerThread(
         std::move(callbackEventCount),
@@ -50,8 +50,8 @@ template <class TQueueImpl>
 TSuspendableSingleQueueSchedulerThread<TQueueImpl>::TSuspendableSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    TString threadGroupName,
-    TString threadName,
+    std::string threadGroupName,
+    std::string threadName,
     NThreading::TThreadOptions options)
     : TSchedulerThread(
         std::move(callbackEventCount),

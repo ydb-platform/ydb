@@ -11,6 +11,7 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+import base64
 import datetime
 import getpass
 import json
@@ -19,43 +20,61 @@ import os
 import subprocess
 import threading
 import time
+import uuid
 from collections import namedtuple
 from copy import deepcopy
-from hashlib import sha1
+from hashlib import sha1, sha256
 
+import dateutil.parser
 from dateutil.parser import parse
 from dateutil.tz import tzlocal, tzutc
 
 import botocore.compat
 import botocore.configloader
 from botocore import UNSIGNED
-from botocore.compat import compat_shell_split, total_seconds
+from botocore.compat import (
+    EC,
+    compat_shell_split,
+    total_seconds,
+)
 from botocore.config import Config
 from botocore.exceptions import (
     ConfigNotFound,
     CredentialRetrievalError,
     InfiniteLoopConfigError,
     InvalidConfigError,
+    LoginError,
+    LoginInsufficientPermissions,
+    LoginRefreshRequired,
+    LoginTokenLoadError,
     MetadataRetrievalError,
+    MissingDependencyException,
     PartialCredentialsError,
     RefreshWithMFAUnsupportedError,
     UnauthorizedSSOTokenError,
     UnknownCredentialError,
 )
 from botocore.tokens import SSOTokenProvider
+from botocore.useragent import register_feature_id, register_feature_ids
 from botocore.utils import (
+    ArnParser,
     ContainerMetadataFetcher,
     FileWebIdentityTokenLoader,
     InstanceMetadataFetcher,
     JSONFileCache,
+    LoginTokenLoader,
     SSOTokenLoader,
+    create_nested_client,
+    get_login_token_cache_directory,
     parse_key_val_file,
     resolve_imds_endpoint_mode,
 )
 
 logger = logging.getLogger(__name__)
 ReadOnlyCredentials = namedtuple(
-    'ReadOnlyCredentials', ['access_key', 'secret_key', 'token']
+    'ReadOnlyCredentials',
+    ['access_key', 'secret_key', 'token', 'account_id'],
+    defaults=(None,),
 )
 
 _DEFAULT_MANDATORY_REFRESH_TIMEOUT = 10 * 60  # 10 min
@@ -83,6 +102,9 @@ def create_credential_resolver(session, cache=None, region_name=None):
             session
         ),
         'ec2_credential_refresh_window': _DEFAULT_ADVISORY_REFRESH_TIMEOUT,
+        'ec2_metadata_v1_disabled': session.get_config_variable(
+            'ec2_metadata_v1_disabled'
+        ),
     }
 
     if cache is None:
@@ -167,12 +189,18 @@ class ProfileProviderBuilder:
     """
 
     def __init__(
-        self, session, cache=None, region_name=None, sso_token_cache=None
+        self,
+        session,
+        cache=None,
+        region_name=None,
+        sso_token_cache=None,
+        login_token_cache=None,
     ):
         self._session = session
         self._cache = cache
         self._region_name = region_name
         self._sso_token_cache = sso_token_cache
+        self._login_token_cache = login_token_cache
 
     def providers(self, profile_name, disable_env_vars=False):
         return [
@@ -182,6 +210,7 @@ class ProfileProviderBuilder:
             ),
             self._create_sso_provider(profile_name),
             self._create_shared_credential_provider(profile_name),
+            self._create_login_provider(profile_name),
             self._create_process_provider(profile_name),
             self._create_config_provider(profile_name),
         ]
@@ -231,6 +260,14 @@ class ProfileProviderBuilder:
             ),
         )
 
+    def _create_login_provider(self, profile_name):
+        return LoginProvider(
+            load_config=lambda: self._session.full_config,
+            client_creator=self._session.create_client,
+            profile_name=profile_name,
+            token_cache=self._login_token_cache,
+        )
+
 
 def get_credentials(session):
     resolver = create_credential_resolver(session)
@@ -259,7 +296,9 @@ def _get_client_creator(session, region_name):
     def client_creator(service_name, **kwargs):
         create_client_kwargs = {'region_name': region_name}
         create_client_kwargs.update(**kwargs)
-        return session.create_client(service_name, **create_client_kwargs)
+        return create_nested_client(
+            session, service_name, **create_client_kwargs
+        )
 
     return client_creator
 
@@ -307,9 +346,12 @@ class Credentials:
     :param str token: The security token, valid only for session credentials.
     :param str method: A string which identifies where the credentials
         were found.
+    :param str account_id: (optional) An account ID associated with the credentials.
     """
 
-    def __init__(self, access_key, secret_key, token=None, method=None):
+    def __init__(
+        self, access_key, secret_key, token=None, method=None, account_id=None
+    ):
         self.access_key = access_key
         self.secret_key = secret_key
         self.token = token
@@ -317,6 +359,7 @@ class Credentials:
         if method is None:
             method = 'explicit'
         self.method = method
+        self.account_id = account_id
 
         self._normalize()
 
@@ -332,8 +375,14 @@ class Credentials:
 
     def get_frozen_credentials(self):
         return ReadOnlyCredentials(
-            self.access_key, self.secret_key, self.token
+            self.access_key, self.secret_key, self.token, self.account_id
         )
+
+    def get_deferred_property(self, property_name):
+        def get_property():
+            return getattr(self, property_name, None)
+
+        return get_property
 
 
 class RefreshableCredentials(Credentials):
@@ -367,26 +416,47 @@ class RefreshableCredentials(Credentials):
         refresh_using,
         method,
         time_fetcher=_local_now,
+        advisory_timeout=None,
+        mandatory_timeout=None,
+        account_id=None,
     ):
         self._refresh_using = refresh_using
         self._access_key = access_key
         self._secret_key = secret_key
         self._token = token
+        self._account_id = account_id
         self._expiry_time = expiry_time
         self._time_fetcher = time_fetcher
         self._refresh_lock = threading.Lock()
         self.method = method
         self._frozen_credentials = ReadOnlyCredentials(
-            access_key, secret_key, token
+            access_key, secret_key, token, account_id
         )
         self._normalize()
+        if advisory_timeout is not None:
+            self._advisory_refresh_timeout = advisory_timeout
+        if mandatory_timeout is not None:
+            self._mandatory_refresh_timeout = mandatory_timeout
 
     def _normalize(self):
         self._access_key = botocore.compat.ensure_unicode(self._access_key)
         self._secret_key = botocore.compat.ensure_unicode(self._secret_key)
 
     @classmethod
-    def create_from_metadata(cls, metadata, refresh_using, method):
+    def create_from_metadata(
+        cls,
+        metadata,
+        refresh_using,
+        method,
+        advisory_timeout=None,
+        mandatory_timeout=None,
+    ):
+        kwargs = {}
+        if advisory_timeout is not None:
+            kwargs['advisory_timeout'] = advisory_timeout
+        if mandatory_timeout is not None:
+            kwargs['mandatory_timeout'] = mandatory_timeout
+
         instance = cls(
             access_key=metadata['access_key'],
             secret_key=metadata['secret_key'],
@@ -394,6 +464,8 @@ class RefreshableCredentials(Credentials):
             expiry_time=cls._expiry_datetime(metadata['expiry_time']),
             method=method,
             refresh_using=refresh_using,
+            account_id=metadata.get('account_id'),
+            **kwargs,
         )
         return instance
 
@@ -435,6 +507,19 @@ class RefreshableCredentials(Credentials):
     @token.setter
     def token(self, value):
         self._token = value
+
+    @property
+    def account_id(self):
+        """Warning: Using this property can lead to race conditions if you
+        access another property subsequently along the refresh boundary.
+        Please use get_frozen_credentials instead.
+        """
+        self._refresh()
+        return self._account_id
+
+    @account_id.setter
+    def account_id(self, value):
+        self._account_id = value
 
     def _seconds_remaining(self):
         delta = self._expiry_time - self._time_fetcher()
@@ -532,7 +617,7 @@ class RefreshableCredentials(Credentials):
             return
         self._set_from_data(metadata)
         self._frozen_credentials = ReadOnlyCredentials(
-            self._access_key, self._secret_key, self._token
+            self._access_key, self._secret_key, self._token, self._account_id
         )
         if self._is_expired():
             # We successfully refreshed credentials but for whatever
@@ -569,6 +654,7 @@ class RefreshableCredentials(Credentials):
         self.secret_key = data['secret_key']
         self.token = data['token']
         self._expiry_time = parse(data['expiry_time'])
+        self.account_id = data.get('account_id')
         logger.debug(
             "Retrieved credentials will expire at: %s", self._expiry_time
         )
@@ -623,6 +709,7 @@ class DeferredRefreshableCredentials(RefreshableCredentials):
         self._access_key = None
         self._secret_key = None
         self._token = None
+        self._account_id = None
         self._expiry_time = None
         self._time_fetcher = time_fetcher
         self._refresh_lock = threading.Lock()
@@ -646,6 +733,7 @@ class CachedCredentialFetcher:
         if expiry_window_seconds is None:
             expiry_window_seconds = self.DEFAULT_EXPIRY_WINDOW_SECONDS
         self._expiry_window_seconds = expiry_window_seconds
+        self.feature_ids = set()
 
     def _create_cache_key(self):
         raise NotImplementedError('_create_cache_key()')
@@ -676,12 +764,15 @@ class CachedCredentialFetcher:
 
         creds = response['Credentials']
         expiration = _serialize_if_needed(creds['Expiration'], iso=True)
-        return {
+        credentials = {
             'access_key': creds['AccessKeyId'],
             'secret_key': creds['SecretAccessKey'],
             'token': creds['SessionToken'],
             'expiry_time': expiration,
+            'account_id': creds.get('AccountId'),
         }
+
+        return credentials
 
     def _load_from_cache(self):
         if self._cache_key in self._cache:
@@ -730,7 +821,7 @@ class BaseAssumeRoleCredentialFetcher(CachedCredentialFetcher):
         super().__init__(cache, expiry_window_seconds)
 
     def _generate_assume_role_name(self):
-        self._role_session_name = 'botocore-session-%s' % (int(time.time()))
+        self._role_session_name = f'botocore-session-{int(time.time())}'
         self._assume_kwargs['RoleSessionName'] = self._role_session_name
         self._using_default_session_name = True
 
@@ -755,6 +846,15 @@ class BaseAssumeRoleCredentialFetcher(CachedCredentialFetcher):
         args = json.dumps(args, sort_keys=True)
         argument_hash = sha1(args.encode('utf-8')).hexdigest()
         return self._make_file_safe(argument_hash)
+
+    def _add_account_id_to_response(self, response):
+        role_arn = response.get('AssumedRoleUser', {}).get('Arn')
+        if ArnParser.is_arn(role_arn):
+            arn_parser = ArnParser()
+            account_id = arn_parser.parse_arn(role_arn)['account']
+            response['Credentials']['AccountId'] = account_id
+        else:
+            logger.debug("Unable to extract account ID from Arn: %s", role_arn)
 
 
 class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
@@ -814,9 +914,12 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
 
     def _get_credentials(self):
         """Get credentials by calling assume role."""
+        register_feature_ids(self.feature_ids)
         kwargs = self._assume_role_kwargs()
         client = self._create_client()
-        return client.assume_role(**kwargs)
+        response = client.assume_role(**kwargs)
+        self._add_account_id_to_response(response)
+        return response
 
     def _assume_role_kwargs(self):
         """Get the arguments for assume role based on current configuration."""
@@ -825,7 +928,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
         mfa_serial = assume_role_kwargs.get('SerialNumber')
 
         if mfa_serial is not None:
-            prompt = 'Enter MFA code for %s: ' % mfa_serial
+            prompt = f'Enter MFA code for {mfa_serial}: '
             token_code = self._mfa_prompter(prompt)
             assume_role_kwargs['TokenCode'] = token_code
 
@@ -898,12 +1001,15 @@ class AssumeRoleWithWebIdentityCredentialFetcher(
 
     def _get_credentials(self):
         """Get credentials by calling assume role."""
+        register_feature_ids(self.feature_ids)
         kwargs = self._assume_role_kwargs()
         # Assume role with web identity does not require credentials other than
         # the token, explicitly configure the client to not sign requests.
         config = Config(signature_version=UNSIGNED)
         client = self._client_creator('sts', config=config)
-        return client.assume_role_with_web_identity(**kwargs)
+        response = client.assume_role_with_web_identity(**kwargs)
+        self._add_account_id_to_response(response)
+        return response
 
     def _assume_role_kwargs(self):
         """Get the arguments for assume role based on current configuration."""
@@ -937,7 +1043,7 @@ class CredentialProvider:
         environment, the network or wherever), returning ``True`` if they were
         found & loaded.
 
-        If not found, this method should return ``False``, indictating that the
+        If not found, this method should return ``False``, indicating that the
         ``CredentialResolver`` should fall back to the next available method.
 
         The default implementation does nothing, assuming the user has set the
@@ -974,7 +1080,9 @@ class ProcessProvider(CredentialProvider):
         if credential_process is None:
             return
 
+        register_feature_id('CREDENTIALS_PROFILE_PROCESS')
         creds_dict = self._retrieve_credentials_using(credential_process)
+        register_feature_id('CREDENTIALS_PROCESS')
         if creds_dict.get('expiry_time') is not None:
             return RefreshableCredentials.create_from_metadata(
                 creds_dict,
@@ -987,6 +1095,7 @@ class ProcessProvider(CredentialProvider):
             secret_key=creds_dict['secret_key'],
             token=creds_dict.get('token'),
             method=self.METHOD,
+            account_id=creds_dict.get('account_id'),
         )
 
     def _retrieve_credentials_using(self, credential_process):
@@ -1017,6 +1126,7 @@ class ProcessProvider(CredentialProvider):
                 'secret_key': parsed['SecretAccessKey'],
                 'token': parsed.get('SessionToken'),
                 'expiry_time': parsed.get('Expiration'),
+                'account_id': self._get_account_id(parsed),
             }
         except KeyError as e:
             raise CredentialRetrievalError(
@@ -1026,12 +1136,20 @@ class ProcessProvider(CredentialProvider):
 
     @property
     def _credential_process(self):
+        return self.profile_config.get('credential_process')
+
+    @property
+    def profile_config(self):
         if self._loaded_config is None:
             self._loaded_config = self._load_config()
         profile_config = self._loaded_config.get('profiles', {}).get(
             self._profile_name, {}
         )
-        return profile_config.get('credential_process')
+        return profile_config
+
+    def _get_account_id(self, parsed):
+        account_id = parsed.get('AccountId')
+        return account_id or self.profile_config.get('aws_account_id')
 
 
 class InstanceMetadataProvider(CredentialProvider):
@@ -1049,6 +1167,7 @@ class InstanceMetadataProvider(CredentialProvider):
         metadata = fetcher.retrieve_iam_role_credentials()
         if not metadata:
             return None
+        register_feature_id('CREDENTIALS_IMDS')
         logger.info(
             'Found credentials from IAM Role: %s', metadata['role_name']
         )
@@ -1072,6 +1191,7 @@ class EnvProvider(CredentialProvider):
     # AWS_SESSION_TOKEN is what other AWS SDKs have standardized on.
     TOKENS = ['AWS_SECURITY_TOKEN', 'AWS_SESSION_TOKEN']
     EXPIRY_TIME = 'AWS_CREDENTIAL_EXPIRATION'
+    ACCOUNT_ID = 'AWS_ACCOUNT_ID'
 
     def __init__(self, environ=None, mapping=None):
         """
@@ -1081,8 +1201,12 @@ class EnvProvider(CredentialProvider):
         :param mapping: An optional mapping of variable names to
             environment variable names.  Use this if you want to
             change the mapping of access_key->AWS_ACCESS_KEY_ID, etc.
-            The dict can have up to 3 keys: ``access_key``, ``secret_key``,
-            ``session_token``.
+            The dict can have up to 5 keys:
+            * ``access_key``
+            * ``secret_key``
+            * ``token``
+            * ``expiry_time``
+            * ``account_id``
         """
         if environ is None:
             environ = os.environ
@@ -1098,6 +1222,7 @@ class EnvProvider(CredentialProvider):
             var_mapping['secret_key'] = self.SECRET_KEY
             var_mapping['token'] = self.TOKENS
             var_mapping['expiry_time'] = self.EXPIRY_TIME
+            var_mapping['account_id'] = self.ACCOUNT_ID
         else:
             var_mapping['access_key'] = mapping.get(
                 'access_key', self.ACCESS_KEY
@@ -1110,6 +1235,9 @@ class EnvProvider(CredentialProvider):
                 var_mapping['token'] = [var_mapping['token']]
             var_mapping['expiry_time'] = mapping.get(
                 'expiry_time', self.EXPIRY_TIME
+            )
+            var_mapping['account_id'] = mapping.get(
+                'account_id', self.ACCOUNT_ID
             )
         return var_mapping
 
@@ -1124,6 +1252,7 @@ class EnvProvider(CredentialProvider):
             logger.info('Found credentials in environment variables.')
             fetcher = self._create_credentials_fetcher()
             credentials = fetcher(require_expiry=False)
+            register_feature_id('CREDENTIALS_ENV_VARS')
 
             expiry_time = credentials['expiry_time']
             if expiry_time is not None:
@@ -1135,6 +1264,7 @@ class EnvProvider(CredentialProvider):
                     expiry_time,
                     refresh_using=fetcher,
                     method=self.METHOD,
+                    account_id=credentials['account_id'],
                 )
 
             return Credentials(
@@ -1142,6 +1272,7 @@ class EnvProvider(CredentialProvider):
                 credentials['secret_key'],
                 credentials['token'],
                 method=self.METHOD,
+                account_id=credentials['account_id'],
             )
         else:
             return None
@@ -1183,6 +1314,11 @@ class EnvProvider(CredentialProvider):
                 raise PartialCredentialsError(
                     provider=method, cred_var=mapping['expiry_time']
                 )
+
+            credentials['account_id'] = None
+            account_id = environ.get(mapping['account_id'], '')
+            if account_id:
+                credentials['account_id'] = account_id
 
             return credentials
 
@@ -1234,6 +1370,7 @@ class SharedCredentialProvider(CredentialProvider):
     # aws_security_token, but the SDKs are standardizing on aws_session_token
     # so we support both.
     TOKENS = ['aws_security_token', 'aws_session_token']
+    ACCOUNT_ID = 'aws_account_id'
 
     def __init__(self, creds_filename, profile_name=None, ini_parser=None):
         self._creds_filename = creds_filename
@@ -1260,14 +1397,23 @@ class SharedCredentialProvider(CredentialProvider):
                     config, self.ACCESS_KEY, self.SECRET_KEY
                 )
                 token = self._get_session_token(config)
+                account_id = self._get_account_id(config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
-                    access_key, secret_key, token, method=self.METHOD
+                    access_key,
+                    secret_key,
+                    token,
+                    method=self.METHOD,
+                    account_id=account_id,
                 )
 
     def _get_session_token(self, config):
         for token_envvar in self.TOKENS:
             if token_envvar in config:
                 return config[token_envvar]
+
+    def _get_account_id(self, config):
+        return config.get(self.ACCOUNT_ID)
 
 
 class ConfigProvider(CredentialProvider):
@@ -1282,6 +1428,7 @@ class ConfigProvider(CredentialProvider):
     # aws_security_token, but the SDKs are standardizing on aws_session_token
     # so we support both.
     TOKENS = ['aws_security_token', 'aws_session_token']
+    ACCOUNT_ID = 'aws_account_id'
 
     def __init__(self, config_filename, profile_name, config_parser=None):
         """
@@ -1318,8 +1465,14 @@ class ConfigProvider(CredentialProvider):
                     profile_config, self.ACCESS_KEY, self.SECRET_KEY
                 )
                 token = self._get_session_token(profile_config)
+                account_id = self._get_account_id(profile_config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
-                    access_key, secret_key, token, method=self.METHOD
+                    access_key,
+                    secret_key,
+                    token,
+                    method=self.METHOD,
+                    account_id=account_id,
                 )
         else:
             return None
@@ -1328,6 +1481,9 @@ class ConfigProvider(CredentialProvider):
         for token_name in self.TOKENS:
             if token_name in profile_config:
                 return profile_config[token_name]
+
+    def _get_account_id(self, config):
+        return config.get(self.ACCOUNT_ID)
 
 
 class BotoProvider(CredentialProvider):
@@ -1370,6 +1526,7 @@ class BotoProvider(CredentialProvider):
                     access_key, secret_key = self._extract_creds_from_mapping(
                         credentials, self.ACCESS_KEY, self.SECRET_KEY
                     )
+                    register_feature_id('CREDENTIALS_BOTO2_CONFIG_FILE')
                     return Credentials(
                         access_key, secret_key, method=self.METHOD
                     )
@@ -1389,6 +1546,11 @@ class AssumeRoleProvider(CredentialProvider):
     # remaining time left until the credentials expires is less than the
     # EXPIRY_WINDOW.
     EXPIRY_WINDOW_SECONDS = 60 * 15
+    NAMED_PROVIDER_FEATURE_MAP = {
+        'Ec2InstanceMetadata': 'CREDENTIALS_IMDS',
+        'Environment': 'CREDENTIALS_ENV_VARS',
+        'EcsContainer': 'CREDENTIALS_HTTP',
+    }
 
     def __init__(
         self,
@@ -1451,6 +1613,7 @@ class AssumeRoleProvider(CredentialProvider):
         self._credential_sourcer = credential_sourcer
         self._profile_provider_builder = profile_provider_builder
         self._visited_profiles = [self._profile_name]
+        self._feature_ids = set()
 
     def load(self):
         self._loaded_config = self._load_config()
@@ -1501,10 +1664,13 @@ class AssumeRoleProvider(CredentialProvider):
             mfa_prompter=self._prompter,
             cache=self.cache,
         )
+        fetcher.feature_ids = self._feature_ids.copy()
         refresher = fetcher.fetch_credentials
         if mfa_serial is not None:
             refresher = create_mfa_serial_refresher(refresher)
 
+        self._feature_ids.add('CREDENTIALS_STS_ASSUME_ROLE')
+        register_feature_ids(self._feature_ids)
         # The initial credentials are empty and the expiration time is set
         # to now so that we can delay the call to assume role until it is
         # strictly needed.
@@ -1547,8 +1713,8 @@ class AssumeRoleProvider(CredentialProvider):
         if credential_source is not None and source_profile is not None:
             raise InvalidConfigError(
                 error_msg=(
-                    'The profile "%s" contains both source_profile and '
-                    'credential_source.' % profile_name
+                    f'The profile "{profile_name}" contains both '
+                    'source_profile and credential_source.'
                 )
             )
         elif credential_source is None and source_profile is None:
@@ -1633,26 +1799,28 @@ class AssumeRoleProvider(CredentialProvider):
     def _resolve_source_credentials(self, role_config, profile_name):
         credential_source = role_config.get('credential_source')
         if credential_source is not None:
+            self._feature_ids.add('CREDENTIALS_PROFILE_NAMED_PROVIDER')
             return self._resolve_credentials_from_source(
                 credential_source, profile_name
             )
 
         source_profile = role_config['source_profile']
         self._visited_profiles.append(source_profile)
+        self._feature_ids.add('CREDENTIALS_PROFILE_SOURCE_PROFILE')
         return self._resolve_credentials_from_profile(source_profile)
 
     def _resolve_credentials_from_profile(self, profile_name):
         profiles = self._loaded_config.get('profiles', {})
         profile = profiles[profile_name]
-
+        self._feature_ids.add('CREDENTIALS_PROFILE')
         if (
             self._has_static_credentials(profile)
             and not self._profile_provider_builder
         ):
             # This is only here for backwards compatibility. If this provider
             # isn't given a profile provider builder we still want to be able
-            # handle the basic static credential case as we would before the
-            # provile provider builder parameter was added.
+            # to handle the basic static credential case as we would before the
+            # profile provider builder parameter was added.
             return self._resolve_static_credentials_from_profile(profile)
         elif self._has_static_credentials(
             profile
@@ -1697,9 +1865,14 @@ class AssumeRoleProvider(CredentialProvider):
                 provider=credential_source,
                 error_msg=(
                     'No credentials found in credential_source referenced '
-                    'in profile %s' % profile_name
+                    f'in profile {profile_name}'
                 ),
             )
+        named_provider_feature_id = self.NAMED_PROVIDER_FEATURE_MAP.get(
+            credential_source
+        )
+        if named_provider_feature_id:
+            self._feature_ids.add(named_provider_feature_id)
         return credentials
 
 
@@ -1730,6 +1903,7 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
         if token_loader_cls is None:
             token_loader_cls = FileWebIdentityTokenLoader
         self._token_loader_cls = token_loader_cls
+        self._feature_ids = set()
 
     def load(self):
         return self._assume_role_with_web_identity()
@@ -1752,8 +1926,15 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
     def _get_config(self, key):
         env_value = self._get_env_config(key)
         if env_value is not None:
+            self._feature_ids.add('CREDENTIALS_ENV_VARS_STS_WEB_ID_TOKEN')
             return env_value
-        return self._get_profile_config(key)
+
+        config_value = self._get_profile_config(key)
+        if config_value is not None:
+            self._feature_ids.add('CREDENTIALS_PROFILE_STS_WEB_ID_TOKEN')
+            return config_value
+
+        return None
 
     def _assume_role_with_web_identity(self):
         token_path = self._get_config('web_identity_token_file')
@@ -1783,6 +1964,10 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
             extra_args=extra_args,
             cache=self.cache,
         )
+        fetcher.feature_ids = self._feature_ids.copy()
+
+        self._feature_ids.add('CREDENTIALS_STS_ASSUME_ROLE_WEB_ID')
+        register_feature_ids(self._feature_ids)
         # The initial credentials are empty and the expiration time is set
         # to now so that we can delay the call to assume role until it is
         # strictly needed.
@@ -1886,6 +2071,7 @@ class ContainerProvider(CredentialProvider):
     ENV_VAR = 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'
     ENV_VAR_FULL = 'AWS_CONTAINER_CREDENTIALS_FULL_URI'
     ENV_VAR_AUTH_TOKEN = 'AWS_CONTAINER_AUTHORIZATION_TOKEN'
+    ENV_VAR_AUTH_TOKEN_FILE = 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE'
 
     def __init__(self, environ=None, fetcher=None):
         if environ is None:
@@ -1906,8 +2092,7 @@ class ContainerProvider(CredentialProvider):
             full_uri = self._fetcher.full_url(self._environ[self.ENV_VAR])
         else:
             full_uri = self._environ[self.ENV_VAR_FULL]
-        headers = self._build_headers()
-        fetcher = self._create_fetcher(full_uri, headers)
+        fetcher = self._create_fetcher(full_uri)
         creds = fetcher()
         return RefreshableCredentials(
             access_key=creds['access_key'],
@@ -1916,19 +2101,33 @@ class ContainerProvider(CredentialProvider):
             method=self.METHOD,
             expiry_time=_parse_if_needed(creds['expiry_time']),
             refresh_using=fetcher,
+            account_id=creds.get('account_id'),
         )
 
     def _build_headers(self):
-        auth_token = self._environ.get(self.ENV_VAR_AUTH_TOKEN)
+        auth_token = None
+        if self.ENV_VAR_AUTH_TOKEN_FILE in self._environ:
+            auth_token_file_path = self._environ[self.ENV_VAR_AUTH_TOKEN_FILE]
+            with open(auth_token_file_path) as token_file:
+                auth_token = token_file.read()
+        elif self.ENV_VAR_AUTH_TOKEN in self._environ:
+            auth_token = self._environ[self.ENV_VAR_AUTH_TOKEN]
         if auth_token is not None:
+            self._validate_auth_token(auth_token)
             return {'Authorization': auth_token}
 
-    def _create_fetcher(self, full_uri, headers):
+    def _validate_auth_token(self, auth_token):
+        if "\r" in auth_token or "\n" in auth_token:
+            raise ValueError("Auth token value is not a legal header value")
+
+    def _create_fetcher(self, full_uri, *args, **kwargs):
         def fetch_creds():
             try:
+                headers = self._build_headers()
                 response = self._fetcher.retrieve_full_uri(
                     full_uri, headers=headers
                 )
+                register_feature_id('CREDENTIALS_HTTP')
             except MetadataRetrievalError as e:
                 logger.debug(
                     "Error retrieving container metadata: %s", e, exc_info=True
@@ -1941,6 +2140,7 @@ class ContainerProvider(CredentialProvider):
                 'secret_key': response['SecretAccessKey'],
                 'token': response['Token'],
                 'expiry_time': response['Expiration'],
+                'account_id': response.get('AccountId'),
             }
 
         return fetch_creds
@@ -2064,6 +2264,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
         expiry_window_seconds=None,
         token_provider=None,
         sso_session_name=None,
+        time_fetcher=_local_now,
     ):
         self._client_creator = client_creator
         self._sso_region = sso_region
@@ -2073,6 +2274,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
         self._token_loader = token_loader
         self._token_provider = token_provider
         self._sso_session_name = sso_session_name
+        self._time_fetcher = time_fetcher
         super().__init__(cache, expiry_window_seconds)
 
     def _create_cache_key(self):
@@ -2114,7 +2316,16 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
             initial_token_data = self._token_provider.load_token()
             token = initial_token_data.get_frozen_token().token
         else:
-            token = self._token_loader(self._start_url)['accessToken']
+            token_dict = self._token_loader(self._start_url)
+            token = token_dict['accessToken']
+
+            # raise an UnauthorizedSSOTokenError if the loaded legacy token
+            # is expired to save a call to GetRoleCredentials with an
+            # expired token.
+            expiration = dateutil.parser.parse(token_dict['expiresAt'])
+            remaining = total_seconds(expiration - self._time_fetcher())
+            if remaining <= 0:
+                raise UnauthorizedSSOTokenError()
 
         kwargs = {
             'roleName': self._role_name,
@@ -2122,6 +2333,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
             'accessToken': token,
         }
         try:
+            register_feature_ids(self.feature_ids)
             response = client.get_role_credentials(**kwargs)
         except client.exceptions.UnauthorizedException:
             raise UnauthorizedSSOTokenError()
@@ -2134,6 +2346,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
                 'SecretAccessKey': credentials['secretAccessKey'],
                 'SessionToken': credentials['sessionToken'],
                 'Expiration': self._parse_timestamp(credentials['expiration']),
+                'AccountId': self._account_id,
             },
         }
         return credentials
@@ -2176,6 +2389,7 @@ class SSOProvider(CredentialProvider):
         self._load_config = load_config
         self._client_creator = client_creator
         self._profile_name = profile_name
+        self._feature_ids = set()
 
     def _load_sso_config(self):
         loaded_config = self._load_config()
@@ -2207,8 +2421,8 @@ class SSOProvider(CredentialProvider):
             missing = ', '.join(missing_config_vars)
             raise InvalidConfigError(
                 error_msg=(
-                    'The profile "%s" is configured to use SSO but is missing '
-                    'required configuration: %s' % (profile_name, missing)
+                    f'The profile "{profile_name}" is configured to use SSO '
+                    f'but is missing required configuration: {missing}'
                 )
             )
         return config
@@ -2250,13 +2464,318 @@ class SSOProvider(CredentialProvider):
             'token_loader': SSOTokenLoader(cache=self._token_cache),
             'cache': self.cache,
         }
-        if 'sso_session' in sso_config:
+        sso_session_in_config = 'sso_session' in sso_config
+        if sso_session_in_config:
             fetcher_kwargs['sso_session_name'] = sso_config['sso_session']
             fetcher_kwargs['token_provider'] = self._token_provider
+            self._feature_ids.add('CREDENTIALS_PROFILE_SSO')
+        else:
+            self._feature_ids.add('CREDENTIALS_PROFILE_SSO_LEGACY')
 
         sso_fetcher = SSOCredentialFetcher(**fetcher_kwargs)
+        sso_fetcher.feature_ids = self._feature_ids.copy()
 
+        if sso_session_in_config:
+            self._feature_ids.add('CREDENTIALS_SSO')
+        else:
+            self._feature_ids.add('CREDENTIALS_SSO_LEGACY')
+
+        register_feature_ids(self._feature_ids)
         return DeferredRefreshableCredentials(
             method=self.METHOD,
             refresh_using=sso_fetcher.fetch_credentials,
+        )
+
+
+def _base64_url_encode_no_padding(data):
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+
+def _build_dpop_header(private_key, uri, uid=None, ts=None):
+    if EC is None:
+        raise MissingDependencyException(
+            msg=(
+                "This operation requires an additional dependency. You"
+                " will need to pip install \"botocore[crt]\" before proceeding."
+            )
+        )
+    x, y = private_key.get_public_coords()
+    jwk = {
+        "kty": "EC",
+        "x": _base64_url_encode_no_padding(x),
+        "y": _base64_url_encode_no_padding(y),
+        "crv": "P-256",
+    }
+
+    header = {
+        "typ": "dpop+jwt",
+        "alg": "ES256",
+        "jwk": jwk,
+    }
+
+    payload = {
+        "htm": "POST",
+        "htu": uri,
+        "iat": ts or int(time.time()),
+        "jti": uid or str(uuid.uuid4()),
+    }
+    header_b64 = _base64_url_encode_no_padding(
+        json.dumps(header, separators=(',', ':')).encode()
+    )
+    payload_b64 = _base64_url_encode_no_padding(
+        json.dumps(payload, separators=(',', ':')).encode()
+    )
+    signing_input = f"{header_b64}.{payload_b64}".encode()
+    signature = private_key.sign(sha256(signing_input).digest())
+    signature_bytes = EC.decode_der_signature_to_padded_pair(
+        signature, pad_to=32
+    )
+    signature_b64 = _base64_url_encode_no_padding(signature_bytes)
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def _build_add_dpop_header_handler(private_key):
+    """Builds a before-call handler for calculating and setting the DPoP header"""
+
+    def _add_dpop_header_handler(**kwargs):
+        kwargs['params']['headers']['DPoP'] = _build_dpop_header(
+            private_key, kwargs['params']['url']
+        )
+
+    return _add_dpop_header_handler
+
+
+class LoginCredentialFetcher:
+    """
+    Converts login access tokens from the cached token to
+    credentials, and supports refreshing them.
+    """
+
+    _REFRESH_THRESHOLD = 5 * 60
+    _REQUIRED_TOKEN_FIELDS = (
+        'accessToken',
+        'refreshToken',
+        'dpopKey',
+        'clientId',
+    )
+
+    def __init__(
+        self,
+        session_name,
+        token_loader,
+        client_creator,
+        time_fetcher=_local_now,
+        feature_ids=None,
+    ):
+        self._session_name = session_name
+        self._token_loader = token_loader
+        self._client_creator = client_creator
+        self._time_fetcher = time_fetcher
+        if feature_ids is None:
+            feature_ids = set()
+        self.feature_ids = feature_ids
+
+    def load_cached_credentials(self):
+        """Loads cached credentials without checking their expiry."""
+        token = self._token_loader.load_token(self._session_name)
+
+        if token is None:
+            raise LoginTokenLoadError(
+                error_msg='Unable to load a existing login session for session '
+                f'{self._session_name}. Please reauthenticate with '
+                "'aws login'.",
+            )
+
+        missing_fields = [
+            key for key in self._REQUIRED_TOKEN_FIELDS if key not in token
+        ]
+        if missing_fields:
+            raise LoginTokenLoadError(
+                error_msg=f'Failed to load access token from token cache, missing required fields: {", ".join(missing_fields)}.'
+            )
+
+        return self._token_to_credentials(token)
+
+    def refresh_credentials(self):
+        """Refreshes login credentials, including saving them to the cache."""
+        if self.feature_ids:
+            register_feature_ids(self.feature_ids)
+        # Reload the token from disk, we need the refresh info
+        token = self._token_loader.load_token(self._session_name)
+        private_key = self._load_private_key(token)
+
+        # Check if token has already been refreshed and is still valid
+        if (
+            token
+            and 'accessToken' in token
+            and 'expiresAt' in token['accessToken']
+        ):
+            expiry_time = _parse_if_needed(token['accessToken']['expiresAt'])
+            remaining_time = total_seconds(expiry_time - self._time_fetcher())
+            if remaining_time > self._REFRESH_THRESHOLD:
+                return self._token_to_credentials(token)
+
+        config = botocore.config.Config(
+            signature_version=botocore.UNSIGNED,
+        )
+        client = self._client_creator(
+            'signin',
+            config=config,
+        )
+
+        client.meta.events.register(
+            'before-call.signin.CreateOAuth2Token',
+            _build_add_dpop_header_handler(private_key),
+        )
+
+        try:
+            response = client.create_o_auth2_token(
+                tokenInput={
+                    'clientId': token['clientId'],
+                    'refreshToken': token['refreshToken'],
+                    'grantType': 'refresh_token',
+                },
+            )
+        except client.exceptions.AccessDeniedException as e:
+            error_type = e.response.get('error', '')
+            if error_type in ('TOKEN_EXPIRED', 'USER_CREDENTIALS_CHANGED'):
+                raise LoginRefreshRequired() from e
+            elif error_type == 'INSUFFICIENT_PERMISSIONS':
+                raise LoginInsufficientPermissions() from e
+            raise LoginError() from e
+
+        if response is None or 'tokenOutput' not in response:
+            raise LoginTokenLoadError(
+                error_msg=(
+                    "Unable to refresh access token due to an invalid service response. "
+                    "Please try running 'aws login' again. If the issue persists, there "
+                    "may be a temporary signin service problem."
+                )
+            )
+
+        output = response.get('tokenOutput')
+
+        expires_timestamp = self._time_fetcher().astimezone(
+            tzutc()
+        ) + datetime.timedelta(seconds=output['expiresIn'])
+
+        # Overwrite token with refreshed fields
+        token.update(
+            {
+                'accessToken': {
+                    'accessKeyId': output['accessToken']['accessKeyId'],
+                    'secretAccessKey': output['accessToken'][
+                        'secretAccessKey'
+                    ],
+                    'sessionToken': output['accessToken']['sessionToken'],
+                    'accountId': token['accessToken']['accountId'],
+                    'expiresAt': expires_timestamp.strftime(
+                        '%Y-%m-%dT%H:%M:%SZ'
+                    ),
+                },
+                'refreshToken': output['refreshToken'],
+            }
+        )
+        self._token_loader.save_token(self._session_name, token)
+
+        return self._token_to_credentials(token)
+
+    @staticmethod
+    def _token_to_credentials(token):
+        return {
+            'access_key': token['accessToken']['accessKeyId'],
+            'secret_key': token['accessToken']['secretAccessKey'],
+            'token': token['accessToken']['sessionToken'],
+            'expiry_time': token['accessToken']['expiresAt'],
+            'account_id': token['accessToken']['accountId'],
+        }
+
+    @staticmethod
+    def _load_private_key(token):
+        if 'dpopKey' not in token:
+            raise LoginTokenLoadError(
+                error_msg='Private key not found in cached token.'
+            )
+
+        # Remove the PEM header and footer lines
+        lines = token['dpopKey'].splitlines()
+        content_lines = [
+            line
+            for line in lines
+            if not line.startswith('-----BEGIN')
+            and not line.startswith('-----END')
+        ]
+
+        # strip should handle the optional newline at the end as well
+        contents = ''.join(content_lines).strip()
+
+        try:
+            return EC.new_key_from_der_data(base64.b64decode(contents))
+        except ValueError as e:
+            raise LoginTokenLoadError(
+                error_msg='Unable to load private key from cached token.'
+            ) from e
+
+
+class LoginProvider(CredentialProvider):
+    METHOD = 'login'
+
+    def __init__(
+        self,
+        load_config,
+        client_creator,
+        profile_name,
+        token_cache=None,
+    ):
+        super().__init__()
+        if token_cache is None:
+            token_cache = JSONFileCache(get_login_token_cache_directory())
+        self._token_cache = token_cache
+
+        self._load_config = load_config
+        self._client_creator = client_creator
+        self._profile_name = profile_name
+        self._feature_ids = {'CREDENTIALS_PROFILE_LOGIN', 'CREDENTIALS_LOGIN'}
+
+    def load(self):
+        loaded_config = self._load_config()
+        profiles = loaded_config.get('profiles', {})
+        profile_config = profiles.get(self._profile_name, {})
+
+        if 'login_session' not in profile_config:
+            return None
+
+        if EC is None:
+            raise MissingDependencyException(
+                msg=(
+                    "Using the login credential provider requires an "
+                    "additional dependency. You will need to pip install "
+                    "\"botocore[crt]\" before proceeding."
+                )
+            )
+
+        fetcher = LoginCredentialFetcher(
+            session_name=profile_config['login_session'],
+            token_loader=LoginTokenLoader(self._token_cache),
+            client_creator=self._client_creator,
+            time_fetcher=_local_now,
+            feature_ids=self._feature_ids,
+        )
+
+        register_feature_ids(self._feature_ids)
+
+        # Return the current cached credentials initially,
+        # regardless if they're expired
+        cached_credentials = fetcher.load_cached_credentials()
+
+        return RefreshableCredentials(
+            access_key=cached_credentials['access_key'],
+            secret_key=cached_credentials['secret_key'],
+            token=cached_credentials['token'],
+            expiry_time=_parse_if_needed(cached_credentials['expiry_time']),
+            account_id=cached_credentials['account_id'],
+            method=self.METHOD,
+            refresh_using=fetcher.refresh_credentials,
+            time_fetcher=_local_now,
         )

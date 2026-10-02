@@ -5,6 +5,9 @@ VERSION(1.3)
 LICENSE(Apache-2.0)
 
 JAR_RESOURCE(1096776689)
+
 SRC_RESOURCE(1096777023)
+
+ORIGINAL_SOURCE(http://svn.sonatype.org/spice/tags/oss-parent-7)
 
 END()

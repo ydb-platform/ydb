@@ -4,6 +4,7 @@
 #include "core.h"
 #include "helpers.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
@@ -18,22 +19,18 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/singleton.h>
-#include <util/generic/algorithm.h>
-
-#include <util/stream/mem.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/escape.h>
 #include <util/string/printf.h>
 
 #include <util/system/byteorder.h>
 #include <util/system/getpid.h>
 
 #include <exception>
+#include <memory>
 
 
 namespace NYT {
@@ -45,16 +42,16 @@ std::exception_ptr WrapSystemError(
     const std::exception& ex)
 {
     if (auto errorResponse = dynamic_cast<const TErrorResponse*>(&ex); errorResponse != nullptr) {
-        return std::make_exception_ptr(errorResponse);
+        return std::make_exception_ptr(*errorResponse);
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
-    TYtError outer(1, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
+    TYtError outer(NClusterErrorCodes::NBus::TransportError, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
         {"request_id", context.RequestId},
         {"host", context.HostName},
         {"method", context.Method},
     });
-    TTransportError errorResponse(std::move(outer));
+    TErrorResponse errorResponse(std::move(outer), context.RequestId);
 
     return std::make_exception_ptr(errorResponse);
 }
@@ -120,7 +117,7 @@ private:
     }
 
     // In many cases http proxy stops reading request and resets connection
-    // if error has happend. This function tries to read error response
+    // if error has happened. This function tries to read error response
     // in such cases.
     void HandleWriteException(const std::exception& ex) {
         Y_ABORT_UNLESS(WriteError_ == nullptr);
@@ -128,8 +125,12 @@ private:
         Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
-        } catch (const TErrorResponse &) {
-            throw;
+        } catch (const TErrorResponse& e) {
+            // If we can read more meaningful error, we'll throw that error.
+            // If we can't read such error, we'll rethrow original WriteError_ below.
+            if (!e.IsTransportError()) {
+                throw;
+            }
         } catch (...) {
         }
         std::rethrow_exception(WriteError_);
@@ -259,6 +260,16 @@ void THttpHeader::SetServiceTicket(const TString& ticket)
     ServiceTicket_ = ticket;
 }
 
+void THttpHeader::SetTraceparent(const TString& traceparent)
+{
+    Traceparent_ = traceparent;
+}
+
+const TString& THttpHeader::GetTraceparent() const
+{
+    return Traceparent_;
+}
+
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
 {
     InputFormat_ = format;
@@ -311,6 +322,11 @@ TString THttpHeader::GetUrl(bool needProxy) const
     return url.Str();
 }
 
+TMaybe<TString> THttpHeader::GetRequestCompression() const
+{
+    return RequestCompression_;
+}
+
 bool THttpHeader::ShouldAcceptFraming() const
 {
     return TConfig::Get()->CommandsWithFraming.contains(Command_);
@@ -338,7 +354,8 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     auto headers = New<NHttp::THeaders>();
 
     headers->Add("Host", hostName);
-    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
+    // Explicitly call ConstRef until https://st.yandex-team.ru/IGNIETFERRO-2155 is fixed.
+    headers->Add("User-Agent", TProcessState::Get()->ClientVersion.ConstRef());
 
     if (!Token_.empty()) {
         headers->Add("Authorization", "OAuth " + Token_);
@@ -355,10 +372,15 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
+
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
     headers->Add("Content-Encoding", RequestCompression_);
     headers->Add("Accept-Encoding", ResponseCompression_);
+
+    if (Traceparent_) {
+        headers->Add("traceparent", Traceparent_);
+    }
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;
@@ -449,9 +471,9 @@ TAddressCache::TAddressPtr TAddressCache::Resolve(const TString& hostName)
             break;
         }
         retryPolicy->NotifyNewAttempt();
-        YT_LOG_DEBUG("Failed to resolve address of required version for host %v, retrying: %v",
-            hostName,
-            retryPolicy->GetAttemptDescription());
+        YT_TLOG_DEBUG("Failed to resolve address of required version; retrying")
+            .With("HostName", hostName)
+            .With("Attempt", retryPolicy->GetAttemptDescription());
         if (auto backoffDuration = retryPolicy->OnGenericError(error)) {
             NDetail::TWaitProxy::Get()->Sleep(*backoffDuration);
         } else {
@@ -476,14 +498,14 @@ TAddressCache::TAddressPtr TAddressCache::FindAddress(const TString& hostName) c
     }
 
     if (TInstant::Now() > entry.ExpirationTime) {
-        YT_LOG_DEBUG("Address resolution cache entry for host %v is expired, will retry resolution",
-            hostName);
+        YT_TLOG_DEBUG("Address resolution cache entry is expired; will retry resolution")
+            .With("HostName", hostName);
         return nullptr;
     }
 
     if (!ContainsAddressOfRequiredVersion(entry.Address)) {
-        YT_LOG_DEBUG("Address of required version not found for host %v, will retry resolution",
-            hostName);
+        YT_TLOG_DEBUG("Address of required version not found; will retry resolution")
+            .With("HostName", hostName);
         return nullptr;
     }
 
@@ -499,7 +521,7 @@ void TAddressCache::AddAddress(TString hostName, TAddressPtr address)
 
     {
         TWriteGuard guard(Lock_);
-        Cache_.emplace(std::move(hostName), std::move(entry));
+        Cache_[std::move(hostName)] = std::move(entry);
     }
 }
 
@@ -529,7 +551,7 @@ TConnectionPtr TConnectionPool::Connect(
             if (connection->DeadLine < now) {
                 continue;
             }
-            if (!AtomicCas(&connection->Busy, 1, 0)) {
+            if (bool expected = false; !connection->Busy.compare_exchange_strong(expected, true)) {
                 continue;
             }
 
@@ -557,9 +579,9 @@ TConnectionPtr TConnectionPool::Connect(
         Connections_.insert({hostName, connection});
     }
 
-    YT_LOG_DEBUG("New connection to %v #%v opened",
-        hostName,
-        connection->Id);
+    YT_TLOG_DEBUG("New connection opened")
+        .With("HostName", hostName)
+        .With("ConnectionId", connection->Id);
 
     return connection;
 }
@@ -575,7 +597,7 @@ void TConnectionPool::Release(TConnectionPtr connection)
     }
 
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
-    AtomicSet(connection->Busy, 0);
+    connection->Busy.store(false);
 
     Refresh();
 }
@@ -588,8 +610,8 @@ void TConnectionPool::Invalidate(
     auto range = Connections_.equal_range(hostName);
     for (auto it = range.first; it != range.second; ++it) {
         if (it->second == connection) {
-            YT_LOG_DEBUG("Closing connection #%v",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection")
+                .With("ConnectionId", connection->Id);
             Connections_.erase(it);
             return;
         }
@@ -620,22 +642,22 @@ void TConnectionPool::Refresh()
     for (const auto& item : sortedConnections) {
         const auto& mapIterator = item.second;
         auto connection = mapIterator->second;
-        if (AtomicGet(connection->Busy)) {
+        if (connection->Busy.load()) {
             continue;
         }
 
         if (removeCount > 0) {
             Connections_.erase(mapIterator);
-            YT_LOG_DEBUG("Closing connection #%v (too many opened connections)",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection; too many opened connections")
+                .With("ConnectionId", connection->Id);
             --removeCount;
             continue;
         }
 
         if (connection->DeadLine < now) {
             Connections_.erase(mapIterator);
-            YT_LOG_DEBUG("Closing connection #%v (timeout)",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection; timed out")
+                .With("ConnectionId", connection->Id);
         }
     }
 }
@@ -702,34 +724,40 @@ class THttpResponse::THttpInputWrapped
 public:
     explicit THttpInputWrapped(TRequestContext context, IInputStream* input)
         : Context_(std::move(context))
-        , HttpInput_(input)
-    { }
+    {
+        try {
+            HttpInput_ = std::make_unique<THttpInput>(input);
+        } catch (const std::exception& ex) {
+            auto wrapped = WrapSystemError(Context_, ex);
+            std::rethrow_exception(wrapped);
+        }
+    }
 
     const THttpHeaders& Headers() const noexcept
     {
-        return HttpInput_.Headers();
+        return HttpInput_->Headers();
     }
 
     const TString& FirstLine() const noexcept
     {
-        return HttpInput_.FirstLine();
+        return HttpInput_->FirstLine();
     }
 
     bool IsKeepAlive() const noexcept
     {
-        return HttpInput_.IsKeepAlive();
+        return HttpInput_->IsKeepAlive();
     }
 
     const TMaybe<THttpHeaders>& Trailers() const noexcept
     {
-        return HttpInput_.Trailers();
+        return HttpInput_->Trailers();
     }
 
 private:
     size_t DoRead(void* buf, size_t len) override
     {
         try {
-            return HttpInput_.Read(buf, len);
+            return HttpInput_->Read(buf, len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -739,7 +767,7 @@ private:
     size_t DoSkip(size_t len) override
     {
         try {
-            return HttpInput_.Skip(len);
+            return HttpInput_->Skip(len);
         } catch (const std::exception& ex) {
             auto wrapped = WrapSystemError(Context_, ex);
             std::rethrow_exception(wrapped);
@@ -748,7 +776,7 @@ private:
 
 private:
     const TRequestContext Context_;
-    THttpInput HttpInput_;
+    std::unique_ptr<THttpInput> HttpInput_;
 };
 
 THttpResponse::THttpResponse(
@@ -766,23 +794,25 @@ THttpResponse::THttpResponse(
         return;
     }
 
-    ErrorResponse_ = TErrorResponse(HttpCode_, Context_.RequestId);
-
-    auto logAndSetError = [&] (const TString& rawError) {
-        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-            Context_.RequestId,
-            HttpCode_,
-            rawError.data());
-        ErrorResponse_->SetRawError(rawError);
+    auto logAndSetError = [&] (int code, const TString& rawError) {
+        YT_TLOG_ERROR("Response carries an HTTP error")
+            .With("RequestId", Context_.RequestId)
+            .With("HttpCode", HttpCode_)
+            .With("Error", rawError);
+        ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
     switch (HttpCode_) {
         case 429:
-            logAndSetError("request rate limit exceeded");
+            logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
             break;
 
         case 500:
-            logAndSetError(::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            logAndSetError(NClusterErrorCodes::NRpc::Unavailable, ::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            break;
+
+        case 503:
+            logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
             break;
 
         default: {
@@ -798,14 +828,18 @@ THttpResponse::THttpResponse(
                 HttpCode_,
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
-                ErrorResponse_->SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
+                ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
+            }
+
+            if (ErrorResponse_ && TExpectedErrorGuard::IsErrorExpected(*ErrorResponse_)) {
+                YT_TLOG_INFO("Response carries an expected error")
+                    .With("Error", errorString);
+            } else {
+                YT_TLOG_ERROR("Response carries an error")
+                    .With("Error", errorString);
             }
             break;
         }
@@ -851,8 +885,9 @@ TMaybe<TErrorResponse> THttpResponse::ParseError(const THttpHeaders& headers)
 {
     for (const auto& header : headers) {
         if (header.Name() == "X-YT-Error") {
-            TErrorResponse errorResponse(HttpCode_, Context_.RequestId);
-            errorResponse.ParseFromJsonError(header.Value());
+            TYtError error;
+            error.ParseFrom(header.Value());
+            TErrorResponse errorResponse(std::move(error), Context_.RequestId);
             if (errorResponse.IsOk()) {
                 return Nothing();
             }
@@ -904,9 +939,9 @@ void THttpResponse::CheckTrailers(const THttpHeaders& trailers)
 {
     if (auto errorResponse = ParseError(trailers)) {
         errorResponse->SetIsFromTrailers(true);
-        YT_LOG_ERROR("RSP %v - %v",
-            Context_.RequestId,
-            errorResponse.GetRef().what());
+        YT_TLOG_ERROR("Response trailers carry an error")
+            .With("RequestId", Context_.RequestId)
+            .With("Error", errorResponse.GetRef().what());
         ythrow errorResponse.GetRef();
     }
 }
@@ -999,9 +1034,9 @@ TString THttpRequest::GetRequestId() const
 
 IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
 {
-    YT_LOG_DEBUG("REQ %v - requesting connection to %v from connection pool",
-        Context_.RequestId,
-        Context_.HostName);
+    YT_TLOG_DEBUG("Requesting connection from the pool")
+        .With("RequestId", Context_.RequestId)
+        .With("HostName", Context_.HostName);
 
     StartTime_ = TInstant::Now();
 
@@ -1012,15 +1047,15 @@ IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
         std::rethrow_exception(wrapped);
     }
 
-    YT_LOG_DEBUG("REQ %v - connection #%v",
-        Context_.RequestId,
-        Connection_->Id);
+    YT_TLOG_DEBUG("Connection assigned to request")
+        .With("RequestId", Context_.RequestId)
+        .With("ConnectionId", Connection_->Id);
 
     auto strHeader = Header_.GetHeaderAsString(Context_.HostName, Context_.RequestId, includeParameters);
 
     LogRequest(Header_, Url_, includeParameters, Context_.RequestId, Context_.HostName);
 
-    LoggedAttributes_ = GetLoggedAttributes(Header_, Url_, includeParameters, 128);
+    IncludeParameters_ = includeParameters;
 
     auto outputFormat = Header_.GetOutputFormat();
     if (outputFormat && outputFormat->IsTextYson()) {
@@ -1080,23 +1115,21 @@ TString THttpRequest::GetResponse()
 {
     TString result = GetResponseStream()->ReadAll();
 
-    TStringStream loggedAttributes;
-    loggedAttributes
-        << "Time: " << TInstant::Now() - StartTime_ << "; "
-        << "HostName: " << GetResponseStream()->GetHostName() << "; "
-        << LoggedAttributes_;
+    auto tags = NLogging::TLoggingTagList()
+        .With("RequestId", Context_.RequestId)
+        .With("Time", TInstant::Now() - StartTime_)
+        .With("HostName", GetResponseStream()->GetHostName());
+    tags.Add(GetLoggedAttributes(Header_, Url_, IncludeParameters_, /*sizeLimit*/ 128));
 
     if (LogResponse_) {
         constexpr auto sizeLimit = 1 << 7;
-        YT_LOG_DEBUG("RSP %v - received response (Response: '%v'; %v)",
-            Context_.RequestId,
-            TruncateForLogs(result, sizeLimit),
-            loggedAttributes.Str());
+        YT_TLOG_DEBUG("Response received")
+            .With(tags)
+            .With("Response", TruncateForLogs(result, sizeLimit));
     } else {
-        YT_LOG_DEBUG("RSP %v - received response of %v bytes (%v)",
-            Context_.RequestId,
-            result.size(),
-            loggedAttributes.Str());
+        YT_TLOG_DEBUG("Response received")
+            .With(tags)
+            .With("Size", result.size());
     }
     return result;
 }

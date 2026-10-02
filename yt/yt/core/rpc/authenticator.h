@@ -13,8 +13,12 @@ namespace NYT::NRpc {
 struct TAuthenticationResult
 {
     std::string User;
-    TString Realm;
-    TString UserTicket;
+    std::string Realm;
+    std::string UserTicket;
+
+    // Certain authenticators can have a shadow mode, emitting warnings instead of authentication error.
+    // Also can be used in future for deprecated authentication methods.
+    TError Warning;
 };
 
 struct TAuthenticationContext

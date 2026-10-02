@@ -591,11 +591,11 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         TAlter delta;
 
         delta.AddTable("test", 1);
-        delta.AddColumn(1, "test", 1, 1, { });
+        delta.AddColumn(1, "test", 1, 1, false, false, { });
         applier.Apply(*delta.Flush());
 
         delta.AddTable("testtest", 1);
-        delta.AddColumn(1, "testtest", 1, 1, { });
+        delta.AddColumn(1, "testtest", 1, 1, false, false, { });
         applier.Apply(*delta.Flush());
 
         UNIT_ASSERT(scheme.Tables.find(1)->second.Name == "testtest");

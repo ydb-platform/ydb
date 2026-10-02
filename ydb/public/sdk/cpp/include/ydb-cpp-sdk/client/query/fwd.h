@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TClientSettings;
 struct TSessionPoolSettings;
@@ -9,6 +9,7 @@ struct TExecuteQuerySettings;
 struct TBeginTxSettings;
 struct TCommitTxSettings;
 struct TRollbackTxSettings;
+struct TDeleteSessionSettings;
 struct TExecuteScriptSettings;
 struct TFetchScriptResultsSettings;
 struct TTxOnlineSettings;
@@ -27,7 +28,7 @@ class TExecuteQueryPart;
 class TExecuteQueryIterator;
 
 class TTransaction;
-struct TTxControl;
+class TTxControl;
 
 class TQueryContent;
 class TResultSetMeta;

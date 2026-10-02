@@ -50,7 +50,7 @@ namespace NTest {
         {
             for (const auto &slice : slices) {
                 auto got = Run.FindInsertHint(part.Get(), slice);
-                Y_ABORT_UNLESS(got.second, "Unexpected slices intersection");
+                Y_ENSURE(got.second, "Unexpected slices intersection");
                 Run.Insert(got.first, part, slice);
             }
         }
@@ -73,19 +73,19 @@ namespace NTest {
             return Remap_;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Ready = EReady::Gone;
             Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
             return Seek(key, seek);
         }
 
-        EReady Seek(const TCells key, ESeek seek) noexcept
+        EReady Seek(const TCells key, ESeek seek)
         {
             if constexpr (Direction == EDirection::Reverse) {
                 Ready = Iter->SeekReverse(key, seek);
@@ -96,12 +96,12 @@ namespace NTest {
             if (Ready == EReady::Data)
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
 
-        EReady SkipToRowVersion(TRowVersion rowVersion) noexcept
+        EReady SkipToRowVersion(TRowVersion rowVersion)
         {
             TIteratorStats stats;
             Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr,
@@ -110,14 +110,14 @@ namespace NTest {
             if (Ready == EReady::Data)
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
 
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
-            Y_ABORT_UNLESS(Ready == EReady::Data);
+            Y_ENSURE(Ready == EReady::Data);
 
             return Iter->GetRowVersion();
         }
@@ -126,21 +126,21 @@ namespace NTest {
             StopKey = TOwnedCellVec::Make(key);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             if (std::exchange(NoBlobs, false)) {
                 Ready = RollUp();
             } else if (EReady::Data == (Ready = DoIterNext()))
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
-            Y_ABORT_UNLESS(Ready == EReady::Data, "Row state isn't ready");
+            Y_ENSURE(Ready == EReady::Data, "Row state isn't ready");
 
             return State;
         }
@@ -180,7 +180,7 @@ namespace NTest {
         const bool Defaults = true;
 
     private:
-        EReady DoIterNext() noexcept
+        EReady DoIterNext()
         {
             if constexpr (Direction == EDirection::Reverse) {
                 return Iter->Prev();

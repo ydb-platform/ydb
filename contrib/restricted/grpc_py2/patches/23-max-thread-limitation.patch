@@ -1,0 +1,57 @@
+--- a/src/core/lib/event_engine/thread_pool.cc	(e2ca673ad16f4cb0e0e81da057545ef9583bd947)
++++ b/src/core/lib/event_engine/thread_pool.cc	(working tree)
+@@ -34,9 +34,30 @@
+ #include "src/core/lib/gprpp/thd.h"
+ #include "src/core/lib/gprpp/time.h"
+ 
++namespace {
++    size_t threads_limit_ = 0;
++}
++
+ namespace grpc_event_engine {
+ namespace experimental {
+ 
++size_t ThreadPool::SetThreadsLimit(size_t count) {
++    size_t prev = threads_limit_;
++    threads_limit_ = count;
++    return prev;
++}
++
++unsigned ThreadPool::GetMaxSystemThread() {
++    unsigned max_threads = grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
++
++    if (threads_limit_) {
++        unsigned new_max_threads = std::min(max_threads, static_cast<unsigned>(threads_limit_));
++        gpr_log(GPR_INFO, "Threads limit changed from %u to %u", max_threads, new_max_threads);
++        max_threads = new_max_threads;
++    }
++    return max_threads;
++}
++
+ void ThreadPool::StartThread(StatePtr state, StartThreadReason reason) {
+   state->thread_count.Add();
+   const auto now = grpc_core::Timestamp::Now();
+--- a/src/core/lib/event_engine/thread_pool.h	(e2ca673ad16f4cb0e0e81da057545ef9583bd947)
++++ b/src/core/lib/event_engine/thread_pool.h	(working tree)
+@@ -62,6 +62,9 @@ class ThreadPool final : public Forkable, public Executor {
+   // Returns true if the current thread is a thread pool thread.
+   static bool IsThreadPoolThread();
+ 
++  // Set the maximum numbers of treads for threadpool
++  static size_t SetThreadsLimit(size_t count);
++
+  private:
+   class Queue {
+    public:
+@@ -129,8 +132,9 @@ class ThreadPool final : public Forkable, public Executor {
+   static void StartThread(StatePtr state, StartThreadReason reason);
+   void Postfork();
+ 
+-  const unsigned reserve_threads_ =
+-      grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
++  unsigned GetMaxSystemThread();
++
++  const unsigned reserve_threads_ = GetMaxSystemThread();
+   const StatePtr state_ = std::make_shared<State>(reserve_threads_);
+   std::atomic<bool> quiesced_{false};
+ };

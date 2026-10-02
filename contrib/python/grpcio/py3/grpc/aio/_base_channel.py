@@ -14,7 +14,7 @@
 """Abstract base classes for Channel objects and Multicallable objects."""
 
 import abc
-from typing import Any, Optional
+from typing import Generic, Optional
 
 import grpc
 
@@ -22,23 +22,25 @@ from . import _base_call
 from ._typing import DeserializingFunction
 from ._typing import MetadataType
 from ._typing import RequestIterableType
+from ._typing import RequestType
+from ._typing import ResponseType
 from ._typing import SerializingFunction
 
 
-class UnaryUnaryMultiCallable(abc.ABC):
+class UnaryUnaryMultiCallable(Generic[RequestType, ResponseType], abc.ABC):
     """Enables asynchronous invocation of a unary-call RPC."""
 
     @abc.abstractmethod
     def __call__(
         self,
-        request: Any,
+        request: RequestType,
         *,
         timeout: Optional[float] = None,
         metadata: Optional[MetadataType] = None,
         credentials: Optional[grpc.CallCredentials] = None,
         wait_for_ready: Optional[bool] = None,
-        compression: Optional[grpc.Compression] = None
-    ) -> _base_call.UnaryUnaryCall:
+        compression: Optional[grpc.Compression] = None,
+    ) -> _base_call.UnaryUnaryCall[RequestType, ResponseType]:
         """Asynchronously invokes the underlying RPC.
 
         Args:
@@ -63,20 +65,20 @@ class UnaryUnaryMultiCallable(abc.ABC):
         """
 
 
-class UnaryStreamMultiCallable(abc.ABC):
+class UnaryStreamMultiCallable(Generic[RequestType, ResponseType], abc.ABC):
     """Enables asynchronous invocation of a server-streaming RPC."""
 
     @abc.abstractmethod
     def __call__(
         self,
-        request: Any,
+        request: RequestType,
         *,
         timeout: Optional[float] = None,
         metadata: Optional[MetadataType] = None,
         credentials: Optional[grpc.CallCredentials] = None,
         wait_for_ready: Optional[bool] = None,
-        compression: Optional[grpc.Compression] = None
-    ) -> _base_call.UnaryStreamCall:
+        compression: Optional[grpc.Compression] = None,
+    ) -> _base_call.UnaryStreamCall[RequestType, ResponseType]:
         """Asynchronously invokes the underlying RPC.
 
         Args:
@@ -112,7 +114,7 @@ class StreamUnaryMultiCallable(abc.ABC):
         metadata: Optional[MetadataType] = None,
         credentials: Optional[grpc.CallCredentials] = None,
         wait_for_ready: Optional[bool] = None,
-        compression: Optional[grpc.Compression] = None
+        compression: Optional[grpc.Compression] = None,
     ) -> _base_call.StreamUnaryCall:
         """Asynchronously invokes the underlying RPC.
 
@@ -150,7 +152,7 @@ class StreamStreamMultiCallable(abc.ABC):
         metadata: Optional[MetadataType] = None,
         credentials: Optional[grpc.CallCredentials] = None,
         wait_for_ready: Optional[bool] = None,
-        compression: Optional[grpc.Compression] = None
+        compression: Optional[grpc.Compression] = None,
     ) -> _base_call.StreamStreamCall:
         """Asynchronously invokes the underlying RPC.
 
@@ -207,17 +209,19 @@ class Channel(abc.ABC):
         This method immediately stops the channel from executing new RPCs in
         all cases.
 
-        If a grace period is specified, this method wait until all active
-        RPCs are finshed, once the grace period is reached the ones that haven't
-        been terminated are cancelled. If a grace period is not specified
-        (by passing None for grace), all existing RPCs are cancelled immediately.
+        If a grace period is specified, this method waits until all active
+        RPCs are finished or until the grace period is reached. RPCs that haven't
+        been terminated within the grace period are aborted.
+        If a grace period is not specified (by passing None for grace),
+        all existing RPCs are cancelled immediately.
 
         This method is idempotent.
         """
 
     @abc.abstractmethod
-    def get_state(self,
-                  try_to_connect: bool = False) -> grpc.ChannelConnectivity:
+    def get_state(
+        self, try_to_connect: bool = False
+    ) -> grpc.ChannelConnectivity:
         """Checks the connectivity state of a channel.
 
         This is an EXPERIMENTAL API.
@@ -268,7 +272,8 @@ class Channel(abc.ABC):
         self,
         method: str,
         request_serializer: Optional[SerializingFunction] = None,
-        response_deserializer: Optional[DeserializingFunction] = None
+        response_deserializer: Optional[DeserializingFunction] = None,
+        _registered_method: Optional[bool] = False,
     ) -> UnaryUnaryMultiCallable:
         """Creates a UnaryUnaryMultiCallable for a unary-unary method.
 
@@ -279,6 +284,8 @@ class Channel(abc.ABC):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
+          _registered_method: Implementation Private. Optional: A bool representing
+            whether the method is registered.
 
         Returns:
           A UnaryUnaryMultiCallable value for the named unary-unary method.
@@ -289,7 +296,8 @@ class Channel(abc.ABC):
         self,
         method: str,
         request_serializer: Optional[SerializingFunction] = None,
-        response_deserializer: Optional[DeserializingFunction] = None
+        response_deserializer: Optional[DeserializingFunction] = None,
+        _registered_method: Optional[bool] = False,
     ) -> UnaryStreamMultiCallable:
         """Creates a UnaryStreamMultiCallable for a unary-stream method.
 
@@ -300,6 +308,8 @@ class Channel(abc.ABC):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
+          _registered_method: Implementation Private. Optional: A bool representing
+            whether the method is registered.
 
         Returns:
           A UnarySteramMultiCallable value for the named unary-stream method.
@@ -310,7 +320,8 @@ class Channel(abc.ABC):
         self,
         method: str,
         request_serializer: Optional[SerializingFunction] = None,
-        response_deserializer: Optional[DeserializingFunction] = None
+        response_deserializer: Optional[DeserializingFunction] = None,
+        _registered_method: Optional[bool] = False,
     ) -> StreamUnaryMultiCallable:
         """Creates a StreamUnaryMultiCallable for a stream-unary method.
 
@@ -321,6 +332,8 @@ class Channel(abc.ABC):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
+          _registered_method: Implementation Private. Optional: A bool representing
+            whether the method is registered.
 
         Returns:
           A StreamUnaryMultiCallable value for the named stream-unary method.
@@ -331,7 +344,8 @@ class Channel(abc.ABC):
         self,
         method: str,
         request_serializer: Optional[SerializingFunction] = None,
-        response_deserializer: Optional[DeserializingFunction] = None
+        response_deserializer: Optional[DeserializingFunction] = None,
+        _registered_method: Optional[bool] = False,
     ) -> StreamStreamMultiCallable:
         """Creates a StreamStreamMultiCallable for a stream-stream method.
 
@@ -342,6 +356,8 @@ class Channel(abc.ABC):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
+          _registered_method: Implementation Private. Optional: A bool representing
+            whether the method is registered.
 
         Returns:
           A StreamStreamMultiCallable value for the named stream-stream method.

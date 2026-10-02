@@ -2,11 +2,11 @@
 
 #include "aliases.h"
 
-#include <ydb-cpp-sdk/client/topic/write_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h>
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
     
 struct TWriteStat : public TThrRefBase {
     TDuration WriteTime;

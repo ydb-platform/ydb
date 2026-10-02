@@ -1,7 +1,9 @@
 #include <Python.h>
 #include <errcode.h>
 
-#include "tokenizer.h"
+#include "pycore_pyerrors.h"      // _PyErr_ProgramDecodedTextObject()
+#include "lexer/state.h"
+#include "lexer/lexer.h"
 #include "pegen.h"
 
 // TOKENIZER ERRORS
@@ -33,7 +35,7 @@ _PyPegen_raise_tokenizer_init_error(PyObject *filename)
 
     tuple = PyTuple_Pack(2, errstr, tmp);
     Py_DECREF(tmp);
-    if (!value) {
+    if (!tuple) {
         goto error;
     }
     PyErr_SetObject(PyExc_SyntaxError, tuple);
@@ -350,8 +352,8 @@ _PyPegen_raise_error_known_location(Parser *p, PyObject *errtype,
         assert(p->tok->fp == NULL || p->tok->fp == stdin || p->tok->done == E_EOF);
 
         if (p->tok->lineno <= lineno && p->tok->inp > p->tok->buf) {
-            Py_ssize_t size = p->tok->inp - p->tok->buf;
-            error_line = PyUnicode_DecodeUTF8(p->tok->buf, size, "replace");
+            Py_ssize_t size = p->tok->inp - p->tok->line_start;
+            error_line = PyUnicode_DecodeUTF8(p->tok->line_start, size, "replace");
         }
         else if (p->tok->fp == NULL || p->tok->fp == stdin) {
             error_line = get_error_line_from_tokenizer_buffers(p, lineno);
@@ -402,7 +404,7 @@ error:
 
 void
 _Pypegen_set_syntax_error(Parser* p, Token* last_token) {
-    // Existing sintax error
+    // Existing syntax error
     if (PyErr_Occurred()) {
         // Prioritize tokenizer errors to custom syntax errors raised
         // on the second phase only if the errors come from the parser.

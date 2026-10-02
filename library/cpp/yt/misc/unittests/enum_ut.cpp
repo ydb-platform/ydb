@@ -29,6 +29,12 @@ DEFINE_BIT_ENUM(EFlag,
     ((_4)(0x0008))
 );
 
+DEFINE_BIT_ENUM(EAmbiguousFlag,
+    ((A)  (0x1))
+    ((B)  (0x2))
+    ((AB) (0x3))
+);
+
 DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(EMultipleNames, int,
      (A1)
     ((A2)(0))
@@ -74,6 +80,7 @@ TEST(TEnumTest, Domain)
         ESimple::Z
     };
     EXPECT_EQ(v, ToVector(TEnumTraits<ESimple>::GetDomainValues()));
+    EXPECT_EQ(v, ToVector(TEnumTraits<ESimple>::GetUniqueDomainValues()));
     EXPECT_EQ(ESimple::X, TEnumTraits<ESimple>::GetMinValue());
     EXPECT_EQ(ESimple::Z, TEnumTraits<ESimple>::GetMaxValue());
 }
@@ -267,6 +274,29 @@ TEST(TEnumTest, Decompose4)
 
 TEST(TEnumTest, MultipleNames)
 {
+    std::vector<EMultipleNames> domainValues{
+        EMultipleNames::A1,
+        EMultipleNames::A2,
+        EMultipleNames::B,
+        EMultipleNames::C,
+        EMultipleNames::D1,
+        EMultipleNames::D2,
+    };
+    EXPECT_EQ(
+        domainValues,
+        ToVector(TEnumTraits<EMultipleNames>::GetDomainValues</*AllowAmbiguousValues*/ true>()));
+
+    std::vector<EMultipleNames> uniqueValues{
+        EMultipleNames::A1,
+        EMultipleNames::B,
+        EMultipleNames::C,
+        EMultipleNames::D1,
+    };
+    EXPECT_EQ(uniqueValues, ToVector(TEnumTraits<EMultipleNames>::GetUniqueDomainValues()));
+
+    EXPECT_EQ(EMultipleNames::A1, TEnumTraits<EMultipleNames>::GetMinValue());
+    EXPECT_EQ(EMultipleNames::D1, TEnumTraits<EMultipleNames>::GetMaxValue());
+
     EXPECT_EQ(EMultipleNames::A1, TEnumTraits<EMultipleNames>::FromString("A1"));
     EXPECT_EQ(EMultipleNames::A1, TEnumTraits<EMultipleNames>::FromString("A2"));
     EXPECT_EQ(EMultipleNames::B,  TEnumTraits<EMultipleNames>::FromString("B"));
@@ -297,8 +327,14 @@ TEST(TEnumTest, UnknownValue)
     EXPECT_EQ(TEnumTraits<EWithUnknown>::TryGetUnknownValue(), EWithUnknown::Unknown);
 }
 
+TEST(TEnumTest, PopCount)
+{
+    EXPECT_EQ(PopCount(EAmbiguousFlag::A), 1);
+    EXPECT_EQ(PopCount(EAmbiguousFlag::B), 1);
+    EXPECT_EQ(PopCount(EAmbiguousFlag::AB), 2);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT
-

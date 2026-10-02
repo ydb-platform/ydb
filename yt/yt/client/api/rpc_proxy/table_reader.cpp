@@ -7,10 +7,16 @@
 
 #include <yt/yt_proto/yt/client/chunk_client/proto/data_statistics.pb.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
+#include <library/cpp/yt/threading/rw_spin_lock.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NConcurrency;
 using namespace NTableClient;
+
+using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,11 +30,13 @@ public:
         i64 startRowIndex,
         const std::vector<std::string>& omittedInaccessibleColumns,
         TTableSchemaPtr schema,
-        const NProto::TRowsetStatistics& statistics)
+        const NProto::TRowsetStatistics& statistics,
+        const NProfiling::TWallTimer& totalTimer)
         : TRowBatchReader(std::move(underlying), /*isStreamWithStatistics*/ true)
         , StartRowIndex_(startRowIndex)
         , TableSchema_(std::move(schema))
         , OmittedInaccessibleColumns_(omittedInaccessibleColumns)
+        , TotalTimer_(totalTimer)
     {
         ApplyStatistics(statistics);
     }
@@ -40,16 +48,24 @@ public:
 
     i64 GetTotalRowCount() const override
     {
+        auto guard = NThreading::ReaderGuard(StatisticsLock_);
         return TotalRowCount_;
     }
 
     NChunkClient::NProto::TDataStatistics GetDataStatistics() const override
     {
+        auto guard = NThreading::ReaderGuard(StatisticsLock_);
         auto dataStatistics = DataStatistics_;
         dataStatistics.set_row_count(RowCount_);
         dataStatistics.set_data_weight(DataWeight_);
-
         return dataStatistics;
+    }
+
+    TTableReaderTimingStatistics GetTimingStatistics() const override
+    {
+        return TTableReaderTimingStatistics{
+            .TotalTime = TotalTimer_.GetElapsedTime(),
+        };
     }
 
     const TTableSchemaPtr& GetTableSchema() const override
@@ -66,18 +82,24 @@ private:
     const i64 StartRowIndex_;
     const TTableSchemaPtr TableSchema_;
     const std::vector<std::string> OmittedInaccessibleColumns_;
+    const NProfiling::TWallTimer TotalTimer_;
 
+    // NB: Statistics are updated asynchronously.
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, StatisticsLock_);
     NChunkClient::NProto::TDataStatistics DataStatistics_;
-    i64 TotalRowCount_;
+    i64 TotalRowCount_ = 0;
 
     void ApplyStatistics(const NProto::TRowsetStatistics& statistics) override
     {
+        auto guard = NThreading::WriterGuard(StatisticsLock_);
         TotalRowCount_ = statistics.total_row_count();
         DataStatistics_ = statistics.data_statistics();
     }
 };
 
-TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStream)
+TFuture<ITableReaderPtr> CreateTableReader(
+    IAsyncZeroCopyInputStreamPtr inputStream,
+    const NProfiling::TWallTimer& totalTimer)
 {
     return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
         NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
@@ -89,8 +111,9 @@ TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStr
             inputStream,
             meta.start_row_index(),
             FromProto<std::vector<std::string>>(meta.omitted_inaccessible_columns()),
-             NYT::FromProto<TTableSchemaPtr>(meta.schema()),
-            meta.statistics());
+            FromProto<TTableSchemaPtr>(meta.schema()),
+            meta.statistics(),
+            totalTimer);
     })).As<ITableReaderPtr>();
 }
 

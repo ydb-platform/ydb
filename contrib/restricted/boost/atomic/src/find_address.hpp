@@ -25,7 +25,7 @@ namespace atomics {
 namespace detail {
 
 //! \c find_address signature
-typedef std::size_t (find_address_t)(const volatile void* addr, const volatile void* const* addrs, std::size_t size);
+using find_address_t = std::size_t (const volatile void* addr, const volatile void* const* addrs, std::size_t size);
 
 extern find_address_t find_address_generic;
 

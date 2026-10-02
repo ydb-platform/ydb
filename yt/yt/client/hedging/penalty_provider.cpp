@@ -89,54 +89,34 @@ public:
 
         for (const auto& [key, child] : replicasNode->AsMap()->GetChildren()) {
             auto cluster = child->AsMap()->GetChildOrThrow("cluster_name")->AsString()->GetValue();
+            if (const auto contentType = child->AsMap()->FindChild("content_type");
+                contentType != nullptr && contentType->AsString()->GetValue() != "data") {
+                // skip replication queue from hedging penalty clusters
+                continue;
+            }
             if (auto* info = ReplicaClusters_.FindPtr(cluster)) {
                 info->ReplicaId = NTabletClient::TTableReplicaId::FromString(key);
-                YT_LOG_INFO("Found replica (ReplicaId: %v, Cluster: %v, Table: %v)",
-                    info->ReplicaId,
-                    cluster,
-                    Config_->TablePath);
+
+                const auto replicaLag = TDuration::MilliSeconds(child->AsMap()->GetChildOrThrow("replication_lag_time")->AsInt64()->GetValue());
+                const auto newLagPenalty = CalculateLagPenalty(replicaLag);
+
+                info->CurrentLagPenalty.store(newLagPenalty.GetValue(), std::memory_order::relaxed);
+
+                YT_TLOG_INFO("Found replica")
+                    .With("ReplicaId", info->ReplicaId)
+                    .With("Cluster", cluster)
+                    .With("Table", Config_->TablePath)
+                    .With("Lag", replicaLag)
+                    .With("Penalty", newLagPenalty);
             };
         }
         CheckAllReplicaIdsPresent()
             .ThrowOnError();
     }
 
-    int GetTotalNumberOfTablets()
+    TDuration CalculateLagPenalty(TDuration replicaLag)
     {
-        auto tabletCountNode = WaitFor(Client_->GetNode(Config_->TablePath + "/@tablet_count", GetNodeOptions_))
-            .ValueOrThrow();
-        return ConvertTo<int>(tabletCountNode);
-    }
-
-    // Returns a map: ReplicaId -> # of tablets.
-    THashMap<NTabletClient::TTableReplicaId, ui64> CalculateTabletWithLagCounts(int tabletCount)
-    {
-        auto tabletsRange = xrange(tabletCount);
-        auto tabletsInfo = WaitFor(Client_->GetTabletInfos(Config_->TablePath, {tabletsRange.begin(), tabletsRange.end()}))
-            .ValueOrThrow();
-
-        const auto now = TInstant::Now();
-        THashMap<NTabletClient::TTableReplicaId, ui64> tabletsWithLag;
-
-        for (const auto& tabletInfo : tabletsInfo) {
-            if (!tabletInfo.TableReplicaInfos) {
-                continue;
-            }
-
-            for (const auto& replicaInfo : *tabletInfo.TableReplicaInfos) {
-                auto lastReplicationTimestamp = TInstant::Seconds(NTransactionClient::UnixTimeFromTimestamp(replicaInfo.LastReplicationTimestamp));
-                if (now - lastReplicationTimestamp > Config_->MaxTabletLag) {
-                    ++tabletsWithLag[replicaInfo.ReplicaId];
-                }
-            }
-        }
-
-        return tabletsWithLag;
-    }
-
-    TDuration CalculateLagPenalty(int tabletCount, int tabletWithLagCount)
-    {
-        return tabletWithLagCount >= Config_->MaxTabletsWithLagFraction * tabletCount
+        return replicaLag >= Config_->MaxReplicaLag
             ? Config_->LagPenalty
             : TDuration::Zero();
     }
@@ -144,45 +124,24 @@ public:
     void UpdateCurrentLagPenalty()
     {
         try {
-            YT_LOG_INFO("Start penalty updater check (Table: %v)",
-                Config_->TablePath);
+            YT_TLOG_INFO("Start penalty updater check")
+                .With("Table", Config_->TablePath);
 
-            if (!CheckAllReplicaIdsPresent().IsOK()) {
-                UpdateReplicaIds();
-            }
-
-            auto tabletCount = GetTotalNumberOfTablets();
-            auto tabletWithLagCountPerReplica = CalculateTabletWithLagCounts(tabletCount);
-
-            Counters_->TotalTabletCount.Update(tabletCount);
-
-            for (auto& [cluster, info] : ReplicaClusters_) {
-                Y_ASSERT(info.ReplicaId);
-                auto tabletWithLagCount = tabletWithLagCountPerReplica.Value(info.ReplicaId, 0);
-                auto newLagPenalty = CalculateLagPenalty(tabletCount, tabletWithLagCount);
-                info.CurrentLagPenalty.store(newLagPenalty.GetValue(), std::memory_order::relaxed);
-
-                GetOrCrash(Counters_->TabletWithLagCountPerReplica, cluster).Update(tabletWithLagCount);
-                YT_LOG_INFO("Lag penalty for cluster replica updated (Cluster: %v, Table: %v, TabletWithLagCount: %v/%v, Penalty: %v)",
-                    cluster,
-                    Config_->TablePath,
-                    tabletWithLagCount,
-                    tabletCount,
-                    newLagPenalty);
-            }
+            UpdateReplicaIds();
 
             Counters_->SuccessRequestCount.Increment();
         } catch (const std::exception& ex) {
             Counters_->ErrorRequestCount.Increment();
-            YT_LOG_ERROR(ex, "Failed to update lag penalty (Table: %v)",
-                Config_->TablePath);
+            YT_TLOG_ERROR("Failed to update lag penalty")
+                .With("Table", Config_->TablePath)
+                .With(ex);
 
             if (Config_->ClearPenaltiesOnErrors) {
                 for (auto& [cluster, info] : ReplicaClusters_) {
                     info.CurrentLagPenalty.store(0, std::memory_order::relaxed);
-                    YT_LOG_INFO("Clear lag penalty for cluster replica (Cluster: %v, Table: %v)",
-                        cluster,
-                        Config_->TablePath);
+                    YT_TLOG_INFO("Clear lag penalty for cluster replica")
+                        .With("Cluster", cluster)
+                        .With("Table", Config_->TablePath);
                 }
             }
         }

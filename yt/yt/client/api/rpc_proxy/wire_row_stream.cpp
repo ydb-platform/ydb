@@ -74,8 +74,11 @@ class TWireRowStreamDecoder
     : public IRowStreamDecoder
 {
 public:
-    explicit TWireRowStreamDecoder(TNameTablePtr nameTable)
+    explicit TWireRowStreamDecoder(
+        TNameTablePtr nameTable,
+        TWireProtocolOptions wireProtocolOptions = {})
         : NameTable_(std::move(nameTable))
+        , WireProtocolOptions_(std::move(wireProtocolOptions))
     {
         Descriptor_.set_wire_format_version(NApi::NRpcProxy::CurrentWireFormatVersion);
         Descriptor_.set_rowset_kind(NApi::NRpcProxy::NProto::RK_UNVERSIONED);
@@ -86,7 +89,7 @@ public:
         const NProto::TRowsetDescriptor& descriptorDelta) override
     {
         struct TWireRowStreamDecoderTag { };
-        auto reader = CreateWireProtocolReader(payloadRef, New<TRowBuffer>(TWireRowStreamDecoderTag()));
+        auto reader = CreateWireProtocolReader(payloadRef, New<TRowBuffer>(TWireRowStreamDecoderTag()), WireProtocolOptions_);
         auto rows = reader->ReadUnversionedRowset(true);
 
         auto oldNameTableSize = Descriptor_.name_table_entries_size();
@@ -125,18 +128,20 @@ public:
 
 private:
     const TNameTablePtr NameTable_;
+    const TWireProtocolOptions WireProtocolOptions_;
 
     NApi::NRpcProxy::NProto::TRowsetDescriptor Descriptor_;
     TNameTableToSchemaIdMapping IdMapping_;
     bool HasNontrivialIdMapping_ = false;
 };
 
-IRowStreamDecoderPtr CreateWireRowStreamDecoder(TNameTablePtr nameTable)
+IRowStreamDecoderPtr CreateWireRowStreamDecoder(
+    TNameTablePtr nameTable,
+    TWireProtocolOptions wireProtocolOptions)
 {
-    return New<TWireRowStreamDecoder>(std::move(nameTable));
+    return New<TWireRowStreamDecoder>(std::move(nameTable), std::move(wireProtocolOptions));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi::NRpcProxy
-

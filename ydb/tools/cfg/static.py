@@ -8,7 +8,6 @@ import logging
 import subprocess
 import tempfile
 
-import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
 from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config_pb
 from google.protobuf import json_format
@@ -19,6 +18,8 @@ from ydb.core.protos import (
     bootstrap_pb2,
     cms_pb2,
     config_pb2,
+    blobstorage_config_pb2,
+    blobstorage_base3_pb2,
     feature_flags_pb2,
     key_pb2,
     netclassifier_pb2,
@@ -29,12 +30,13 @@ from ydb.tools.cfg import base, types, utils
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,
     kikimr_cfg_for_dynamic_node,
+    kikimr_cfg_for_dynamic_node_new_style,
     kikimr_cfg_for_dynamic_slot,
     kikimr_cfg_for_static_node,
     kikimr_cfg_for_static_node_new_style,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class StaticConfigGenerator(object):
@@ -52,6 +54,7 @@ class StaticConfigGenerator(object):
         cfg_home="/Berkanavt/kikimr",
         sqs_port=8771,
         enable_cores=False,
+        enable_modules=False,
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
@@ -64,12 +67,17 @@ class StaticConfigGenerator(object):
 
         self._host_info_provider = host_info_provider
 
-        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database)
+        self._enable_cores = template.get("enable_cores", enable_cores)
+        self._enable_modules = template.get("enable_modules", enable_modules)
+
+        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database, enable_modules=self._enable_modules)
+        self.__use_auth_token_file = template.get("use_auth_token_file", False)
         if self.__cluster_details.use_k8s_api:
             self._host_info_provider._init_k8s_labels(self.__cluster_details.k8s_rack_label, self.__cluster_details.k8s_dc_label)
 
-        self._enable_cores = template.get("enable_cores", enable_cores)
         self._yaml_config_enabled = template.get("yaml_config_enabled", False)
+        # New option: whether to include kikimr_auth_token_file in generated configs
+        self._use_auth_token_file = template.get("use_auth_token_file", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
         self._skip_location = skip_location
@@ -91,6 +99,7 @@ class StaticConfigGenerator(object):
             "sys.txt": self.__generate_sys_txt,
             "tracing.txt": self.__generate_tracing_txt,
             # files with default implementation
+            "actor_system_config.txt": None,
             "sqs.txt": None,
             "vdisks.txt": None,
             "ic.txt": None,
@@ -110,6 +119,8 @@ class StaticConfigGenerator(object):
             "pdisk_key.txt": None,
             "immediate_controls_config.txt": None,
             "cms_config.txt": None,
+            "audit_config.txt": None,
+            "kqpconfig.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -163,6 +174,10 @@ class StaticConfigGenerator(object):
     @property
     def feature_flags_txt(self):
         return self.__proto_config("feature_flags.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("features"))
+
+    @property
+    def feature_flags_new_txt(self):
+        return self.__proto_config("feature_flags_new.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("feature_flags"))
 
     @property
     def failure_injection_txt(self):
@@ -249,6 +264,14 @@ class StaticConfigGenerator(object):
         return self.__proto_config("audit.txt").ByteSize() > 0
 
     @property
+    def audit_config_txt(self):
+        return self.__proto_config("audit_config.txt", config_pb2.TAuditConfig, self.__cluster_details.get_service("audit_config"))
+
+    @property
+    def audit_config_txt_enabled(self):
+        return self.__proto_config("audit_config.txt").ByteSize() > 0
+
+    @property
     def fq_txt(self):
         return self.__proto_config("fq.txt", TFederatedQueryConfig, self.__cluster_details.get_service("yq"))
 
@@ -287,6 +310,26 @@ class StaticConfigGenerator(object):
         return self.__proto_config("cms_config.txt").ByteSize() > 0
 
     @property
+    def actor_system_config_txt(self):
+        return self.__proto_config("actor_system_config.txt",
+                                   config_pb2.TActorSystemConfig,
+                                   self.__cluster_details.get_service("actor_system_config"))
+
+    @property
+    def actor_system_config_txt_enabled(self):
+        return self.__proto_config("actor_system_config.txt").ByteSize() > 0
+
+    @property
+    def kqpconfig_txt(self):
+        return self.__proto_config("kqpconfig.txt",
+                                   config_pb2.TKQPConfig,
+                                   self.__cluster_details.get_service("kqpconfig"))
+
+    @property
+    def kqpconfig_txt_enabled(self):
+        return self.__proto_config("kqpconfig.txt").ByteSize() > 0
+
+    @property
     def mbus_enabled(self):
         mbus_config = self.__cluster_details.get_service("message_bus_config")
         return mbus_config is not None and len(mbus_config) > 0
@@ -296,12 +339,228 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("host_configs")
 
     @property
+    def udfs_dir(self):
+        return self.__cluster_details.get_service("udfs_dir")
+
+    @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
 
     @property
+    def query_service_config(self):
+        return self.__cluster_details.get_service("query_service_config")
+
+    @property
     def column_shard_config(self):
         return self.__cluster_details.get_service("column_shard_config")
+
+    @property
+    def scan_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("scan_grouped_memory_limiter_config")
+
+    @property
+    def composite_conveyor_config(self):
+        return self.__cluster_details.get_service("composite_conveyor_config")
+
+    @property
+    def comp_disk_limiter_config(self):
+        return self.__cluster_details.get_service("comp_disk_limiter_config")
+
+    @property
+    def data_shard_config(self):
+        return self.__cluster_details.get_service("data_shard_config")
+
+    @property
+    def monitoring_config(self):
+        return self.__cluster_details.get_service("monitoring_config")
+
+    @property
+    def restarts_count_config(self):
+        return self.__cluster_details.get_service("restarts_count_config")
+
+    @property
+    def drive_model_config(self):
+        return self.__cluster_details.get_service("drive_model_config")
+
+    @property
+    def memory_log_config(self):
+        return self.__cluster_details.get_service("memory_log_config")
+
+    @property
+    def dynamic_node_config(self):
+        return self.__cluster_details.get_service("dynamic_node_config")
+
+    @property
+    def tenant_pool_config(self):
+        return self.__cluster_details.get_service("tenant_pool_config")
+
+    @property
+    def tenant_slot_broker_config(self):
+        return self.__cluster_details.get_service("tenant_slot_broker_config")
+
+    @property
+    def configs_dispatcher_config(self):
+        return self.__cluster_details.get_service("configs_dispatcher_config")
+
+    @property
+    def node_broker_config(self):
+        return self.__cluster_details.get_service("node_broker_config")
+
+    @property
+    def shared_cache_config(self):
+        return self.__cluster_details.get_service("shared_cache_config")
+
+    @property
+    def allocator_config(self):
+        return self.__cluster_details.get_service("allocator_config")
+
+    @property
+    def net_classifier_distributable_config(self):
+        return self.__cluster_details.get_service("net_classifier_distributable_config")
+
+    @property
+    def graph_config(self):
+        return self.__cluster_details.get_service("graph_config")
+
+    @property
+    def compaction_config(self):
+        return self.__cluster_details.get_service("compaction_config")
+
+    @property
+    def scheme_shard_config(self):
+        return self.__cluster_details.get_service("scheme_shard_config")
+
+    @property
+    def public_http_config(self):
+        return self.__cluster_details.get_service("public_http_config")
+
+    @property
+    def metadata_provider_config(self):
+        return self.__cluster_details.get_service("metadata_provider_config")
+
+    @property
+    def background_tasks_config(self):
+        return self.__cluster_details.get_service("background_tasks_config")
+
+    @property
+    def external_index_config(self):
+        return self.__cluster_details.get_service("external_index_config")
+
+    @property
+    def scan_conveyor_config(self):
+        return self.__cluster_details.get_service("scan_conveyor_config")
+
+    @property
+    def aws_compatibility_config(self):
+        return self.__cluster_details.get_service("aws_compatibility_config")
+
+    @property
+    def comp_conveyor_config(self):
+        return self.__cluster_details.get_service("comp_conveyor_config")
+
+    @property
+    def insert_conveyor_config(self):
+        return self.__cluster_details.get_service("insert_conveyor_config")
+
+    @property
+    def background_cleaning_config(self):
+        return self.__cluster_details.get_service("background_cleaning_config")
+
+    @property
+    def blob_cache_config(self):
+        return self.__cluster_details.get_service("blob_cache_config")
+
+    @property
+    def metadata_cache_config(self):
+        return self.__cluster_details.get_service("metadata_cache_config")
+
+    @property
+    def replication_config(self):
+        return self.__cluster_details.get_service("replication_config")
+
+    @property
+    def shutdown_config(self):
+        return self.__cluster_details.get_service("shutdown_config")
+
+    @property
+    def comp_priorities_config(self):
+        return self.__cluster_details.get_service("comp_priorities_config")
+
+    @property
+    def self_management_config(self):
+        return self.__cluster_details.get_service("self_management_config")
+
+    @property
+    def data_integrity_trails_config(self):
+        return self.__cluster_details.get_service("data_integrity_trails_config")
+
+    @property
+    def data_erasure_config(self):
+        return self.__cluster_details.get_service("data_erasure_config")
+
+    @property
+    def health_check_config(self):
+        return self.__cluster_details.get_service("health_check_config")
+
+    @property
+    def workload_manager_config(self):
+        return self.__cluster_details.get_service("workload_manager_config")
+
+    @property
+    def bridge_config(self):
+        return self.__cluster_details.get_service("bridge_config")
+
+    @property
+    def comp_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("comp_grouped_memory_limiter_config")
+
+    @property
+    def blockstore_config(self):
+        return self.__cluster_details.get_service("blockstore_config")
+
+    @property
+    def portions_metadata_cache(self):
+        return self.__cluster_details.get_service("portions_metadata_cache")
+
+    @property
+    def column_data_cache(self):
+        return self.__cluster_details.get_service("column_data_cache")
+
+    @property
+    def deduplication_grouped_memory_limiter_config(self):
+        return self.__cluster_details.get_service("deduplication_grouped_memory_limiter_config")
+
+    @property
+    def statistics_config(self):
+        return self.__cluster_details.get_service("statistics_config")
+
+    @property
+    def metrics_config(self):
+        return self.__cluster_details.get_service("metrics_config")
+
+    @property
+    def aws_client_config(self):
+        return self.__cluster_details.get_service("aws_client_config")
+
+    @property
+    def recovery_shard_config(self):
+        return self.__cluster_details.get_service("recovery_shard_config")
+
+    @property
+    def cluster_diagnostics_config(self):
+        return self.__cluster_details.get_service("cluster_diagnostics_config")
+
+    @property
+    def nbs_config(self):
+        return self.__cluster_details.get_service("nbs_config")
+
+    @property
+    def tli_config(self):
+        return self.__cluster_details.get_service("tli_config")
+
+    @property
+    def long_tx_service_config(self):
+        return self.__cluster_details.get_service("long_tx_service_config")
 
     @property
     def hive_config(self):
@@ -310,6 +569,22 @@ class StaticConfigGenerator(object):
     @property
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
+            if self.__cluster_details.use_new_style_kikimr_cfg:
+                return kikimr_cfg_for_dynamic_node_new_style(
+                    self.__node_broker_port,
+                    self._database,
+                    self.__ic_port,
+                    self.__grpc_port,
+                    self.__mon_port,
+                    self.__kikimr_home,
+                    self._enable_cores,
+                    self.__cluster_details.default_log_level,
+                    kikimr_binaries_base_path='/Berkanavt/kikimr',
+                    mon_address=self.__cluster_details.monitor_address,
+                    cert_params=self.__cluster_details.ic_cert_params,
+                    use_auth_token_file=self._use_auth_token_file,
+                )
+
             return kikimr_cfg_for_dynamic_node(
                 self.__node_broker_port,
                 self._database,
@@ -326,6 +601,7 @@ class StaticConfigGenerator(object):
                 metering_txt_enabled=self.metering_txt_enabled,
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
+                use_auth_token_file=self._use_auth_token_file,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:
@@ -338,6 +614,7 @@ class StaticConfigGenerator(object):
                 kikimr_home=self.__kikimr_home,
                 cert_params=self.__cluster_details.ic_cert_params,
                 mbus_enabled=self.mbus_enabled,
+                use_auth_token_file=self._use_auth_token_file,
             )
 
         return kikimr_cfg_for_static_node(
@@ -355,6 +632,7 @@ class StaticConfigGenerator(object):
             audit_txt_enabled=self.audit_txt_enabled,
             fq_txt_enabled=self.fq_txt_enabled,
             mbus_enabled=self.mbus_enabled,
+            use_auth_token_file=self._use_auth_token_file,
         )
 
     def get_all_configs(self):
@@ -369,11 +647,21 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.need_generate_app_config:
             all_configs["app_config.proto"] = utils.message_to_string(self.get_app_config())
-        all_configs["kikimr.cfg"] = self.kikimr_cfg
-        all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
+        # these files are obsolete and not generated with new style config.yaml
+        if not self.__cluster_details.use_new_style_config_yaml:
+            all_configs["kikimr.cfg"] = self.kikimr_cfg
+            all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
         normalized_config = self.get_normalized_config()
+
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
+
         all_configs["dynconfig.yaml"] = self.get_yaml_format_dynconfig(normalized_config)
+
+        if 'log.txt' in self.__proto_configs and self.__proto_configs['log.txt'].ClusterName:
+            all_configs['cluster.txt'] = self.__proto_configs['log.txt'].ClusterName
+
         return all_configs
 
     def get_yaml_format_string(self, key):
@@ -421,11 +709,17 @@ class StaticConfigGenerator(object):
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
                     for drive in host_config['drive']:
+                        pdisk_config = {}
                         if 'expected_slot_count' in drive:
                             # inside config.yaml we should use pdisk_config section for expected_slot_count
-                            drive['pdisk_config'] = {
-                                'expected_slot_count': drive.pop('expected_slot_count')
-                            }
+                            pdisk_config['expected_slot_count'] = drive.pop('expected_slot_count')
+                        if 'expected_slot_size' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_size/max_slots
+                            pdisk_config['expected_slot_size'] = drive.pop('expected_slot_size')
+                        if 'max_slots' in drive:
+                            pdisk_config['max_slots'] = drive.pop('max_slots')
+                        if pdisk_config:
+                            drive.setdefault('pdisk_config', {}).update(pdisk_config)
 
                         # support type-safe `pdisk_config` directly in `host_configs`, for example:
                         # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
@@ -443,14 +737,179 @@ class StaticConfigGenerator(object):
 
                             drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
 
+        if self.udfs_dir:
+            normalized_config["udfs_dir"] = self.udfs_dir
+
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
+
+        if self.query_service_config:
+            normalized_config["query_service_config"] = self.query_service_config
 
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
 
+        if self.scan_grouped_memory_limiter_config:
+            normalized_config["scan_grouped_memory_limiter_config"] = self.scan_grouped_memory_limiter_config
+
+        if self.composite_conveyor_config:
+            normalized_config["composite_conveyor_config"] = self.composite_conveyor_config
+
+        if self.comp_disk_limiter_config:
+            normalized_config["comp_disk_limiter_config"] = self.comp_disk_limiter_config
+
+        if self.data_shard_config:
+            normalized_config["data_shard_config"] = self.data_shard_config
+
+        if self.monitoring_config:
+            normalized_config["monitoring_config"] = self.monitoring_config
+
+        if self.restarts_count_config:
+            normalized_config["restarts_count_config"] = self.restarts_count_config
+
+        if self.drive_model_config:
+            normalized_config["drive_model_config"] = self.drive_model_config
+
+        if self.memory_log_config:
+            normalized_config["memory_log_config"] = self.memory_log_config
+
+        if self.dynamic_node_config:
+            normalized_config["dynamic_node_config"] = self.dynamic_node_config
+
+        if self.tenant_pool_config:
+            normalized_config["tenant_pool_config"] = self.tenant_pool_config
+
+        if self.tenant_slot_broker_config:
+            normalized_config["tenant_slot_broker_config"] = self.tenant_slot_broker_config
+
+        if self.configs_dispatcher_config:
+            normalized_config["configs_dispatcher_config"] = self.configs_dispatcher_config
+
+        if self.node_broker_config:
+            normalized_config["node_broker_config"] = self.node_broker_config
+
+        if self.shared_cache_config:
+            normalized_config["shared_cache_config"] = self.shared_cache_config
+
+        if self.allocator_config:
+            normalized_config["allocator_config"] = self.allocator_config
+
+        if self.net_classifier_distributable_config:
+            normalized_config["net_classifier_distributable_config"] = self.net_classifier_distributable_config
+
+        if self.graph_config:
+            normalized_config["graph_config"] = self.graph_config
+
+        if self.compaction_config:
+            normalized_config["compaction_config"] = self.compaction_config
+
+        if self.scheme_shard_config:
+            normalized_config["scheme_shard_config"] = self.scheme_shard_config
+
+        if self.public_http_config:
+            normalized_config["public_http_config"] = self.public_http_config
+
+        if self.metadata_provider_config:
+            normalized_config["metadata_provider_config"] = self.metadata_provider_config
+
+        if self.background_tasks_config:
+            normalized_config["background_tasks_config"] = self.background_tasks_config
+
+        if self.external_index_config:
+            normalized_config["external_index_config"] = self.external_index_config
+
+        if self.scan_conveyor_config:
+            normalized_config["scan_conveyor_config"] = self.scan_conveyor_config
+
+        if self.aws_compatibility_config:
+            normalized_config["aws_compatibility_config"] = self.aws_compatibility_config
+
+        if self.comp_conveyor_config:
+            normalized_config["comp_conveyor_config"] = self.comp_conveyor_config
+
+        if self.insert_conveyor_config:
+            normalized_config["insert_conveyor_config"] = self.insert_conveyor_config
+
+        if self.background_cleaning_config:
+            normalized_config["background_cleaning_config"] = self.background_cleaning_config
+
+        if self.blob_cache_config:
+            normalized_config["blob_cache_config"] = self.blob_cache_config
+
+        if self.metadata_cache_config:
+            normalized_config["metadata_cache_config"] = self.metadata_cache_config
+
+        if self.replication_config:
+            normalized_config["replication_config"] = self.replication_config
+
+        if self.shutdown_config:
+            normalized_config["shutdown_config"] = self.shutdown_config
+
+        if self.comp_priorities_config:
+            normalized_config["comp_priorities_config"] = self.comp_priorities_config
+
+        if self.self_management_config:
+            normalized_config["self_management_config"] = self.self_management_config
+
+        if self.data_integrity_trails_config:
+            normalized_config["data_integrity_trails_config"] = self.data_integrity_trails_config
+
+        if self.data_erasure_config:
+            normalized_config["data_erasure_config"] = self.data_erasure_config
+
+        if self.health_check_config:
+            normalized_config["health_check_config"] = self.health_check_config
+
+        if self.workload_manager_config:
+            normalized_config["workload_manager_config"] = self.workload_manager_config
+
+        if self.bridge_config:
+            normalized_config["bridge_config"] = self.bridge_config
+
+        if self.comp_grouped_memory_limiter_config:
+            normalized_config["comp_grouped_memory_limiter_config"] = self.comp_grouped_memory_limiter_config
+
+        if self.blockstore_config:
+            normalized_config["blockstore_config"] = self.blockstore_config
+
+        if self.portions_metadata_cache:
+            normalized_config["portions_metadata_cache"] = self.portions_metadata_cache
+
+        if self.column_data_cache:
+            normalized_config["column_data_cache"] = self.column_data_cache
+
+        if self.deduplication_grouped_memory_limiter_config:
+            normalized_config["deduplication_grouped_memory_limiter_config"] = self.deduplication_grouped_memory_limiter_config
+
+        if self.statistics_config:
+            normalized_config["statistics_config"] = self.statistics_config
+
+        if self.metrics_config:
+            normalized_config["metrics_config"] = self.metrics_config
+
+        if self.aws_client_config:
+            normalized_config["aws_client_config"] = self.aws_client_config
+
+        if self.recovery_shard_config:
+            normalized_config["recovery_shard_config"] = self.recovery_shard_config
+
+        if self.cluster_diagnostics_config:
+            normalized_config["cluster_diagnostics_config"] = self.cluster_diagnostics_config
+
+        if self.nbs_config:
+            normalized_config["nbs_config"] = self.nbs_config
+
+        if self.tli_config:
+            normalized_config["tli_config"] = self.tli_config
+
+        if self.long_tx_service_config:
+            normalized_config["long_tx_service_config"] = self.long_tx_service_config
+
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
+
+        if self.__cluster_details.system_tablet_backup_config is not None:
+            normalized_config["system_tablet_backup_config"] = self.__cluster_details.system_tablet_backup_config
 
         if self.__cluster_details.table_profiles_config is not None:
             normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config
@@ -461,7 +920,13 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.memory_controller_config is not None:
             normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
 
-        if self.__cluster_details.blob_storage_config is not None:
+        if self.__cluster_details.kafka_proxy_config is not None:
+            normalized_config["kafka_proxy_config"] = self.__cluster_details.kafka_proxy_config
+
+        if self.__cluster_details.s3_proxy_resolver_config is not None:
+            normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
+
+        if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
             blobstorage_config_service_set = normalized_config["blob_storage_config"]["service_set"]
@@ -530,16 +995,21 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
-        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
+        def get_compatible_port(node):
+            if node.port != base.DEFAULT_INTERCONNECT_PORT:
+                return node.port
+            return node.ic_port
+
+        node_to_host_config_id = {(node.hostname, get_compatible_port(node)): node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
-            if "port" in node and int(node.get("port")) == 19001:
+            if "port" in node and int(node.get("port")) == base.DEFAULT_INTERCONNECT_PORT:
                 del node["port"]
 
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
-            host_config_id = hostname_to_host_config_id[node["host"]]
+            host_config_id = node_to_host_config_id[(node["host"], node.get("port", base.DEFAULT_INTERCONNECT_PORT))]
             if host_config_id is not None:
                 node["host_config_id"] = host_config_id
             normalized_config["hosts"].append(node)
@@ -557,7 +1027,14 @@ class StaticConfigGenerator(object):
                             vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
-                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_count'])
+                                if 'expected_slot_size' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_size'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_size'])
+                                if 'max_slots' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['max_slots'] = int(
+                                        vdisk_location['pdisk_config']['max_slots'])
 
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
@@ -574,10 +1051,13 @@ class StaticConfigGenerator(object):
         if self._yaml_config_enabled:
             normalized_config['yaml_config_enabled'] = True
 
+        if self.__cluster_details.storage_config_generation is not None:
+            normalized_config["storage_config_generation"] = int(self.__cluster_details.storage_config_generation)
+
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):
-        return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=False, indent=2)
+        return utils.dump_yaml(normalized_config)
 
     def get_yaml_format_dynconfig(self, normalized_config):
         cluster_uuid = normalized_config.get('nameservice_config', {}).get('cluster_uuid', '')
@@ -596,7 +1076,7 @@ class StaticConfigGenerator(object):
             'selector_config': [],
         }
 
-        if self.__cluster_details.use_auto_config:
+        if self.__cluster_details.use_auto_config or normalized_config.get('actor_system_config', {}).get('use_auto_config', False):
             dynconfig['selector_config'].append({
                 'description': 'actor system config for dynnodes',
                 'selector': {
@@ -610,11 +1090,22 @@ class StaticConfigGenerator(object):
                     }
                 }
             })
+
+            # copy all selector_config elements without validation (for now) to dynconfig
+            for elem in self.__cluster_details.selector_config:
+                dynconfig['selector_config'].append(elem)
+
         # emulate dumping ordered dict to yaml
         lines = []
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
             lines.append(key + ':')
-            substr = yaml.safe_dump(dynconfig[key], sort_keys=True, default_flow_style=False, indent=2)
+
+            # must keep `selector_config` unsorted to keep `!append` and `!inherit` flags
+            # during serialization
+            should_sort = key != "selector_config"
+
+            substr = utils.dump_yaml(dynconfig[key], should_sort)
+
             for line in substr.split('\n'):
                 lines.append('  ' + line)
         return '\n'.join(lines)
@@ -625,21 +1116,23 @@ class StaticConfigGenerator(object):
         app_config.BlobStorageConfig.CopyFrom(self.bs_txt)
         app_config.ChannelProfileConfig.CopyFrom(self.channels_txt)
         app_config.DomainsConfig.CopyFrom(self.domains_txt)
+
+        # Old template style:
         if self.feature_flags_txt.ByteSize() > 0:
             app_config.FeatureFlags.CopyFrom(self.feature_flags_txt)
+        # New config.yaml style:
+        if self.feature_flags_new_txt.ByteSize() > 0:
+            app_config.FeatureFlags.CopyFrom(self.feature_flags_new_txt)
+
         app_config.LogConfig.CopyFrom(self.log_txt)
         if self.auth_txt.ByteSize() > 0:
             app_config.AuthConfig.CopyFrom(self.auth_txt)
-        app_config.KQPConfig.CopyFrom(self.kqp_txt)
         app_config.NameserviceConfig.CopyFrom(self.names_txt)
-        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
         app_config.GRpcConfig.CopyFrom(self.grpc_txt)
         app_config.InterconnectConfig.CopyFrom(self.ic_txt)
         app_config.VDiskConfig.CopyFrom(self.vdisks_txt)
         app_config.PQConfig.CopyFrom(self.pq_txt)
 
-        if self.cms_txt.ByteSize() > 0:
-            app_config.CmsConfig.CopyFrom(self.cms_txt)
         if self.dyn_ns_txt.ByteSize() > 0:
             app_config.DynamicNameserviceConfig.CopyFrom(self.dyn_ns_txt)
         if self.pqcd_txt.ByteSize() > 0:
@@ -650,8 +1143,6 @@ class StaticConfigGenerator(object):
             app_config.ResourceBrokerConfig.CopyFrom(self.rb_txt)
         if self.metering_txt_enabled:
             app_config.MeteringConfig.CopyFrom(self.metering_txt)
-        if self.audit_txt_enabled:
-            app_config.AuditConfig.CopyFrom(self.audit_txt)
         if self.fq_txt_enabled:
             app_config.FederatedQueryConfig.CopyFrom(self.fq_txt)
         if self.failure_injection_txt_enabled:
@@ -665,8 +1156,32 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+
+        # Old template style:
+        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
+        # New config.yaml style:
+        if self.actor_system_config_txt_enabled:
+            app_config.ActorSystemConfig.CopyFrom(self.actor_system_config_txt)
+
+        # Old template style:
+        app_config.KQPConfig.CopyFrom(self.kqp_txt)
+        # New config.yaml style:
+        if self.kqpconfig_txt_enabled:
+            app_config.KQPConfig.CopyFrom(self.kqpconfig_txt)
+
+        # Old template style:
+        if self.cms_txt.ByteSize() > 0:
+            app_config.CmsConfig.CopyFrom(self.cms_txt)
+        # New config.yaml style:
         if self.cms_config_txt_enabled:
             app_config.CmsConfig.CopyFrom(self.cms_config_txt)
+
+        # Old template style:
+        if self.audit_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_txt)
+        # New config.yaml style:
+        if self.audit_config_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -758,17 +1273,24 @@ class StaticConfigGenerator(object):
     def __generate_boot_txt(self):
         self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
+        # New style `config.yaml`, allow specifying bootstrap_config
+        if self.__cluster_details.bootstrap_config is not None:
+            template_proto = bootstrap_pb2.TBootstrap()
+            utils.wrap_parse_dict(self.__cluster_details.bootstrap_config, template_proto)
+            self.__proto_configs["boot.txt"].MergeFrom(template_proto)
+        else:
+            # Old style `template.yaml`, just get random fields from top-level of `template.yaml`
+            if self.__cluster_details.shared_cache_memory_limit is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
+            shared_cache_size = self.__cluster_details.pq_shared_cache_size
+            if shared_cache_size is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
+
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
                 self.__add_tablet(tablet_type, index, self.__cluster_details.system_tablets_node_ids)
-
-        if self.__cluster_details.shared_cache_memory_limit is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
-        shared_cache_size = self.__cluster_details.pq_shared_cache_size
-        if shared_cache_size is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
 
     def __generate_bs_txt(self):
         self.__proto_configs["bs.txt"] = config_pb2.TBlobStorageConfig()
@@ -800,6 +1322,17 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
+
+                # Full support of `pdisk_config`, not just copying selected fields manually
+                # from other non-typed locations
+                if drive.pdisk_config is not None:
+                    utils.wrap_parse_dict(drive.pdisk_config, drive_pb.PDiskConfig)
 
                 assert drive_pb.Guid not in all_guids, "All Guids must be unique!"
                 all_guids.add(drive_pb.Guid)
@@ -810,7 +1343,7 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
-            if self.__cluster_details.blob_storage_config:
+            if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
                 return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
@@ -819,6 +1352,13 @@ class StaticConfigGenerator(object):
                 str(self.__cluster_details.fail_domain_type),
                 bs_format_config,
             )
+
+            # Merging generated static group config with other keys
+            if self.__cluster_details.blob_storage_config is not None:
+                template_proto = config_pb2.TBlobStorageConfig()
+                utils.wrap_parse_dict(self.__cluster_details.blob_storage_config, template_proto)
+                self.__proto_configs["bs.txt"].MergeFrom(template_proto)
+
             if self.__cluster_details.nw_cache_file_path is not None:
                 self.__proto_configs["bs.txt"].CacheFilePath = self.__cluster_details.nw_cache_file_path
             return
@@ -868,6 +1408,12 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),
@@ -1029,10 +1575,109 @@ class StaticConfigGenerator(object):
         if domains_config is None:
             self.__generate_domains_from_old_domains_key()
         else:
-            self.__generate_domains_from_proto(domains_config)
+            self.__generate_domains_from_proto(domains_config, self.__cluster_details.domains_config_as_dict)
 
-    def __generate_domains_from_proto(self, domains_config):
-        self.__configure_security_config(domains_config)
+    def __generate_default_pool_with_kind(self, pool_kind):
+        pool = config_pb2.TDomainsConfig.TStoragePoolType()
+        pool.Kind = pool_kind
+        pool_config = blobstorage_config_pb2.TDefineStoragePool()
+
+        pool_config.BoxId = 1
+        pool_config.Kind = pool_kind
+        pool_config.ErasureSpecies = str(self.__cluster_details.static_erasure)
+        pool_config.VDiskKind = "Default"
+        pdisk_filter = pool_config.PDiskFilter.add()
+        property = pdisk_filter.Property.add()
+        diskTypeToProto = {
+            'ssd': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rot': blobstorage_base3_pb2.EPDiskType.ROT,
+            'ssdencrypted': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
+        }
+
+        if pool_kind in diskTypeToProto:
+            property.Type = diskTypeToProto[pool_kind]
+
+        pool.PoolConfig.CopyFrom(pool_config)
+        return pool
+
+    def __generate_explicit_mediators_coordinators_allocators(self, domain, mediators, coordinators, allocators):
+        domain.ExplicitCoordinators.extend(
+            [self.__tablet_types.FLAT_TX_COORDINATOR.tablet_id_for(i) for i in range(int(coordinators))]
+        )
+        domain.ExplicitMediators.extend([self.__tablet_types.TX_MEDIATOR.tablet_id_for(i) for i in range(int(mediators))])
+        domain.ExplicitAllocators.extend(
+            [self.__tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(allocators))]
+        )
+
+    def __check_pool_configs(self, domain, domains_config_dict):
+        for pool in domain.StoragePoolTypes:
+            # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
+            if 'encrypted' in pool.Kind and pool.PoolConfig.EncryptionMode != 1:
+                # Special case for migration purposes: if `encryption_mode: 0` is present in pool config,
+                # we should still allow it even if the naming contains `encrypted`. We have to rely on yaml config
+                # because there is no way in proto message to distinguish between missing and undefined keys
+                encryption_mode_0 = False
+                for storage_pool_type in domains_config_dict['domain'][0]['storage_pool_types']:
+                    if storage_pool_type['kind'] == pool.Kind and 'encryption_mode' in storage_pool_type['pool_config']:
+                        encryption_mode_0 = True
+                        break
+
+                if not encryption_mode_0:
+                    raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`. Either specify the value (0 or 1) or rename the pool")
+
+            # Check disk type is specified for every pool
+            type_defined = False
+            for filterElement in pool.PoolConfig.PDiskFilter:
+                if filterElement.Property and filterElement.Property[0].Type:
+                    type_defined = True
+
+            if not type_defined:
+                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
+
+    def __generate_domains_from_proto(self, domains_config, domains_config_dict):
+        domains = domains_config.Domain
+        if len(domains) > 1:
+            raise ValueError('Multiple domains specified: len(domains_config.domain) > 1. This is unsupported')
+
+        domain = domains[0]
+        pool_kinds = []
+        if not domain.StoragePoolTypes:
+            pool_kinds = ['ssd', 'rot', 'ssdencrypted', 'rotencrypted']
+            for pool_kind in pool_kinds:
+                storage_pool_type = domain.StoragePoolTypes.add()
+                default_storage_pool_type = self.__generate_default_pool_with_kind(pool_kind)
+                storage_pool_type.MergeFrom(default_storage_pool_type)
+        else:
+            for pool in domain.StoragePoolTypes:
+                # do a little dance to keep the specified fields prioritized
+                # while filling the remaining defaults (MergeFrom overwrites)
+                defaultPool = self.__generate_default_pool_with_kind(pool.Kind)
+                defaultPool.MergeFrom(pool)
+                pool.CopyFrom(defaultPool)
+
+        self.__check_pool_configs(domain, domains_config_dict)
+
+        if not domain.DomainId:
+            domain.DomainId = 1
+        if not domain.PlanResolution:
+            domain.PlanResolution = base.DEFAULT_PLAN_RESOLUTION
+        if not domain.SchemeRoot:
+            domain.SchemeRoot = self.__tablet_types.FLAT_SCHEMESHARD.tablet_id_for(0)
+        if not domain.SSId:
+            domain.SSId.append(domain.DomainId)
+
+        self.__generate_explicit_mediators_coordinators_allocators(domain,
+                                                                   self.__cluster_details.mediators_count_optimal,
+                                                                   self.__cluster_details.coordinators_count_optimal,
+                                                                   self.__cluster_details.allocators_count_optimal)
+
+        domain.HiveUid.append(domain.DomainId)
+        domains_config.HiveConfig.add(HiveUid=domain.DomainId, Hive=self.__tablet_types.FLAT_HIVE.tablet_id_for(0))
+
+        if not domains_config.StateStorage:
+            self._configure_default_state_storage(domains_config, domain.DomainId)
+
         self.__proto_configs["domains.txt"] = domains_config
 
     def __generate_domains_from_old_domains_key(self):
@@ -1098,6 +1743,9 @@ class StaticConfigGenerator(object):
 
                     if "SharedWithOs" in pool_kind.filter_properties:
                         pdisk_filter.Property.add(SharedWithOs=pool_kind.filter_properties["SharedWithOs"])
+
+                    if "kind" in pool_kind.filter_properties:
+                        pdisk_filter.Property.add(Kind=pool_kind.filter_properties["kind"])
 
     def _get_base_statestorage(self, domains_cfg, ss):
         ssid = ss.get("ssid", None)
@@ -1211,28 +1859,44 @@ class StaticConfigGenerator(object):
             state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
             return
 
-        rack_limit = 1
-        dc_limit = None
-        if self.__n_to_select == 9:
-            dc_limit = 3
-
-        occupied_dcs = collections.Counter()
-        occupied_racks = collections.Counter()
         selected_ids = []
-        hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
-        for node_id in self.__cluster_details.state_storage_node_ids:
-            node = hosts_by_node_id.get(node_id)
-            assert node is not None
+        if self.__cluster_details.use_new_style_config_yaml:
+            # By default, we create a set of state storage nodes equal to a set of nodes
+            # in static blobstorage groups.
+            if self.__cluster_details.blob_storage_config:
+                blobstorage_config = self.__cluster_details.blob_storage_config
 
-            if occupied_racks[node.rack] == rack_limit:
-                continue
+                for group in blobstorage_config['service_set']['groups']:
+                    for ring in group['rings']:
+                        for fail_domain in ring['fail_domains']:
+                            for vdisk_location in fail_domain['vdisk_locations']:
+                                selected_ids.append(int(vdisk_location['node_id']))
+            else:
+                blobstorage_config = self.__proto_config("bs.txt")
+                for pdisk in blobstorage_config.ServiceSet.PDisks:
+                    selected_ids.append(pdisk.NodeID)
+        else:
+            rack_limit = 1
+            dc_limit = None
+            if self.__n_to_select == 9:
+                dc_limit = 3
 
-            if occupied_dcs[node.datacenter] == dc_limit:
-                continue
+            occupied_dcs = collections.Counter()
+            occupied_racks = collections.Counter()
+            hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
+            for node_id in self.__cluster_details.state_storage_node_ids:
+                node = hosts_by_node_id.get(node_id)
+                assert node is not None
 
-            occupied_racks[node.rack] += 1
-            occupied_dcs[node.datacenter] += 1
-            selected_ids.append(node.node_id)
+                if occupied_racks[node.rack] == rack_limit:
+                    continue
+
+                if occupied_dcs[node.datacenter] == dc_limit:
+                    continue
+
+                occupied_racks[node.rack] += 1
+                occupied_dcs[node.datacenter] += 1
+                selected_ids.append(node.node_id)
 
         if len(selected_ids) < self.__n_to_select:
             raise RuntimeError("Unable to build valid quorum in state storage")
@@ -1257,9 +1921,12 @@ class StaticConfigGenerator(object):
             utils.wrap_parse_dict(self.__cluster_details.nameservice_config, self.names_txt)
 
         for host in self.__cluster_details.hosts:
+            port = host.port
+            if port is base.DEFAULT_INTERCONNECT_PORT:
+                port = host.ic_port
             node = self.names_txt.Node.add(
                 NodeId=host.node_id,
-                Port=host.ic_port,
+                Port=port,
                 Host=host.hostname,
                 InterconnectHost=host.hostname,
             )
@@ -1267,6 +1934,8 @@ class StaticConfigGenerator(object):
             if not self._skip_location:
                 if self.__cluster_details.use_walle:
                     node.WalleLocation.DataCenter = host.datacenter
+                    if self._enable_modules:
+                        node.WalleLocation.Module = host.module
                     node.WalleLocation.Rack = host.rack
                     node.WalleLocation.Body = int(host.body)
                 elif self.__cluster_details.use_k8s_api:
@@ -1275,6 +1944,8 @@ class StaticConfigGenerator(object):
                     node.Location.Body = int(host.body)
                 else:
                     node.Location.DataCenter = host.datacenter
+                    if self._enable_modules:
+                        node.Location.Module = host.module
                     node.Location.Rack = host.rack
                     node.Location.Body = int(host.body)
 
@@ -1287,10 +1958,17 @@ class StaticConfigGenerator(object):
             if len(cluster_uuid) == 0:
                 cluster_uuid = self.__cluster_details.cluster_uuid  # fall back to `cluster_uuid: ...`
 
+            # fall back to generated if no cluster uuid is specified at all
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
+
             self.names_txt.ClusterUUID = cluster_uuid
-            self.names_txt.AcceptUUID.append(cluster_uuid)
-            self.names_txt.AcceptUUID.extend(accepted_uuids)
+            accepted_uuids.append(cluster_uuid)
+
+            # combine accept uuids from all possible sources: old format, new format, and filter unique
+            existing_set = set(self.names_txt.AcceptUUID)
+            new_set = set(accepted_uuids)
+            unique_elements = existing_set.union(new_set)
+            self.names_txt.AcceptUUID[:] = unique_elements
 
     def __generate_sys_txt(self):
         self.__proto_configs["sys.txt"] = config_pb2.TActorSystemConfig()
@@ -1411,7 +2089,10 @@ class StaticConfigGenerator(object):
     @property
     def dynamic_server_common_args(self):
         if self.__cluster_details.use_new_style_kikimr_cfg:
-            return dynamic_cfg_new_style(self._enable_cores)
+            domain = ""
+            if len(self.__cluster_details.domains) == 1:
+                domain = self.__cluster_details.domains[0].domain_name
+            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain)
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

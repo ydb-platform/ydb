@@ -10,8 +10,7 @@ PYTHONIC_NS_BEGIN
 namespace itertools
 {
   template <class T, bool Endless>
-  struct repeat_iterator : std::iterator<std::forward_iterator_tag, T,
-                                         ptrdiff_t, T *, T /* no ref*/
+  struct repeat_iterator : std::iterator<std::forward_iterator_tag, T, ptrdiff_t, T *, T /* no ref*/
                                          > {
     T value_;
     long count_;
@@ -51,9 +50,9 @@ PYTHONIC_NS_END
 
 template <class E, class T, bool C>
 struct __combined<E, pythonic::itertools::_repeat<T, C>> {
-  using type = typename __combined<
-      E,
-      container<typename pythonic::itertools::_repeat<T, C>::value_type>>::type;
+  using type =
+      typename __combined<E,
+                          container<typename pythonic::itertools::_repeat<T, C>::value_type>>::type;
 };
 
 /* } */

@@ -1,6 +1,7 @@
 PY23_TEST()
 
 TEST_SRCS(
+    test_logging.py
     test_tools.py
 )
 
@@ -12,3 +13,9 @@ PEERDIR(
 STYLE_PYTHON()
 
 END()
+
+RECURSE_FOR_TESTS(
+    conftest_local
+    conftest_non_local
+    pytest_plugins_env
+)

@@ -19,7 +19,7 @@ from .constant_expressions import ConstantExpressions
 from .dependencies import Dependencies
 from .extended_syntax_check import ExtendedSyntaxCheck
 from .fixed_size_list import FixedSizeList
-from .global_declarations import GlobalDeclarations
+from .global_declarations import GlobalDeclarations, NonlocalDeclarations
 from .global_effects import GlobalEffects
 from .globals_analysis import Globals
 from .has_return import HasReturn, HasBreak, HasContinue

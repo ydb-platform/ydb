@@ -7,7 +7,22 @@
 
 #include <optional>
 
+namespace NKikimr::NSchemeShard {
+    bool IsSupportedIndex(TPathId pathId, const TOperationContext& context);
+    bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss);
+}
+
 namespace NKikimr::NSchemeShard::NBackup {
+
+inline constexpr TStringBuf FullBackupSuffix = "_full";
+inline constexpr TStringBuf IncrementalBackupSuffix = "_incremental";
+
+inline TString FullBackupDirName(TStringBuf trimmed) {
+    return TStringBuilder() << trimmed << FullBackupSuffix;
+}
+inline TString IncrementalBackupDirName(TStringBuf trimmed) {
+    return TStringBuilder() << trimmed << IncrementalBackupSuffix;
+}
 
 struct TBackupCollectionPaths {
     TPath RootPath;

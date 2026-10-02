@@ -15,7 +15,9 @@ SRCS(
     chunked_memory_pool_output.cpp
     chunked_output_stream.cpp
     memory_tag.cpp
+    simple_memory_usage_tracker.cpp
     new.cpp
+    poison.cpp
     ref.cpp
     ref_tracked.cpp
     safe_memory_reader.cpp
@@ -25,7 +27,9 @@ SRCS(
 PEERDIR(
     library/cpp/sanitizer/include
     library/cpp/yt/assert
+    library/cpp/yt/exception
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/malloc
     library/cpp/yt/system
 )
@@ -37,11 +41,18 @@ CHECK_DEPENDENT_DIRS(
     library
     util
     library/cpp/yt/assert
+    library/cpp/yt/exception
     library/cpp/yt/misc
     library/cpp/yt/malloc
 )
 
 END()
+
+IF (NOT OPENSOURCE)
+    RECURSE(
+        benchmark
+    )
+ENDIF()
 
 RECURSE_FOR_TESTS(
     unittests

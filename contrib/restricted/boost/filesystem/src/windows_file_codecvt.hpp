@@ -12,7 +12,7 @@
 
 #include <boost/filesystem/config.hpp>
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
 
 #include <boost/config/workaround.hpp>
 #include <cstddef>
@@ -67,6 +67,6 @@ protected:
 
 #include <boost/filesystem/detail/footer.hpp>
 
-#endif // BOOST_WINDOWS_API
+#endif // BOOST_FILESYSTEM_WINDOWS_API
 
 #endif // BOOST_FILESYSTEM_WINDOWS_FILE_CODECVT_HPP

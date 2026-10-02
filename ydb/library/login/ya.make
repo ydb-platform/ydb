@@ -6,9 +6,11 @@ PEERDIR(
     library/cpp/digest/argonish
     library/cpp/json
     library/cpp/string_utils/base64
+    ydb/library/login/account_lockout
+    ydb/library/login/hashes_checker
     ydb/library/login/protos
     ydb/library/login/password_checker
-    ydb/library/login/account_lockout
+    ydb/library/login/sasl
 )
 
 SRCS(
@@ -23,6 +25,8 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE(
-    password_checker
     account_lockout
+    hashes_checker
+    password_checker
+    sasl
 )

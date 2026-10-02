@@ -2,23 +2,26 @@
 
 #include "control_plane_common.h"
 
-#include <ydb/core/kafka_proxy/kafka_events.h>
-
-#include <ydb/services/lib/actors/pq_schema_actor.h>
-
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <ydb/core/persqueue/public/schema/common.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 
 namespace NKafka {
 
-class TKafkaAlterConfigsRequest: public TKafkaTopicModificationRequest {
+class TKafkaAlterConfigsRequest: public TKafkaTopicRequestCtx {
 public:
     TKafkaAlterConfigsRequest(
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const std::string&)> sendResultCallback)
-        : TKafkaTopicModificationRequest(userToken, topicPath, databaseName, sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&, const google::protobuf::Message&)> sendResultCallback)
+        : TKafkaTopicRequestCtx(userToken, topicPath, databaseName, sendResultCallback)
     {
     };
 
@@ -26,7 +29,7 @@ protected:
     EKafkaErrors Convert(Ydb::StatusIds::StatusCode& status) override {
         return status == Ydb::StatusIds::BAD_REQUEST
                 ? INVALID_CONFIG
-                : TKafkaTopicModificationRequest::Convert(status);
+                : TKafkaTopicRequestCtx::Convert(status);
     }
 };
 
@@ -39,7 +42,9 @@ public:
             TString topicPath,
             TString databaseName,
             std::optional<ui64> retentionMs,
-            std::optional<ui64> retentionBytes)
+            std::optional<ui64> retentionBytes,
+            std::optional<ECleanupPolicy> cleanupPolicy,
+            std::optional<TString> timestampType)
         : TAlterTopicActor<TAlterConfigsActor, TKafkaAlterConfigsRequest>(
             requester,
             userToken,
@@ -47,22 +52,24 @@ public:
             databaseName)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
+        , CleanupPolicy(cleanupPolicy)
+        , TimestampType(timestampType)
     {
-        KAFKA_LOG_D("Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
+        YDB_LOG_DEBUG("Alter configs actor",
+            {LogPrefix()},
+            {"databaseName", databaseName},
+            {"topicPath", TopicPath});
     };
 
     ~TAlterConfigsActor() = default;
 
     void ModifyPersqueueConfig(
-            NKikimr::TAppData* appData,
-            NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-            const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-            const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimr::TAppData* appData,
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+        const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(appData);
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
-
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
@@ -72,11 +79,37 @@ public:
         if (RetentionBytes.has_value()) {
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
         }
+        if (TimestampType.has_value()) {
+            groupConfig.MutablePQTabletConfig()->SetTimestampType(TimestampType.value());
+        }
+        if (CleanupPolicy.has_value()) {
+            groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
+        }
+        if (pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && !groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            NKikimr::NGRpcProxy::V1::RemoveReadRuleFromConfig(
+                groupConfig.MutablePQTabletConfig(),
+                pqGroupDescription.GetPQTabletConfig(),
+                NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER,
+                appData->PQConfig
+            );
+        } else if (!pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.mutable_read_from()->set_seconds(0);
+            NKikimr::NPQ::NSchema::AddConsumer(
+                groupConfig.MutablePQTabletConfig(),
+                compConsumer,
+                NKikimr::NPQ::NSchema::GetSupportedClientServiceTypes(),
+                false, // checkServiceType
+                nullptr);
+        }
     }
-
 private:
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
+    std::optional<ECleanupPolicy> CleanupPolicy;
+    std::optional<TString> TimestampType;
 };
 
 NActors::IActor* CreateKafkaAlterConfigsActor(
@@ -89,7 +122,9 @@ NActors::IActor* CreateKafkaAlterConfigsActor(
 
 void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    KAFKA_LOG_D(InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -116,6 +151,8 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
+        std::optional<ECleanupPolicy> cleanupPolicy;
+        std::optional<TString> messageTimestampType;
 
         std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
@@ -129,6 +166,10 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 retentionMs = config.Value;
             } else if (config.Name.value() == RETENTION_BYTES_CONFIG_NAME) {
                 retentionBytes = config.Value;
+            }  else if (config.Name.value() == CLEANUP_POLICY) {
+                unsupportedConfigResponse = ConvertCleanupPolicy(config.Value, cleanupPolicy);
+            } else if (config.Name.value() == MESSAGE_TIMESTAMP_TYPE) {
+                unsupportedConfigResponse = ConvertTimestampType(config.Value, messageTimestampType);
             }
         }
 
@@ -146,11 +187,13 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.Register(new TAlterConfigsActor(
             SelfId(),
-            Context->UserToken,
+            Context->Token.UserToken,
             resource.ResourceName.value(),
             Context->DatabasePath,
             convertedRetentions.Ms,
-            convertedRetentions.Bytes
+            convertedRetentions.Bytes,
+            cleanupPolicy,
+            messageTimestampType
         ));
 
         InflyTopics++;
@@ -162,6 +205,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         Reply(ctx);
     }
 };
+
 
 void TKafkaAlterConfigsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
     auto eventPtr = ev->Release();
@@ -230,7 +274,9 @@ void TKafkaAlterConfigsActor::ProcessValidateOnly(const NActors::TActorContext& 
         response->Responses.push_back(responseResource);
     }
 
-    KAFKA_LOG_D("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId == " << CorrelationId);
+    YDB_LOG_DEBUG("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId",
+        {LogPrefix()},
+        {"correlationId", CorrelationId});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, NONE_ERROR));
     Die(ctx);

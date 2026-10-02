@@ -145,8 +145,11 @@ struct TPDiskFailureInjectionTest {
         PDiskGuid = Now().GetValue();
 
         // format pdisk
+        NKikimr::TFormatOptions options;
+        options.IsErasureEncodeUserLog = ErasureEncode;
+        options.EnableSmallDiskOptimization = false;
         NKikimr::FormatPDisk(PDiskFilePath, DiskSize, SectorSize, ChunkSize, PDiskGuid, 1, 1, 1, 1, "text message",
-                ErasureEncode, false, nullptr, false);
+                options);
 
         Cerr << "created pdisk at " << PDiskFilePath << Endl;
     }
@@ -229,7 +232,7 @@ struct TPDiskFailureInjectionTest {
         TObjectWithState::DeserializeCommonState(data);
         InitActorSystem();
         ActorSystem->Start();
-        LOG_NOTICE(*ActorSystem, NActorsServices::TEST, "actor system started");
+        YDB_LOG_NOTICE_CTX_COMP(*ActorSystem, NActorsServices::TEST, "Actor system started");
         test->Run(this, &StopEvent, stateManager);
     }
 

@@ -130,7 +130,7 @@ private:
             UNIT_ASSERT(statusVal.IsSuccess());
         }
         void AddEvent(
-                const TString& account, const TString& queueName, const EEvType& type, TInstant ts = TInstant::Zero(), TString labels = "{}")
+                const TString& account, const TString& queueName, const EEvType& type, TInstant ts = TInstant::Zero(), TMaybe<TString> labels = "{}")
         {
             if (ts == TInstant::Zero())
                 ts = CurrTs;
@@ -143,12 +143,12 @@ private:
                             << "\"myQueueCustomName\", "
                             << ts.MilliSeconds() << ", "
                             << "\"myFolder\", "
-                            << "\"" << labels << "\""
+                            << (labels.Defined() ? "\"" + labels.GetRef() + "\"" : "NULL")
                          << ");";
             ExecDataQuery(queryBuilder.c_str());
         }
 
-        void AddQueue(const TString& account, const TString& queueName, TInstant ts = TInstant::Zero(), TString tags = "{}") {
+        void AddQueue(const TString& account, const TString& queueName, TInstant ts = TInstant::Zero(), TMaybe<TString> tags = "{}") {
             if (ts == TInstant::Zero())
                 ts = CurrTs;
             TStringBuilder queryBuilder;
@@ -159,12 +159,12 @@ private:
                              << "\"myQueueCustomName\", "
                              << ts.MilliSeconds() << ", "
                              << "\"myFolder\", "
-                             << "\"" << tags << "\""
+                             << (tags.Defined() ? "\"" + tags.GetRef() + "\"" : "NULL")
                          << ");";
             ExecDataQuery(queryBuilder.c_str());
         }
 
-        void AddQueuesBatch(const TString& account, const TString& queueNameBase, ui64 count, ui64 startIndex = 0, TString tags = "{}") {
+        void AddQueuesBatch(const TString& account, const TString& queueNameBase, ui64 count, ui64 startIndex = 0, TMaybe<TString> tags = "{}") {
             Cerr << "===Started add queue batch\n";
             TDeque<NYdb::NTable::TAsyncDataQueryResult> results;
             ui64 maxInflight = 1;
@@ -181,7 +181,7 @@ private:
                              << "\"myQueueCustomName\", "
                              << CurrTs.MilliSeconds() << ", "
                              << "\"myFolder\", "
-                             << "\"" << tags << "\""
+                             << (tags.Defined() ? "\"" + tags.GetRef() + "\"" : "NULL")
                          << ");";
 
             auto preparedResult = session.PrepareDataQuery(queryBuilder.c_str()).GetValueSync();
@@ -293,12 +293,24 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(res_path.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res_path[0].GetMap().size(), 2);
 
-        if (labels.empty()) {
-            UNIT_ASSERT(map.find("labels") == map.end());
+        if (labels.empty() || labels == "{}") {
+            auto it1 = map.find("attributes");
+            if (it1 != map.end()) {
+                auto& attributes = it1->second.GetMap();
+                auto it2 = attributes.find("labels");
+                if (it2 != attributes.end()) {
+                    UNIT_ASSERT(it2->second.GetMap().empty());
+                }
+            }
         } else {
-            auto it = map.find("labels");
-            UNIT_ASSERT(it != map.end());
-            UNIT_ASSERT_VALUES_EQUAL(it->second.GetString(), labels);
+            NJson::TJsonMap labelsMap;
+            NJson::ReadJsonTree(labels, &labelsMap);
+            auto it1 = map.find("attributes");
+            UNIT_ASSERT(it1 != map.end());
+            auto& attributes = it1->second.GetMap();
+            auto it2 = attributes.find("labels");
+            UNIT_ASSERT(it2 != attributes.end());
+            UNIT_ASSERT_VALUES_EQUAL(it2->second.GetMap(), labelsMap.GetMap());
         }
 
         switch (type) {
@@ -323,41 +335,56 @@ private:
         TTestRunner("CreateIndexProcessor", this);
     }
 
-    void TestSingleCreateQueueEvent() {
+    void CheckSingleCreateQueueEvent(bool nullLabels) {
         TTestRunner runner{"SingleCreateQueueEvent", this};
         const TString labels = "{\"k1\": \"v1\"}";
         const TString escapedLabels = EscapeC(labels);
-        runner.AddEvent( "cloud1", "queue1", EEvType::Created, {}, escapedLabels);
+        runner.AddEvent("cloud1", "queue1", EEvType::Created, {}, nullLabels ? Nothing() : TMaybe<TString>(escapedLabels));
         runner.DispatchEvents();
         auto messages = runner.EventsWriter->GetMessages();
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2); // Events, reindex
-        CheckEventsLine(messages[0], EEvType::Created, {}, labels);
-        CheckEventsLine(messages[1], EEvType::Existed, {}, labels);
+        CheckEventsLine(messages[0], EEvType::Created, {}, nullLabels ? "{}" : labels);
+        CheckEventsLine(messages[1], EEvType::Existed, {}, nullLabels ? "{}" : labels);
         UNIT_ASSERT_VALUES_EQUAL(runner.CountEvents(), 0);
     }
 
-    void TestReindexSingleQueue() {
+    void TestSingleCreateQueueEvent() {
+        CheckSingleCreateQueueEvent(false);
+        CheckSingleCreateQueueEvent(true);
+    }
+
+    void CheckReindexSingleQueue(bool nullLabels) {
         TTestRunner runner{"ReindexSingleQueue", this};
         const TString labels = "{\"k1\": \"v1\"}";
         const TString escapedLabels = EscapeC(labels);
-        runner.AddQueue("cloud1", "queue1", {}, escapedLabels);
+        runner.AddQueue("cloud1", "queue1", {}, nullLabels ? Nothing() : TMaybe<TString>(escapedLabels));
         runner.DispatchEvents();
         auto messages = runner.EventsWriter->GetMessages();
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        CheckEventsLine(messages[0], EEvType::Existed, {}, labels);
+        CheckEventsLine(messages[0], EEvType::Existed, {}, nullLabels ? "{}" : labels);
     }
 
-    void TestDeletedQueueNotReindexed() {
+    void TestReindexSingleQueue() {
+        CheckReindexSingleQueue(false);
+        CheckReindexSingleQueue(true);
+    }
+
+    void CheckDeletedQueueNotReindexed(bool nullLabels) {
         TTestRunner runner{"DeletedQueueNotReindexed", this};
         const TString labels = "{\"k1\": \"v1\"}";
         const TString escapedLabels = EscapeC(labels);
-        runner.AddQueue("cloud1", "queue2", runner.PrevTs, escapedLabels);
-        runner.AddEvent("cloud1", "queue2", EEvType::Deleted, {}, escapedLabels);
+        runner.AddQueue("cloud1", "queue2", runner.PrevTs, nullLabels ? Nothing() : TMaybe<TString>(escapedLabels));
+        runner.AddEvent("cloud1", "queue2", EEvType::Deleted, {}, nullLabels ? Nothing() : TMaybe<TString>(escapedLabels));
         Sleep(TDuration::Seconds(1));
         runner.DispatchEvents();
         auto messages = runner.EventsWriter->GetMessages();
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        CheckEventsLine(messages[0], EEvType::Deleted, {}, labels);
+        CheckEventsLine(messages[0], EEvType::Deleted, {}, nullLabels ? "{}" : labels);
+    }
+
+    void TestDeletedQueueNotReindexed() {
+        CheckDeletedQueueNotReindexed(false);
+        CheckDeletedQueueNotReindexed(true);
     }
 
     void TestManyMessages() {

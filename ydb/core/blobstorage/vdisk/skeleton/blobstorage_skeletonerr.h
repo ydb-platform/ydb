@@ -290,7 +290,7 @@ namespace NKikimr {
             auto result = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(status, vdiskID, cookie, now,
                 ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes,
                 vdiskIncarnationGuid, errorReason);
-            Y_ABORT_UNLESS(record.ItemsSize() == statuses.size());
+            Y_VERIFY_S(record.ItemsSize() == statuses.size(), vctx->VDiskLogPrefix);
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = record.GetItems(itemIdx);
                 ui64 cookieValue = 0;
@@ -434,7 +434,7 @@ namespace NKikimr {
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             ui64 cookie = ev->Get()->Record.GetCookie();
             return std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(status, vdiskID, cookie, now, counterPtr, nullptr,
-                ev->GetChannel());
+                ev->GetChannel(), ev->Get()->Record.GetProtocol());
         }
 
         static inline std::unique_ptr<IEventBase>
@@ -483,6 +483,16 @@ namespace NKikimr {
                         const TIntrusivePtr<TBlobStorageGroupInfo>& /*groupInfo*/)
         {
             return std::make_unique<TEvGetLogoBlobIndexStatResponse>(status,vdiskID, now, nullptr, nullptr);
+        }
+
+        static inline std::unique_ptr<IEventBase>
+        ErroneousResult(const TVDiskContextPtr& /*vctx*/, const NKikimrProto::EReplyStatus status,
+                        const TString& errorReason, TEvGetVDiskSpaceReportRequest::TPtr& /*ev*/,
+                        const TInstant& now, const TActorIDPtr& /*skeletonFrontIDPtr*/,
+                        const TVDiskID& /*vdiskID*/, ui64 /*vdiskIncarnationGuid*/,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& /*groupInfo*/)
+        {
+            return std::make_unique<TEvGetVDiskSpaceReportResponse>(status, errorReason, now, nullptr, nullptr);
         }
     } // NErrBuilder
 

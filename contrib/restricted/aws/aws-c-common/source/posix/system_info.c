@@ -34,6 +34,16 @@ size_t aws_system_info_processor_count(void) {
     AWS_FATAL_POSTCONDITION(nprocs >= 0);
     return 0;
 }
+
+size_t aws_system_info_page_size(void) {
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (AWS_LIKELY(page_size >= 0)) {
+        return (size_t)page_size;
+    }
+
+    AWS_FATAL_POSTCONDITION(page_size >= 0);
+    return 0;
+}
 #else
 size_t aws_system_info_processor_count(void) {
 #    if defined(AWS_NUM_CPU_CORES)
@@ -43,6 +53,17 @@ size_t aws_system_info_processor_count(void) {
     return 1;
 #    endif
 }
+
+size_t aws_system_info_page_size(void) {
+#    if defined(AWS_PAGE_SIZE)
+    AWS_FATAL_PRECONDITION(AWS_PAGE_SIZE > 0);
+    return AWS_PAGE_SIZE;
+#    else
+    /* Default page size fallback - most systems use 4KiB pages */
+    AWS_LOGF(AWS_LL_INFO, AWS_LS_COMMON_GENERAL, "No page size found, fallback to 4KiB");
+    return 4096;
+#    endif
+}
 #endif
 
 #include <ctype.h>
@@ -50,10 +71,10 @@ size_t aws_system_info_processor_count(void) {
 
 uint16_t aws_get_cpu_group_count(void) {
     if (g_numa_num_configured_nodes_ptr) {
-        return (uint16_t)g_numa_num_configured_nodes_ptr();
+        return aws_max_u16(1, (uint16_t)g_numa_num_configured_nodes_ptr());
     }
 
-    return 1u;
+    return 1U;
 }
 
 size_t aws_get_cpu_count_for_group(uint16_t group_idx) {
@@ -242,7 +263,7 @@ int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *
     if (function_len >= (sizeof(frame->function) - 1)) {
         function_len = sizeof(frame->function) - 1;
     }
-    strncpy(frame->function, function_start, function_end - function_start);
+    strncpy(frame->function, function_start, function_len);
 
     /* find base addr for library/exe */
     Dl_info addr_info;
@@ -444,12 +465,15 @@ void aws_backtrace_log(int log_level) {
 }
 #endif /* AWS_HAVE_EXECINFO */
 
-#if defined(AWS_OS_APPLE)
 enum aws_platform_os aws_get_platform_build_os(void) {
+#if defined(AWS_OS_MACOS)
     return AWS_PLATFORM_OS_MAC;
-}
+// Other Apple platforms will be reported as iOS
+#elif defined(AWS_OS_APPLE)
+    return AWS_PLATFORM_OS_IOS;
+#elif defined(AWS_OS_ANDROID)
+    return AWS_PLATFORM_OS_ANDROID;
 #else
-enum aws_platform_os aws_get_platform_build_os(void) {
     return AWS_PLATFORM_OS_UNIX;
+#endif
 }
-#endif /* AWS_OS_APPLE */

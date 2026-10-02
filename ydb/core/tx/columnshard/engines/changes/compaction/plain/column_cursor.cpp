@@ -1,5 +1,6 @@
 #include "column_cursor.h"
-#include <ydb/library/formats/arrow/common/validation.h>
+
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -56,4 +57,4 @@ bool TPortionColumnCursor::Next(const ui32 portionRecordIdx, TMergedColumn& colu
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

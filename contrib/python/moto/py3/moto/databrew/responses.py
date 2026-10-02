@@ -1,27 +1,29 @@
 import json
-from urllib.parse import urlparse
+from typing import Any, Dict, Union
+from urllib.parse import unquote
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
 from moto.utilities.aws_headers import amzn_request_id
-from .models import databrew_backends
+from .models import databrew_backends, DataBrewBackend
 
 
 class DataBrewResponse(BaseResponse):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(service_name="databrew")
 
     @property
-    def databrew_backend(self):
+    def databrew_backend(self) -> DataBrewBackend:
         """Return backend instance specific for this region."""
         return databrew_backends[self.current_account][self.region]
 
     # region Recipes
     @property
-    def parameters(self):
+    def parameters(self) -> Dict[str, Any]:  # type: ignore[misc]
         return json.loads(self.body)
 
     @amzn_request_id
-    def create_recipe(self):
+    def create_recipe(self) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_CreateRecipe.html
         recipe_description = self.parameters.get("Description")
         recipe_steps = self.parameters.get("Steps")
@@ -29,17 +31,16 @@ class DataBrewResponse(BaseResponse):
         tags = self.parameters.get("Tags")
         return json.dumps(
             self.databrew_backend.create_recipe(
-                recipe_name, recipe_description, recipe_steps, tags
+                recipe_name, recipe_description, recipe_steps, tags  # type: ignore[arg-type]
             ).as_dict()
         )
 
     @amzn_request_id
-    def delete_recipe_version(self, request, full_url, headers):
+    def delete_recipe_version(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         # https://docs.aws.amazon.com/databrew/latest/dg/API_DeleteRecipeVersion.html
         if request.method == "DELETE":
-            parsed_url = urlparse(full_url)
-            split_path = parsed_url.path.strip("/").split("/")
+            split_path = self._get_path().strip("/").split("/")
             recipe_name = split_path[1]
             recipe_version = split_path[3]
             self.databrew_backend.delete_recipe_version(recipe_name, recipe_version)
@@ -49,8 +50,11 @@ class DataBrewResponse(BaseResponse):
                 json.dumps({"Name": recipe_name, "RecipeVersion": recipe_version}),
             )
 
+    def _get_path(self) -> str:
+        return unquote(self.parsed_url.path)
+
     @amzn_request_id
-    def list_recipes(self):
+    def list_recipes(self) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_ListRecipes.html
         next_token = self._get_param("NextToken", self._get_param("nextToken"))
         max_results = self._get_int_param(
@@ -74,7 +78,7 @@ class DataBrewResponse(BaseResponse):
         )
 
     @amzn_request_id
-    def list_recipe_versions(self, request, full_url, headers):
+    def list_recipe_versions(self, request: Any, full_url: str, headers: Any) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_ListRecipeVersions.html
         self.setup_class(request, full_url, headers)
         recipe_name = self._get_param("Name", self._get_param("name"))
@@ -95,25 +99,24 @@ class DataBrewResponse(BaseResponse):
         )
 
     @amzn_request_id
-    def publish_recipe(self, request, full_url, headers):
+    def publish_recipe(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "POST":
-            parsed_url = urlparse(full_url)
-            recipe_name = parsed_url.path.strip("/").split("/", 2)[1]
+            recipe_name = self._get_path().strip("/").split("/", 2)[1]
             recipe_description = self.parameters.get("Description")
             self.databrew_backend.publish_recipe(recipe_name, recipe_description)
             return 200, {}, json.dumps({"Name": recipe_name})
 
-    def put_recipe_response(self, recipe_name):
+    def put_recipe_response(self, recipe_name: str) -> TYPE_RESPONSE:
         recipe_description = self.parameters.get("Description")
         recipe_steps = self.parameters.get("Steps")
 
         self.databrew_backend.update_recipe(
-            recipe_name, recipe_description, recipe_steps
+            recipe_name, recipe_description, recipe_steps  # type: ignore[arg-type]
         )
         return 200, {}, json.dumps({"Name": recipe_name})
 
-    def get_recipe_response(self, recipe_name):
+    def get_recipe_response(self, recipe_name: str) -> TYPE_RESPONSE:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_DescribeRecipe.html
         recipe_version = self._get_param(
             "RecipeVersion", self._get_param("recipeVersion")
@@ -124,11 +127,10 @@ class DataBrewResponse(BaseResponse):
         return 200, {}, json.dumps(recipe.as_dict())
 
     @amzn_request_id
-    def recipe_response(self, request, full_url, headers):
+    def recipe_response(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        recipe_name = parsed_url.path.rstrip("/").rsplit("/", 1)[1]
+        recipe_name = self._get_path().rstrip("/").rsplit("/", 1)[1]
 
         if request.method == "PUT":
             return self.put_recipe_response(recipe_name)
@@ -140,7 +142,7 @@ class DataBrewResponse(BaseResponse):
     # region Rulesets
 
     @amzn_request_id
-    def create_ruleset(self):
+    def create_ruleset(self) -> str:
         ruleset_description = self.parameters.get("Description")
         ruleset_rules = self.parameters.get("Rules")
         ruleset_name = self.parameters.get("Name")
@@ -149,38 +151,37 @@ class DataBrewResponse(BaseResponse):
 
         return json.dumps(
             self.databrew_backend.create_ruleset(
-                ruleset_name,
-                ruleset_description,
-                ruleset_rules,
-                ruleset_target_arn,
-                tags,
+                ruleset_name,  # type: ignore[arg-type]
+                ruleset_description,  # type: ignore[arg-type]
+                ruleset_rules,  # type: ignore[arg-type]
+                ruleset_target_arn,  # type: ignore[arg-type]
+                tags,  # type: ignore[arg-type]
             ).as_dict()
         )
 
-    def put_ruleset_response(self, ruleset_name):
+    def put_ruleset_response(self, ruleset_name: str) -> TYPE_RESPONSE:
         ruleset_description = self.parameters.get("Description")
         ruleset_rules = self.parameters.get("Rules")
         tags = self.parameters.get("Tags")
 
         ruleset = self.databrew_backend.update_ruleset(
-            ruleset_name, ruleset_description, ruleset_rules, tags
+            ruleset_name, ruleset_description, ruleset_rules, tags  # type: ignore[arg-type]
         )
         return 200, {}, json.dumps(ruleset.as_dict())
 
-    def get_ruleset_response(self, ruleset_name):
+    def get_ruleset_response(self, ruleset_name: str) -> TYPE_RESPONSE:
         ruleset = self.databrew_backend.describe_ruleset(ruleset_name)
         return 200, {}, json.dumps(ruleset.as_dict())
 
-    def delete_ruleset_response(self, ruleset_name):
+    def delete_ruleset_response(self, ruleset_name: str) -> TYPE_RESPONSE:
         self.databrew_backend.delete_ruleset(ruleset_name)
         return 200, {}, json.dumps({"Name": ruleset_name})
 
     @amzn_request_id
-    def ruleset_response(self, request, full_url, headers):
+    def ruleset_response(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        ruleset_name = parsed_url.path.split("/")[-1]
+        ruleset_name = self._get_path().split("/")[-1]
 
         if request.method == "PUT":
             response = self.put_ruleset_response(ruleset_name)
@@ -191,7 +192,7 @@ class DataBrewResponse(BaseResponse):
             return self.delete_ruleset_response(ruleset_name)
 
     @amzn_request_id
-    def list_rulesets(self):
+    def list_rulesets(self) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_ListRulesets.html
         next_token = self._get_param("NextToken", self._get_param("nextToken"))
         max_results = self._get_int_param(
@@ -214,7 +215,7 @@ class DataBrewResponse(BaseResponse):
     # region Datasets
 
     @amzn_request_id
-    def create_dataset(self):
+    def create_dataset(self) -> str:
         dataset_name = self.parameters.get("Name")
         dataset_format = self.parameters.get("Format")
         dataset_format_options = self.parameters.get("FormatOptions")
@@ -224,17 +225,17 @@ class DataBrewResponse(BaseResponse):
 
         return json.dumps(
             self.databrew_backend.create_dataset(
-                dataset_name,
-                dataset_format,
-                dataset_format_options,
-                dataset_input,
-                dataset_path_otions,
-                dataset_tags,
+                dataset_name,  # type: ignore[arg-type]
+                dataset_format,  # type: ignore[arg-type]
+                dataset_format_options,  # type: ignore[arg-type]
+                dataset_input,  # type: ignore[arg-type]
+                dataset_path_otions,  # type: ignore[arg-type]
+                dataset_tags,  # type: ignore[arg-type]
             ).as_dict()
         )
 
     @amzn_request_id
-    def list_datasets(self):
+    def list_datasets(self) -> str:
         next_token = self._get_param("NextToken", self._get_param("nextToken"))
         max_results = self._get_int_param(
             "MaxResults", self._get_int_param("maxResults")
@@ -253,7 +254,7 @@ class DataBrewResponse(BaseResponse):
         )
 
     @amzn_request_id
-    def update_dataset(self, dataset_name):
+    def update_dataset(self, dataset_name: str) -> TYPE_RESPONSE:
         dataset_format = self.parameters.get("Format")
         dataset_format_options = self.parameters.get("FormatOptions")
         dataset_input = self.parameters.get("Input")
@@ -262,30 +263,29 @@ class DataBrewResponse(BaseResponse):
 
         dataset = self.databrew_backend.update_dataset(
             dataset_name,
-            dataset_format,
-            dataset_format_options,
-            dataset_input,
-            dataset_path_otions,
-            dataset_tags,
+            dataset_format,  # type: ignore[arg-type]
+            dataset_format_options,  # type: ignore[arg-type]
+            dataset_input,  # type: ignore[arg-type]
+            dataset_path_otions,  # type: ignore[arg-type]
+            dataset_tags,  # type: ignore[arg-type]
         )
         return 200, {}, json.dumps(dataset.as_dict())
 
     @amzn_request_id
-    def delete_dataset(self, dataset_name):
+    def delete_dataset(self, dataset_name: str) -> TYPE_RESPONSE:
         self.databrew_backend.delete_dataset(dataset_name)
         return 200, {}, json.dumps({"Name": dataset_name})
 
     @amzn_request_id
-    def describe_dataset(self, dataset_name):
+    def describe_dataset(self, dataset_name: str) -> TYPE_RESPONSE:
         dataset = self.databrew_backend.describe_dataset(dataset_name)
         return 200, {}, json.dumps(dataset.as_dict())
 
     @amzn_request_id
-    def dataset_response(self, request, full_url, headers):
+    def dataset_response(self, request: Any, full_url: str, headers: Any) -> Union[str, TYPE_RESPONSE]:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        dataset_name = parsed_url.path.split("/")[-1]
+        dataset_name = self._get_path().split("/")[-1]
 
         if request.method == "POST":
             return self.create_dataset()
@@ -302,7 +302,7 @@ class DataBrewResponse(BaseResponse):
 
     # region Jobs
     @amzn_request_id
-    def list_jobs(self, request, full_url, headers):
+    def list_jobs(self, request: Any, full_url: str, headers: Any) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_ListJobs.html
         self.setup_class(request, full_url, headers)
         dataset_name = self._get_param("datasetName")
@@ -326,20 +326,19 @@ class DataBrewResponse(BaseResponse):
             }
         )
 
-    def get_job_response(self, job_name):
+    def get_job_response(self, job_name: str) -> TYPE_RESPONSE:
         job = self.databrew_backend.describe_job(job_name)
         return 200, {}, json.dumps(job.as_dict())
 
-    def delete_job_response(self, job_name):
+    def delete_job_response(self, job_name: str) -> TYPE_RESPONSE:
         self.databrew_backend.delete_job(job_name)
         return 200, {}, json.dumps({"Name": job_name})
 
     @amzn_request_id
-    def job_response(self, request, full_url, headers):
+    def job_response(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        job_name = parsed_url.path.rstrip("/").rsplit("/", 1)[1]
+        job_name = self._get_path().rstrip("/").rsplit("/", 1)[1]
 
         if request.method == "GET":
             return self.get_job_response(job_name)
@@ -347,7 +346,7 @@ class DataBrewResponse(BaseResponse):
             return self.delete_job_response(job_name)
 
     @amzn_request_id
-    def create_profile_job(self):
+    def create_profile_job(self) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_CreateProfileJob.html
         kwargs = {
             "dataset_name": self._get_param("DatasetName"),
@@ -367,7 +366,7 @@ class DataBrewResponse(BaseResponse):
         }
         return json.dumps(self.databrew_backend.create_profile_job(**kwargs).as_dict())
 
-    def update_profile_job_response(self, name):
+    def update_profile_job_response(self, name: str) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_UpdateProfileJob.html
         kwargs = {
             "name": name,
@@ -386,7 +385,7 @@ class DataBrewResponse(BaseResponse):
         return json.dumps(self.databrew_backend.update_profile_job(**kwargs).as_dict())
 
     @amzn_request_id
-    def create_recipe_job(self):
+    def create_recipe_job(self) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_CreateRecipeJob.html
         kwargs = {
             "name": self._get_param("Name"),
@@ -408,7 +407,7 @@ class DataBrewResponse(BaseResponse):
         return json.dumps(self.databrew_backend.create_recipe_job(**kwargs).as_dict())
 
     @amzn_request_id
-    def update_recipe_job_response(self, name):
+    def update_recipe_job_response(self, name: str) -> str:
         # https://docs.aws.amazon.com/databrew/latest/dg/API_UpdateRecipeJob.html
         kwargs = {
             "name": name,
@@ -426,21 +425,19 @@ class DataBrewResponse(BaseResponse):
         return json.dumps(self.databrew_backend.update_recipe_job(**kwargs).as_dict())
 
     @amzn_request_id
-    def profile_job_response(self, request, full_url, headers):
+    def profile_job_response(self, request: Any, full_url: str, headers: Any) -> str:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        job_name = parsed_url.path.rstrip("/").rsplit("/", 1)[1]
+        job_name = self._get_path().rstrip("/").rsplit("/", 1)[1]
 
         if request.method == "PUT":
             return self.update_profile_job_response(job_name)
 
     @amzn_request_id
-    def recipe_job_response(self, request, full_url, headers):
+    def recipe_job_response(self, request: Any, full_url: str, headers: Any) -> str:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
-        parsed_url = urlparse(full_url)
 
-        job_name = parsed_url.path.rstrip("/").rsplit("/", 1)[1]
+        job_name = self._get_path().rstrip("/").rsplit("/", 1)[1]
 
         if request.method == "PUT":
             return self.update_recipe_job_response(job_name)

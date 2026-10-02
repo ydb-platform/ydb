@@ -43,6 +43,7 @@ TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConv
                     .Columns(columns)
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(settings.Cast())
@@ -60,7 +61,7 @@ TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConv
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::Unordered, ctx);
                 makeUnordered = false;
             }
-            if (!opts.KeepDirecRead_) {
+            if (!opts.KeepDirectRead_) {
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::DirectRead, ctx);
             }
             if (opts.Settings_) {
@@ -579,6 +580,63 @@ TExprNode::TPtr BuildYtEquiJoinPremap(TExprBase list, TMaybeNode<TCoLambda> prem
     return {};
 }
 
+TExprBase BuildMapForPruneKeys(
+    const TExprBase node,
+    const TExprNode::TPtr extractorLambda,
+    bool isOrdered,
+    const TString& cluster,
+    const TExprNode::TPtr newWorld,
+    const TYtSectionList newInput,
+    const TTypeAnnotationNode* outItemType,
+    TExprContext& ctx,
+    const TYtState::TPtr& state) {
+
+    auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+    auto mapper = ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("stream")
+            .Callable(pruneKeysCallable)
+                .Arg(0, "stream")
+                .Add(1, extractorLambda)
+            .Seal()
+        .Seal()
+        .Build();
+
+    TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, isOrdered, node.Pos(),
+        outItemType, cluster, ctx, state, node.Ref().GetConstraintSet());
+
+    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
+    if (isOrdered) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Ordered))
+                .Build()
+            .Build();
+    }
+    if (state->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Flow))
+                .Build()
+            .Build();
+    }
+
+    auto map = Build<TYtMap>(ctx, node.Pos())
+        .World(newWorld)
+        .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+        .Input(newInput)
+        .Output()
+            .Add(outTables)
+        .Build()
+        .Settings(settingsBuilder.Done())
+        .Mapper(std::move(mapper))
+        .Done();
+
+    return WrapOp(map, ctx);
+}
+
 // label -> pair(<asc sort keys>, <inputs matched by keys>)
 THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> CollectTableSortKeysUsage(const TYtState::TPtr& state, const TCoEquiJoin& equiJoin) {
     THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> tableSortKeys;
@@ -678,14 +736,26 @@ TCoLambda FallbackLambdaOutput(TCoLambda lambda, TExprContext& ctx) {
     return lambda;
 }
 
-TYtDSink GetDataSink(TExprBase input, TExprContext& ctx) {
-    if (auto read = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
-        return TYtDSink(ctx.RenameNode(read.Cast().DataSource().Ref(), "DataSink"));
-    } else if (auto out = input.Maybe<TYtOutput>()) {
-        return GetOutputOp(out.Cast()).DataSink();
-    } else {
-        YQL_ENSURE(false, "Unknown operation input");
-    }
+TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSink>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
+}
+
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSource>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
 }
 
 TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ctx) {
@@ -705,7 +775,7 @@ TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ct
 }
 
 TConvertInputOpts::TConvertInputOpts()
-            : KeepDirecRead_(false)
+            : KeepDirectRead_(false)
             , MakeUnordered_(false)
             , ClearUnordered_(false)
 {
@@ -747,8 +817,8 @@ TConvertInputOpts::ExplicitFields(const TStructExprType& type, TPositionHandle p
 }
 
 TConvertInputOpts&
-TConvertInputOpts::KeepDirecRead(bool keepDirecRead) {
-    KeepDirecRead_ = keepDirecRead;
+TConvertInputOpts::KeepDirectRead(bool keepDirectRead) {
+    KeepDirectRead_ = keepDirectRead;
     return *this;
 }
 
@@ -910,15 +980,15 @@ TCoLambda MapEmbedInputFieldsFilter(TCoLambda lambda, bool ordered, TCoAtomList 
         .Build());
 }
 
-TVector<TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TMultiConstraintNode* multi) {
     TVector<TYtOutTable> outTables;
     YQL_ENSURE(outItemType->GetKind() == ETypeAnnotationKind::Variant);
     const TTupleExprType* tupleType = outItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
     size_t ndx = 0;
-    const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *state->Configuration);
     for (auto tupleItemType: tupleType->GetItems()) {
-        TYtOutTableInfo outTableInfo(tupleItemType->Cast<TStructExprType>(), nativeTypeFlags);
+        TYtOutTableInfo outTableInfo(tupleItemType->Cast<TStructExprType>(), nativeTypeCompatibility);
         const TConstraintSet* constraints = multi ? multi->GetItem(ndx) : nullptr;
         if (constraints) {
             outTableInfo.RowSpec->SetConstraints(*constraints);
@@ -929,13 +999,13 @@ TVector<TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnot
     return outTables;
 }
 
-TVector<TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TConstraintSet* constraint) {
     if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
-        return ConvertMultiOutTables(pos, outItemType, ctx, state, constraint ? constraint->GetConstraint<TMultiConstraintNode>() : nullptr);
+        return ConvertMultiOutTables(pos, outItemType, cluster, ctx, state, constraint ? constraint->GetConstraint<TMultiConstraintNode>() : nullptr);
     }
 
-    TYtOutTableInfo outTableInfo(outItemType->Cast<TStructExprType>(), state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTableInfo(outItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *state->Configuration));
     if (constraint) {
         outTableInfo.RowSpec->SetConstraints(*constraint);
     }
@@ -943,12 +1013,13 @@ TVector<TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotation
 }
 
 TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
 
     YQL_ENSURE(outItemType->GetKind() == ETypeAnnotationKind::Variant);
 
-    const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+    const auto nativeTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *state->Configuration);
     const auto multi = constraints.GetConstraint<TMultiConstraintNode>();
     const TTupleExprType* tupleType = outItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
 
@@ -958,12 +1029,12 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
     TVector<TExprBase> switchArgs;
     for (auto tupleItemType: tupleType->GetItems()) {
         const TConstraintSet* itemConstraints = multi ? multi->GetItem(ndx) : nullptr;
-        TYtOutTableInfo outTable(tupleItemType->Cast<TStructExprType>(), nativeTypeFlags);
+        TYtOutTableInfo outTable(tupleItemType->Cast<TStructExprType>(), nativeTypeCompatibility);
         TExprNode::TPtr remapper;
         if (auto sorted = itemConstraints ? itemConstraints->GetConstraint<TSortedConstraintNode>() : nullptr) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, tupleItemType->Cast<TStructExprType>());
             builder.ProcessConstraint(*sorted);
-            builder.FillRowSpecSort(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 remapper = builder.MakeRemapLambda(true);
             }
@@ -1027,18 +1098,18 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
 }
 
 TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
 
-    const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     const auto outStructType = outItemType->Cast<TStructExprType>();
 
     ordered = false;
-    TYtOutTableInfo outTable(outStructType, nativeTypeFlags);
+    TYtOutTableInfo outTable(outStructType, GetNativeYtTypeCompatibility(cluster, *state->Configuration));
     if (auto sorted = constraints.GetConstraint<TSortedConstraintNode>()) {
         TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, outStructType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             lambda = ctx.Builder(pos)
@@ -1062,13 +1133,13 @@ TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& or
 }
 
 TVector<TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints) {
     TVector<TYtOutTable> outTables;
     if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
-        return ConvertMultiOutTablesWithSortAware(lambda, ordered, pos, outItemType, ctx, state, constraints);
+        return ConvertMultiOutTablesWithSortAware(lambda, ordered, pos, outItemType, cluster, ctx, state, constraints);
     }
 
-    return TVector<TYtOutTable>{ConvertSingleOutTableWithSortAware(lambda, ordered, pos, outItemType, ctx, state, constraints)};
+    return TVector<TYtOutTable>{ConvertSingleOutTableWithSortAware(lambda, ordered, pos, outItemType, cluster, ctx, state, constraints)};
 }
 
 bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state) {
@@ -1077,20 +1148,18 @@ bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& 
     }
     if (type.GetKind() == ETypeAnnotationKind::Variant) {
         for (auto tupleItemType: type.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems()) {
-            if (tupleItemType->HasBareYson() && 0 != NYql::GetNativeYtTypeFlags(*tupleItemType->Cast<TStructExprType>())) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tupleItemType));
+            if (tupleItemType->HasBareYson() && (NYql::GetNativeYtTypeFlags(*tupleItemType->Cast<TStructExprType>()) & NTCF_COMPLEX)) {
+                ReportNonWritableBareYsonError(ctx.GetPosition(pos), *tupleItemType->Cast<TStructExprType>(), ctx);
                 return false;
             }
         }
 
-    } else if (type.HasBareYson() && 0 != NYql::GetNativeYtTypeFlags(*type.Cast<TStructExprType>())) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                    << type));
+    } else if (type.HasBareYson() && (NYql::GetNativeYtTypeFlags(*type.Cast<TStructExprType>()) & NTCF_COMPLEX)) {
+        ReportNonWritableBareYsonError(ctx.GetPosition(pos), *type.Cast<TStructExprType>(), ctx);
         return false;
     }
 
     return true;
 }
 
-}  // namespace NYql
+} // namespace NYql

@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include "events.h"
 #include <ydb/core/ymq/base/table_info.h>
@@ -35,6 +35,9 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 
 THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveDirectoryEvent(const TString& root, const TString& name);
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeRemoveTopicEvent(const TString& root, const TString& name);
 
 // Create actor that calls AddQuoterResource and handles pipe errors and retries
 TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);

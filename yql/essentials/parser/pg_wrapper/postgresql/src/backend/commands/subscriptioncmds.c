@@ -1008,10 +1008,10 @@ AlterSubscription_refresh(Subscription *sub, bool copy_data,
 					 *
 					 * It is possible that the origin is not yet created for
 					 * tablesync worker, this can happen for the states before
-					 * SUBREL_STATE_FINISHEDCOPY. The tablesync worker or
-					 * apply worker can also concurrently try to drop the
-					 * origin and by this time the origin might be already
-					 * removed. For these reasons, passing missing_ok = true.
+					 * SUBREL_STATE_DATASYNC. The tablesync worker or apply
+					 * worker can also concurrently try to drop the origin and
+					 * by this time the origin might be already removed. For
+					 * these reasons, passing missing_ok = true.
 					 */
 					ReplicationOriginNameForLogicalRep(sub->oid, relid, originname,
 													   sizeof(originname));
@@ -1491,10 +1491,12 @@ DropSubscription(DropSubscriptionStmt *stmt, bool isTopLevel)
 	bool		must_use_password;
 
 	/*
-	 * Lock pg_subscription with AccessExclusiveLock to ensure that the
-	 * launcher doesn't restart new worker during dropping the subscription
+	 * The launcher may concurrently start a new worker for this subscription.
+	 * During initialization, the worker checks for subscription validity and
+	 * exits if the subscription has already been dropped. See
+	 * InitializeLogRepWorker.
 	 */
-	rel = table_open(SubscriptionRelationId, AccessExclusiveLock);
+	rel = table_open(SubscriptionRelationId, RowExclusiveLock);
 
 	tup = SearchSysCache2(SUBSCRIPTIONNAME, MyDatabaseId,
 						  CStringGetDatum(stmt->subname));
@@ -1636,7 +1638,7 @@ DropSubscription(DropSubscriptionStmt *stmt, bool isTopLevel)
 		 *
 		 * It is possible that the origin is not yet created for tablesync
 		 * worker so passing missing_ok = true. This can happen for the states
-		 * before SUBREL_STATE_FINISHEDCOPY.
+		 * before SUBREL_STATE_DATASYNC.
 		 */
 		ReplicationOriginNameForLogicalRep(subid, relid, originname,
 										   sizeof(originname));
@@ -1931,11 +1933,12 @@ AlterSubscriptionOwner_oid(Oid subid, Oid newOwnerId)
 }
 
 /*
- * Check and log a warning if the publisher has subscribed to the same table
- * from some other publisher. This check is required only if "copy_data = true"
- * and "origin = none" for CREATE SUBSCRIPTION and
- * ALTER SUBSCRIPTION ... REFRESH statements to notify the user that data
- * having origin might have been copied.
+ * Check and log a warning if the publisher has subscribed to the same table,
+ * its partition ancestors (if it's a partition), or its partition children (if
+ * it's a partitioned table), from some other publishers. This check is
+ * required only if "copy_data = true" and "origin = none" for CREATE
+ * SUBSCRIPTION and ALTER SUBSCRIPTION ... REFRESH statements to notify the
+ * user that data having origin might have been copied.
  *
  * This check need not be performed on the tables that are already added
  * because incremental sync for those tables will happen through WAL and the
@@ -1965,7 +1968,9 @@ check_publications_origin(WalReceiverConn *wrconn, List *publications,
 						   "SELECT DISTINCT P.pubname AS pubname\n"
 						   "FROM pg_publication P,\n"
 						   "     LATERAL pg_get_publication_tables(P.pubname) GPT\n"
-						   "     JOIN pg_subscription_rel PS ON (GPT.relid = PS.srrelid),\n"
+						   "     JOIN pg_subscription_rel PS ON (GPT.relid = PS.srrelid OR"
+						   "     GPT.relid IN (SELECT relid FROM pg_partition_ancestors(PS.srrelid) UNION"
+						   "                   SELECT relid FROM pg_partition_tree(PS.srrelid))),\n"
 						   "     pg_class C JOIN pg_namespace N ON (N.oid = C.relnamespace)\n"
 						   "WHERE C.oid = GPT.relid AND P.pubname IN (");
 	get_publications_str(publications, &cmd, true);
@@ -1981,9 +1986,14 @@ check_publications_origin(WalReceiverConn *wrconn, List *publications,
 		Oid			relid = subrel_local_oids[i];
 		char	   *schemaname = get_namespace_name(get_rel_namespace(relid));
 		char	   *tablename = get_rel_name(relid);
+		char	   *schemaname_lit = quote_literal_cstr(schemaname);
+		char	   *tablename_lit = quote_literal_cstr(tablename);
 
-		appendStringInfo(&cmd, "AND NOT (N.nspname = '%s' AND C.relname = '%s')\n",
-						 schemaname, tablename);
+		appendStringInfo(&cmd, "AND NOT (N.nspname = %s AND C.relname = %s)\n",
+						 schemaname_lit, tablename_lit);
+
+		pfree(schemaname_lit);
+		pfree(tablename_lit);
 	}
 
 	res = walrcv_exec(wrconn, cmd.data, 1, tableRow);

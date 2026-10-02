@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(json2_udf)
         28
         0
     )
-    
+
     SRCS(
         json2_udf.cpp
     )

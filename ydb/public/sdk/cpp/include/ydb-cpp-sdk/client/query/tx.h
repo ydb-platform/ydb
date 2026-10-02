@@ -1,47 +1,66 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/stream/output.h>
 
-#include <optional>
+namespace NYdb::inline Dev::NQuery {
 
-namespace NYdb::inline V3::NQuery {
-
+//! Additional settings for an online read-only transaction.
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
 
+    //! Allows an individual read to observe inconsistent data; disabled by default.
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 
+    //! Constructs online read-only settings with consistent individual reads.
     TTxOnlineSettings() {}
 };
 
+//! Selects the isolation and access mode of a query transaction.
 struct TTxSettings {
     using TSelf = TTxSettings;
 
+    //! Constructs serializable read-write transaction settings.
     TTxSettings()
         : Mode_(TS_SERIALIZABLE_RW) {}
 
+    //! Creates serializable read-write transaction settings.
     static TTxSettings SerializableRW() {
         return TTxSettings(TS_SERIALIZABLE_RW);
     }
 
+    //! Creates online read-only transaction settings.
     static TTxSettings OnlineRO(const TTxOnlineSettings& settings = TTxOnlineSettings()) {
         return TTxSettings(TS_ONLINE_RO).OnlineSettings(settings);
     }
 
+    //! Creates stale read-only transaction settings.
     static TTxSettings StaleRO() {
         return TTxSettings(TS_STALE_RO);
     }
 
+    //! Creates snapshot read-only transaction settings.
     static TTxSettings SnapshotRO() {
         return TTxSettings(TS_SNAPSHOT_RO);
     }
 
+    //! Creates snapshot read-write transaction settings.
     static TTxSettings SnapshotRW() {
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    //! Creates read-committed read-write transaction settings.
+    static TTxSettings ReadCommittedRW() {
+        return TTxSettings(TS_READ_COMMITTED_RW);
+    }
+
+    //! Creates strict-serializable read-write transaction settings.
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
+    //! Writes a human-readable transaction mode name to out.
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -59,22 +78,40 @@ struct TTxSettings {
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_READ_COMMITTED_RW:
+            out << "ReadCommittedRW";
+            break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
         }
     }
 
+    //! Transaction isolation and access modes supported by Query Service.
     enum ETransactionMode {
+        //! Serializable read-write mode.
         TS_SERIALIZABLE_RW,
+        //! Online read-only mode.
         TS_ONLINE_RO,
+        //! Stale read-only mode.
         TS_STALE_RO,
+        //! Snapshot read-only mode.
         TS_SNAPSHOT_RO,
+        //! Snapshot read-write mode.
         TS_SNAPSHOT_RW,
+        //! Read-committed read-write mode.
+        TS_READ_COMMITTED_RW,
+        //! Strict-serializable read-write mode.
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
+    //! Sets options used by online read-only mode.
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
 
+    //! Returns the selected transaction mode.
     ETransactionMode GetMode() const {
         return Mode_;
     }
@@ -85,35 +122,4 @@ private:
     ETransactionMode Mode_;
 };
 
-struct TTxControl {
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const std::string& txId) {
-        return TTxControl(txId);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    static TTxControl NoTx() {
-        return TTxControl();
-    }
-
-    const std::optional<std::string> TxId_;
-    const std::optional<TTxSettings> TxSettings_;
-    FLUENT_SETTING_FLAG(CommitTx);
-
-    bool HasTx() const { return TxId_.has_value() || TxSettings_.has_value(); }
-
-private:
-    TTxControl() {}
-
-    TTxControl(const std::string& txId)
-        : TxId_(txId) {}
-
-    TTxControl(const TTxSettings& txSettings)
-        : TxSettings_(txSettings) {}
-};
-
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

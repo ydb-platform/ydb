@@ -38,11 +38,17 @@ public:
     //! NB: This thread pool is different from the underlying thread pool beneath two previous invokers.
     const NConcurrency::IFairShareThreadPoolPtr& GetFairShareCompressionThreadPool();
 
-    //! Returns true if alert must be issued when a request is missing request info.
-    bool ShouldAlertOnMissingRequestInfo();
+    //! Returns true if alert must be issued when a request carries no annotations.
+    bool ShouldAlertOnMissingRequestAnnotation();
 
     //! Returns true if tracing baggage must be sent.
     bool ShouldSendTracingBaggage();
+
+    //! Returns default request timeout.
+    TDuration GetDefaultRequestTimeout();
+
+    //! Returns true if alert must be issued when rpc timeout is unset.
+    bool ShouldAlertOnUnsetRequestTimeout();
 
     NServiceDiscovery::IServiceDiscoveryPtr GetServiceDiscovery();
     void SetServiceDiscovery(NServiceDiscovery::IServiceDiscoveryPtr serviceDiscovery);

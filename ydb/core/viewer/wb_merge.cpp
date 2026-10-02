@@ -1,11 +1,23 @@
 #include "wb_merge.h"
 
+#include <util/system/rwlock.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
 
-std::unordered_map<TWhiteboardMergerBase::TMergerKey, TWhiteboardMergerBase::TMergerValue> TWhiteboardMergerBase::FieldMerger;
+namespace {
+
+TWhiteboardMergerBase::TMergeFieldsMap FieldMerger;
+
+} // anonymous namespace
+
+TWhiteboardMergerBase::TRegistrator::TRegistrator(TWhiteboardMergerBase::TMergeFieldsMap&& fields) {
+    for (auto& [key, value] : fields) {
+        FieldMerger[key] = std::move(value);
+    }
+}
 
 void TWhiteboardMergerBase::ProtoMaximizeEnumField(
         const ::google::protobuf::Reflection& reflectionTo,
@@ -214,4 +226,4 @@ void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const
     }
 }
 
-}
+} // namespace NKikimr::NViewer

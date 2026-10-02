@@ -60,6 +60,7 @@ public:
     using TSinkCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TSinkArguments&& args)>;
     using TInputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TInputTransformArguments&& args)>;
     using TOutputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TOutputTransformArguments&& args)>;
+    using TControlPlaneCreatorFunction = std::function<NActors::IActor*(TControlPlaneArguments&& args)>;
 
     // Registration
     void RegisterSource(const TString& type, TSourceCreatorFunction creator);
@@ -177,12 +178,15 @@ public:
         });
     }
 
+    void RegisterControlPlane(const TString& type, TControlPlaneCreatorFunction creator);
+
     // Creation
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TSourceArguments&& args) const override;
     std::pair<IDqAsyncLookupSource*, NActors::IActor*> CreateDqLookupSource(TStringBuf type, TLookupSourceArguments&& args) const override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TSinkArguments&& args) const override;
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqInputTransform(TInputTransformArguments&& args) override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TOutputTransformArguments&& args) override;
+    NActors::IActor* CreateDqControlPlane(TControlPlaneArguments&& args) override;
 
 private:
     THashMap<TString, TSourceCreatorFunction> SourceCreatorsByType;
@@ -190,6 +194,7 @@ private:
     THashMap<TString, TSinkCreatorFunction> SinkCreatorsByType;
     THashMap<TString, TInputTransformCreatorFunction> InputTransformCreatorsByType;
     THashMap<TString, TOutputTransformCreatorFunction> OutputTransformCreatorsByType;
+    THashMap<TString, TControlPlaneCreatorFunction> ControlPlaneCreatorsByType;
 };
 
 } // namespace NYql::NDq

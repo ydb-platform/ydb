@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 namespace NKikimr {
 
@@ -46,8 +46,6 @@ namespace NKikimr {
             TEvBlobStorage::TEvVPut::TPtr ev)>;
     using TVMultiPutHandler = std::function<void(const TActorContext &ctx,
             TEvBlobStorage::TEvVMultiPut::TPtr ev)>;
-    using TLocalSyncDataHandler = std::function<void(const TActorContext &ctx, TEvLocalSyncData::TPtr ev)>;
-    using TAnubisOsirisPutHandler = std::function<void(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev)>;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     // TOverloadHandler is used to postpone or throttle events if message put rate is too high.
@@ -69,9 +67,7 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut,
-                TLocalSyncDataHandler &&loc,
-                TAnubisOsirisPutHandler &&aoput);
+                TVMultiPutHandler &&vMultiPut);
         ~TOverloadHandler();
 
         // call it when Hull database is changed (puts, etc) -- it recalculates ranks

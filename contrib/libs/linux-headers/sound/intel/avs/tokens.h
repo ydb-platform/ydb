@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
- * Copyright(c) 2021 Intel Corporation. All rights reserved.
+ * Copyright(c) 2021 Intel Corporation
  *
  * Authors: Cezary Rojewski <cezary.rojewski@intel.com>
  *          Amadeusz Slawinski <amadeuszx.slawinski@linux.intel.com>
@@ -19,6 +19,8 @@ enum avs_tplg_token {
 	AVS_TKN_MANIFEST_NUM_MODCFGS_EXT_U32		= 6,
 	AVS_TKN_MANIFEST_NUM_PPLCFGS_U32		= 7,
 	AVS_TKN_MANIFEST_NUM_BINDINGS_U32		= 8,
+	AVS_TKN_MANIFEST_NUM_CONDPATH_TMPLS_U32		= 9,
+	AVS_TKN_MANIFEST_NUM_INIT_CONFIGS_U32		= 10,
 
 	/* struct avs_tplg_library */
 	AVS_TKN_LIBRARY_ID_U32				= 101,
@@ -75,6 +77,17 @@ enum avs_tplg_token {
 	AVS_TKN_MODCFG_UPDOWN_MIX_CHAN_MAP_U32		= 430,
 	AVS_TKN_MODCFG_EXT_NUM_INPUT_PINS_U16		= 431,
 	AVS_TKN_MODCFG_EXT_NUM_OUTPUT_PINS_U16		= 432,
+	AVS_TKN_MODCFG_WHM_REF_AFMT_ID_U32		= 433,
+	AVS_TKN_MODCFG_WHM_OUT_AFMT_ID_U32		= 434,
+	AVS_TKN_MODCFG_WHM_WAKE_TICK_PERIOD_U32		= 435,
+	AVS_TKN_MODCFG_WHM_VINDEX_U8			= 436,
+	AVS_TKN_MODCFG_WHM_DMA_TYPE_U32			= 437,
+	AVS_TKN_MODCFG_WHM_DMABUFF_SIZE_U32		= 438,
+	AVS_TKN_MODCFG_WHM_BLOB_AFMT_ID_U32		= 439,
+	AVS_TKN_MODCFG_PEAKVOL_VOLUME_U32		= 440,
+	AVS_TKN_MODCFG_PEAKVOL_CHANNEL_ID_U32		= 441, /* reserved */
+	AVS_TKN_MODCFG_PEAKVOL_CURVE_TYPE_U32		= 442,
+	AVS_TKN_MODCFG_PEAKVOL_CURVE_DURATION_U32	= 443,
 
 	/* struct avs_tplg_pplcfg */
 	AVS_TKN_PPLCFG_ID_U32				= 1401,
@@ -109,6 +122,8 @@ enum avs_tplg_token {
 	AVS_TKN_MOD_PROC_DOMAIN_U8			= 1705,
 	AVS_TKN_MOD_MODCFG_EXT_ID_U32			= 1706,
 	AVS_TKN_MOD_KCONTROL_ID_U32			= 1707,
+	AVS_TKN_MOD_INIT_CONFIG_NUM_IDS_U32		= 1708,
+	AVS_TKN_MOD_INIT_CONFIG_ID_U32			= 1709,
 
 	/* struct avs_tplg_path_template */
 	AVS_TKN_PATH_TMPL_ID_U32			= 1801,
@@ -125,6 +140,11 @@ enum avs_tplg_token {
 
 	/* struct avs_tplg_kcontrol */
 	AVS_TKN_KCONTROL_ID_U32				= 2301,
+
+	/* struct avs_tplg_init_config */
+	AVS_TKN_INIT_CONFIG_ID_U32			= 2401,
+	AVS_TKN_INIT_CONFIG_PARAM_U8			= 2402,
+	AVS_TKN_INIT_CONFIG_LENGTH_U32			= 2403,
 };
 
 #endif

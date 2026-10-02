@@ -114,6 +114,18 @@ bool TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &va
     return Counters.empty();
 }
 
+void TDynamicCounters::RemoveHistogram(const TString &value) {
+    RemoveNamedHistogram("sensor", value);
+}
+
+bool TDynamicCounters::RemoveNamedHistogram(const TString& name, const TString &value) {
+    auto g = LockForUpdate("RemoveNamedHistogram", name, value);
+    if (const auto it = Counters.find({name, value}); it != Counters.end() && AsHistogram(it->second)) {
+        Counters.erase(it);
+    }
+    return Counters.empty();
+}
+
 void TDynamicCounters::RemoveSubgroupChain(const std::vector<std::pair<TString, TString>>& chain) {
     std::vector<TIntrusivePtr<TDynamicCounters>> basePointers;
     basePointers.push_back(this);
@@ -139,6 +151,18 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
         }
     }
     return res;
+}
+
+TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name) const {
+    TReadGuard g(Lock);
+    const auto it = Counters.lower_bound({name, TString()});
+    if (it != Counters.end() && it->first.LabelName == name) {
+        const auto it2 = std::next(it);
+        if (it2 == Counters.end() || it2->first.LabelName != name) {
+            return AsDynamicCounters(it->second);
+        }
+    }
+    return nullptr;
 }
 
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const {

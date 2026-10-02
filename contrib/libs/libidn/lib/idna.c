@@ -1,5 +1,5 @@
 /* idna.c --- Prototypes for Internationalized Domain Name library.
-   Copyright (C) 2002-2024 Simon Josefsson
+   Copyright (C) 2002-2025 Simon Josefsson
 
    This file is part of GNU Libidn.
 
@@ -689,6 +689,7 @@ idna_to_unicode_4z4z (const uint32_t *input, uint32_t **output, int flags)
   size_t buflen;
   uint32_t *out = NULL;
   size_t outlen = 0;
+  int rc;
 
   *output = NULL;
 
@@ -707,9 +708,15 @@ idna_to_unicode_4z4z (const uint32_t *input, uint32_t **output, int flags)
 	  return IDNA_MALLOC_ERROR;
 	}
 
-      /* don't check return code as per specification! */
-      idna_to_unicode_44i (start, (size_t) (end - start),
-			   buf, &buflen, flags);
+      /* don't check for non-malloc return codes as per
+         specification! */
+      rc = idna_to_unicode_44i (start, (size_t) (end - start),
+				buf, &buflen, flags);
+      if (rc == IDNA_MALLOC_ERROR)
+	{
+	  free (out);
+	  return IDNA_MALLOC_ERROR;
+	}
 
       if (out)
 	{

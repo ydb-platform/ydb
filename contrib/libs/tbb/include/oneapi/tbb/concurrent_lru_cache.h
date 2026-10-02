@@ -1,5 +1,6 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation
+    Copyright (c) 2005-2022 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,7 +18,8 @@
 #ifndef __TBB_concurrent_lru_cache_H
 #define __TBB_concurrent_lru_cache_H
 
-#if ! TBB_PREVIEW_CONCURRENT_LRU_CACHE
+#include "detail/_config.h"
+#if ! __TBB_PREVIEW_CONCURRENT_LRU_CACHE
     #error Set TBB_PREVIEW_CONCURRENT_LRU_CACHE to include concurrent_lru_cache.h
 #endif
 
@@ -140,6 +142,11 @@ private:
         if (! --(map_it->second.my_ref_counter)) {
             // if the LRU history is full, evict the oldest items to get space
             if (my_history_list.size() >= my_history_list_capacity) {
+                if (my_history_list_capacity == 0) {
+                    // Since LRU history capacity is zero, there is no need to keep the element in history
+                    my_storage_map.erase(map_it);
+                    return;
+                }
                 std::size_t number_of_elements_to_evict = 1 + my_history_list.size() - my_history_list_capacity;
 
                 for (std::size_t i = 0; i < number_of_elements_to_evict; ++i) {
@@ -320,13 +327,16 @@ public:
 public:
     retrieve_aggregator_operation(key_type key)
         : aggregator_operation(aggregator_operation::op_type::retrieve),
-          my_key(key), my_is_new_value_needed(false) {}
+          my_key(key), my_map_record_ptr(nullptr), my_is_new_value_needed(false) {}
 
     void handle(lru_cache_type& lru_cache_ref) {
         my_map_record_ptr = &lru_cache_ref.retrieve_serial(my_key, my_is_new_value_needed);
     }
 
-    storage_map_reference_type result() { return *my_map_record_ptr; }
+    storage_map_reference_type result() {
+        __TBB_ASSERT(my_map_record_ptr, "Attempt to call result() before calling handle()");
+        return *my_map_record_ptr;
+    }
 
     bool is_new_value_needed() { return my_is_new_value_needed; }
 };

@@ -28,6 +28,7 @@ from hypothesis.control import (
 )
 from hypothesis.core import example, find, given, reproduce_failure, seed
 from hypothesis.entry_points import run
+from hypothesis.internal.detection import is_hypothesis_test
 from hypothesis.internal.entropy import register_random
 from hypothesis.utils.conventions import infer
 from hypothesis.version import __version__, __version_info__
@@ -36,6 +37,8 @@ __all__ = [
     "HealthCheck",
     "Phase",
     "Verbosity",
+    "__version__",
+    "__version_info__",
     "assume",
     "currently_in_test_context",
     "event",
@@ -43,6 +46,7 @@ __all__ = [
     "find",
     "given",
     "infer",
+    "is_hypothesis_test",
     "note",
     "register_random",
     "reject",
@@ -50,8 +54,6 @@ __all__ = [
     "seed",
     "settings",
     "target",
-    "__version__",
-    "__version_info__",
 ]
 
 run()

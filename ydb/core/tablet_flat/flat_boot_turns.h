@@ -4,6 +4,7 @@
 #include "flat_boot_back.h"
 #include "flat_boot_blobs.h"
 #include "flat_boot_switch.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/util/pb.h>
 #include <util/generic/xrange.h>
@@ -22,7 +23,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             for (auto slot: xrange(Back->Switches.size()))
                 if (const auto &largeGlobId = Back->Switches[slot].LargeGlobId)
@@ -31,7 +32,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -40,30 +41,36 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             Process();
 
             if (!Pending && Handled >= Back->Switches.size()) Env->Finish(this);
         }
 
-        void Assign(ui32 slot, TArrayRef<const char> body) noexcept
+        void Assign(ui32 slot, TArrayRef<const char> body)
         {
-            Y_ABORT_UNLESS(slot < Back->Switches.size(), "Invalid switch index");
+            Y_ENSURE(slot < Back->Switches.size(), "Invalid switch index");
 
             auto &entry = Back->Switches[slot];
             auto index = TCookie(entry.LargeGlobId.Lead.Cookie()).Index();
 
-            Y_ABORT_UNLESS(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
+            Y_ENSURE(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
 
             if (index != TCookie::EIdx::TurnLz4) {
                 Apply(entry, body);
             } else {
+                size_t decompressedSize = Codec->DecompressedLength(body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "Switch entry " << NFmt::Do(entry.LargeGlobId)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Apply(entry, Codec->Decode(body));
             }
         }
 
-        void Apply(TSwitch &entry, TArrayRef<const char> body) noexcept
+        void Apply(TSwitch &entry, TArrayRef<const char> body)
         {
             TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(body);
 
@@ -96,7 +103,7 @@ namespace NBoot {
                 Back->SetTableEdge(proto.GetTableSnapshoted());
         }
 
-        void Process() noexcept
+        void Process()
         {
             for (; Handled < Back->Switches.size(); Handled++) {
                 auto &front = Back->Switches[Handled];
@@ -107,7 +114,7 @@ namespace NBoot {
                 for (auto &txStatusId : front.LeavingTxStatus) {
                     auto it = TxStatus.find(txStatusId);
                     if (it == TxStatus.end()) {
-                        Y_Fail("Part switch has removal for an unknown tx status " << txStatusId);
+                        Y_TABLET_ERROR("Part switch has removal for an unknown tx status " << txStatusId);
                     }
                     it->second->Load = false;
                     TxStatus.erase(it);
@@ -116,14 +123,14 @@ namespace NBoot {
 
                 for (auto &txStatus : front.TxStatus) {
                     if (!txStatus.DataId) {
-                        Y_Fail("Part switch has tx status without data id");
+                        Y_TABLET_ERROR("Part switch has tx status without data id");
                     }
                     const auto &txStatusId = txStatus.DataId.Lead;
                     if (TxStatus.contains(txStatusId)) {
-                        Y_Fail("Part switch has a duplicate tx status " << txStatusId);
+                        Y_TABLET_ERROR("Part switch has a duplicate tx status " << txStatusId);
                     }
                     if (LeavingTxStatus.contains(txStatusId)) {
-                        Y_Fail("Part switch has a removed tx status " << txStatusId);
+                        Y_TABLET_ERROR("Part switch has a removed tx status " << txStatusId);
                     }
                     TxStatus[txStatusId] = &txStatus;
                 }
@@ -131,7 +138,7 @@ namespace NBoot {
                 for (auto &bundleId : front.Leaving) {
                     auto it = Bundles.find(bundleId);
                     if (it == Bundles.end()) {
-                        Y_Fail("Part switch has removal for an unknown bundle " << bundleId);
+                        Y_TABLET_ERROR("Part switch has removal for an unknown bundle " << bundleId);
                     }
                     it->second->Load = false;
                     Bundles.erase(it);
@@ -141,7 +148,7 @@ namespace NBoot {
                 for (auto &change : front.Changes) {
                     auto *bundle = Bundles.Value(change.Label, nullptr);
                     if (!bundle) {
-                        Y_Fail("Part switch has changes for an unknown bundle " << change.Label);
+                        Y_TABLET_ERROR("Part switch has changes for an unknown bundle " << change.Label);
                     }
                     bundle->Legacy = std::move(change.Legacy);
                     bundle->Opaque = std::move(change.Opaque);
@@ -151,21 +158,21 @@ namespace NBoot {
                 for (auto &delta : front.Deltas) {
                     auto *bundle = Bundles.Value(delta.Label, nullptr);
                     if (!bundle) {
-                        Y_Fail("Part switch has delta for an unknown bundle " << delta.Label);
+                        Y_TABLET_ERROR("Part switch has delta for an unknown bundle " << delta.Label);
                     }
                     bundle->Deltas.push_back(std::move(delta.Delta));
                 }
 
                 for (auto &bundle : front.Bundles) {
                     if (!bundle.LargeGlobIds) {
-                        Y_Fail("Part switch has bundle without page collections");
+                        Y_TABLET_ERROR("Part switch has bundle without page collections");
                     }
                     const auto &bundleId = bundle.LargeGlobIds[0].Lead;
                     if (Bundles.contains(bundleId)) {
-                        Y_Fail("Part switch has a duplicate bundle " << bundleId);
+                        Y_TABLET_ERROR("Part switch has a duplicate bundle " << bundleId);
                     }
                     if (Leaving.contains(bundleId)) {
-                        Y_Fail("Part switch has a removed bundle" << bundleId);
+                        Y_TABLET_ERROR("Part switch has a removed bundle" << bundleId);
                     }
                     Bundles[bundleId] = &bundle;
                 }
@@ -178,7 +185,7 @@ namespace NBoot {
 
                     auto *source = Bundles.Value(move.Label, nullptr);
                     if (!source) {
-                        Y_Fail("Part switch has move for an unknown bundle " << move.Label);
+                        Y_TABLET_ERROR("Part switch has move for an unknown bundle " << move.Label);
                     }
 
                     if (compaction) {

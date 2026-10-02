@@ -24,7 +24,7 @@ class Settings:
         endpoint: str
         hmac_secret_file: str
 
-    token_accessor_mock: TokenAccessorMock
+    token_accessor_mock: Optional[TokenAccessorMock] = None
 
     @dataclass
     class MdbMock:
@@ -50,6 +50,14 @@ class Settings:
         password: str
 
     greenplum: Optional[Greenplum] = None
+
+    @dataclass
+    class MySQL:
+        dbname: str
+        username: str
+        password: str
+
+    mysql: Optional[MySQL] = None
 
     @dataclass
     class PostgreSQL:
@@ -80,11 +88,12 @@ class Settings:
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
             ),
-            token_accessor_mock=cls.TokenAccessorMock(
+        )
+        if "TOKEN_ACCESSOR_MOCK_ENDPOINT" in environ.keys():
+            s.token_accessor_mock = cls.TokenAccessorMock(
                 endpoint=environ['TOKEN_ACCESSOR_MOCK_ENDPOINT'],
                 hmac_secret_file=environ['TOKEN_ACCESSOR_HMAC_SECRET_FILE'],
-            ),
-        )
+            )
 
         if 'MDB_MOCK_ENDPOINT' in environ.keys():
             s.mdb_mock = cls.MdbMock(
@@ -104,6 +113,13 @@ class Settings:
                 dbname='template1',
                 username='gpadmin',
                 password='123456',
+            )
+
+        if 'mysql' in docker_compose_yml_data['services']:
+            s.mysql = cls.MySQL(
+                dbname='db',
+                username='root',
+                password='password',
             )
 
         if 'postgresql' in docker_compose_yml_data['services']:

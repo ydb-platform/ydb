@@ -44,7 +44,7 @@ private:
     ui32 ActiveNode;
     std::optional<Ydb::Monitoring::SelfCheckResult> Result;
     TInstant LastResultUpdate;
-    std::vector<TActorId> Clients;
+    std::vector<NHealthCheck::TEvSelfCheckRequestProto::TPtr> Requests;
     TBoardInfoEntries BoardInfo;
     TActorId PublishActor;
     TActorId SubscribeActor;
@@ -66,10 +66,10 @@ private:
         Counters->GetCounter(HEALTHCHECK_REQUESTS_MADE_COUNTER, true)->Inc();
     }
 
-    void Reply(TActorId client) {
+    void Reply(NHealthCheck::TEvSelfCheckRequestProto::TPtr& request) {
         auto response = std::make_unique<NHealthCheck::TEvSelfCheckResultProto>();
         response->Record = *Result;
-        Send(client, response.release());
+        Send(request->Sender, response.release(), 0, request->Cookie);
         Counters->GetCounter(HEALTHCHECK_REQUESTS_ANSWERED_COUNTER, true)->Inc();
     }
 
@@ -80,7 +80,8 @@ private:
 
     void UpdateActiveNode() {
         ActiveNode = PickActiveNode(BoardInfo);
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node is " << ActiveNode);
+        YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node",
+            {"activeNode", ActiveNode});
         bool areWeActive = (ActiveNode == SelfId().NodeId());
         if (areWeActive && CurrentStateFunc() != &TThis::StateActive) {
             RefreshCache();
@@ -125,22 +126,22 @@ private:
         RequestInProgress = false;
         Result = ev->Get()->Result;
         LastResultUpdate = TActivationContext::Now();
-        for (const auto& client : Clients) {
-            Reply(client);
+        for (auto& request : Requests) {
+            Reply(request);
         }
-        Clients.clear();
+        Requests.clear();
     }
 
     void Handle(NHealthCheck::TEvSelfCheckRequestProto::TPtr& ev) {
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
+        YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
         TInstant now = TActivationContext::Now();
         if (Result && now - LastResultUpdate <= 2 * RefreshPeriod) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
-            Reply(ev->Sender);
+            YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
+            Reply(ev);
         } else {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Answer not ready, waiting");
+            YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Answer not ready, waiting");
             SendRequest();
-            Clients.push_back(ev->Sender);
+            Requests.emplace_back(std::move(ev));
         }
     }
 
@@ -200,7 +201,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
+        YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
         Become(&TThis::StateInactive);
         ApplyConfig(AppData()->MetadataCacheConfig, AppData()->FeatureFlags);
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),

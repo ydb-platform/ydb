@@ -19,6 +19,10 @@ PEERDIR(
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
+IF (OS_WINDOWS)
+    #TODO llvm18
+    PEERDIR(library/cpp/resource)
+ELSE()
     LLVM_BC(
         yt_codec_bc.cpp
         NAME
@@ -64,15 +68,31 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         ReadTzDate32
         ReadTzDatetime64
         ReadTzTimestamp64
+        ReadTzDateNative
+        ReadTzDatetimeNative
+        ReadTzTimestampNative
+        ReadTzDate32Native
+        ReadTzDatetime64Native
+        ReadTzTimestamp64Native
         WriteTzDate
         WriteTzDatetime
         WriteTzTimestamp
         WriteTzDate32
         WriteTzDatetime64
         WriteTzTimestamp64
+        WriteTzDateNative
+        WriteTzDatetimeNative
+        WriteTzTimestampNative
+        WriteTzDate32Native
+        WriteTzDatetime64Native
+        WriteTzTimestamp64Native
         GetWrittenBytes
         FillZero
+        FillOptionalZero
+        FillNull
+        FillOptionalNull
     )
+ENDIF()
 ELSE()
     CFLAGS(
         -DMKQL_DISABLE_CODEGEN

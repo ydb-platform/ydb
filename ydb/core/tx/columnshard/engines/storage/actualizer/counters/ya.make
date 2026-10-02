@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/tx/columnshard/engines/portions
-    ydb/core/tx/columnshard/counters/common
+    ydb/library/signals
 )
 
 END()

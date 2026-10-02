@@ -3,6 +3,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -18,11 +20,11 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsCommitWritesTx());
-        Y_ABORT_UNLESS(!op->IsAborted());
+        Y_ENSURE(op->IsCommitWritesTx());
+        Y_ENSURE(!op->IsAborted());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (CheckRejectDataTx(op, ctx)) {
             op->Abort(EExecutionUnitKind::FinishPropose);
@@ -66,7 +68,7 @@ public:
                     << " expected " << tableInfo.GetTableSchemaVersion()
                     << " at shard " << DataShard.TabletID(),
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
-                NKikimrTxDataShard::TError::SCHEME_ERROR);
+                NKikimrTxDataShard::TError::SCHEME_CHANGED);
         }
 
         if (!commitTx.HasWriteTxId() || commitTx.GetWriteTxId() == 0) {
@@ -78,7 +80,8 @@ public:
                 << "Can't propose tx " << op->GetTxId()
                 << " at blocked shard " << DataShard.TabletID();
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckCommitWritesTxUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
             return buildUnsuccessfulResult(
                 err,
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
@@ -87,10 +90,10 @@ public:
 
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Prepared " << op->GetKind()
-            << " transaction txId " << op->GetTxId()
-            << " at shard " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckCommitWritesTxUnit::Execute: prepared transaction",
+            {"opKind", op->GetKind()},
+            {"txId", op->GetTxId()},
+            {"tabletId", DataShard.TabletID()});
         return EExecutionStatus::Executed;
     }
 
@@ -104,3 +107,7 @@ THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard& self, TPipelin
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

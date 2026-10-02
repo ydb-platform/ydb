@@ -91,7 +91,7 @@ namespace detail
                 assert(x_multiplicity_iter != multiplicity->end());
                 auto y_multiplicity_iter = multiplicity->find(invariant1(y));
                 assert(y_multiplicity_iter != multiplicity->end());
-                return *x_multiplicity_iter < *y_multiplicity_iter;
+                return x_multiplicity_iter->second < y_multiplicity_iter->second;
             }
             Invariant1 invariant1;
             const InvariantCountMap* multiplicity;

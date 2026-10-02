@@ -1,0 +1,307 @@
+#include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
+
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+#define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
+
+namespace NKikimr::NSchemeShard {
+
+namespace NStreamingQuery {
+
+namespace {
+
+class TPropose : public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
+public:
+    explicit TPropose(TOperationId id, i64 runDelta = 0)
+        : OperationId(std::move(id))
+        , RunDelta(runDelta)
+    {}
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        const TStepId step = TStepId(ev->Get()->StepId);
+        YDB_LOG_INFO_CTX(context.Ctx, "Operation plan received",
+            {"step", step},
+        );
+
+        const TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterStreamingQuery);
+
+        if (RunDelta > 0) {
+            context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(RunDelta);
+        } else if (RunDelta < 0) {
+            context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Sub(-RunDelta);
+        }
+
+        const TPathId& pathId = txState->TargetPathId;
+        const TPath& path = TPath::Init(pathId, context.SS);
+        NIceDb::TNiceDb db(context.GetDB());
+
+        IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "Propose to coordinator");
+
+        const TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterStreamingQuery);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+
+private:
+    const TOperationId OperationId;
+    const i64 RunDelta;
+};
+
+class TAlterStreamingQuery : public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterStreamingQuery"; }
+
+    static constexpr ui64 MAX_PROTOBUF_SIZE = 2_MB;
+
+    static TTxState::ETxState NextState() {
+        return TTxState::Propose;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::Propose:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::Propose:
+            // RunDelta is 0 on restart (init already loaded the updated state from DB)
+            return MakeHolder<TPropose>(OperationId, RunDelta);
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
+
+    static bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
+        const auto checks = parentPath.Check();
+        checks.NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .NotUnderDeleting()
+            .IsCommonSensePath()
+            .IsLikeDirectory();
+
+        if (!checks) {
+            result->SetError(checks.GetStatus(), checks.GetError());
+        }
+
+        return static_cast<bool>(checks);
+    }
+
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath) {
+        const auto checks = dstPath.Check();
+        checks.IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .FailOnWrongType(TPathElement::EPathType::EPathTypeStreamingQuery);
+
+        if (!checks) {
+            result->SetError(checks.GetStatus(), checks.GetError());
+            if (dstPath.IsResolved()) {
+                result->SetPathCreateTxId(static_cast<ui64>(dstPath.Base()->CreateTxId));
+                result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+            }
+        }
+
+        return static_cast<bool>(checks);
+    }
+
+    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+        if (TString errorStr; !context.SS->CheckApplyIf(Transaction, errorStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
+            return false;
+        }
+
+        return true;
+    }
+
+    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
+        const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
+        AFL_ENSURE(oldStreamingQueryInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
+
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
+            .AlterVersion = oldStreamingQueryInfo->AlterVersion + 1,
+            .Properties = info.GetProperties(),
+            .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
+        });
+
+        if (!Transaction.GetReplaceIfExists()) {
+            auto& properties = *streamingQueryInfo->Properties.MutableProperties();
+            for (const auto& [property, value] : oldStreamingQueryInfo->Properties.GetProperties()) {
+                properties.emplace(property, value);
+            }
+        }
+
+        return streamingQueryInfo;
+    }
+
+    bool IsDescriptionValid(const THolder<TProposeResponse>& result, TStreamingQueryInfo::TPtr oldQueryInfo, TStreamingQueryInfo::TPtr newQueryInfo) const {
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        if (info.HasOperationOwnerActorId() && !newQueryInfo->OperationOwnerActorId) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
+            return false;
+        }
+
+        if (const ui64 propertiesSize = newQueryInfo->Properties.ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
+            result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize << " after alter");
+            return false;
+        }
+
+        if (oldQueryInfo->OperationOwnerActorId && Transaction.GetCreateStreamingQuery().HasOperationOwnerActorId()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation");
+            return false;
+        }
+
+        return true;
+    }
+
+    void PersistAlterStreamingQuery(const TPath& dstPath, const TProposeContext& context) const {
+        const TPathId& pathId = dstPath.Base()->PathId;
+
+        context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
+        context.MemChanges.GrabStreamingQuery(context.SS, pathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(pathId);
+        context.DbChanges.PersistStreamingQuery(pathId);
+        context.DbChanges.PersistTxState(OperationId);
+    }
+
+    void CreateTransaction(const TPath& dstPath, const TOperationContext& context) const {
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterStreamingQuery, dstPath.Base()->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        txState.MinStep = TStepId(1);
+        context.OnComplete.ActivateTx(OperationId);
+
+        if (const auto parent = dstPath.Parent().Base(); parent->HasActiveChanges()) {
+            const TTxId parentTxId = parent->PlannedToCreate() ? parent->CreateTxId : parent->LastTxId;
+            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
+        }
+    }
+
+    void AlterStreamingQueryPathElement(const TPath& dstPath, TStreamingQueryInfo::TPtr queryInfo, const TOperationContext& context) const {
+        TPathElement::TPtr streamingQuery = dstPath.Base();
+
+        streamingQuery->PathState = TPathElement::EPathState::EPathStateAlter;
+        streamingQuery->LastTxId  = OperationId.GetTxId();
+
+        if (const auto& acl = Transaction.GetModifyACL().GetDiffACL()) {
+            streamingQuery->ApplyACL(acl);
+        }
+
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, queryInfo);
+    }
+
+public:
+    using TSubOperation::TSubOperation;
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+        Y_UNUSED(owner);
+
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
+        const TString& name = streamingQueryDescription.GetName();
+        YDB_LOG_NOTICE_CTX(context.Ctx, "Alter streaming query",
+            {"path", parentPathStr + "/" + name},
+        );
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+                                                   static_cast<ui64>(OperationId.GetTxId()),
+                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+
+        const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
+        RETURN_RESULT_UNLESS(IsParentPathValid(result, parentPath));
+
+        const TPath& dstPath = parentPath.Child(name);
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
+        RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
+
+        const auto oldInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
+        Y_ABORT_UNLESS(oldInfo);
+        const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
+        RETURN_RESULT_UNLESS(IsDescriptionValid(result, oldInfo, queryInfo));
+
+        // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter
+        {
+            const auto& oldProps = oldInfo->Properties.GetProperties();
+            const auto& newProps = queryInfo->Properties.GetProperties();
+            const bool wasRun = oldProps.contains("run") && oldProps.at("run") == "true";
+            const bool willRun = newProps.contains("run") && newProps.at("run") == "true";
+            RunDelta = static_cast<i64>(willRun) - static_cast<i64>(wasRun);
+        }
+
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        const auto guard = context.DbGuard();
+        PersistAlterStreamingQuery(dstPath, context);
+        CreateTransaction(dstPath, context);
+        AlterStreamingQueryPathElement(dstPath, queryInfo, context);
+
+        SetState(NextState());
+        return result;
+    }
+
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterStreamingQuery AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
+        context.OnComplete.DoneOperation(OperationId);
+    }
+
+private:
+    i64 RunDelta = 0;
+};
+
+}  // anonymous namespace
+
+}  // namespace NStreamingQuery
+
+ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<NStreamingQuery::TAlterStreamingQuery>(id, tx);
+}
+
+ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxState state) {
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
+    return MakeSubOperation<NStreamingQuery::TAlterStreamingQuery>(id, state);
+}
+
+}  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

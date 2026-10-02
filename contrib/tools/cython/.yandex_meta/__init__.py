@@ -37,11 +37,11 @@ cython = NixProject(
     nixattr=python.make_nixattr("cython"),
     copy_sources=["Cython/", "cygdb.py", "cython.py"],
     keep_paths=[
-        "Cython/Includes/numpy.pxd",
         "Cython/Utility/CommonTypes.c",
         "Cython/ya.make",
         "generated_c_headers.h",
         "generated_cpp_headers.h",
+        "a.yaml",
     ],
     post_install=post_install,
 )

@@ -15,10 +15,10 @@ import os
 import pkgutil
 import subprocess
 import sys
+from collections.abc import Generator
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
-from typing import Generator
 
 import pytest
 
@@ -49,9 +49,6 @@ def _discover_path_importables(
         pkg_dir_path = Path(dir_path)
 
         if pkg_dir_path.parts[-1] == "__pycache__":
-            continue
-
-        if all(Path(_).suffix != ".py" for _ in file_names):
             continue
 
         rel_pt = pkg_dir_path.relative_to(pkg_pth)
@@ -85,8 +82,10 @@ def test_no_warnings(import_path: str) -> None:
         # fmt: off
         sys.executable,
         "-I",
-        "-W", "error",
-        "-c", f"import {import_path!s}",
+        "-W",
+        "error",
+        "-c",
+        f"import {import_path!s}",
         # fmt: on
     )
 
@@ -102,8 +101,10 @@ def test_c_extension_preferred_by_default(monkeypatch: pytest.MonkeyPatch) -> No
         # fmt: off
         sys.executable,
         "-I",
-        "-W", "error",
-        "-c", "import multidict; raise SystemExit(int("
+        "-W",
+        "error",
+        "-c",
+        "import multidict; raise SystemExit(int("
         "multidict.istr.__module__ != 'multidict._multidict' "
         "or multidict.USE_EXTENSIONS is not True))",
         # fmt: on

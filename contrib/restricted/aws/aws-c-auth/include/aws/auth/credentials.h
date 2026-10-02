@@ -12,6 +12,8 @@
 #include <aws/common/linked_list.h>
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_client_bootstrap;
 struct aws_auth_http_system_vtable;
 struct aws_credentials;
@@ -214,6 +216,11 @@ struct aws_credentials_provider_imds_options {
      */
     enum aws_imds_protocol_version imds_version;
 
+    /*
+     * If true, fallback from v2 to v1 will be disabled for all cases
+     */
+    bool ec2_metadata_v1_disabled;
+
     /* For mocking the http layer in tests, leave NULL otherwise */
     struct aws_auth_http_system_vtable *function_table;
 };
@@ -226,10 +233,20 @@ struct aws_credentials_provider_imds_options {
  * or via a full uri specified by environment variables:
  * AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
  * AWS_CONTAINER_CREDENTIALS_FULL_URI
- * AWS_CONTAINER_AUTHORIZATION_TOKEN
+ *
  * If both relative uri and absolute uri are set, relative uri
- * has higher priority. Token is used in auth header but only for
- * absolute uri.
+ * has higher priority.
+ *
+ * Currently, the ECS creds provider doesn't read those environment variables and requires host & path_and_query
+ * TODO: Support AWS_CONTAINER_CREDENTIALS_RELATIVE_URI and AWS_CONTAINER_CREDENTIALS_FULL_URI
+ * parameters.
+ *
+ * For the Authorization token, there are three ways (in order of priority).
+ * 1. auth_token parameter
+ * 2. AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE (env var which contains absolute path to the token file. The file will be
+ * re-read for each call to get credentials.)
+ * 3. AWS_CONTAINER_AUTHORIZATION_TOKEN (env var which contains static auth token)
+ *
  * While above information is used in request only, endpoint info
  * is needed when creating ecs provider to initiate the connection
  * manager, more specifically, host and http scheme (tls or not)
@@ -270,7 +287,7 @@ struct aws_credentials_provider_ecs_options {
     /*
      * Port to query credentials from.  If zero, 80/443 will be used based on whether or not tls is enabled.
      */
-    uint16_t port;
+    uint32_t port;
 };
 
 /**
@@ -321,7 +338,7 @@ struct aws_credentials_provider_x509_options {
  * identity provider like Elastic Kubernetes Service
  * https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
  * The required parameters used in the request (region, roleArn, sessionName, tokenFilePath) are automatically resolved
- * by SDK from envrionment variables or config file.
+ * by SDK from envrionment variables or config file if not set.
  ---------------------------------------------------------------------------------
  | Parameter           | Environment Variable Name    | Config File Property Name |
  ----------------------------------------------------------------------------------
@@ -330,6 +347,10 @@ struct aws_credentials_provider_x509_options {
  | role_session_name   | AWS_ROLE_SESSION_NAME        | role_session_name         |
  | token_file_path     | AWS_WEB_IDENTITY_TOKEN_FILE  | web_identity_token_file   |
  |--------------------------------------------------------------------------------|
+ * The order of resolution is the following
+ * 1. Parameters
+ * 2. Environment Variables
+ * 3. Config File
  */
 struct aws_credentials_provider_sts_web_identity_options {
     struct aws_credentials_provider_shutdown_options shutdown_options;
@@ -353,6 +374,33 @@ struct aws_credentials_provider_sts_web_identity_options {
 
     /* For mocking the http layer in tests, leave NULL otherwise */
     struct aws_auth_http_system_vtable *function_table;
+
+    /*
+     * (Optional)
+     * Override of what profile to use, if not set, 'default' will be used.
+     */
+    struct aws_byte_cursor profile_name_override;
+
+    /*
+     * (Optional)
+     * Override of region, if not set, it will be resolved from env or profile.
+     */
+    struct aws_byte_cursor region;
+    /*
+     * (Optional)
+     * Override of role_arn, if not set, it will be resolved from env or profile.
+     */
+    struct aws_byte_cursor role_arn;
+    /*
+     * (Optional)
+     * Override of role_session_name, if not set, it will be resolved from env or profile.
+     */
+    struct aws_byte_cursor role_session_name;
+    /*
+     * (Optional)
+     * Override of token_file_path, if not set, it will be resolved from env or profile.
+     */
+    struct aws_byte_cursor token_file_path;
 };
 
 /*
@@ -465,7 +513,6 @@ struct aws_credentials_provider_sts_options {
     "Expiration": "2019-05-29T00:21:43Z"
    }
  * Version here identifies the command output format version.
- * This provider is not part of the default provider chain.
  */
 struct aws_credentials_provider_process_options {
     struct aws_credentials_provider_shutdown_options shutdown_options;
@@ -474,6 +521,12 @@ struct aws_credentials_provider_process_options {
      * if not provided, we will try environment variable: AWS_PROFILE.
      */
     struct aws_byte_cursor profile_to_use;
+
+    /**
+     * (Optional)
+     * Use a cached config profile collection. You can also pass a merged collection.
+     */
+    struct aws_profile_collection *config_profile_collection_cached;
 };
 
 /**
@@ -505,6 +558,18 @@ struct aws_credentials_provider_chain_default_options {
      * If this option is provided, `config_file_name_override` and `credentials_file_name_override` will be ignored.
      */
     struct aws_profile_collection *profile_collection_cached;
+
+    /*
+     * (Optional)
+     * Override of what profile to use, if not set, 'default' will be used.
+     */
+    struct aws_byte_cursor profile_name_override;
+
+    /*
+     * (Optional)
+     * If enabled, the Environment Credentials Provider is not added to the chain.
+     */
+    bool skip_environment_credentials_provider;
 };
 
 typedef int(aws_credentials_provider_delegate_get_credentials_fn)(
@@ -1063,5 +1128,6 @@ struct aws_credentials_provider *aws_credentials_provider_new_chain_default(
 AWS_AUTH_API extern const struct aws_auth_http_system_vtable *g_aws_credentials_provider_http_function_table;
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_CREDENTIALS_H */

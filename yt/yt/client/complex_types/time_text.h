@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yt/yt/client/table_client/row_base.h>
 
 namespace NYT::NComplexTypes {

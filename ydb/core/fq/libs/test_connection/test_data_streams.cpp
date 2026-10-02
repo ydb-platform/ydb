@@ -2,15 +2,16 @@
 #include "probes.h"
 #include "test_connection.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-
 #include <ydb/core/fq/libs/actors/clusters_from_connections.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/security/util.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
 
 namespace {
 
@@ -81,7 +82,7 @@ class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTest
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
     NFq::TYqSharedResources::TPtr SharedResources;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
@@ -98,7 +99,7 @@ public:
         const TActorId& sender,
         ui64 cookie,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
@@ -127,8 +128,19 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_DATA_STREAMS_CONNECTION";
 
     void Bootstrap() {
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test data stream connection actor. Actor id: " << SelfId());
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Structured token: " << StructuredToken << " service-account: " << ClusterConfig.GetServiceAccountId() << " signature: " << ClusterConfig.GetServiceAccountIdSignature() << " token: " << NKikimr::MaskTicket(ClusterConfig.GetToken()));
+        YDB_LOG_DEBUG("Starting test data stream connection actor",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"selfId", SelfId()});
+        YDB_LOG_TRACE("Dump bootstrap details",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"token", StructuredToken},
+            {"serviceAccount", ClusterConfig.GetServiceAccountId()},
+            {"signature", ClusterConfig.GetServiceAccountIdSignature()},
+            {"clusterConfigTicket", NKikimr::MaskTicket(ClusterConfig.GetToken())});
         Become(&TTestDataStreamsConnectionActor::StateFunc);
         SendResolveDatabaseId();
     }
@@ -142,7 +154,11 @@ public:
 private:
     void SendResolveDatabaseId() {
         if (ClusterConfig.GetDatabase()) {
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Database from connection settings " << ClusterConfig.GetDatabase());
+            YDB_LOG_TRACE("Database from connection settings",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"database", ClusterConfig.GetDatabase()});
             SendOpenSession();
             return;
         }
@@ -161,19 +177,32 @@ private:
     void Handler(TEvPrivate::TEvResolveDbResponse::TPtr& ev) {
         const auto& response = ev->Get()->Result;
         if (!response.Success) {
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Resolve datababse id " << ClusterConfig.GetDatabaseId() << " error " << response.Issues.ToOneLineString());
+            YDB_LOG_TRACE("Resolve datababse",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"databaseId", ClusterConfig.GetDatabaseId()},
+                {"issues", response.Issues.ToOneLineString()});
             ReplyError(response.Issues);
             return;
         }
 
         auto it = response.DatabaseDescriptionMap.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams});
         if (it == response.DatabaseDescriptionMap.end()) {
-            TC_LOG_E(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
+            YDB_LOG_ERROR("Test data streams connection: database is not found for database_id",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"databaseId", ClusterConfig.GetDatabaseId()});
             ReplyError(TStringBuilder{} << "Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
             return;
         }
 
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Resolve datababse id result: " << it->second.Database);
+        YDB_LOG_TRACE("Resolve datababse",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"result", it->second.Database});
         ClusterConfig.SetDatabase(it->second.Database);
         ClusterConfig.SetEndpoint(it->second.Endpoint);
         ClusterConfig.SetUseSsl(it->second.Secure);
@@ -195,11 +224,18 @@ private:
     void Handler(TEvPrivate::TEvOpenSessionResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Open session error " << response.ErrorMessage);
+            YDB_LOG_TRACE("Open session",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"error", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Open session: ok");
+        YDB_LOG_TRACE("Open session",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)});
         SendCheckListStreams();
     }
 
@@ -217,11 +253,18 @@ private:
     void Handler(TEvPrivate::TEvCheckListStreamsResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Check list strems error " << response.ErrorMessage);
+            YDB_LOG_TRACE("Check list streams",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"error", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Check list streams: ok");
+        YDB_LOG_TRACE("Check list streams",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)});
         ReplyOk();
     }
 
@@ -276,7 +319,7 @@ NActors::IActor* CreateTestDataStreamsConnectionActor(
         const TActorId& sender,
         ui64 cookie,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,

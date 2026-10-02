@@ -1,0 +1,4 @@
+SELECT
+    WithSideEffectsMode(1, 'SemilatticeRT')
+    + WithSideEffectsMode(1, 'SemilatticeRT')
+;

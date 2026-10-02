@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/eventfd.h>
 
 #include "helpers.h"
 #include "liburing.h"
@@ -23,6 +24,7 @@
 static int not_supported;
 static int no_modify;
 static int no_multishot;
+static int no_immediate;
 
 static void msec_to_ts(struct __kernel_timespec *ts, unsigned int msec)
 {
@@ -30,11 +32,26 @@ static void msec_to_ts(struct __kernel_timespec *ts, unsigned int msec)
 	ts->tv_nsec = (msec % 1000) * 1000000;
 }
 
+static void t_prep_timeout(struct io_uring_sqe *sqe,
+			   const struct __kernel_timespec *ts,
+			   unsigned flags,
+			   bool immediate)
+{
+	if (!immediate) {
+		io_uring_prep_timeout(sqe, ts, 0, 0);
+	} else {
+		io_uring_prep_timeout(sqe, NULL, 0, 0);
+		sqe->addr = ts->tv_sec * 1000000000 + ts->tv_nsec;
+		sqe->timeout_flags = IORING_TIMEOUT_IMMEDIATE_ARG;
+	}
+	sqe->timeout_flags |= flags;
+}
+
 /*
  * Test that we return to userspace if a timeout triggers, even if we
  * don't satisfy the number of events asked for.
  */
-static int test_single_timeout_many(struct io_uring *ring)
+static int test_single_timeout_many(struct io_uring *ring, bool immediate)
 {
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
@@ -50,7 +67,7 @@ static int test_single_timeout_many(struct io_uring *ring)
 	}
 
 	msec_to_ts(&ts, TIMEOUT_MSEC);
-	io_uring_prep_timeout(sqe, &ts, 0, 0);
+	t_prep_timeout(sqe, &ts, 0, immediate);
 
 	ret = io_uring_submit(ring);
 	if (ret <= 0) {
@@ -219,7 +236,7 @@ err:
 /*
  * Test single timeout waking us up
  */
-static int test_single_timeout(struct io_uring *ring)
+static int test_single_timeout(struct io_uring *ring, bool immediate)
 {
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
@@ -235,7 +252,7 @@ static int test_single_timeout(struct io_uring *ring)
 	}
 
 	msec_to_ts(&ts, TIMEOUT_MSEC);
-	io_uring_prep_timeout(sqe, &ts, 0, 0);
+	t_prep_timeout(sqe, &ts, 0, immediate);
 
 	ret = io_uring_submit(ring);
 	if (ret <= 0) {
@@ -252,6 +269,11 @@ static int test_single_timeout(struct io_uring *ring)
 	ret = cqe->res;
 	io_uring_cqe_seen(ring, cqe);
 	if (ret == -EINVAL) {
+		if (immediate) {
+			no_immediate = true;
+			fprintf(stdout, "%s: Timeout (imm) not supported, ignored\n", __FUNCTION__);
+			return 0;
+		}
 		fprintf(stdout, "%s: Timeout not supported, ignored\n", __FUNCTION__);
 		not_supported = 1;
 		return 0;
@@ -416,7 +438,7 @@ err:
 /*
  * Test single absolute timeout waking us up
  */
-static int test_single_timeout_abs(struct io_uring *ring)
+static int test_single_timeout_abs(struct io_uring *ring, bool immediate)
 {
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
@@ -435,7 +457,7 @@ static int test_single_timeout_abs(struct io_uring *ring)
 	clock_gettime(CLOCK_MONOTONIC, &abs_ts);
 	ts.tv_sec = abs_ts.tv_sec + 1;
 	ts.tv_nsec = abs_ts.tv_nsec;
-	io_uring_prep_timeout(sqe, &ts, 0, IORING_TIMEOUT_ABS);
+	t_prep_timeout(sqe, &ts, IORING_TIMEOUT_ABS, immediate);
 
 	ret = io_uring_submit(ring);
 	if (ret <= 0) {
@@ -1063,6 +1085,153 @@ err:
 	return 1;
 }
 
+static int test_update_multishot_timeouts(struct io_uring *ring, unsigned long ms)
+{
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	struct __kernel_timespec ts, ts_upd;
+	unsigned long long exp_ms, base_ms = 10000;
+	struct timeval tv1, tv2;
+	int ret, i, nr = 6;
+	__u32 mode = 0;
+
+	if (no_multishot)
+		return T_EXIT_SKIP;
+
+	msec_to_ts(&ts, base_ms);
+
+	msec_to_ts(&ts_upd, ms);
+	gettimeofday(&tv1, NULL);
+	gettimeofday(&tv2, NULL);
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	msec_to_ts(&ts, base_ms);
+	io_uring_prep_timeout(sqe, &ts, 0, IORING_TIMEOUT_MULTISHOT);
+	sqe->user_data = 1;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	io_uring_prep_timeout(sqe, &ts, 0, IORING_TIMEOUT_MULTISHOT);
+	sqe->user_data = 2;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	io_uring_prep_timeout_update(sqe, &ts_upd, 1, mode);
+	sqe->user_data = 3;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	io_uring_prep_timeout_update(sqe, &ts_upd, 2, mode);
+	sqe->user_data = 4;
+
+	ret = io_uring_submit(ring);
+	if (ret == 0) {
+		fprintf(stderr, "%s: sqe submit failed: %d\n", __FUNCTION__, ret);
+		goto err;
+	}
+
+	for (i = 0; i < nr; i++) {
+		ret = io_uring_wait_cqe(ring, &cqe);
+		if (ret < 0) {
+			fprintf(stderr, "%s: wait completion %d\n", __FUNCTION__, ret);
+			goto err;
+		}
+
+		switch (cqe->user_data) {
+		case 1:
+			if (cqe->res != -ETIME) {
+				fprintf(stderr, "%s: got %d, wanted %d\n",
+						__FUNCTION__, cqe->res, -ETIME);
+				goto err;
+			}
+			exp_ms = mtime_since_now(&tv1);
+			if (exp_ms > 1.05 * ms) {
+				fprintf(stderr, "too long, timeout wasn't updated (expired after %llu instead of %lu)\n", exp_ms, ms);
+				goto err;
+			}
+			gettimeofday(&tv1, NULL);
+
+			break;
+		case 2:
+			if (cqe->res != -ETIME) {
+				fprintf(stderr, "%s: got %d, wanted %d\n",
+						__FUNCTION__, cqe->res, -ETIME);
+				goto err;
+			}
+			exp_ms = mtime_since_now(&tv2);
+			if (exp_ms > 1.05 * ms) {
+				fprintf(stderr, "too long, timeout wasn't updated (expired after %llu instead of %lu)\n", exp_ms, ms);
+				goto err;
+			}
+			gettimeofday(&tv2, NULL);
+			break;
+		case 3:
+		case 4:
+			if (cqe->res != 0) {
+				fprintf(stderr, "%s: got %d, wanted %d\n",
+						__FUNCTION__, cqe->res, 0);
+				goto err;
+			}
+			break;
+		default:
+			goto err;
+		}
+		io_uring_cqe_seen(ring, cqe);
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	io_uring_prep_timeout_remove(sqe, 1, 0);
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "%s: get sqe failed\n", __FUNCTION__);
+		goto err;
+	}
+
+	io_uring_prep_timeout_remove(sqe, 2, 0);
+
+	ret = io_uring_submit(ring);
+	if (ret != 2) {
+		fprintf(stderr, "%s: sqe submit failed: %d\n", __FUNCTION__, ret);
+		goto err;
+	}
+
+	for (i = 0; i < 2; i++) {
+		ret = io_uring_wait_cqe(ring, &cqe);
+		if (ret < 0) {
+			fprintf(stderr, "%s: wait completion %d\n", __FUNCTION__, ret);
+			goto err;
+		}
+		io_uring_cqe_seen(ring, cqe);
+	}
+
+	return 0;
+err:
+	return 1;
+}
+
 static int test_update_nonexistent_timeout(struct io_uring *ring)
 {
 	struct io_uring_sqe *sqe;
@@ -1229,14 +1398,19 @@ static int test_timeout_link_cancel(void)
 		exit(0);
 	}
 
-	if (waitpid(p, &wstatus, 0) == (pid_t)-1) {
-		perror("waitpid()");
-		return 1;
-	}
-	if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus)) {
-		fprintf(stderr, "child failed %i\n", WEXITSTATUS(wstatus));
-		return 1;
-	}
+	do {
+		if (waitpid(p, &wstatus, 0) == (pid_t)-1) {
+			perror("waitpid()");
+			return 1;
+		}
+		if (!WIFEXITED(wstatus))
+			continue;
+		if (WEXITSTATUS(wstatus)) {
+			fprintf(stderr, "child failed %i\n", WEXITSTATUS(wstatus));
+			return 1;
+		}
+		break;
+	} while (1);
 
 	for (i = 0; i < 2; ++i) {
 		ret = io_uring_wait_cqe(&ring, &cqe);
@@ -1555,6 +1729,44 @@ err:
 	return 1;
 }
 
+static int test_eventfd(void)
+{
+	struct __kernel_timespec ts = { .tv_sec = 5, };
+	struct io_uring_sqe *sqe;
+	struct io_uring ring;
+	int ev, ret;
+
+	ret = io_uring_queue_init(2, &ring, IORING_SETUP_DEFER_TASKRUN |
+					IORING_SETUP_SINGLE_ISSUER);
+	if (ret == -EINVAL) {
+		return T_EXIT_SKIP;
+	} else if (ret < 0) {
+		fprintf(stderr, "queue_init: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
+
+	ev = eventfd(0, 0);
+	if (ev < 0) {
+		perror("eventfd");
+		return T_EXIT_SKIP;
+	}
+
+	ret = io_uring_register_eventfd(&ring, ev);
+	if (ret) {
+		fprintf(stderr, "register_eventfd: %d\n", ret);
+		return ret;
+	}
+
+	sqe = io_uring_get_sqe(&ring);
+	io_uring_prep_timeout(sqe, &ts, 100, 0);
+	sqe->user_data = 0x1234;
+	sqe->flags |= IOSQE_ASYNC;
+	io_uring_submit(&ring);
+
+	io_uring_queue_exit(&ring);
+	close(ev);
+	return T_EXIT_PASS;
+}
 
 int main(int argc, char *argv[])
 {
@@ -1575,7 +1787,7 @@ int main(int argc, char *argv[])
 	ret = io_uring_queue_init(8, &sqpoll_ring, IORING_SETUP_SQPOLL);
 	sqpoll = !ret;
 
-	ret = test_single_timeout(&ring);
+	ret = test_single_timeout(&ring, false);
 	if (ret) {
 		fprintf(stderr, "test_single_timeout failed\n");
 		return ret;
@@ -1583,16 +1795,30 @@ int main(int argc, char *argv[])
 	if (not_supported)
 		return 0;
 
+	ret = test_single_timeout(&ring, true);
+	if (ret) {
+		fprintf(stderr, "test_single_timeout (imm) failed\n");
+		return ret;
+	}
+
 	ret = test_multi_timeout(&ring);
 	if (ret) {
 		fprintf(stderr, "test_multi_timeout failed\n");
 		return ret;
 	}
 
-	ret = test_single_timeout_abs(&ring);
+	ret = test_single_timeout_abs(&ring, false);
 	if (ret) {
 		fprintf(stderr, "test_single_timeout_abs failed\n");
 		return ret;
+	}
+
+	if (!no_immediate) {
+		ret = test_single_timeout_abs(&ring, true);
+		if (ret) {
+			fprintf(stderr, "test_single_timeout_abs (imm) failed\n");
+			return ret;
+		}
 	}
 
 	ret = test_single_timeout_remove(&ring);
@@ -1607,10 +1833,18 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = test_single_timeout_many(&ring);
+	ret = test_single_timeout_many(&ring, false);
 	if (ret) {
 		fprintf(stderr, "test_single_timeout_many failed\n");
 		return ret;
+	}
+
+	if (!no_immediate) {
+		ret = test_single_timeout_many(&ring, true);
+		if (ret) {
+			fprintf(stderr, "test_single_timeout_many (imm) failed\n");
+			return ret;
+		}
 	}
 
 	ret = test_single_timeout_nr(&ring, 1);
@@ -1747,6 +1981,12 @@ int main(int argc, char *argv[])
 			return ret;
 		}
 
+		ret = test_update_multishot_timeouts(&ring, 200);
+		if (ret && ret != T_EXIT_SKIP) {
+			fprintf(stderr, "test_update_multishot_timeouts linked failed\n");
+			return ret;
+		}
+
 		if (sqpoll) {
 			ret = test_update_timeout(&sqpoll_ring, 0, false, false,
 						  false);
@@ -1756,6 +1996,12 @@ int main(int argc, char *argv[])
 				return ret;
 			}
 		}
+	}
+
+	ret = test_eventfd();
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test_eventfd failed\n");
+		return ret;
 	}
 
 	/*

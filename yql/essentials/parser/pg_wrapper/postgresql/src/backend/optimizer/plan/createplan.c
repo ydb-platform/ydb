@@ -40,6 +40,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parsetree.h"
 #include "partitioning/partprune.h"
+#include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 
 
@@ -2005,7 +2006,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
 	 * Convert our subpath to a Plan and determine whether we need a Result
 	 * node.
 	 *
-	 * In most cases where we don't need to project, creation_projection_path
+	 * In most cases where we don't need to project, create_projection_path
 	 * will have set dummypp, but not always.  First, some createplan.c
 	 * routines change the tlists of their nodes.  (An example is that
 	 * create_merge_append_plan might add resjunk sort columns to a
@@ -6987,6 +6988,8 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 				 List *mergeActionLists, int epqParam)
 {
 	ModifyTable *node = makeNode(ModifyTable);
+	bool		transition_tables = false;
+	bool		transition_tables_valid = false;
 	List	   *fdw_private_list;
 	Bitmapset  *direct_modify_plans;
 	ListCell   *lc;
@@ -7090,7 +7093,19 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 
 			if (rte->rtekind == RTE_RELATION &&
 				rte->relkind == RELKIND_FOREIGN_TABLE)
+			{
+				/* Check if the access to foreign tables is restricted */
+				if (unlikely((restrict_nonsystem_relation_kind & RESTRICT_RELKIND_FOREIGN_TABLE) != 0))
+				{
+					/* there must not be built-in foreign tables */
+					Assert(rte->relid >= FirstNormalObjectId);
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("access to non-system foreign table is restricted")));
+				}
+
 				fdwroutine = GetFdwRoutineByRelId(rte->relid);
+			}
 			else
 				fdwroutine = NULL;
 		}
@@ -7118,7 +7133,7 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 		 * callback functions needed for that and (2) there are no local
 		 * structures that need to be run for each modified row: row-level
 		 * triggers on the foreign table, stored generated columns, WITH CHECK
-		 * OPTIONs from parent views.
+		 * OPTIONs from parent views, transition tables on the named relation.
 		 */
 		direct_modify = false;
 		if (fdwroutine != NULL &&
@@ -7129,7 +7144,19 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 			withCheckOptionLists == NIL &&
 			!has_row_triggers(root, rti, operation) &&
 			!has_stored_generated_columns(root, rti))
-			direct_modify = fdwroutine->PlanDirectModify(root, node, rti, i);
+		{
+			/* transition_tables is the same for all result relations */
+			if (!transition_tables_valid)
+			{
+				transition_tables = has_transition_tables(root,
+														  nominalRelation,
+														  operation);
+				transition_tables_valid = true;
+			}
+			if (!transition_tables)
+				direct_modify = fdwroutine->PlanDirectModify(root, node,
+															 rti, i);
+		}
 		if (direct_modify)
 			direct_modify_plans = bms_add_member(direct_modify_plans, i);
 

@@ -742,7 +742,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     directed_graph_helper< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 //=========================================================================
@@ -1094,7 +1094,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     undirected_graph_helper< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 
@@ -1518,7 +1518,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     bidirectional_graph_helper_with_property< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 // O(1)
@@ -2228,9 +2228,10 @@ inline typename Config::vertex_descriptor add_vertex(
     vec_adj_list_impl< Graph, Config, Base >& g_)
 {
     Graph& g = static_cast< Graph& >(g_);
-    g.m_vertices.resize(g.m_vertices.size() + 1);
-    g.added_vertex(g.m_vertices.size() - 1);
-    return g.m_vertices.size() - 1;
+    auto const added_descriptor = g.m_vertices.size();
+    g.m_vertices.emplace_back();
+    g.added_vertex(added_descriptor);
+    return added_descriptor;
 }
 
 template < class Graph, class Config, class Base >
@@ -2243,10 +2244,10 @@ inline typename Config::vertex_descriptor add_vertex(
     if (optional< vertex_descriptor > v
         = g.vertex_by_property(get_property_value(p, vertex_bundle)))
         return *v;
-    typedef typename Config::stored_vertex stored_vertex;
-    g.m_vertices.push_back(stored_vertex(p));
-    g.added_vertex(g.m_vertices.size() - 1);
-    return g.m_vertices.size() - 1;
+    auto const added_descriptor = g.m_vertices.size();
+    g.m_vertices.emplace_back(p);
+    g.added_vertex(added_descriptor);
+    return added_descriptor;
 }
 
 // Here we override the directed_graph_helper add_edge() function
@@ -2271,7 +2272,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     vec_adj_list_impl< Graph, Config, Base >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 

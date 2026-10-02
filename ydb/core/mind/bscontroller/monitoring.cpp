@@ -1,7 +1,14 @@
 #include "impl.h"
+#include "cluster_balancing.h"
+
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
+#include <ydb/core/util/format.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
+#include <ydb/core/base/mon_auth.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
@@ -15,6 +22,29 @@ static void RenderBytesCell(IOutputStream& out, ui64 bytes) {
             FormatHumanReadable(out, bytes, 1024, 2, DataSizeSuffix);
         }
     }
+}
+
+using ESpaceColor = NKikimrBlobStorage::TPDiskSpaceColor::E;
+
+static void RenderSpaceColor(IOutputStream& out, std::optional<ESpaceColor> color) {
+    if (!color) {
+        out << "-";
+        return;
+    }
+    const char *htmlColor = "black";
+    switch (*color) {
+        case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:        htmlColor = "green";        break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:         htmlColor = "darkcyan";     break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW: htmlColor = "goldenrod";    break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:       htmlColor = "darkgoldenrod"; break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:
+        case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:
+        case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:       htmlColor = "darkorange";   break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::RED:          htmlColor = "red";          break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:        htmlColor = "black";        break;
+        default:                                                 break;
+    }
+    out << "<font color='" << htmlColor << "'>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*color) << "</font>";
 }
 
 template<typename T>
@@ -360,7 +390,7 @@ public:
         , RespondTo(sender)
         , Json(cgi.Has("fmt") && cgi.Get("fmt") == "json")
         , Offset(FromStringWithDefault<ui64>(cgi.Get("RowsOffset"), 0))
-        , NumRows(FromStringWithDefault<ui64>(cgi.Get("RowsCount"), 1000))
+        , NumRows(Max<ui64>(1, FromStringWithDefault<ui64>(cgi.Get("RowsCount"), 1000)))
     {}
 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MON_EVENT_HEALTH_EVENTS; }
@@ -661,8 +691,12 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO01, "TBlobStorageController::TTxMonEvent_SetDown",
-            (GroupId.GetRawId(), GroupId.GetRawId()), (Down, Down), (Persist, Persist), (Response, Response));
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
+            {"marker", "BSCTXMO01"},
+            {"groupId", GroupId.GetRawId()},
+            {"down", Down},
+            {"persist", Persist},
+            {"response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -712,8 +746,10 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId.GetRawId(), GroupId.GetRawId()),
-            (Response, Response));
+        YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
+            {"marker", "BSCTXMO02"},
+            {"groupId", GroupId.GetRawId()},
+            {"response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -862,6 +898,17 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
     if (!ev) {
         return true;
     }
+    const TCgiParameters& cgi(ev->Get()->Cgi());
+    // BSController exposes no non-admin handlers.
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
     if (const auto& ext = ev->Get()->ExtendedQuery; ext && ext->GetMethod() == HTTP_METHOD_POST) {
         ProcessPostQuery(*ext, ev->Sender);
         return true;
@@ -869,7 +916,6 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 
     THolder<TTransactionBase<TBlobStorageController>> tx;
     TStringStream str;
-    const TCgiParameters& cgi(ev->Get()->Cgi());
 
     if (!cgi.count("page")) {
         RenderMonPage(str);
@@ -961,8 +1007,12 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
+        } else if (page == "Bridge") {
+            RenderBridge(str);
         } else if (page == "VirtualGroups") {
             RenderVirtualGroups(str);
+        } else if (page == "DatabaseSpace") {
+            RenderDatabaseSpace(str);
         } else if (page == "StopGivingGroups") {
             StopGivingGroups = true;
             str << "OK";
@@ -1009,14 +1059,16 @@ void TBlobStorageController::RenderFooter(IOutputStream& out) {
 void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     RenderHeader(out);
 
-    out << "<a href='app?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
+    out << "<a href='?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=DatabaseSpace'>Database space</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {
         DIV_CLASS("panel panel-info") {
@@ -1056,6 +1108,84 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                             TABLED() { out << "PDisk space color border"; }
                             TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(PDiskSpaceColorBorder); }
                         }
+                        TABLER() {
+                            TABLED() { out << "Database space block color"; }
+                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(DatabaseSpace.GetBlockColor()); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "Database space unblock color"; }
+                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(DatabaseSpace.GetUnblockColor()); }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Self Heal Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (SelfHealSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (SelfHealSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cluster Balancing Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Status"; }
+                                    TABLED() { out << (ClusterBalancingSettings.Enable ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Iteration interval (ms)"; }
+                                    TABLED() { out << ClusterBalancingSettings.IterationIntervalMs; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating PDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingPDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating VDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (ClusterBalancingSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (ClusterBalancingSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1070,7 +1200,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
 
     auto gen_li = [&](const TString& component) {
         out << "<li" << (component == table ? " class='active'" : "") << ">";
-        out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
+        out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
         out << component << "</a>";
         out << "</li>";
     };
@@ -1097,6 +1227,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Total Size"; }
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
+                        TABLEH() { out << "Decommit status"; }
+                        TABLEH() { out << "Maintenance status"; }
                         TABLEH() { out << "ExpectedSerial"; }
                         TABLEH() { out << "LastSeenSerial"; }
                         TABLEH() { out << "LastSeenPath"; }
@@ -1120,6 +1252,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
+                            TABLED() { out << NKikimrBlobStorage::EDecommitStatus_Name(pdisk->DecommitStatus); }
+                            TABLED() { out << NKikimrBlobStorage::TMaintenanceStatus::E_Name(pdisk->MaintenanceStatus); }
                             TABLED() { out << pdisk->ExpectedSerial.Quote(); }
                             TABLED() {
                                 TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";
@@ -1147,7 +1281,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                 TABLEHEAD() {
                     TABLER() {
                         TAG_ATTRS(TTableH, {{"colspan", "3"}}) { out << "Box attributes"; }
-                        TAG_ATTRS(TTableH, {{"colspan", "7"}}) { out << "Storage pools"; }
+                        TAG_ATTRS(TTableH, {{"colspan", "10"}}) { out << "Storage pools"; }
                     }
                     TABLER() {
                         TABLEH() { out << "BoxId"; }
@@ -1160,6 +1294,9 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "VDiskKind"; }
                         TABLEH() { out << "Kind"; }
                         TABLEH() { out << "NumGroups"; }
+                        TAG_ATTRS(TTableH, {{"title", "The best space color among pool's groups"}}) { out << "Best color"; }
+                        TAG_ATTRS(TTableH, {{"title", "The worst space color among pool's groups"}}) { out << "Worst color"; }
+                        TAG_ATTRS(TTableH, {{"title", "Does the pool block writes to its database?"}}) { out << "Space exhausted"; }
                         TABLEH() { out << "Detail"; }
                     }
                 }
@@ -1183,6 +1320,10 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                 TABLED() { out << NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(it->second.VDiskKind); }
                                 TABLED() { out << it->second.Kind; }
                                 TABLED() { out << it->second.NumGroups; }
+                                const auto poolState = DatabaseSpace.GetPoolState(it->first);
+                                TABLED() { RenderSpaceColor(out, poolState ? poolState->BestColor : std::nullopt); }
+                                TABLED() { RenderSpaceColor(out, poolState ? poolState->WorstColor : std::nullopt); }
+                                TABLED() { out << (poolState && poolState->Exhausted ? "<strong>YES</strong>" : ""); }
                                 TABLED() {
                                     out << "<a href='?TabletID=" << TabletID()
                                         << "&page=Groups&BoxId=" << boxId
@@ -1194,7 +1335,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         if (!enlistedStoragePools) {
                             TABLER() {
                                 renderBoxPart();
-                                TABLED_ATTRS({{"colspan", "7"}, {"align", "center"}}) {
+                                TABLED_ATTRS({{"colspan", "10"}, {"align", "center"}}) {
                                     out << "No storage pools";
                                 }
                             }
@@ -1227,6 +1368,131 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                             TABLED() { out << info->Kind; }
                             TABLED() { out << info->PDiskType; }
                             TABLED() { out << PrintMaybe(info->Path); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    RenderFooter(out);
+}
+
+void TBlobStorageController::RenderDatabaseSpace(IOutputStream& out) {
+    RenderHeader(out);
+
+    auto renderPoolLink = [&](const TBoxStoragePoolId& poolId, const TString& name) {
+        out << "<a href='?TabletID=" << TabletID() << "&page=Groups&BoxId=" << std::get<0>(poolId)
+            << "&StoragePoolId=" << std::get<1>(poolId) << "'>" << name << "</a>";
+    };
+
+    HTML(out) {
+        TAG(TH3) {
+            out << "Database space";
+        }
+
+        out << "<p>Writes to a database get blocked when every group of any of its storage pools is at the block "
+            "color or worse; they get unblocked when some group becomes better than the unblock color.</p>";
+
+        TABLE_CLASS("table table-condensed") {
+            TABLEBODY() {
+                const auto block = DatabaseSpace.GetBlockColor();
+                TABLER() {
+                    TABLED() { out << "Block color"; }
+                    TABLED() {
+                        if (block == NKikimrBlobStorage::TPDiskSpaceColor::GREEN) {
+                            out << "<strong>disabled</strong>";
+                        } else {
+                            RenderSpaceColor(out, block);
+                        }
+                    }
+                }
+                TABLER() {
+                    TABLED() { out << "Unblock color"; }
+                    TABLED() {
+                        RenderSpaceColor(out, DatabaseSpace.GetEffectiveUnblockColor());
+                    }
+                }
+            }
+        }
+
+        TAG(TH4) {
+            out << "Databases";
+        }
+        TABLE_CLASS("table") {
+            TABLEHEAD() {
+                TABLER() {
+                    TAG_ATTRS(TTableH, {{"title", "SchemeShardId:PathId, as in ScopeId of storage pools"}}) { out << "Database"; }
+                    TABLEH() { out << "Exhausted"; }
+                    TABLEH() { out << "Storage pool"; }
+                    TABLEH() { out << "Groups"; }
+                    TABLEH() { out << "Best color"; }
+                    TABLEH() { out << "Worst color"; }
+                    TABLEH() { out << "Pool exhausted"; }
+                    TABLEH() { out << "Subscribed nodes"; }
+                }
+            }
+            TABLEBODY() {
+                // databases with storage pools and those somebody is subscribed to
+                std::set<TDatabaseSpaceTracker::TScope> scopes;
+                for (const auto& [scope, pools] : DatabaseSpace.GetScopePools()) {
+                    scopes.insert(scope);
+                }
+                for (const auto& [scope, nodes] : DatabaseSpace.GetSubscribers()) {
+                    scopes.insert(scope);
+                }
+
+                for (const auto& scope : scopes) {
+                    const bool exhausted = DatabaseSpace.IsExhausted(scope);
+
+                    TStringBuilder nodes;
+                    if (const auto *subscribers = DatabaseSpace.GetSubscribers(scope)) {
+                        for (const TNodeId nodeId : *subscribers) {
+                            nodes << (nodes ? " " : "") << nodeId;
+                        }
+                    }
+
+                    std::vector<TBoxStoragePoolId> poolIds;
+                    if (const auto it = DatabaseSpace.GetScopePools().find(scope); it != DatabaseSpace.GetScopePools().end()) {
+                        poolIds.assign(it->second.begin(), it->second.end());
+                    }
+                    const TString rowspan = ToString(Max<size_t>(1, poolIds.size()));
+
+                    auto renderDatabasePart = [&] {
+                        TABLED_ATTRS({{"rowspan", rowspan}}) { out << scope.OwnerId << ":" << scope.LocalPathId; }
+                        TABLED_ATTRS({{"rowspan", rowspan}}) { out << (exhausted ? "<strong>YES</strong>" : "no"); }
+                    };
+
+                    if (poolIds.empty()) {
+                        TABLER() {
+                            renderDatabasePart();
+                            TABLED_ATTRS({{"colspan", "5"}, {"align", "center"}}) { out << "No storage pools"; }
+                            TABLED() { out << nodes; }
+                        }
+                    }
+                    for (size_t i = 0; i < poolIds.size(); ++i) {
+                        const TBoxStoragePoolId& poolId = poolIds[i];
+                        const auto poolState = DatabaseSpace.GetPoolState(poolId);
+                        TABLER() {
+                            if (!i) {
+                                renderDatabasePart();
+                            }
+                            TABLED() {
+                                const auto it = StoragePools.find(poolId);
+                                renderPoolLink(poolId, it != StoragePools.end() ? it->second.Name : TString("?"));
+                            }
+                            TABLED() {
+                                out << (poolState ? poolState->NumGroups : 0);
+                                if (poolState && poolState->NumIncompleteGroups) {
+                                    out << " (" << poolState->NumIncompleteGroups << " not fully reported)";
+                                }
+                            }
+                            TABLED() { RenderSpaceColor(out, poolState ? poolState->BestColor : std::nullopt); }
+                            TABLED() { RenderSpaceColor(out, poolState ? poolState->WorstColor : std::nullopt); }
+                            TABLED() { out << (poolState && poolState->Exhausted ? "<strong>YES</strong>" : "no"); }
+                            if (!i) {
+                                TABLED_ATTRS({{"rowspan", rowspan}}) { out << nodes; }
+                            }
                         }
                     }
                 }
@@ -1275,8 +1541,8 @@ void TBlobStorageController::RenderGroupsInStoragePool(IOutputStream &out, const
             out << "Groups in storage pool " << name << " (" << std::get<0>(id) << ", " << std::get<1>(id) << ")";
         }
         RenderGroupTable(out, [&] {
-            auto range = StoragePoolGroups.equal_range(id);
-            for (auto it = range.first; it != range.second; ++it) {
+            for (auto it = StoragePoolGroups.lower_bound({id, Min<TGroupId>()});
+                    it != StoragePoolGroups.end() && it->first == id; ++it) {
                 if (TGroupInfo *group = FindGroup(it->second)) {
                     RenderGroupRow(out, *group);
                 }
@@ -1291,7 +1557,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
         TABLE_CLASS("table") {
             TABLEHEAD() {
                 TABLER() {
-                    TAG_ATTRS(TTableH, {{"colspan", "10"}}) { out << "VDisk attributes"; }
+                    TAG_ATTRS(TTableH, {{"colspan", "11"}}) { out << "VDisk attributes"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Current"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Maximum"; }
                 }
@@ -1303,6 +1569,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Allocated"; }
                     TABLEH() { out << "Available"; }
                     TABLEH() { out << "Status"; }
+                    TABLEH() { out << "Space color"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
                     TABLEH() { out << "ReplicationTime"; }
@@ -1338,6 +1605,9 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
             RenderBytesCell(out, vslot.Metrics.GetAllocatedSize());
             RenderBytesCell(out, vslot.Metrics.GetAvailableSize());
             TABLED() { out << vslot.GetStatusString(); }
+            TABLED() {
+                RenderSpaceColor(out, StatusFlagToValidSpaceColor(vslot.Metrics.GetStatusFlags()));
+            }
             TABLED() { out << (vslot.IsReady ? "YES" : ""); }
             TABLED() {
                 if (vslot.LastSeenReady != TInstant::Zero()) {
@@ -1388,9 +1658,12 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; }
                     TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; }
                     TABLEH() { out << "Seen operational"; }
+                    TABLEH() { out << "Layout correct"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
+                    TAG_ATTRS(TTableH, {{"title", "The worst space color among group's VDisks"}}) { out << "Space<br/>color"; }
                     TABLEH() { out << "Donors"; }
+                    TABLEH() { out << "Bridge"; }
                 }
             }
             TABLEBODY() {
@@ -1422,6 +1695,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             }
         };
 
+        TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
+
         TABLER() {
             TString storagePool = "<strong>none</strong>";
             if (auto it = StoragePools.find(group.StoragePoolId); it != StoragePools.end()) {
@@ -1448,16 +1723,33 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
+            TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder, BridgeInfo.get());
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
+            TABLED() { RenderSpaceColor(out, StatusFlagToValidSpaceColor(group.StatusFlags.Raw)); }
             TABLED() {
                 ui32 numDonors = 0;
                 for (const auto& vdisk : group.VDisksInGroup) {
                     numDonors += vdisk->Donors.size();
                 }
                 out << numDonors;
+            }
+
+            TStringBuilder bridge;
+            if (group.BridgeGroupInfo) {
+                for (const auto& pile : group.BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (bridge) {
+                        bridge << ' ';
+                    }
+                    bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
+                        << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
+                        << '@' << pile.GetBecameUnsyncedGeneration();
+                }
+            }
+            TABLED() {
+                out << bridge;
             }
         }
     }

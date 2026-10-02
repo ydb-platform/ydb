@@ -35,13 +35,13 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = NodeTrackerClientLogger;
+constinit const auto Logger = NodeTrackerClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 const std::string& NullNodeAddress()
 {
-    static const TString Result("<null>");
+    static const std::string Result("<null>");
     return Result;
 }
 
@@ -152,7 +152,7 @@ const std::vector<std::string>& TNodeDescriptor::GetTags() const
 
 std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 {
-    auto cpuTime = LastSeenTime_.Load();
+    auto cpuTime = LastSeenTime_.load();
     if (cpuTime != 0) {
         return CpuInstantToInstant(cpuTime);
     } else {
@@ -163,8 +163,8 @@ std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 void TNodeDescriptor::UpdateLastSeenTime(TInstant at) const
 {
     auto cpuTime = InstantToCpuInstant(at);
-    if (auto currentTime = LastSeenTime_.Load(); cpuTime > currentTime) {
-        LastSeenTime_.Store(cpuTime);
+    if (auto currentTime = LastSeenTime_.load(); cpuTime > currentTime) {
+        LastSeenTime_.store(cpuTime);
     }
 }
 
@@ -344,31 +344,13 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
 
     ToProto(protoDescriptor->mutable_addresses(), descriptor.Addresses());
 
-    if (auto host = descriptor.GetHost()) {
-        protoDescriptor->set_host(ToProto(*host));
-    } else {
-        protoDescriptor->clear_host();
-    }
-
-    if (auto rack = descriptor.GetRack()) {
-        protoDescriptor->set_rack(ToProto(*rack));
-    } else {
-        protoDescriptor->clear_rack();
-    }
-
-    if (auto dataCenter = descriptor.GetDataCenter()) {
-        protoDescriptor->set_data_center(ToProto(*dataCenter));
-    } else {
-        protoDescriptor->clear_data_center();
-    }
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, host, descriptor.GetHost());
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, rack, descriptor.GetRack());
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, data_center, descriptor.GetDataCenter());
 
     ToProto(protoDescriptor->mutable_tags(), descriptor.GetTags());
 
-    if (auto lastHeartbeatTime = descriptor.GetLastSeenTime()) {
-        protoDescriptor->set_last_seen_time(ToProto(*lastHeartbeatTime));
-    } else {
-        protoDescriptor->clear_last_seen_time();
-    }
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, last_seen_time, descriptor.GetLastSeenTime());
 }
 
 void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrackerClient::NProto::TNodeDescriptor& protoDescriptor)
@@ -386,7 +368,7 @@ void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrack
 
 } // namespace NProto
 
-bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
+bool operator==(const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
 {
     return
         lhs.GetDefaultAddress() == rhs.GetDefaultAddress() && // shortcut
@@ -397,7 +379,7 @@ bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
         GetSortedTags(lhs.GetTags()) == GetSortedTags(rhs.GetTags());
 }
 
-bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
+bool operator==(const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
 {
     if (std::ssize(lhs.Addresses()) != rhs.addresses().entries_size()) {
         return false;
@@ -591,7 +573,9 @@ void TNodeDirectory::OnDescriptorAdded(TNodeId id, const TNodeDescriptor* descri
 {
     if (auto it = IdToPromise_.find(id); it != IdToPromise_.end()) {
         it->second.TrySet(descriptor);
-        YT_LOG_DEBUG("Awaited node descriptor added (NodeId: %v, NodeAddress: %v)", id, descriptor->GetDefaultAddress());
+        YT_TLOG_DEBUG("Awaited node descriptor added")
+            .With("NodeId", id)
+            .With("NodeAddress", descriptor->GetDefaultAddress());
         IdToPromise_.erase(it);
     }
 }
@@ -618,7 +602,8 @@ TFuture<const TNodeDescriptor*> TNodeDirectory::GetAsyncDescriptor(TNodeId id)
 
     TPromise<const TNodeDescriptor*> promise;
     {
-        YT_LOG_DEBUG("Waiting for node descriptor (NodeId: %v)", id);
+        YT_TLOG_DEBUG("Waiting for node descriptor")
+            .With("NodeId", id);
         auto guard = WriterGuard(SpinLock_);
         if (auto it = IdToPromise_.find(id); it != IdToPromise_.end()) {
             promise = it->second;
@@ -724,10 +709,11 @@ const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetwor
         return it->second;
     }
 
-    THROW_ERROR_EXCEPTION("Cannot select address for host %v since there is no compatible network",
+    THROW_ERROR_EXCEPTION(EErrorCode::NoSuchNetwork,
+        "Cannot select address for host %Qv since there is no compatible network",
         FindDefaultAddress(addresses))
-        << TErrorAttribute("remote_networks", GetKeys(addresses))
-        << TErrorAttribute("local_networks", networks);
+        .With("remote_networks", GetKeys(addresses))
+        .With("local_networks", networks);
 }
 
 const TAddressMap& GetAddressesOrThrow(const TNodeAddressMap& nodeAddresses, EAddressType type)
@@ -738,7 +724,7 @@ const TAddressMap& GetAddressesOrThrow(const TNodeAddressMap& nodeAddresses, EAd
     }
 
     THROW_ERROR_EXCEPTION("No addresses known for address type %Qlv", type)
-        << TErrorAttribute("known_types", GetKeys(nodeAddresses));
+        .With("known_types", GetKeys(nodeAddresses));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

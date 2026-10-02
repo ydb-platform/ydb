@@ -284,7 +284,8 @@
 /****************************/
 
 #if (!defined SLJIT_CACHE_FLUSH && defined __has_builtin)
-#if __has_builtin(__builtin___clear_cache)
+#if __has_builtin(__builtin___clear_cache) && \
+	!(defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC)
 
 #define SLJIT_CACHE_FLUSH(from, to) \
 	__builtin___clear_cache((char*)from, (char*)to)

@@ -1,7 +1,7 @@
 Init tables ...
 --!syntax_v1
 
-CREATE TABLE `/Root/db/Root/db/clickbench/s1` (
+CREATE TABLE `/Root/db/clickbench/s1` (
     WatchID Int64 NOT NULL,
     JavaEnable Int16 NOT NULL,
     Title Utf8 NOT NULL,

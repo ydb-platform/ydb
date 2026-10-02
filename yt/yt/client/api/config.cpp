@@ -1,8 +1,12 @@
 #include "config.h"
 
+#include <yt/yt/client/transaction_client/config.h>
+
 #include <yt/yt/core/misc/config.h>
 
 namespace NYT::NApi {
+
+using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,6 +32,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("replication_card_cache", &TThis::ReplicationCardCache)
         .Optional();
+    registrar.Parameter("chaos_lease_cache", &TThis::ChaosLeaseCache)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,6 +42,8 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
         .DefaultNew();
+    registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
+        .Default(); // DefaultNew breaks exenodes job config due to direct patching.
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({
             .InvocationCount = 0,
@@ -94,6 +102,10 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
         .Default(100'000);
     registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
         .Default(100_MB);
+    registrar.Parameter("max_in_flight_flush_count", &TThis::MaxInFlightFlushCount)
+        .Default(1)
+        .GreaterThanOrEqual(1)
+        .DontSerializeDefault();
 
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
@@ -116,21 +128,65 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("replica_fake_timeout_delay", &TThis::ReplicaFakeTimeoutDelay)
         .Default();
 
+    registrar.Parameter("chunk_close_grace_period", &TThis::ChunkCloseGracePeriod)
+        .Default(TDuration::Seconds(15))
+        .DontSerializeDefault();
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxBatchRowCount > config->MaxFlushRowCount) {
             THROW_ERROR_EXCEPTION("\"max_batch_row_count\" cannot be greater than \"max_flush_row_count\"")
-                << TErrorAttribute("max_batch_row_count", config->MaxBatchRowCount)
-                << TErrorAttribute("max_flush_row_count", config->MaxFlushRowCount);
+                .With("max_batch_row_count", config->MaxBatchRowCount)
+                .With("max_flush_row_count", config->MaxFlushRowCount);
         }
         if (config->MaxBatchDataSize > config->MaxFlushDataSize) {
             THROW_ERROR_EXCEPTION("\"max_batch_data_size\" cannot be greater than \"max_flush_data_size\"")
-                << TErrorAttribute("max_batch_data_size", config->MaxBatchDataSize)
-                << TErrorAttribute("max_flush_data_size", config->MaxFlushDataSize);
+                .With("max_batch_data_size", config->MaxBatchDataSize)
+                .With("max_flush_data_size", config->MaxFlushDataSize);
         }
     });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Optional();
+    registrar.Parameter("max_batch_row_count", &TThis::MaxBatchRowCount)
+        .Optional();
+    registrar.Parameter("max_batch_data_size", &TThis::MaxBatchDataSize)
+        .Optional();
+    registrar.Parameter("max_flush_row_count", &TThis::MaxFlushRowCount)
+        .Optional();
+    registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
+        .Optional();
+    registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
+        .Optional();
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
+        .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TJournalWriterConfigPtr TJournalWriterConfig::ApplyDynamic(
+    const TDynamicJournalWriterConfigPtr& dynamicConfig) const
+{
+    auto config = CloneYsonStruct(MakeStrong(this));
+    config->ApplyDynamicInplace(dynamicConfig);
+    config->Postprocess();
+    return config;
+}
+
+void TJournalWriterConfig::ApplyDynamicInplace(const TDynamicJournalWriterConfigPtr& dynamicConfig)
+{
+    UpdateYsonStructField(ValidateErasureCoding, dynamicConfig->ValidateErasureCoding);
+    UpdateYsonStructField(MaxBatchRowCount, dynamicConfig->MaxBatchRowCount);
+    UpdateYsonStructField(MaxBatchDataSize, dynamicConfig->MaxBatchDataSize);
+    UpdateYsonStructField(MaxFlushRowCount, dynamicConfig->MaxFlushRowCount);
+    UpdateYsonStructField(MaxFlushDataSize, dynamicConfig->MaxFlushDataSize);
+    UpdateYsonStructField(PreferLocalHost, dynamicConfig->PreferLocalHost);
+    UpdateYsonStructField(TryDisjointPreallocatedSessionNodes, dynamicConfig->TryDisjointPreallocatedSessionNodes);
+}
 
 void TJournalWriterConfig::Register(TRegistrar registrar)
 {
@@ -151,11 +207,18 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("prerequisite_transaction_probe_period", &TThis::PrerequisiteTransactionProbePeriod)
         .Default(TDuration::Seconds(60));
 
+    registrar.Parameter("enable_checksums", &TThis::EnableChecksums)
+        .Default(false);
+    registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Default(false);
+
     registrar.Parameter("dont_close", &TThis::DontClose)
         .Default(false);
     registrar.Parameter("dont_seal", &TThis::DontSeal)
         .Default(false);
     registrar.Parameter("dont_preallocate", &TThis::DontPreallocate)
+        .Default(false);
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
         .Default(false);
     registrar.Parameter("open_delay", &TThis::OpenDelay)
         .Default();
@@ -185,4 +248,3 @@ void TJournalChunkWriterOptions::Register(TRegistrar registrar)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

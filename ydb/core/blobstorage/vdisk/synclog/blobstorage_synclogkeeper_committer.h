@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_synclogdata.h"
+#include "blobstorage_synclog_context.h"
 
 namespace NKikimr {
     namespace NSyncLog {
@@ -55,13 +56,16 @@ namespace NKikimr {
             const TCommitHistory CommitInfo;
             const TEntryPointDbgInfo EntryPointDbgInfo;
             TDeltaToDiskRecLog Delta;
+            TVector<ui32> ChunksDeleted;
 
             TEvSyncLogCommitDone(const TCommitHistory &commitInfo,
                                  const TEntryPointDbgInfo &layout,
-                                 TDeltaToDiskRecLog &&delta)
+                                 TDeltaToDiskRecLog &&delta,
+                                 TVector<ui32>&& chunksDeleted)
                 : CommitInfo(commitInfo)
                 , EntryPointDbgInfo(layout)
                 , Delta(std::move(delta))
+                , ChunksDeleted(std::move(chunksDeleted))
             {}
 
             void Output(IOutputStream &s) const {
@@ -82,24 +86,37 @@ namespace NKikimr {
         };
 
         ////////////////////////////////////////////////////////////////////////////
+        // TEvSyncLogDiskOutOfSpace
+        // Sent by the committer to the keeper when a sync log chunk write returns
+        // OUT_OF_SPACE. Carries the chunks that were allocated during the aborted
+        // commit so the keeper can dispose of them together with the whole disk log.
+        ////////////////////////////////////////////////////////////////////////////
+        struct TEvSyncLogDiskOutOfSpace
+            : public TEventLocal<TEvSyncLogDiskOutOfSpace, TEvBlobStorage::EvSyncLogDiskOutOfSpace>
+        {
+            TVector<ui32> AllocatedChunks;
+
+            TEvSyncLogDiskOutOfSpace(TVector<ui32>&& allocatedChunks)
+                : AllocatedChunks(std::move(allocatedChunks))
+            {}
+        };
+
+        ////////////////////////////////////////////////////////////////////////////
         // TSyncLogKeeperCommitData
         ////////////////////////////////////////////////////////////////////////////
         struct TSyncLogKeeperCommitData {
             TSyncLogSnapshotPtr SyncLogSnap;
             TMemRecLogSnapshotPtr SwapSnap;
-            TVector<ui32> ChunksToDeleteDelayed;
             TVector<ui32> ChunksToDelete;
             const ui64 RecoveryLogConfirmedLsn;
 
             TSyncLogKeeperCommitData(
-                    TSyncLogSnapshotPtr &&syncLogSnap,
+                    TSyncLogSnapshotPtr syncLogSnap,
                     TMemRecLogSnapshotPtr &&swapSnap,
-                    TVector<ui32> &&chunksToDeleteDelayed,
                     TVector<ui32> &&chunksToDelete,
                     ui64 recoveryLogConfirmedLsn)
-                : SyncLogSnap(std::move(syncLogSnap))
+                : SyncLogSnap(syncLogSnap)
                 , SwapSnap(std::move(swapSnap))
-                , ChunksToDeleteDelayed(std::move(chunksToDeleteDelayed))
                 , ChunksToDelete(std::move(chunksToDelete))
                 , RecoveryLogConfirmedLsn(recoveryLogConfirmedLsn)
             {}
@@ -111,7 +128,6 @@ namespace NKikimr {
             void Output(IOutputStream &str) const {
                 str << "{SyncLogSnap->Boundaries# " << SyncLogSnap->BoundariesToString()
                     << " SwapSnap# " << (SwapSnap ? SwapSnap->BoundariesToString() : "<empty>")
-                    << " ChunksToDeleteDelayed.size# " << ChunksToDeleteDelayed.size()
                     << " ChunksToDelete# " << ChunksToDelete.size()
                     << " RecoveryLogConfirmedLsn# " << RecoveryLogConfirmedLsn
                     << "}";
@@ -127,7 +143,6 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // CreateSyncLogCommitter
         ////////////////////////////////////////////////////////////////////////////
-        class TSyncLogCtx;
         IActor *CreateSyncLogCommitter(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
                 const TActorId &notifyID,

@@ -21,6 +21,7 @@
  */
 #ifndef FRONTEND
 #include "postgres.h"
+#include "utils/memutils.h"
 #else
 #include "postgres_fe.h"
 #endif
@@ -1004,15 +1005,17 @@ pg_utf8_string_len(const char *source)
 	const unsigned char *p = (const unsigned char *) source;
 	int			l;
 	int			num_chars = 0;
+	size_t		len = strlen(source);
 
-	while (*p)
+	while (len)
 	{
 		l = pg_utf_mblen(p);
 
-		if (!pg_utf8_islegal(p, l))
+		if (len < l || !pg_utf8_islegal(p, l))
 			return -1;
 
 		p += l;
+		len -= l;
 		num_chars++;
 	}
 
@@ -1077,6 +1080,8 @@ pg_saslprep(const char *input, char **output)
 	input_size = pg_utf8_string_len(input);
 	if (input_size < 0)
 		return SASLPREP_INVALID_UTF8;
+	if (input_size >= MaxAllocSize / sizeof(pg_wchar))
+		goto oom;
 
 	input_chars = ALLOC((input_size + 1) * sizeof(pg_wchar));
 	if (!input_chars)

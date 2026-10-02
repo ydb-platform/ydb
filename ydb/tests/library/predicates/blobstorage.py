@@ -11,6 +11,7 @@ def blobstorage_controller_has_started_on_some_node(monitors):
     """
     predicates = []
     for monitor in monitors:
+        monitor.force_update()
         tx_all_counter = monitor.sensor(
             counters='tablets', sensor='Tx(all)', type='BSController',
             category='executor'

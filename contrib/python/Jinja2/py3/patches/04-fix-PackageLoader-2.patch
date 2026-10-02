@@ -1,0 +1,27 @@
+--- contrib/python/Jinja2/py3/jinja2/loaders.py	(index)
++++ contrib/python/Jinja2/py3/jinja2/loaders.py	(working tree)
+@@ -310,6 +310,7 @@ class PackageLoader(BaseLoader):
+         package_path: "str" = "templates",
+         encoding: str = "utf-8",
+         skip_unknown_package: bool = False,
++        check_templates: bool = False,
+     ) -> None:
+         package_path = os.path.normpath(package_path).rstrip(os.path.sep)
+ 
+@@ -340,7 +341,7 @@ class PackageLoader(BaseLoader):
+         self._loader = loader
+         self._archive = None
+         self._package = package
+-        self._check_templates = False
++        self._check_templates = check_templates
+ 
+         if isinstance(loader, zipimport.zipimporter):
+             self._archive = loader.archive
+--- contrib/python/Jinja2/py3/tests/test_loader.py	(index)
++++ contrib/python/Jinja2/py3/tests/test_loader.py	(working tree)
+@@ -436,4 +436,4 @@ def test_pep_451_import_hook():
+ 
+ def test_package_loader_no_dir() -> None:
+     with pytest.raises(ValueError, match="could not find a 'templates' directory"):
+-        PackageLoader("jinja2")
++        PackageLoader("jinja2", check_templates=True)

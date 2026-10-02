@@ -1,6 +1,7 @@
 PY3_LIBRARY()
 
 PY_SRCS(
+    fqrun.py
     kqprun.py
 )
 

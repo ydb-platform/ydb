@@ -1,10 +1,9 @@
 UNITTEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -13,6 +12,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
+    ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/lib/json_value
     ydb/public/lib/yson_value
@@ -27,12 +27,16 @@ PEERDIR(
 
     ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/federated_topic/impl
+
+    ydb/public/sdk/cpp/tests/integration/topic/utils
 )
 
 YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    federation_observer_deadlock_ut.cpp
+    simple_blocking_write_session_ut.cpp
 )
 
 END()

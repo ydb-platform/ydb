@@ -18,10 +18,9 @@
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/ring_queue.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -34,6 +33,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/ref.h>
@@ -170,6 +171,9 @@ public:
     using TTypedRequest = TTypedServiceRequest<TRequestMessage>;
     using TTypedResponse = TTypedServiceResponse<TResponseMessage>;
 
+    using TRequestPool = TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>;
+    using TResponsePool = TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>;
+
     TGenericTypedServiceContext(
         TIntrusivePtr<TServiceContext> context,
         const THandlerInvocationOptions& options)
@@ -178,8 +182,8 @@ public:
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
         Response_ = underlyingContext->IsPooled()
-            ? ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>().Allocate()
-            : std::make_shared<TTypedResponse>();
+            ? ResponsePool().AllocateUnique()
+            : TResponsePool::AllocateUniqueUnpooled();
         Response_->Context_ = underlyingContext.Get();
 
         if (this->GetResponseCodec() == NCompression::ECodec::None) {
@@ -190,11 +194,9 @@ public:
     bool DeserializeRequest()
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
-        if (underlyingContext->IsPooled()) {
-            Request_ = ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>().Allocate();
-        } else {
-            Request_ = std::make_shared<TTypedRequest>();
-        }
+        Request_ = underlyingContext->IsPooled()
+            ? RequestPool().AllocateUnique()
+            : TRequestPool::AllocateUniqueUnpooled();
 
         Request_->Context_ = underlyingContext.Get();
         const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
@@ -247,30 +249,38 @@ public:
             return false;
         }
 
-        std::vector<TSharedRef> requestAttachments;
-        try {
-            if (attachmentCodecId == NCompression::ECodec::None) {
-                requestAttachments = underlyingContext->RequestAttachments();
-            } else {
-                requestAttachments = DecompressAttachments(
-                    underlyingContext->RequestAttachments(),
-                    attachmentCodecId);
+        // When the request attachments are delivered via direct placement transfer,
+        // they are not yet available (and #RequestAttachments would abort): leave the
+        // typed attachments empty and let the handler drive
+        // #IServiceContext::TryGetRequestAttachmentsTransfer, then read them from the
+        // context. For all non-DPT methods #TryGetRequestAttachmentsTransfer is null
+        // and this behaves exactly as before.
+        if (!underlyingContext->TryGetRequestAttachmentsTransfer()) {
+            std::vector<TSharedRef> requestAttachments;
+            try {
+                if (attachmentCodecId == NCompression::ECodec::None) {
+                    requestAttachments = underlyingContext->RequestAttachments();
+                } else {
+                    requestAttachments = DecompressAttachments(
+                        underlyingContext->RequestAttachments(),
+                        attachmentCodecId);
 
-                // For decompressed blocks, memory tracking must be used again,
-                // since they are allocated in a new allocation.
-                for (auto& attachment : requestAttachments) {
-                    attachment = TrackMemory(tracker, attachment);
+                    // For decompressed blocks, memory tracking must be used again,
+                    // since they are allocated in a new allocation.
+                    for (auto& attachment : requestAttachments) {
+                        attachment = TrackMemory(tracker, attachment);
+                    }
                 }
+            } catch (const std::exception& ex) {
+                underlyingContext->Reply(TError(
+                    NRpc::EErrorCode::ProtocolError,
+                    "Error deserializing request attachments")
+                    .With(ex));
+                return false;
             }
-        } catch (const std::exception& ex) {
-            underlyingContext->Reply(TError(
-                NRpc::EErrorCode::ProtocolError,
-                "Error deserializing request attachments")
-                << TError(ex));
-            return false;
-        }
 
-        Request_->Attachments() = std::move(requestAttachments);
+            Request_->Attachments() = std::move(requestAttachments);
+        }
 
         return true;
     }
@@ -322,8 +332,18 @@ public:
 protected:
     const THandlerInvocationOptions Options_;
 
-    typename TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>::TObjectPtr Request_;
-    typename TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>::TObjectPtr Response_;
+    typename TRequestPool::TObjectUniquePtr Request_;
+    typename TResponsePool::TObjectUniquePtr Response_;
+
+    static TRequestPool& RequestPool()
+    {
+        return ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>();
+    }
+
+    static TResponsePool& ResponsePool()
+    {
+        return ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>();
+    }
 
     struct TSerializedResponse
     {
@@ -391,7 +411,7 @@ protected:
                 return;
             }
 
-            response.AttachmentsFuture.SubscribeUnique(
+            response.AttachmentsFuture.AsUnique().Subscribe(
                 BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
                     const auto& underlyingContext = this->GetUnderlyingContext();
                     if (compressedAttachments.IsOK()) {
@@ -482,8 +502,8 @@ extern const NConcurrency::TThroughputThrottlerConfigPtr InfiniteRequestThrottle
 TRequestQueuePtr CreateRequestQueue(
     std::string name,
     std::any tag,
-    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler,
-    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler);
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler);
 
 TRequestQueuePtr CreateRequestQueue(
     std::string name,
@@ -533,7 +553,8 @@ public:
     void HandleRequest(
         std::unique_ptr<NProto::TRequestHeader> header,
         TSharedRefArray message,
-        NYT::NBus::IBusPtr replyBus) override;
+        NYT::NBus::IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer) override;
     void HandleRequestCancellation(TRequestId requestId) override;
     void HandleStreamingPayload(
         TRequestId requestId,
@@ -569,7 +590,7 @@ protected:
     {
         // Defaults.
         TMethodDescriptor(
-            TString method,
+            std::string method,
             TLiteHandler liteHandler,
             THeavyHandler heavyHandler);
 
@@ -588,7 +609,7 @@ protected:
         TInvokerProvider InvokerProvider;
 
         //! Service method name.
-        TString Method;
+        std::string Method;
 
         //! A handler that will serve lite requests.
         TLiteHandler LiteHandler;
@@ -616,8 +637,10 @@ protected:
         //! Also system methods do not require authentication.
         bool System = false;
 
-        //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
+        //! Log level for the request and response log messages.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
+        //! Log level for events emitted when method fails, by default |LogLevel| is used.
+        std::optional<NLogging::ELogLevel> ErrorLogLevel;
 
         //! Logging suppression timeout for this method requests.
         TDuration LoggingSuppressionTimeout = TDuration::Zero();
@@ -636,6 +659,15 @@ protected:
         //! If |true| then the method supports attachments streaming.
         bool StreamingEnabled = false;
 
+        //! If |true| then the method supports direct placement transfer (DPT) of the
+        //! request attachments: when the client also requests it, the attachments are
+        //! not delivered inline but fetched lazily, under the service's control, via
+        //! #IServiceContext::TryGetRequestAttachmentsTransfer.
+        bool RequestAttachmentsDptEnabled = false;
+
+        //! Like #RequestAttachmentsDptEnabled but for the response attachments.
+        bool ResponseAttachmentsDptEnabled = false;
+
         //! If |true| then requests and responses are pooled.
         bool Pooled = true;
 
@@ -653,10 +685,13 @@ protected:
         TMethodDescriptor SetConcurrencyByteLimit(i64 value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
+        TMethodDescriptor SetErrorLogLevel(NLogging::ELogLevel value) const;
         TMethodDescriptor SetLoggingSuppressionTimeout(TDuration value) const;
         TMethodDescriptor SetCancelable(bool value) const;
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
         TMethodDescriptor SetStreamingEnabled(bool value) const;
+        TMethodDescriptor SetRequestAttachmentsDptEnabled(bool value) const;
+        TMethodDescriptor SetResponseAttachmentsDptEnabled(bool value) const;
         TMethodDescriptor SetPooled(bool value) const;
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
@@ -741,6 +776,8 @@ protected:
 
         const TServiceId ServiceId;
         const TMethodDescriptor Descriptor;
+        //! Precomputed handler trace span name (|RpcServer:{Service}.{Method}|).
+        const std::string HandlerSpanName;
         const NProfiling::TProfiler Profiler;
 
         const TRequestQueuePtr DefaultRequestQueue;
@@ -750,6 +787,11 @@ protected:
 
         std::atomic<bool> Heavy = false;
         std::atomic<bool> Pooled = true;
+
+        // These values represent the combined queue sizes and queue byte sizes
+        // of all request queues associated with the method.
+        std::atomic<int> QueueSize = 0;
+        std::atomic<i64> QueueByteSize = 0;
 
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
@@ -762,11 +804,12 @@ protected:
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
-        std::atomic<NLogging::ELogLevel> LogLevel = {};
-        std::atomic<TDuration> LoggingSuppressionTimeout = {};
+        std::atomic<NLogging::ELogLevel> LogLevel;
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel;
+        std::atomic<TDuration> LoggingSuppressionTimeout;
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
-        using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
+        using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
 
         struct TPerformanceCountersKeyEquals
@@ -813,7 +856,7 @@ protected:
         const NProfiling::TProfiler Profiler_;
 
         //! Number of requests per user agent.
-        NConcurrency::TSyncMap<TString, NProfiling::TCounter> RequestsPerUserAgent_;
+        NConcurrency::TSyncMap<std::string, NProfiling::TCounter, THash<TStringBuf>, TEqualTo<TStringBuf>> RequestsPerUserAgent_;
     };
 
     using TPerformanceCountersPtr = TIntrusivePtr<TPerformanceCounters>;
@@ -839,6 +882,7 @@ protected:
         const TServiceDescriptor& descriptor,
         NLogging::TLogger logger,
         TServiceOptions options = {});
+    ~TServiceBase();
 
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.
@@ -888,7 +932,7 @@ protected:
      *  \note
      *  Thread affinity: any
      */
-    virtual std::vector<TString> SuggestAddresses();
+    virtual std::vector<std::string> SuggestAddresses();
 
     //! Part of #DoConfigure
     //! #DoConfigure configures already registered methods.
@@ -906,8 +950,8 @@ protected:
 
 protected:
     virtual void OnMethodError(
-        const TError& error,
-        const TString& method);
+        TError* error,
+        const std::string& method);
 
 private:
     friend class TRequestQueue;
@@ -930,14 +974,14 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<TString, TRuntimeMethodInfoPtr> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 
     struct TRequestBucket
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
-        THashMap<TRequestId, TServiceContext*> RequestIdToContext;
+        THashMap<TRequestId, TWeakPtr<TServiceContext>> RequestIdToContext;
         THashMap<TRequestId, TPendingPayloadsEntry> RequestIdToPendingPayloads;
     };
 
@@ -946,7 +990,7 @@ private:
 
     struct TReplyBusData
     {
-        THashSet<TServiceContext*> Contexts;
+        THashSet<TWeakPtr<TServiceContext>, TTransparentWeakPtrHasher, TEqualTo<>> Contexts;
         TCallback<void(const TError&)> BusTerminationHandler;
     };
 
@@ -991,7 +1035,7 @@ private:
     TAtomicIntrusivePtr<NConcurrency::TPeriodicExecutor> ServiceLivenessChecker_;
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
-    THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
+    THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
@@ -1015,6 +1059,11 @@ private:
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
+        //! Non-null iff the request's attachments are delivered via direct placement
+        //! transfer (the client requested it and the transport supports it). Whether
+        //! the attachments are exposed lazily to the service (vs. materialized inline)
+        //! additionally depends on the method declaring DPT support.
+        NYT::NBus::IDirectPlacementTransferPtr RequestAttachmentsTransfer;
     };
 
     void DoDeclareServerFeature(int featureId);
@@ -1024,9 +1073,13 @@ private:
     TError DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header);
 
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
-    void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
+    void OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakBus, const TError& error);
 
     void DoHandleRequest(TIncomingRequest&& incomingRequest);
+    //! Drives #incomingRequest.RequestAttachmentsTransfer to completion, appends the
+    //! materialized attachments to the message, and re-dispatches the request inline.
+    //! Used when the client requested DPT for a method that does not support it.
+    void MaterializeRequestAttachmentsAndReinvoke(TIncomingRequest&& incomingRequest);
     void ReplyError(TError error, TIncomingRequest&& incomingRequest);
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,
@@ -1082,7 +1135,7 @@ private:
 
     void OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context);
 
-    static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
+    static std::string GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
 };
@@ -1108,9 +1161,14 @@ public:
     bool IsQueueByteSizeLimitExceeded() const;
 
     int GetQueueSize() const;
+    std::optional<int> GetQueueSizeLimit() const;
+    std::optional<i64> GetQueueByteSizeLimit() const;
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
+
+    void SetQueueSizeLimit(std::optional<int> limit);
+    void SetQueueByteSizeLimit(std::optional<i64> limit);
 
     void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
@@ -1130,9 +1188,6 @@ private:
     TServiceBase* Service_;
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;
 
-    std::atomic<int> Concurrency_ = 0;
-    std::atomic<i64> ConcurrencyByte_ = 0;
-
     struct TRequestThrottler
     {
         const NConcurrency::IReconfigurableThroughputThrottlerPtr Throttler;
@@ -1147,7 +1202,17 @@ private:
 
     std::atomic<int> QueueSize_ = 0;
     std::atomic<i64> QueueByteSize_ = 0;
+    std::atomic<int> Concurrency_ = 0;
+    std::atomic<i64> ConcurrencyByte_ = 0;
+
+    // Not std::optional to guarantee lock freeness; -1 means inf.
+    std::atomic<int> QueueSizeLimit_ = -1;
+    std::atomic<i64> QueueByteSizeLimit_ = -1;
+    // TODO(h0pless): Add ConcurrencyLimit and ConcurrencyByteLimit.
+
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
+
+    std::atomic<TDuration> TestingDelay_;
 
 
     void ScheduleRequestsFromQueue();

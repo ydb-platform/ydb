@@ -1,8 +1,11 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -10,22 +13,40 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TTrivialArray::DoSplitBySizes(
-    const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("f", GetDataType()) }));
-    auto chunks = NArrow::NSplitter::TSimpleSplitter(saver).SplitBySizes(
-        arrow::RecordBatch::Make(schema, GetRecordsCount(), { Array }), fullSerializedData, splitSizes);
-    std::vector<TChunkedArraySerialized> result;
-    for (auto&& i : chunks) {
-        AFL_VERIFY(i.GetSlicedBatch()->num_columns() == 1);
-        result.emplace_back(std::make_shared<TTrivialArray>(i.GetSlicedBatch()->column(0)), i.GetSerializedChunk());
-    }
-    return result;
+
+TMinMax TTrivialArray::DoGetMinMaxScalars() const {
+    return TMinMax::Compute(Array);
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
-    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
-    return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
+ui32 TTrivialArray::DoGetValueRawBytes() const {
+    return NArrow::GetArrayDataSize(Array);
+}
+
+std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<arrow::DataType>& type) {
+    return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(type, 0));
+}
+
+void TTrivialArray::Reallocate() {
+    Array = NArrow::ReallocateArray(Array);
+}
+
+std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
+    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
+    AFL_VERIFY(!!typePtr);
+    if (scalar) {
+        AFL_VERIFY(scalar->type->id() == typePtr->id());
+        return BuildArrayFromScalar(scalar);
+    } else {
+        return TStatusValidator::GetValid(arrow::MakeArrayOfNull(typePtr, 1));
+    }
+}
+
+std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    if (Array->length() == 1) {
+        value = TStatusValidator::GetValid(Array->GetScalar(0));
+        return true;
+    }
+    return {};
 }
 
 namespace {
@@ -37,7 +58,8 @@ private:
 public:
     TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
-        , Result(&result) {
+        , Result(&result)
+    {
     }
     ui64 GetChunksCount() const {
         return (ui64)ChunkedArray->num_chunks();
@@ -69,19 +91,16 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
     return result;
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Array->chunks()) {
-        if (!i->length()) {
-            continue;
-        }
-        auto minMaxPos = NArrow::FindMinMaxPosition(i);
-        auto scalarCurrent = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.second));
-        if (!result || ScalarCompare(result, scalarCurrent) < 0) {
-            result = scalarCurrent;
-        }
-    }
+TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
+    return TMinMax::Compute(Array);
+}
 
+
+ui32 TTrivialChunkedArray::DoGetValueRawBytes() const {
+    ui32 result = 0;
+    for (auto&& i : Array->chunks()) {
+        result += NArrow::GetArrayDataSize(i);
+    }
     return result;
 }
 

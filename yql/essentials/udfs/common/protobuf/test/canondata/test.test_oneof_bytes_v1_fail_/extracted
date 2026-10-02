@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:62:1: Error: Execution of node: YtMap!
+    	SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM plato.Input;
+	^
+        <tmp_path>/program.sql:<main>:62:1: Error: The recursive field 'Test.test' was attempted to be parsed as a string, but actually it has no value. Consider using the BytesV2 parsing mode to allow for optional recursive messages.
+        	SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM plato.Input;
+	^

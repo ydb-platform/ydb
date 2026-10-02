@@ -7,6 +7,7 @@
 #include <util/stream/mem.h>
 #include <util/stream/output.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <library/cpp/http/misc/httpcodes.h>
 
 #include "location.h"
 #include "neh.h"
@@ -231,8 +232,8 @@ namespace NNeh {
         struct TRequestFull {
             static TRequestData::TPtr Build(const TMessage& msg, const TParsedLocation&) {
                 TRequestData::TPtr req(new TRequestData(0));
-                req->AddPart(msg.Data.data(), msg.Data.size());
                 req->Data = msg.Data;
+                req->AddPart(req->Data.data(), req->Data.size());
                 return req;
             }
 
@@ -298,4 +299,6 @@ namespace NNeh {
 
         bool IsHttpScheme(TStringBuf scheme);
     }
+
+    HttpCodes GetHttpCode(const IRequest::TResponseError&);
 }

@@ -7,17 +7,20 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
 
-class TTypeHandleWrapper : public TMutableComputationNode<TTypeHandleWrapper> {
-    typedef TMutableComputationNode<TTypeHandleWrapper> TBaseComputation;
+namespace NKikimr::NMiniKQL {
+
+class TTypeHandleWrapper: public TMutableComputationNode<TTypeHandleWrapper> {
+    using TBaseComputation = TMutableComputationNode<TTypeHandleWrapper>;
+
 public:
-    TTypeHandleWrapper(TComputationMutables& mutables, const TString& yson, ui32 exprCtxMutableIndex)
+    TTypeHandleWrapper(TComputationMutables& mutables, TString yson, ui32 exprCtxMutableIndex)
         : TBaseComputation(mutables)
-        , Yson_(yson)
+        , Yson_(std::move(yson))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
@@ -43,5 +46,4 @@ IComputationNode* WrapTypeHandle(TCallable& callable, const TComputationNodeFact
     return new TTypeHandleWrapper(ctx.Mutables, yson, exprCtxMutableIndex);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

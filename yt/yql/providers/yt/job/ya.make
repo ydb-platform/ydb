@@ -8,6 +8,7 @@ SRCS(
     yql_job_registry.h
     yql_job_stats_writer.cpp
     yql_job_user.cpp
+    yql_job_user_base.cpp
 )
 
 PEERDIR(
@@ -18,6 +19,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/library/user_job_statistics
     yql/essentials/minikql/comp_nodes
+    yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/utils
     yql/essentials/utils/backtrace

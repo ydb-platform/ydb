@@ -9,6 +9,8 @@
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -30,6 +32,7 @@ class TConfigsManager::TTxReplaceYamlConfigBase
             , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
             , DryRun(ev->Get()->Record.GetRequest().dry_run())
             , IngressDatabase(ev->Get()->Record.HasIngressDatabase() ? TMaybe<TString>{ev->Get()->Record.GetIngressDatabase()} : TMaybe<TString>{})
+            , SkipAuditLog(ev->Get()->Record.GetSkipAuditLog() ? true : false)
     {
     }
 
@@ -90,6 +93,7 @@ protected:
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     TMaybe<TString> IngressDatabase;
     bool WarnDatabaseBypass = false;
+    bool SkipAuditLog = false;
 };
 
 class TConfigsManager::TTxReplaceMainYamlConfig
@@ -115,8 +119,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateConfigOpContext opCtx;
-        Self->ReplaceMainConfigMetadata(Config, false, opCtx);
-        Self->ValidateMainConfig(opCtx);
+        Self->ReplaceMainConfigMetadata(Config, Force, opCtx);
+        if (!Force) {
+            Self->ValidateMainConfig(opCtx);
+        }
 
         bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
         if (opCtx.Error) {
@@ -130,6 +136,10 @@ public:
             Cluster = opCtx.Cluster;
             Modify = opCtx.UpdatedConfig != Self->MainYamlConfig || Self->YamlDropped;
 
+            // Snapshot unknown/deprecated fields detected at upload time so the UI can
+            // highlight them later without re-resolving the (expensive) config on each view.
+            BuildYamlConfigUnknownFields(opCtx.UnknownFields, opCtx.DeprecatedFields, UpdatedUnknownFields);
+
             if (IngressDatabase) {
                 WarnDatabaseBypass = true;
             }
@@ -142,7 +152,8 @@ public:
                     // set config dropped by default to support rollback to previous versions
                     // where new config layout is not supported
                     // it will lead to ignoring config from new versions
-                    .Update<Schema::YamlConfig::Dropped>(true);
+                    .Update<Schema::YamlConfig::Dropped>(true)
+                    .Update<Schema::YamlConfig::UnknownFields>(UpdatedUnknownFields.SerializeAsString());
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::YamlConfig>().Key(Version)
@@ -172,22 +183,25 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceMainYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceMainYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
         if (!Error && Modify && !DryRun) {
-            AuditLogReplaceConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->MainYamlConfig,
-                /* newConfig = */ Config,
-                /* reason = */ {},
-                /* success = */ true);
+            if (!SkipAuditLog) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ Self->MainYamlConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
 
             Self->YamlVersion = Version + 1;
             Self->MainYamlConfig = UpdatedMainConfig;
+            Self->MainYamlConfigUnknownFields = std::move(UpdatedUnknownFields);
             Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
@@ -195,14 +209,16 @@ public:
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->DatabaseYamlConfigs);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
-            AuditLogReplaceConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->MainYamlConfig,
-                /* newConfig = */ Config,
-                /* reason = */ ErrorReason,
-                /* success = */ false);
+            if (!SkipAuditLog) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ Self->MainYamlConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ ErrorReason,
+                    /* success = */ false);
+            }
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);
@@ -232,6 +248,7 @@ private:
     ui32 Version;
     TString Cluster;
     TString UpdatedMainConfig;
+    NKikimrConsole::TYamlConfigUnknownFields UpdatedUnknownFields;
 };
 
 class TConfigsManager::TTxReplaceDatabaseYamlConfig
@@ -257,8 +274,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateDatabaseConfigOpContext opCtx;
-        Self->ReplaceDatabaseConfigMetadata(Config, false, opCtx);
-        Self->ValidateDatabaseConfig(opCtx);
+        Self->ReplaceDatabaseConfigMetadata(Config, Force, opCtx);
+        if (!Force) {
+            Self->ValidateDatabaseConfig(opCtx);
+        }
 
         bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
         if (opCtx.Error) {
@@ -297,7 +316,7 @@ public:
                 DoInternalAudit(txc, ctx);
 
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::DatabaseYamlConfigs::Config>(Config);
+                    .Update<Schema::DatabaseYamlConfigs::Config>(UpdatedDatabaseConfig);
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version)
@@ -349,7 +368,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceDatabaseYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceDatabaseYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -360,15 +379,17 @@ public:
         }
 
         if (!Error && Modify && !DryRun) {
-            AuditLogReplaceDatabaseConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* database =  */ TargetDatabase,
-                /* oldConfig = */ oldConfig,
-                /* newConfig = */ Config,
-                /* reason = */ {},
-                /* success = */ true);
+            if (!SkipAuditLog) {
+                AuditLogReplaceDatabaseConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* database =  */ TargetDatabase,
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
 
             Self->DatabaseYamlConfigs[TargetDatabase] = TDatabaseYamlConfig {
                 .Config = UpdatedDatabaseConfig,
@@ -383,15 +404,17 @@ public:
 
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
-            AuditLogReplaceDatabaseConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* database =  */ TargetDatabase,
-                /* oldConfig = */ oldConfig,
-                /* newConfig = */ Config,
-                /* reason = */ ErrorReason,
-                /* success = */ false);
+            if (!SkipAuditLog) {
+                AuditLogReplaceDatabaseConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* database =  */ TargetDatabase,
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ ErrorReason,
+                    /* success = */ false);
+            }
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);

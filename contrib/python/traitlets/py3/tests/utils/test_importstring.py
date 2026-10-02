@@ -4,6 +4,7 @@
 # Adapted from enthought.traits, Copyright (c) Enthought, Inc.,
 # also under the terms of the Modified BSD License.
 """Tests for traitlets.utils.importstring."""
+
 from __future__ import annotations
 
 import os
@@ -22,6 +23,6 @@ class TestImportItem(TestCase):
         class NotAString:
             pass
 
-        msg = "import_item accepts strings, not '%s'." % NotAString
+        msg = f"import_item accepts strings, not '{NotAString}'."
         with self.assertRaisesRegex(TypeError, msg):
             import_item(NotAString())  # type:ignore[arg-type]

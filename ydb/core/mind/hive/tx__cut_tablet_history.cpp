@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -17,7 +19,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
-        BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
+        YDB_LOG_DEBUG("THive::TTxCutTabletHistory::Execute cutting tablet channel history",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr && tablet->IsReadyToReassignTablet() && Self->IsCutHistoryAllowed(tablet->Type)) {
             auto channel = msg->Record.GetChannel();
@@ -38,6 +42,10 @@ public:
                 histogram.IncrementFor(channelInfo.History.size());
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::TabletChannelGen>().Key(tabletId, channel, fromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(tablet->KnownGeneration);
+                auto& pool = Self->GetStoragePool(channelInfo.StoragePool);
+                if (pool.RemainingHistory.erase({tabletId, channel, fromGeneration})) {
+                    Self->CheckRemainingHistory(pool);
+                }
             }
         }
         return true;

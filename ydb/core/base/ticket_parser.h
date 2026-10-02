@@ -2,7 +2,6 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/login/login.h>
 #include <util/string/builder.h>
@@ -25,6 +24,16 @@ namespace NKikimr {
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER)");
 
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
+            struct TTraceContext {
+                TString PeerName;
+                TString RequestId;
+
+                TTraceContext(TString peerName, TString requestId)
+                    : PeerName(std::move(peerName))
+                    , RequestId(std::move(requestId))
+                {}
+            };
+
             struct TPermission {
                 TString Permission;
                 bool Required = false;
@@ -68,7 +77,7 @@ namespace NKikimr {
 
             const TString Database;
             const TString Ticket;
-            const TString PeerName;
+            const TTraceContext TraceContext;
 
             // if two identical permissions with different attributies are specified,
             // only one of them will be processed. Which one is not guaranteed
@@ -86,70 +95,34 @@ namespace NKikimr {
 
             const TAccessKeySignature Signature;
 
-            struct TInitializationFields {
-                TString Database;
+            struct TInitializationFieldsWithTicket {
                 TString Ticket;
-                TString PeerName;
+                TString Database;
+                TTraceContext TraceContext;
+                std::vector<TEntry> Entries;
+            };
+            struct TInitializationFieldsWithSignature {
+                TAccessKeySignature Signature;
+                TString Database;
+                TTraceContext TraceContext;
                 std::vector<TEntry> Entries;
             };
 
-            TEvAuthorizeTicket(TInitializationFields&& init)
+            TEvAuthorizeTicket(TInitializationFieldsWithTicket&& init)
                 : Database(std::move(init.Database))
                 , Ticket(std::move(init.Ticket))
-                , PeerName(std::move(init.PeerName))
+                , TraceContext(std::move(init.TraceContext))
                 , Entries(std::move(init.Entries))
             {
             }
 
-            TEvAuthorizeTicket(const TString& ticket)
-                : Ticket(ticket)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName)
-                : Ticket(ticket)
-                , PeerName(peerName)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
-                , Entries({{ToPermissions(permissions), attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries({{ToPermissions(permissions), attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
-                , Entries({{permissions, attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries({{permissions, attributes}})
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket("")
-                , PeerName(peerName)
-                , Entries(entries)
-                , Signature(std::move(sign))
-            {}
-
+            TEvAuthorizeTicket(TInitializationFieldsWithSignature&& init)
+                : Database(std::move(init.Database))
+                , TraceContext(std::move(init.TraceContext))
+                , Entries(std::move(init.Entries))
+                , Signature(std::move(init.Signature))
+            {
+            }
         };
 
         struct TError {
@@ -190,18 +163,30 @@ namespace NKikimr {
             TError Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
+            bool IsSuccess = false;
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)
                 , Token(token)
                 , SerializedToken(token ? token->GetSerializedToken() : "")
+                , IsSuccess(true)
             {
             }
 
             TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
                 : Ticket(ticket)
                 , Error(error)
+                , IsSuccess(false)
             {}
+
+            void SetError(const TError& error) {
+                Error = error;
+                IsSuccess = false;
+            }
+
+            bool HasError() const {
+                return !IsSuccess;
+            }
         };
 
         struct TEvRefreshTicket : TEventLocal<TEvRefreshTicket, EvRefreshTicket> {

@@ -2,7 +2,7 @@
 
 #include "client_common.h"
 
-#include <yt/yt/flow/lib/client/public.h>
+#include <yt/yt/flow/library/cpp/client/public.h>
 
 namespace NYT::NApi {
 
@@ -75,11 +75,22 @@ struct TSetPipelineDynamicSpecResult
 
 struct TGetFlowViewOptions
     : public TTimeoutOptions
-{ };
+{
+    bool Cache = true;
+};
 
 struct TGetFlowViewResult
 {
     NYson::TYsonString FlowViewPart;
+};
+
+struct TFlowExecuteOptions
+    : public TTimeoutOptions
+{ };
+
+struct TFlowExecuteResult
+{
+    NYson::TYsonString Result;
 };
 
 struct IFlowClient
@@ -124,6 +135,12 @@ struct IFlowClient
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options = {}) = 0;
+
+    virtual TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const std::string& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,6 +6,8 @@
 
 #include <util/system/defaults.h>
 
+#include <optional>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,8 +117,8 @@ TIntrusivePtr<T> NewWithDeleter(TDeleter deleter, As&&... args);
 //! Allocates a new instance of |T|.
 //! The allocation is additionally marked with #location.
 //! Aborts the process on out-of-memory condition.
-template <class T, class TTag, int Counter, class... As>
-TIntrusivePtr<T> NewWithLocation(const TSourceLocation& location, As&&... args);
+template <class T, auto LocationLite, class... As>
+TIntrusivePtr<T> NewWithLocation(As&&... args);
 
 //! Enables calling #New and co for types with private ctors.
 #define DECLARE_NEW_FRIEND() \
@@ -130,9 +132,14 @@ template <class T>
 class TWithExtraSpace
 {
 protected:
+    //! Returns the pointer to the extra space associated with this instance.
     const void* GetExtraSpacePtr() const;
     void* GetExtraSpacePtr();
-    size_t GetUsableSpaceSize() const;
+
+    //! Returns the size of the extra space associated with this instance.
+    //! This is determined via the call to |malloc_usable_size| and may be
+    //! null if the allocator support is unavailable.
+    std::optional<size_t> GetUsableSpaceSize() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

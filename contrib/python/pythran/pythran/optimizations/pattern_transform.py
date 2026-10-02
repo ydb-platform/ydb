@@ -334,8 +334,8 @@ class PlaceholderReplace(Transformation):
 
     def __init__(self, placeholders):
         """ Store placeholders value collected. """
+        super().__init__()
         self.placeholders = placeholders
-        super(PlaceholderReplace, self).__init__()
 
     def visit(self, node):
         """ Replace the placeholder if it is one or continue. """
@@ -351,10 +351,6 @@ class PatternTransform(Transformation):
 
     Based on BaseMatcher to search correct pattern.
     """
-
-    def __init__(self):
-        """ Initialize the Basematcher to search for placeholders. """
-        super(PatternTransform, self).__init__()
 
     def visit_Module(self, node):
         self.extra_imports = []

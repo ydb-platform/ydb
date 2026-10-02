@@ -298,15 +298,13 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 		// Start looking for Stream Padding and Stream Footer
 		// at the end of the file.
 		coder->file_target_pos = coder->file_size;
-
-	// Fall through
+		FALLTHROUGH;
 
 	case SEQ_PADDING_SEEK:
 		coder->sequence = SEQ_PADDING_DECODE;
 		return_if_error(reverse_seek(
 				coder, in_start, in_pos, in_size));
-
-	// Fall through
+		FALLTHROUGH;
 
 	case SEQ_PADDING_DECODE: {
 		// Copy to coder->temp first. This keeps the code simpler if
@@ -356,9 +354,9 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 		if (coder->temp_size < LZMA_STREAM_HEADER_SIZE)
 			return_if_error(reverse_seek(
 					coder, in_start, in_pos, in_size));
-	}
 
-	// Fall through
+		FALLTHROUGH;
+	}
 
 	case SEQ_FOOTER:
 		// Copy the Stream Footer field into coder->temp.
@@ -414,7 +412,7 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 				return LZMA_SEEK_NEEDED;
 		}
 
-	// Fall through
+		FALLTHROUGH;
 
 	case SEQ_INDEX_INIT: {
 		// Calculate the amount of memory already used by the earlier
@@ -440,13 +438,13 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 		return_if_error(lzma_index_decoder_init(
 				&coder->index_decoder, allocator,
 				&coder->this_index,
-				coder->memlimit - memused));
+				coder->memlimit - memused,
+				coder->footer_flags.backward_size));
 
 		coder->index_remaining = coder->footer_flags.backward_size;
 		coder->sequence = SEQ_INDEX_DECODE;
+		FALLTHROUGH;
 	}
-
-	// Fall through
 
 	case SEQ_INDEX_DECODE: {
 		// Decode (a part of) the Index. If the whole Index is already
@@ -574,9 +572,9 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 			return_if_error(reverse_seek(coder,
 					in_start, in_pos, in_size));
 		}
-	}
 
-	// Fall through
+		FALLTHROUGH;
+	}
 
 	case SEQ_HEADER_DECODE:
 		// Copy the Stream Header field into coder->temp.
@@ -596,8 +594,7 @@ file_info_decode(void *coder_ptr, const lzma_allocator *allocator,
 				coder->temp + coder->temp_size)));
 
 		coder->sequence = SEQ_HEADER_COMPARE;
-
-	// Fall through
+		FALLTHROUGH;
 
 	case SEQ_HEADER_COMPARE:
 		// Compare Stream Header against Stream Footer. They must
@@ -720,6 +717,13 @@ file_info_decoder_memconfig(void *coder_ptr, uint64_t *memusage,
 			return LZMA_PROG_ERROR;
 		}
 	}
+
+	// combined_index_memusage + this_index_memusage shouldn't overflow
+	// because combined_index_memusage is limited by how much can be
+	// successfully allocated, and this_index_memusage is limited by the
+	// input_size_max check in index_decoder.c. Check for overflow anyway.
+	if (UINT64_MAX - combined_index_memusage < this_index_memusage)
+		return LZMA_PROG_ERROR;
 
 	// Now we know the total memory usage/requirement. If we had neither
 	// old Indexes nor a new Index, this will be zero which isn't

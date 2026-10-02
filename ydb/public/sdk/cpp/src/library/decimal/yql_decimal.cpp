@@ -4,7 +4,9 @@
 #include <ostream>
 #include <string>
 
-namespace NYdb::NDecimal {
+namespace NYdb {
+inline namespace Dev {
+namespace NDecimal {
 
 static const TUint128 Ten(10U);
 
@@ -32,7 +34,7 @@ bool IsNormal(TInt128 v) {
 }
 
 const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
-    if (!precision || precision > MaxPrecision || scale > precision) {
+    if (precision == 0 || precision > MaxPrecision || scale > precision) {
         return "";
     }
 
@@ -47,7 +49,7 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         return nullptr;
     }
 
-    if (!val) {
+    if (val == 0) {
         return "0";
     }
 
@@ -63,9 +65,10 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     auto s = end;
 
     do {
-        if (!precision--) {
+        if (precision == 0) {
             return "";
         }
+        --precision;
 
 
         const auto digit = ui8(v % Ten);
@@ -80,9 +83,10 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
 
     if (scale) {
         do {
-            if (!precision--) {
+            if (precision == 0) {
                 return nullptr;
             }
+            --precision;
 
             *--s = '0';
         } while (--scale);
@@ -119,7 +123,7 @@ TInt128 FromString(const std::string_view& str, ui8 precision, ui8 scale) {
     auto s = str.data();
     auto l = str.size();
 
-    if (!s || !l)
+    if (s == nullptr || l == 0)
         return Err();
 
     const bool neg = '-' == *s;
@@ -138,7 +142,7 @@ TInt128 FromString(const std::string_view& str, ui8 precision, ui8 scale) {
     TUint128 v = 0U;
     auto integral = precision - scale;
 
-    for (bool dot = false; l; --l) {
+    for (bool dot = false; l > 0; --l) {
         if (*s == '.') {
             if (dot)
                 return Err();
@@ -162,19 +166,23 @@ TInt128 FromString(const std::string_view& str, ui8 precision, ui8 scale) {
         v *= Ten;
         v += c - '0';
 
-        if (!dot && v && !integral--) {
-            return neg ? -Inf() : Inf();
+        if (!dot && v > 0) {
+            if (integral == 0) {
+                return neg ? -Inf() : Inf();
+            }
+            --integral;
         }
     }
 
-    if (l--) {
+    if (l > 0) {
+        --l;
         const char c = *s++;
         if (!std::isdigit(c))
             return Err();
 
         bool plus = c > '5';
         if (!plus && c == '5') {
-            for (plus = v & 1; !plus && l; --l) {
+            for (plus = v & 1; !plus && l > 0; --l) {
                 const char c = *s++;
                 if (!std::isdigit(c))
                     return Err();
@@ -183,17 +191,21 @@ TInt128 FromString(const std::string_view& str, ui8 precision, ui8 scale) {
             }
         }
 
-        while (l--)
+        while (l > 0) {
+            --l;
             if (!std::isdigit(*s++))
                 return Err();
+        }
 
         if (plus)
             if (++v >= GetDivider(precision))
                 v = Inf();
     }
 
-    while (scale--)
+    while (scale > 0) {
+        --scale;
         v *= Ten;
+    }
 
     return neg ? -v : v;
 }
@@ -209,7 +221,7 @@ bool IsValid(const std::string_view& str) {
     auto s = str.data();
     auto l = str.size();
 
-    if (!s || !l)
+    if (s == nullptr || l == 0)
         return false;
 
     if ('-' == *s || '+' == *s) {
@@ -221,7 +233,7 @@ bool IsValid(const std::string_view& str) {
         return true;
     }
 
-    for (bool dot = false; l--;) {
+    for (bool dot = false; l > 0; l--) {
         const char c = *s++;
         if (c == '.') {
             if (dot)
@@ -238,4 +250,6 @@ bool IsValid(const std::string_view& str) {
     return true;
 }
 
+}
+}
 }

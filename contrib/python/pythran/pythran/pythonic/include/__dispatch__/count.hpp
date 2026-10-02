@@ -8,8 +8,7 @@ PYTHONIC_NS_BEGIN
 namespace __dispatch__
 {
   template <class Any, class Value>
-  auto count(Any &&any,
-             Value &&value) -> decltype(any.count(std::forward<Value>(value)));
+  auto count(Any &&any, Value &&value) -> decltype(any.count(std::forward<Value>(value)));
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, count);
 } // namespace __dispatch__

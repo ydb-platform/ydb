@@ -3,6 +3,8 @@
 
 #include "unicode/utypes.h"
 
+#if !UCONFIG_NO_NORMALIZATION
+
 #if !UCONFIG_NO_FORMATTING
 
 #if !UCONFIG_NO_MF2
@@ -43,7 +45,8 @@ namespace message2 {
 
         // Parse the pattern
         MFDataModel::Builder tree(errorCode);
-        Parser(pat, tree, *errors, normalizedInput).parse(parseError, errorCode);
+        Parser(pat, tree, *errors, normalizedInput, errorCode)
+            .parse(parseError, errorCode);
 
         // Fail on syntax errors
         if (errors->hasSyntaxError()) {
@@ -127,14 +130,18 @@ namespace message2 {
         FormatterFactory* time = StandardFunctions::DateTimeFactory::time(success);
         FormatterFactory* number = new StandardFunctions::NumberFactory();
         FormatterFactory* integer = new StandardFunctions::IntegerFactory();
-        standardFunctionsBuilder.adoptFormatter(FunctionName(UnicodeString("datetime")), dateTime, success)
-            .adoptFormatter(FunctionName(UnicodeString("date")), date, success)
-            .adoptFormatter(FunctionName(UnicodeString("time")), time, success)
-            .adoptFormatter(FunctionName(UnicodeString("number")), number, success)
-            .adoptFormatter(FunctionName(UnicodeString("integer")), integer, success)
-            .adoptSelector(FunctionName(UnicodeString("number")), new StandardFunctions::PluralFactory(UPLURAL_TYPE_CARDINAL), success)
-            .adoptSelector(FunctionName(UnicodeString("integer")), new StandardFunctions::PluralFactory(StandardFunctions::PluralFactory::integer()), success)
-            .adoptSelector(FunctionName(UnicodeString("string")), new StandardFunctions::TextFactory(), success);
+        standardFunctionsBuilder.adoptFormatter(FunctionName(functions::DATETIME), dateTime, success)
+            .adoptFormatter(FunctionName(functions::DATE), date, success)
+            .adoptFormatter(FunctionName(functions::TIME), time, success)
+            .adoptFormatter(FunctionName(functions::NUMBER), number, success)
+            .adoptFormatter(FunctionName(functions::INTEGER), integer, success)
+            .adoptFormatter(FunctionName(functions::TEST_FUNCTION), new StandardFunctions::TestFormatFactory(), success)
+            .adoptFormatter(FunctionName(functions::TEST_FORMAT), new StandardFunctions::TestFormatFactory(), success)
+            .adoptSelector(FunctionName(functions::NUMBER), new StandardFunctions::PluralFactory(UPLURAL_TYPE_CARDINAL), success)
+            .adoptSelector(FunctionName(functions::INTEGER), new StandardFunctions::PluralFactory(StandardFunctions::PluralFactory::integer()), success)
+            .adoptSelector(FunctionName(functions::STRING), new StandardFunctions::TextFactory(), success)
+            .adoptSelector(FunctionName(functions::TEST_FUNCTION), new StandardFunctions::TestSelectFactory(), success)
+            .adoptSelector(FunctionName(functions::TEST_SELECT), new StandardFunctions::TestSelectFactory(), success);
         CHECK_ERROR(success);
         standardMFFunctionRegistry = standardFunctionsBuilder.build();
         CHECK_ERROR(success);
@@ -170,7 +177,7 @@ namespace message2 {
         // only be checked when arguments are known)
 
         // Check for resolution errors
-        Checker(dataModel, *errors).check(success);
+        Checker(dataModel, *errors, *this).check(success);
     }
 
     void MessageFormatter::cleanup() noexcept {
@@ -256,8 +263,11 @@ namespace message2 {
         return formatter;
     }
 
-    bool MessageFormatter::getDefaultFormatterNameByType(const UnicodeString& type, FunctionName& name) const {
-        U_ASSERT(hasCustomMFFunctionRegistry());
+    bool MessageFormatter::getDefaultFormatterNameByType(const UnicodeString& type,
+                                                         FunctionName& name) const {
+        if (!hasCustomMFFunctionRegistry()) {
+            return false;
+        }
         const MFFunctionRegistry& reg = getCustomMFFunctionRegistry();
         return reg.getDefaultFormatterNameByType(type, name);
     }
@@ -352,3 +362,5 @@ U_NAMESPACE_END
 #endif /* #if !UCONFIG_NO_MF2 */
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
+
+#endif /* #if !UCONFIG_NO_NORMALIZATION */

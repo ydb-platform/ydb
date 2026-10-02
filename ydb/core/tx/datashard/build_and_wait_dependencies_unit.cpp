@@ -4,6 +4,8 @@
 
 #include <ydb/core/tx/locks/time_counters.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -102,9 +104,9 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
                 if (DataShard.TryCaptureTxCache(mem)) {
                     tx->SetTxCacheUsage(mem);
                 } else {
-                    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                               "TBuildAndWaitDependenciesUnit at " << DataShard.TabletID()
-                               << " released data for tx " << tx->GetTxId());
+                    YDB_LOG_INFO_CTX(ctx, "TBuildAndWaitDependenciesUnit::Execute: released data for tx",
+                        {"tabletId", DataShard.TabletID()},
+                        {"txId", tx->GetTxId()});
 
                     DataShard.IncCounter(COUNTER_INACTIVE_TX_DATA_RELEASES);
                     tx->ReleaseTxData(txc, ctx);
@@ -117,7 +119,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
         }
     } else if (BuildVolatileDependencies(op)) {
         // We acquired new volatile dependencies, wait for them too
-        Y_ABORT_UNLESS(!IsReadyToExecute(op));
+        Y_ENSURE(!IsReadyToExecute(op));
         return EExecutionStatus::Continue;
     }
 
@@ -140,10 +142,10 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     // they are completed.
     if (op->IsSchemeTx() && !op->IsReadOnly()) {
         auto *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         for (const auto &pr : Pipeline.GetActivePlannedOps()) {
-            Y_VERIFY_S(pr.first < op->GetStepOrder(),
+            Y_ENSURE(pr.first < op->GetStepOrder(),
                 "unexpected tx " << pr.first.ToString()
                 << " when adding " << op->GetStepOrder().ToString());
             if (!op->IsCompleted()) {
@@ -174,7 +176,7 @@ bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::
             op->AddVolatileDependency(info->TxId);
             bool added = DataShard.GetVolatileTxManager()
                 .AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
-            Y_ABORT_UNLESS(added);
+            Y_ENSURE(added);
         }
     }
 
@@ -194,3 +196,7 @@ THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

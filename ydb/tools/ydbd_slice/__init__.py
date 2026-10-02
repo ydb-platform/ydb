@@ -7,16 +7,18 @@ import logging
 import argparse
 import subprocess
 import warnings
+from pathlib import Path
+
 
 import library.python.resource as rs
 
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
-from ydb.tools.ydbd_slice import nodes, handlers, cluster_description
+from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator, process_profiles
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=HTTPWarning)
 
 
@@ -39,6 +41,9 @@ Guide for ad-hoc Kubernetes operations could be found here
 
 \033[95msample-config\033[94m - get sample configuration for cluster:
     %(prog)s sample-config --cluster-type=block-4-2-8-nodes --output-file=cluster.yaml
+
+\033[95mdynconfig-generator\033[94m - generate simple dynamic configuration for cluster:
+    %(prog)s dynconfig-generator --yaml-config=config.yaml --output-file=dynconfig.yaml
 
 \033[95minstall\033[94m - full install process from scratch:
     %(prog)s install cluster.yaml --arcadia
@@ -254,9 +259,9 @@ class Terminate(BaseException):
         raise Terminate(signum, frame)
 
 
-def safe_load_cluster_details(cluster_yaml, walle_provider):
+def safe_load_cluster_details(cluster_yaml, walle_provider, validator=None):
     try:
-        cluster_details = cluster_description.ClusterDetails(cluster_yaml, walle_provider)
+        cluster_details = cluster_description.ClusterDetails(cluster_yaml, walle_provider, validator=validator)
     except IOError as io_err:
         print('', file=sys.stderr)
         print("unable to open YAML params as a file, check args", file=sys.stderr)
@@ -273,8 +278,10 @@ def deduce_components_from_args(args, cluster_details):
     if dynamic_enabled:
         components.append('dynamic_slots')
 
-    result = dict()
+    if not hasattr(args, 'components'):
+        return {item: [] for item in components}
 
+    result = dict()
     for item in args.components:
         name, val = item.rsplit('=') if '=' in item else (item, None)
         assert name == 'all' or name in components, \
@@ -310,8 +317,7 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args, walle_provider, ssh_user, ssh_key_path):
-    cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
+def deduce_nodes_from_args(args, cluster_hosts, ssh_user, ssh_key_path):
     result = cluster_hosts
 
     if args.nodes is not None:
@@ -392,14 +398,18 @@ def arcadia_root(begin_path='.'):
 
 def deduce_kikimr_bin_from_args(args):
     if args.binary is not None:
-        path = os.path.abspath(args.binary)
+        if args.binary.find(':') < 0:
+            path = os.path.abspath(args.binary)
+        else:
+            path = args.binary
     elif args.arcadia:
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
     else:
-        sys.exit("unable to deduce ydbd bin")
+        # sys.exit("unable to deduce ydbd bin")
+        path = None
 
-    if 'LD_LIBRARY_PATH' not in os.environ:
+    if 'LD_LIBRARY_PATH' not in os.environ and path is not None:
         os.environ['LD_LIBRARY_PATH'] = os.path.dirname(path)
 
     compressed_path = args.binary_lz4
@@ -466,7 +476,7 @@ def binaries_args():
         "--kikimr",
         metavar="BIN",
         default=None,
-        help="explicit path to ydbd"
+        help="explicit path to ydbd. Can be url: 'rbtorrent:<torrent>' for rbtorrent, 'sbr:<id>' for sandbox resource or 'http(s)://<url>' for http or 'script:' for custom script."
     )
     args.add_argument(
         "--binary-lz4",
@@ -547,6 +557,32 @@ def databases_config_path_args():
     return args
 
 
+def yaml_config_path_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--yaml-config",
+        metavar="YAML_CONFIG",
+        default="",
+        required=False,
+        help="Path to file with config.yaml configuration",
+    )
+
+    return args
+
+
+def process_profiles_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--process-profiles",
+        dest="process_profiles",
+        action="store_true",
+        default=False,
+        help="Generate per-process YAML from process_profiles overlays "
+             "(storage_profile / dynamic_profiles on hosts)",
+    )
+    return args
+
+
 def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
@@ -598,6 +634,16 @@ def add_explain_mode(modes, walle_provider):
             kikimr_compressed_bin,
             walle_provider
         )
+        enable_process_profiles = getattr(args, 'process_profiles', False)
+        configuration.enable_process_profiles = enable_process_profiles
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
 
         if 'kikimr' in components:
             static = configuration.create_static_cfg()
@@ -608,7 +654,7 @@ def add_explain_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "explain",
-        parents=[cluster_description_args(), binaries_args(), component_args()],
+        parents=[cluster_description_args(), binaries_args(), component_args(), process_profiles_args()],
         description="Just dump generated cfg into --out-cfg."
     )
     mode.add_argument(
@@ -623,40 +669,76 @@ def add_explain_mode(modes, walle_provider):
 def dispatch_run(func, args, walle_provider, need_confirmation=False):
     if need_confirmation and not __confirm(args):
         print("Aborting slice installation/formatting")
-        # TODO(shmel1k@): add confirmation message.
         return
 
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
-    cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
-    components = deduce_components_from_args(args, cluster_details)
-
-    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user, args.ssh_key_path)
-
     temp_dir = deduce_temp_dir_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
 
-    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
+    # Always get cluster_details
+    cluster_details = None
+    configurator = None
 
-    configurator = cluster_description.Configurator(
-        cluster_details,
-        out_dir=temp_dir,
-        kikimr_bin=kikimr_bin,
-        kikimr_compressed_bin=kikimr_compressed_bin,
-        walle_provider=walle_provider
+    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
+    enable_process_profiles = getattr(args, 'process_profiles', False)
+    if args.yaml_config:
+        configurator = yaml_configurator.YamlConfigurator(
+            args.cluster,
+            Path(temp_dir),
+            args.yaml_config
+        )
+        cluster_details = configurator.cluster_description
+    else:
+        cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
+        configurator = cluster_description.Configurator(
+            cluster_details,
+            out_dir=Path(temp_dir),
+            kikimr_bin=kikimr_bin,
+            kikimr_compressed_bin=kikimr_compressed_bin,
+            walle_provider=walle_provider
+        )
+
+    configurator.enable_process_profiles = enable_process_profiles
+    generates_cfg = func in (
+        handlers.Slice.slice_install,
+        handlers.Slice.slice_update,
     )
+    if generates_cfg:
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
+
+    # Always compute components after cluster_details
+    components = deduce_components_from_args(args, cluster_details)
+
+    # Call deduce_kikimr_bin_from_args only if needed
+    # Skip binary check for the clear command while keeping it for others
+    if ('kikimr' in components and 'bin' in components['kikimr']) and kikimr_bin is None and func != handlers.Slice.slice_clear:
+        sys.exit(
+            "unable to deduce kikimr binary, please specify it with --binary or --arcadia option"
+        )
 
     v = vars(args)
     clear_logs = v.get('clear_logs')
     yav_version = v.get('yav_version')
+
+    nodes = deduce_nodes_from_args(args, configurator.hosts_names, args.ssh_user, args.ssh_key_path)
     slice = handlers.Slice(
         components,
         nodes,
         cluster_details,
-        configurator,
+        kikimr_bin,
+        kikimr_compressed_bin,
         clear_logs,
         yav_version,
         walle_provider,
+        configurator,
     )
     func(slice)
 
@@ -670,28 +752,24 @@ def __confirm(args) -> bool:
         return True
 
     confirm = input(
-        "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
-        + "Press [y] to continue or [n] to abort installation/formatting: "
+        """You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.
+        Press [y] to continue or [n] to abort installation/formatting: """
     )
-    for i in range(0, 3):
+
+    for _ in range(4):
         lw = confirm.strip().lower()
         if lw == "n":
             return False
         if lw == "y":
             return True
-        confirm = input("Enter [y] or [n]")
-    lw = confirm.strip().lower()
-    if lw == "n":
-        return False
-    if lw == "y":
-        return True
+        confirm = input("Enter [y] or [n]: ")
 
     return False
 
 
 def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_install, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_install, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "install",
@@ -699,6 +777,8 @@ def add_install_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -709,6 +789,7 @@ def add_install_mode(modes, walle_provider):
         description="Full installation of the cluster from scratch. "
         "You can use --hosts to specify particular hosts. But it is tricky.",
     )
+
     mode.set_defaults(handler=_run)
 
 
@@ -722,6 +803,8 @@ def add_update_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -759,7 +842,14 @@ def add_stop_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "stop",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            yaml_config_path_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args()
+        ],
         description="Stop ydbd static instances at the nodes. "
                     "If option components specified, try to stop particular component. "
                     "Use --hosts to specify particular hosts."
@@ -773,7 +863,14 @@ def add_start_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "start",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            yaml_config_path_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args()
+        ],
         description="Start all ydbd instances at the nodes. "
                     "If option components specified, try to start particular component. "
                     "Otherwise only kikimr-multi-all will be started. "
@@ -784,13 +881,14 @@ def add_start_mode(modes, walle_provider):
 
 def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "clear",
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             ssh_args(),
@@ -805,13 +903,14 @@ def add_clear_mode(modes, walle_provider):
 
 def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_format, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_format, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "format",
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             ssh_args(),
@@ -843,7 +942,8 @@ def add_sample_config_mode(modes):
         elif cluster_type == "mirror-3-dc-9-nodes":
             template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml"
         else:
-            raise "Unreachable code"  # TODO(shmel1k@): improve error
+            raise BaseException(
+                f"Unknown cluster type '{cluster_type}'. ")
 
         f = rs.find(template_path).decode()
         if args.output_file is not None and args.output_file != "":
@@ -856,6 +956,24 @@ def add_sample_config_mode(modes):
         "sample-config",
         parents=[cluster_type_args(), output_file()],
         description="Generate default mock-configuration for provided cluster-type"
+    )
+
+    mode.set_defaults(handler=_run)
+
+
+def add_dynconfig_generator(modes):
+    def _run(args):
+        if args.yaml_config:
+            yaml_config = yaml_configurator.YamlConfig(args.yaml_config)
+
+            if args.output_file is not None and args.output_file:
+                with open(args.output_file, "w") as output:
+                    output.write(yaml_config.dynamic_simple)
+
+    mode = modes.add_parser(
+        "dynconfig-generator",
+        parents=[yaml_config_path_args(), output_file()],
+        description="Generate a minimalistic dynconfig.yaml for the provided config.yaml"
     )
 
     mode.set_defaults(handler=_run)
@@ -1413,6 +1531,7 @@ def main(walle_provider=None):
         add_format_mode(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
         add_sample_config_mode(modes)
+        add_dynconfig_generator(modes)
 
         add_docker_build_mode(modes)
         add_docker_push_mode(modes)
@@ -1429,8 +1548,12 @@ def main(walle_provider=None):
 
         args = parser.parse_args()
         logging.root.setLevel(args.log_level.upper())
-        args.handler(args)
 
+        if not hasattr(args, 'handler'):
+            parser.print_help()
+            return
+
+        args.handler(args)
     except KeyboardInterrupt:
         sys.exit('\nStopped by KeyboardInterrupt.')
     except Terminate:

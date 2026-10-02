@@ -2,6 +2,10 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+
 namespace NYql {
     class TExprNode;
     struct TExprContext;
@@ -22,7 +26,7 @@ private:
 
     YDB_READONLY_FLAG(HasCondense, false);
     YDB_READONLY(ui32, NodesCount, 0);
-    
+
     YDB_READONLY_FLAG(HasSort, false);
     YDB_READONLY_FLAG(HasMapJoin, false);
     YDB_READONLY_FLAG(HasUdf, false);
@@ -30,6 +34,9 @@ private:
     YDB_READONLY_FLAG(HasTop, false);
     YDB_READONLY_FLAG(HasRangeScan, false);
     YDB_READONLY_FLAG(HasLookup, false);
+    YDB_READONLY_FLAG(HasWatermarkGenerator, false);
+    YDB_OPT(ui64, WatermarkGeneratorIdleTimeoutUs);
+    THashSet<TString> WasmUdfModules_;
 
     YDB_READONLY(double, InputDataPrediction, 1);
     YDB_READONLY(double, OutputDataPrediction, 1);
@@ -43,7 +50,9 @@ public:
     void AcceptInputStageInfo(const TStagePredictor& info, const NYql::NNodes::TDqConnection& connection);
     void SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings& kqpProto) const;
     bool DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto);
+    TVector<TString> GetWasmUdfModules() const;
     static ui32 GetUsableThreads();
+    static ui32 GetPossibleMaxLimitThreads();
     bool NeedLLVM() const;
     ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const;
 };

@@ -1,12 +1,10 @@
-/* postgres can not */
-/* syntax version 1 */
 $lambda = ($x) -> {
     RETURN CAST($x AS String);
 };
 
 $callables = AsTuple(
-    CALLABLE (Callable<(Int32) -> String>, $lambda),
-    CALLABLE (Callable<(Bool) -> String>, $lambda),
+    Callable(Callable<(Int32) -> String>, $lambda),
+    Callable(Callable<(Bool) -> String>, $lambda),
 );
 
 SELECT

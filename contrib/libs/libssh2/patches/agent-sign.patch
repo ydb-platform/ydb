@@ -1,0 +1,52 @@
+--- a/src/agent.c
++++ b/src/agent.c
+@@ -809,3 +809,26 @@ libssh2_agent_free(LIBSSH2_AGENT *agent) {
+ {
+     return agent->identity_agent_path;
+ }
++
++
++/*
++ * _ya_libssh2_agent_sign()
++ *
++ * Yandex specific patch for exporting internal function.
++ *
++ * Returns 0 if succeeded, or a negative value for error.
++ */
++LIBSSH2_API int
++_ya_libssh2_agent_sign(LIBSSH2_SESSION *session,
++                                       unsigned char **sig,
++                                       size_t *sig_len,
++                                       const unsigned char *data,
++                                       size_t data_len,
++                                       LIBSSH2_AGENT *agent) {
++    return agent_sign(session,
++                      sig,
++                      sig_len,
++                      data,
++                      data_len,
++                      &agent);
++}
+--- a/include/libssh2.h
++++ b/include/libssh2.h
+@@ -1285,6 +1285,20 @@ LIBSSH2_API int libssh2_trace_sethandler(LIBSSH2_SESSION *session,
+                                          void *context,
+                                          libssh2_trace_handler_func callback);
+ 
++/*
++ * _ya_libssh2_agent_sign()
++ *
++ * Yandex specific patch for exporting internal function.
++ *
++ * Returns 0 if succeeded, or a negative value for error.
++ */
++LIBSSH2_API int _ya_libssh2_agent_sign(LIBSSH2_SESSION *session,
++                                       unsigned char **sig,
++                                       size_t *sig_len,
++                                       const unsigned char *data,
++                                       size_t data_len,
++                                       LIBSSH2_AGENT *agent);
++
+ #ifdef __cplusplus
+ } /* extern "C" */
+ #endif

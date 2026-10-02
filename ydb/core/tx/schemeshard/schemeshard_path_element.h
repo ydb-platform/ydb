@@ -1,10 +1,11 @@
 #pragma once
 
-#include "schemeshard_types.h"
 #include "schemeshard_effective_acl.h"
+#include "schemeshard_types.h"
 #include "user_attributes.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorid.h>
 
@@ -60,6 +61,12 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TTxId DropTxId = InvalidTxId;
     TTxId LastTxId = InvalidTxId;
 
+    bool IsOrphanPlaceholder = false; // in-memory only, never persisted
+
+    // In-memory: this path holds a DbRefCount ref on its parent (orphan
+    // placeholders don't). Acquired at materialize/init, released at remove.
+    bool ParentRefHeld = false;
+
     ui64 DirAlterVersion = 0;
     ui64 ACLVersion = 0;
 
@@ -110,6 +117,7 @@ public:
     void DecShardsInside(ui64 delta = 1);
     bool IsRoot() const;
     bool IsDirectory() const;
+    bool IsSystemDirectory() const;
     bool IsTableIndex() const;
     bool IsCdcStream() const;
     bool IsTable() const;
@@ -117,6 +125,7 @@ public:
     bool IsPQGroup() const;
     bool IsDomainRoot() const;
     bool IsSubDomainRoot() const;
+    bool IsPlainSubDomainRoot() const;
     bool IsExternalSubDomainRoot() const;
     bool IsRtmrVolume() const;
     bool IsBlockStoreVolume() const;
@@ -136,9 +145,13 @@ public:
     bool IsExternalDataSource() const;
     bool IsIncrementalBackupTable() const;
     bool IsView() const;
+    bool IsSysView() const;
     bool IsTemporary() const;
     bool IsResourcePool() const;
     bool IsBackupCollection() const;
+    bool IsSecret() const;
+    bool IsStreamingQuery() const;
+    bool IsTestShardSet() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

@@ -1,19 +1,27 @@
 #include "yql_pq_provider.h"
-#include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 #include "yql_pq_dq_integration.h"
+#include "yql_pq_ytflow_integration.h"
+#include "yql_pq_ytflow_optimize.h"
 
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/context.h>
 
 namespace NYql {
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode,
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver) {
-    return [gateway, supportRtmrMode, dbResolver] (
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+    const NPq::NProto::StreamingDisposition& disposition,
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const std::vector<ui64>& nodeIds,
+    bool useActorSystemThreadsInTopicClient,
+    bool useYtflowEngine,
+    bool addTransparentPrefixToTransparentSystemColumns) {
+    return [=] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -33,16 +41,26 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             Y_UNUSED(hiddenAborter);
             Y_UNUSED(qContext);
 
-            auto state = MakeIntrusive<TPqState>(sessionId);
+            auto state = MakeIntrusive<TPqState>(sessionId, typeCtx->StrictConfigValidation);
             state->SupportRtmrMode = supportRtmrMode;
+            state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
+            state->AddTransparentPrefixToTransparentSystemColumns = addTransparentPrefixToTransparentSystemColumns;
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
+            state->Disposition = disposition;
+            state->TaskSensorLabels = taskSensorLabels;
+            state->NodeIds = nodeIds;
             if (gatewaysConfig) {
                 state->Configuration->Init(gatewaysConfig->GetPq(), typeCtx, dbResolver, state->DatabaseIds);
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
+            state->UseYtflowEngine = useYtflowEngine;
+            if (useYtflowEngine) {
+                state->YtflowIntegration = CreatePqYtflowIntegration(state);
+                state->YtflowOptimization = CreatePqYtflowOptimization(state);
+            }
 
             TDataProviderInfo info;
 
@@ -67,6 +85,18 @@ TDataProviderInitializer GetPqDataProviderInitializer(
 
             return info;
         };
+}
+
+TPqState::TPqState(const TString& sessionId, bool strictConfigValidation)
+    : SessionId(sessionId)
+    , Configuration(MakeIntrusive<TPqConfiguration>(strictConfigValidation))
+{}
+
+bool TPqState::IsRtmrMode() const {
+    if (!SupportRtmrMode) {
+        return false;
+    }
+    return Configuration->PqReadByRtmrCluster_.Get() != "dq";
 }
 
 const TPqState::TTopicMeta* TPqState::FindTopicMeta(const TString& cluster, const TString& topicPath) const {

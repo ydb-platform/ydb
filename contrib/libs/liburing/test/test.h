@@ -20,6 +20,8 @@ static io_uring_test_config io_uring_test_configs[] = {
 	{ IORING_SETUP_SQE128, 				"large SQE"},
 	{ IORING_SETUP_CQE32, 				"large CQE"},
 	{ IORING_SETUP_SQE128 | IORING_SETUP_CQE32, 	"large SQE/CQE" },
+	{ IORING_SETUP_SQ_REWIND,			"rewind SQ"},
+	{ IORING_SETUP_SQ_REWIND | IORING_SETUP_SQE128,	"large rewind SQ"},
 };
 
 #define FOR_ALL_TEST_CONFIGS							\

@@ -9,22 +9,17 @@
 
 #include <yql/essentials/providers/common/metrics/service_counters.h>
 
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <google/protobuf/util/time_util.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -73,7 +68,12 @@ public:
     static constexpr char ActorName[] = "FQ_FINALIZER_ACTOR";
 
     void Start() {
-        LOG_I("Start finalizer actor. Compute status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Status));
+        YDB_LOG_INFO("[ydb] [Finalizer] Start finalizer actor. Compute",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(Status)});
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Become(&TFinalizerActor::StateFunc);
@@ -91,6 +91,7 @@ public:
                 return ::FederatedQuery::QueryMeta::COMPLETED;
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Running:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
@@ -128,6 +129,7 @@ public:
                 return false;
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Running:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
@@ -166,12 +168,20 @@ public:
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_I("Query moved to terminal state ");
+            YDB_LOG_INFO("[ydb] [Finalizer] Query moved to terminal state",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
-            LOG_E("Error moving the query to the terminal state");
+            YDB_LOG_ERROR("[ydb] [Finalizer] Error moving the query to the terminal state",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }

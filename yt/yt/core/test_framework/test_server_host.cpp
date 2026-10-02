@@ -1,5 +1,7 @@
 #include "test_server_host.h"
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,7 +30,7 @@ void TTestServerHost::InitializeServer()
 
 void TTestServerHost::TearDown()
 {
-    Server_->Stop().Get().ThrowOnError();
+    NConcurrency::WaitFor(Server_->Stop()).ThrowOnError();
     Server_.Reset();
     Port_.Reset();
 }
@@ -38,7 +40,7 @@ TTestNodeMemoryTrackerPtr TTestServerHost::GetMemoryUsageTracker() const
     return MemoryUsageTracker_;
 }
 
-TString TTestServerHost::GetAddress() const
+std::string TTestServerHost::GetAddress() const
 {
     return Format("localhost:%v", static_cast<ui16>(Port_));
 }

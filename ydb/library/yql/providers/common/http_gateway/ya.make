@@ -1,9 +1,12 @@
 LIBRARY()
 
+ENV(TZ="UTC+23")
+
 SRCS(
     yql_aws_signature.cpp
     yql_http_default_retry_policy.cpp
     yql_http_gateway.cpp
+    yql_http_pool_cap_pusher.cpp
 )
 
 PEERDIR(
@@ -25,8 +28,10 @@ END()
 
 RECURSE(
     mock
+    ut_helpers
 )
 
 RECURSE_FOR_TESTS(
     ut
+    ut_large
 )

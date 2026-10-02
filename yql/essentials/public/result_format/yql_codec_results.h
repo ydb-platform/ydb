@@ -4,8 +4,7 @@
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 // we should not write numbers as numbers ever
 // write numbers as strings except Yson value where we use restricted dialect
@@ -15,27 +14,26 @@ class TYsonResultWriter {
 public:
     static constexpr TStringBuf VoidString = "Void";
 
-public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
-        : Writer(writer)
+        : Writer_(writer)
     {
     }
     void OnVoid() {
-        Writer.OnStringScalar(VoidString);
+        Writer_.OnStringScalar(VoidString);
     }
     void OnNull() {
-        Writer.OnEntity();
+        Writer_.OnEntity();
     }
     void OnEmptyList() {
-        Writer.OnBeginList();
-        Writer.OnEndList();
+        Writer_.OnBeginList();
+        Writer_.OnEndList();
     }
     void OnEmptyDict() {
-        Writer.OnBeginList();
-        Writer.OnEndList();
+        Writer_.OnBeginList();
+        Writer_.OnEndList();
     }
     void OnEntity() {
-        Writer.OnEntity();
+        Writer_.OnEntity();
     }
     // numbers
     void OnInt64Scalar(i64 value) {
@@ -45,56 +43,54 @@ public:
         WriteNumberAsString(value);
     }
     void OnFloatScalar(float value) {
-        Writer.OnStringScalar(::FloatToString(value));
+        Writer_.OnStringScalar(::FloatToString(value));
     }
     void OnDoubleScalar(double value) {
-        Writer.OnStringScalar(::FloatToString(value));
+        Writer_.OnStringScalar(::FloatToString(value));
     }
     void OnBooleanScalar(bool value) {
-        Writer.OnBooleanScalar(value);
+        Writer_.OnBooleanScalar(value);
     }
     // strings
     void OnStringScalar(TStringBuf value);
     void OnUtf8StringScalar(TStringBuf value) {
-        Writer.OnStringScalar(value);
+        Writer_.OnStringScalar(value);
     }
     // list construction
     void OnBeginList() {
-        Writer.OnBeginList();
+        Writer_.OnBeginList();
     }
     void OnListItem() {
-        Writer.OnListItem();
+        Writer_.OnListItem();
     }
     void OnEndList() {
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
     void OnBeginMap() {
-        Writer.OnBeginMap();
+        Writer_.OnBeginMap();
     }
     void OnKeyedItem(const TStringBuf& key) {
-        Writer.OnKeyedItem(key);
+        Writer_.OnKeyedItem(key);
     }
     void OnEndMap() {
-        Writer.OnEndMap();
+        Writer_.OnEndMap();
     }
     void OnBeginAttributes() {
-        Writer.OnBeginAttributes();
+        Writer_.OnBeginAttributes();
     }
     void OnEndAttributes() {
-        Writer.OnEndAttributes();
+        Writer_.OnEndAttributes();
     }
     void OnRaw(TStringBuf ysonNode, NYT::NYson::EYsonType type) {
-        Writer.OnRaw(ysonNode, type);
+        Writer_.OnRaw(ysonNode, type);
     }
 
 private:
     template <typename T>
     void WriteNumberAsString(T value) {
-        Writer.OnStringScalar(::ToString(value));
+        Writer_.OnStringScalar(::ToString(value));
     }
 
-private:
-    NYson::TYsonConsumerBase& Writer;
+    NYson::TYsonConsumerBase& Writer_;
 };
-}
-}
+} // namespace NYql::NResult

@@ -3,4 +3,5 @@ RECURSE(
     client
     lib
     recipe
+    testing
 )

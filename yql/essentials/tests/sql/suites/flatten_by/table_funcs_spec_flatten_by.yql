@@ -1,0 +1,9 @@
+use plato;
+
+insert into Output
+select
+  key,
+  value,
+  TablePath()
+from Input flatten by (key)
+;

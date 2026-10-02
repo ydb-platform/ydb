@@ -336,32 +336,26 @@ CheckRelationLockedByMe(Relation relation, LOCKMODE lockmode, bool orstronger)
 						 relation->rd_lockInfo.lockRelId.dbId,
 						 relation->rd_lockInfo.lockRelId.relId);
 
-	if (LockHeldByMe(&tag, lockmode))
-		return true;
+	return (orstronger ?
+			LockOrStrongerHeldByMe(&tag, lockmode) :
+			LockHeldByMe(&tag, lockmode));
+}
 
-	if (orstronger)
-	{
-		LOCKMODE	slockmode;
+/*
+ *		CheckRelationOidLockedByMe
+ *
+ * Like the above, but takes an OID as argument.
+ */
+bool
+CheckRelationOidLockedByMe(Oid relid, LOCKMODE lockmode, bool orstronger)
+{
+	LOCKTAG		tag;
 
-		for (slockmode = lockmode + 1;
-			 slockmode <= MaxLockMode;
-			 slockmode++)
-		{
-			if (LockHeldByMe(&tag, slockmode))
-			{
-#ifdef NOT_USED
-				/* Sometimes this might be useful for debugging purposes */
-				elog(WARNING, "lock mode %s substituted for %s on relation %s",
-					 GetLockmodeName(tag.locktag_lockmethodid, slockmode),
-					 GetLockmodeName(tag.locktag_lockmethodid, lockmode),
-					 RelationGetRelationName(relation));
-#endif
-				return true;
-			}
-		}
-	}
+	SetLocktagRelationOid(&tag, relid);
 
-	return false;
+	return (orstronger ?
+			LockOrStrongerHeldByMe(&tag, lockmode) :
+			LockHeldByMe(&tag, lockmode));
 }
 
 /*
@@ -722,7 +716,10 @@ XactLockTableWait(TransactionId xid, Relation rel, ItemPointer ctid,
 		 * through, to avoid slowing down the normal case.)
 		 */
 		if (!first)
+		{
+			CHECK_FOR_INTERRUPTS();
 			pg_usleep(1000L);
+		}
 		first = false;
 		xid = SubTransGetTopmostTransaction(xid);
 	}
@@ -760,7 +757,10 @@ ConditionalXactLockTableWait(TransactionId xid)
 
 		/* See XactLockTableWait about this case */
 		if (!first)
+		{
+			CHECK_FOR_INTERRUPTS();
 			pg_usleep(1000L);
+		}
 		first = false;
 		xid = SubTransGetTopmostTransaction(xid);
 	}

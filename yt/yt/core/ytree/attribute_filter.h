@@ -63,16 +63,18 @@ namespace NYT::NYTree {
  *    Filter = {.Keys = {}; .Paths = {}, .Universal = true}
  *    Result depends on implementation.
  */
-struct TAttributeFilter
+class TAttributeFilter
 {
+public:
     //! Whitelist of top-level keys to be returned.
-    std::vector<IAttributeDictionary::TKey> Keys;
-    std::vector<NYPath::TYPath> Paths;
+    DEFINE_BYREF_RO_PROPERTY(std::vector<IAttributeDictionary::TKey>, Keys);
+    DEFINE_BYREF_RO_PROPERTY(std::vector<NYPath::TYPath>, Paths);
 
     //! If true, filter is universal, i.e. behavior depends on service's own policy;
     //! in such case #Keys and #Paths are always empty.
-    bool Universal = true;
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Universal, true);
 
+public:
     //! Creates a universal filter.
     TAttributeFilter() = default;
 
@@ -85,8 +87,8 @@ struct TAttributeFilter
     template <class T>
     TAttributeFilter(std::initializer_list<T> keys);
 
+    TAttributeFilter(std::initializer_list<std::string> keys);
     // TODO(babenko): switch to std::string
-    TAttributeFilter(std::initializer_list<TString> keys);
     TAttributeFilter(const std::vector<TString>& keys);
 
     //! Returns true for non-universal filter and false otherwise.
@@ -111,6 +113,9 @@ struct TAttributeFilter
     //! top-level key -> list of YPaths inside this top-level key (i.e. with /<key> stripped off) or
     //! to std::nullopt, which stands for "take the top-level key as is".
     TKeyToFilter Normalize() const;
+
+    //! Removes selected keys from the key and path filters.
+    void Remove(const std::vector<IAttributeDictionary::TKey>& keys);
 
     //! This helper structure enabling us to either return given IYsonConsumer* as is
     //! without creating any new consumers, or to wrap it into another consumer actual
@@ -162,6 +167,35 @@ void Deserialize(TAttributeFilter& attributeFilter, NYson::TYsonPullParserCursor
 void FormatValue(
     TStringBuilderBase* builder,
     const TAttributeFilter& attributeFilter,
+    TStringBuf /*spec*/);
+
+void WriteAttributeDictionaryFragment(
+    NYson::IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable);
+
+void WriteAttributeDictionary(
+    NYson::IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TShrunkAttributeFilterView
+{
+    const TAttributeFilter& AttributeFilter;
+    const i64 Limit;
+};
+
+TShrunkAttributeFilterView MakeShrunkFormattableView(
+    const TAttributeFilter& attributeFilter,
+    i64 limit);
+
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TShrunkAttributeFilterView& attributeFilter,
     TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -28,9 +30,11 @@
 #include "absl/base/config.h"
 #include "absl/base/macros.h"
 #include "absl/base/nullability.h"
+#include "absl/debugging/leak_check.h"
 #include "absl/debugging/stacktrace.h"
 #include "absl/debugging/symbolize.h"
-#include "absl/memory/memory.h"
+#include "absl/functional/function_ref.h"
+#include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/status_payload_printer.h"
 #include "absl/strings/cord.h"
@@ -39,7 +43,9 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
+#include "absl/types/optional_ref.h"
+#include "absl/types/source_location.h"
+#include "absl/types/span.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -55,32 +61,32 @@ void StatusRep::Unref() const {
   }
 }
 
-static absl::optional<size_t> FindPayloadIndexByUrl(
-    const Payloads* payloads, absl::string_view type_url) {
-  if (payloads == nullptr) return absl::nullopt;
+static std::optional<size_t> FindPayloadIndexByUrl(const Payloads* payloads,
+                                                   absl::string_view type_url) {
+  if (payloads == nullptr) return std::nullopt;
 
   for (size_t i = 0; i < payloads->size(); ++i) {
     if ((*payloads)[i].type_url == type_url) return i;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<absl::Cord> StatusRep::GetPayload(
+std::optional<absl::Cord> StatusRep::GetPayload(
     absl::string_view type_url) const {
-  absl::optional<size_t> index =
+  std::optional<size_t> index =
       status_internal::FindPayloadIndexByUrl(payloads_.get(), type_url);
   if (index.has_value()) return (*payloads_)[index.value()].payload;
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void StatusRep::SetPayload(absl::string_view type_url, absl::Cord payload) {
   if (payloads_ == nullptr) {
-    payloads_ = absl::make_unique<status_internal::Payloads>();
+    payloads_ = std::make_unique<status_internal::Payloads>();
   }
 
-  absl::optional<size_t> index =
+  std::optional<size_t> index =
       status_internal::FindPayloadIndexByUrl(payloads_.get(), type_url);
   if (index.has_value()) {
     (*payloads_)[index.value()].payload = std::move(payload);
@@ -91,7 +97,7 @@ void StatusRep::SetPayload(absl::string_view type_url, absl::Cord payload) {
 }
 
 StatusRep::EraseResult StatusRep::ErasePayload(absl::string_view type_url) {
-  absl::optional<size_t> index =
+  std::optional<size_t> index =
       status_internal::FindPayloadIndexByUrl(payloads_.get(), type_url);
   if (!index.has_value()) return {false, Status::PointerToRep(this)};
   payloads_->erase(payloads_->begin() + index.value());
@@ -129,6 +135,14 @@ void StatusRep::ForEachPayload(
   }
 }
 
+absl::Span<const SourceLocation> StatusRep::GetSourceLocations() const {
+  return absl::MakeSpan(source_locations_);
+}
+
+void StatusRep::AddSourceLocation(absl::SourceLocation loc) {
+  source_locations_.push_back(loc);
+}
+
 std::string StatusRep::ToString(StatusToStringMode mode) const {
   std::string text;
   absl::StrAppend(&text, absl::StatusCodeToString(code()), ": ", message());
@@ -141,13 +155,24 @@ std::string StatusRep::ToString(StatusToStringMode mode) const {
         status_internal::GetStatusPayloadPrinter();
     this->ForEachPayload([&](absl::string_view type_url,
                              const absl::Cord& payload) {
-      absl::optional<std::string> result;
+      std::optional<std::string> result;
       if (printer) result = printer(type_url, payload);
       absl::StrAppend(
           &text, " [", type_url, "='",
           result.has_value() ? *result : absl::CHexEscape(std::string(payload)),
           "']");
     });
+  }
+  const bool with_source_location =
+      (mode & StatusToStringMode::kWithSourceLocation) ==
+      StatusToStringMode::kWithSourceLocation;
+  if (with_source_location && !source_locations_.empty()) {
+    absl::string_view whitespace = (absl::Hash<int>{}(42) % 2 == 0) ? "" : " ";
+    absl::StrAppend(&text, "\n=== Source Location Trace: ===", whitespace,
+                    "\n");
+    for (const absl::SourceLocation loc : GetSourceLocations()) {
+      absl::StrAppend(&text, loc.file_name(), ":", loc.line(), "\n");
+    }
   }
 
   return text;
@@ -188,9 +213,12 @@ bool StatusRep::operator==(const StatusRep& other) const {
   return true;
 }
 
-absl::Nonnull<StatusRep*> StatusRep::CloneAndUnref() const {
+StatusRep* absl_nonnull StatusRep::Clone(
+    absl::optional_ref<absl::string_view> new_message, bool include_payloads,
+    bool include_source_locations) const {
   // Optimization: no need to create a clone if we already have a refcount of 1.
-  if (ref_.load(std::memory_order_acquire) == 1) {
+  if (ref_.load(std::memory_order_acquire) == 1 && !new_message.has_value() &&
+      include_payloads && include_source_locations) {
     // All StatusRep instances are heap allocated and mutable, therefore this
     // const_cast will never cast away const from a stack instance.
     //
@@ -199,11 +227,30 @@ absl::Nonnull<StatusRep*> StatusRep::CloneAndUnref() const {
     return const_cast<StatusRep*>(this);
   }
   std::unique_ptr<status_internal::Payloads> payloads;
-  if (payloads_) {
-    payloads = absl::make_unique<status_internal::Payloads>(*payloads_);
+  if (include_payloads && payloads_) {
+    payloads = std::make_unique<status_internal::Payloads>(*payloads_);
   }
-  auto* new_rep = new StatusRep(code_, message_, std::move(payloads));
-  Unref();
+  auto* new_rep =
+      new StatusRep(code_, new_message.value_or(message_), std::move(payloads));
+  if (include_source_locations) {
+    new_rep->source_locations_ = source_locations_;
+  }
+  return new_rep;
+}
+
+StatusRep* absl_nonnull StatusRep::CloneAndUnref() const {
+  return CloneAndUnref(std::nullopt, true, true);
+}
+
+StatusRep* absl_nonnull StatusRep::CloneAndUnref(
+    absl::optional_ref<absl::string_view> new_message, bool include_payloads,
+    bool include_source_locations) const {
+  StatusRep* new_rep =
+      Clone(new_message, /*include_payloads=*/include_payloads,
+            /*include_source_locations=*/include_source_locations);
+  if (new_rep != this) {
+    Unref();
+  }
   return new_rep;
 }
 
@@ -234,12 +281,14 @@ absl::StatusCode MapToLocalCode(int value) {
   }
 }
 
-absl::Nonnull<std::string*> MakeCheckFailString(
-    absl::Nonnull<const absl::Status*> status,
-    absl::Nonnull<const char*> prefix) {
-  return new std::string(
-      absl::StrCat(prefix, " (",
-                   status->ToString(StatusToStringMode::kWithEverything), ")"));
+const char* absl_nonnull MakeCheckFailString(
+    const absl::Status* absl_nonnull status, const char* absl_nonnull prefix) {
+  // There's no need to free this string since the process is crashing.
+  return absl::IgnoreLeak(
+             new std::string(absl::StrCat(
+                 prefix, " (",
+                 status->ToString(StatusToStringMode::kWithEverything), ")")))
+      ->c_str();
 }
 
 }  // namespace status_internal

@@ -813,6 +813,16 @@ InitWalRecovery(ControlFileData *ControlFile, bool *wasShutdown_ptr,
 		}
 		memcpy(&checkPoint, XLogRecGetData(xlogreader), sizeof(CheckPoint));
 		wasShutdown = ((record->xl_info & ~XLR_INFO_MASK) == XLOG_CHECKPOINT_SHUTDOWN);
+
+		/* Make sure that REDO location exists. */
+		if (checkPoint.redo < CheckPointLoc)
+		{
+			XLogPrefetcherBeginRead(xlogprefetcher, checkPoint.redo);
+			if (!ReadRecord(xlogprefetcher, LOG, false, checkPoint.ThisTimeLineID))
+				ereport(PANIC,
+						errmsg("could not find redo location %X/%08X referenced by checkpoint record at %X/%08X",
+							   LSN_FORMAT_ARGS(checkPoint.redo), LSN_FORMAT_ARGS(CheckPointLoc)));
+		}
 	}
 
 	/*
@@ -831,13 +841,13 @@ InitWalRecovery(ControlFileData *ControlFile, bool *wasShutdown_ptr,
 		 * tliSwitchPoint will throw an error if the checkpoint's timeline is
 		 * not in expectedTLEs at all.
 		 */
-		switchpoint = tliSwitchPoint(ControlFile->checkPointCopy.ThisTimeLineID, expectedTLEs, NULL);
+		switchpoint = tliSwitchPoint(CheckPointTLI, expectedTLEs, NULL);
 		ereport(FATAL,
 				(errmsg("requested timeline %u is not a child of this server's history",
 						recoveryTargetTLI),
 				 errdetail("Latest checkpoint is at %X/%X on timeline %u, but in the history of the requested timeline, the server forked off from that timeline at %X/%X.",
-						   LSN_FORMAT_ARGS(ControlFile->checkPoint),
-						   ControlFile->checkPointCopy.ThisTimeLineID,
+						   LSN_FORMAT_ARGS(CheckPointLoc),
+						   CheckPointTLI,
 						   LSN_FORMAT_ARGS(switchpoint))));
 	}
 
@@ -3386,12 +3396,12 @@ retry:
 	 * validates the page header anyway, and would propagate the failure up to
 	 * ReadRecord(), which would retry. However, there's a corner case with
 	 * continuation records, if a record is split across two pages such that
-	 * we would need to read the two pages from different sources. For
-	 * example, imagine a scenario where a streaming replica is started up,
-	 * and replay reaches a record that's split across two WAL segments. The
-	 * first page is only available locally, in pg_wal, because it's already
-	 * been recycled on the primary. The second page, however, is not present
-	 * in pg_wal, and we should stream it from the primary. There is a
+	 * we would need to read the two pages from different sources across two
+	 * WAL segments.
+	 *
+	 * The first page is only available locally, in pg_wal, because it's
+	 * already been recycled on the primary. The second page, however, is not
+	 * present in pg_wal, and we should stream it from the primary. There is a
 	 * recycled WAL segment present in pg_wal, with garbage contents, however.
 	 * We would read the first page from the local WAL segment, but when
 	 * reading the second page, we would read the bogus, recycled, WAL
@@ -3413,6 +3423,7 @@ retry:
 	 * responsible for the validation.
 	 */
 	if (StandbyMode &&
+		(targetPagePtr % wal_segment_size) == 0 &&
 		!XLogReaderValidatePageHeader(xlogreader, targetPagePtr, readBuf))
 	{
 		/*
@@ -3612,8 +3623,19 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * Before we leave XLOG_FROM_STREAM state, make sure that
 					 * walreceiver is not active, so that it won't overwrite
 					 * WAL that we restore from archive.
+					 *
+					 * If walreceiver is actively streaming (or attempting to
+					 * connect), we must shut it down. However, if it's
+					 * already in WAITING state (e.g., due to timeline
+					 * divergence), we only need to reset the install flag to
+					 * allow archive restoration.
 					 */
-					XLogShutdownWalRcv();
+					if (WalRcvStreaming())
+						XLogShutdownWalRcv();
+					else
+					{
+						ResetInstallXLogFileSegmentActive();
+					}
 
 					/*
 					 * Before we sleep, re-scan for possible new timelines if
@@ -4689,9 +4711,20 @@ RecoveryRequiresIntParameter(const char *param_name, int currValue, int minValue
 bool
 check_primary_slot_name(char **newval, void **extra, GucSource source)
 {
+	int			err_code;
+	char	   *err_msg = NULL;
+	char	   *err_hint = NULL;
+
 	if (*newval && strcmp(*newval, "") != 0 &&
-		!ReplicationSlotValidateName(*newval, WARNING))
+		!ReplicationSlotValidateNameInternal(*newval, &err_code, &err_msg,
+											 &err_hint))
+	{
+		GUC_check_errcode(err_code);
+		GUC_check_errdetail("%s", err_msg);
+		if (err_hint != NULL)
+			GUC_check_errhint("%s", err_hint);
 		return false;
+	}
 
 	return true;
 }

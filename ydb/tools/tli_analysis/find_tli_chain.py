@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""
+TLI Chain Finder - Extracts TLI (Transaction Lock Invalidation) chain info from logs.
+
+Given a VictimQuerySpanId, finds the related breaker transaction and displays
+the query texts for both victim and breaker transactions.
+"""
+
+import argparse
+import re
+import sys
+import os
+from datetime import datetime
+from typing import Optional, Dict, Tuple, List
+
+
+# ==================== ANSI Styling ====================
+
+ANSI_RED = "\033[31m"
+ANSI_CYAN = "\033[36m"
+ANSI_BOLD = "\033[1m"
+ANSI_RESET = "\033[0m"
+
+
+def use_color_enabled(no_color_flag: bool) -> bool:
+    """Check if ANSI colors should be used."""
+    if no_color_flag:
+        return False
+    if os.getenv("NO_COLOR") is not None:
+        return False
+    return sys.stdout.isatty()
+
+
+def style(s: str, *, color: Optional[str] = None, bold: bool = False, enable: bool = True) -> str:
+    """Apply ANSI styling to a string."""
+    if not enable:
+        return s
+    parts = []
+    if bold:
+        parts.append(ANSI_BOLD)
+    if color:
+        parts.append(color)
+    parts.append(s)
+    parts.append(ANSI_RESET)
+    return "".join(parts)
+
+
+def color_red(s: str, enable: bool) -> str:
+    return style(s, color=ANSI_RED, enable=enable)
+
+
+def print_section_header(title: str, enable_color: bool):
+    """Print a section header with decorative bars."""
+    bar = "=" * max(48, len(title) + 8)
+    print()
+    print(style(bar, color=ANSI_CYAN, bold=True, enable=enable_color))
+    print(style(f"  {title}", color=ANSI_CYAN, bold=True, enable=enable_color))
+    print(style(bar, color=ANSI_CYAN, bold=True, enable=enable_color))
+    print()
+
+
+def print_kv_header(key: str, enable_color: bool):
+    """Print a key-value header."""
+    print(style(f"{key}:", color=ANSI_CYAN, bold=True, enable=enable_color), end=" ")
+
+
+# ==================== Text Helpers ====================
+
+def unescape_and_format_query_text(s: Optional[str]) -> str:
+    """Unescape and format query text for display."""
+    if not s:
+        return ""
+    try:
+        s2 = s.encode("utf-8").decode("unicode_escape")
+    except (UnicodeDecodeError, UnicodeError) as e:
+        print(f"Warning: unicode_escape failed for query text: {e}", file=sys.stderr)
+        s2 = s.replace(r"\n", "\n").replace(r"\t", " ").replace(r"\"", "\"")
+    s2 = s2.replace("\t", " ")
+    s2 = "\n".join(line.rstrip() for line in s2.splitlines()).strip()
+    return s2
+
+
+def extract_field(line: str, field: str) -> Optional[str]:
+    """Extract a field value from log line.
+
+    Field value can have one of following formats
+        value=text
+        value="escaped text"
+    """
+
+    key = field + "="
+    pos = line.find(key)
+    if pos < 0:
+        return None
+
+    pos += len(key)
+    if pos >= len(line):
+        return None
+
+    if line[pos] != '"':
+        found = line.find(' ', pos)
+        if found < 0:
+            return line[pos:]
+        else:
+            return line[pos:found]
+
+    result = ""
+    pos += 1
+    while pos < len(line):
+        if line[pos] == '"':
+            return result
+        if line[pos] == '\\':
+            pos += 1
+            if line[pos] == '"':
+                result += '"'
+            elif line[pos] == '\\':
+                result += '\\'
+            elif line[pos] == 'n':
+                result += '\n'
+            else:
+                return None
+            pos += 1
+        else:
+            result += line[pos]
+            pos += 1
+
+    return None
+
+
+# ==================== Regex Patterns ====================
+RE_ISO = re.compile(r"\b(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z\b")
+
+# ==================== Timestamp Parsing ====================
+
+# Unix epoch as ordinal (days since Jan 1, year 1)
+_UNIX_EPOCH_ORDINAL = datetime(1970, 1, 1).toordinal()
+
+
+class FastTimeParser:
+    """Fast ISO timestamp parser with date caching."""
+
+    def __init__(self):
+        self._cached_date: Optional[str] = None
+        self._cached_day_base: int = 0
+
+    def parse(self, line: str) -> Optional[float]:
+        """Parse ISO timestamp from line, return seconds since Unix epoch."""
+        m = RE_ISO.search(line)
+        if not m:
+            return None
+        date_s, hh, mm, ss, frac = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
+        if date_s != self._cached_date:
+            d = datetime.strptime(date_s, "%Y-%m-%d").date()
+            days_since_epoch = d.toordinal() - _UNIX_EPOCH_ORDINAL
+            self._cached_day_base = days_since_epoch * 86400
+            self._cached_date = date_s
+        t = self._cached_day_base + int(hh) * 3600 + int(mm) * 60 + int(ss)
+        if frac:
+            frac = (frac + "000000")[:6]
+            t = t + int(frac) / 1_000_000.0
+        return float(t)
+
+
+# ==================== Line Matching Helpers ====================
+
+def extract_query_id(line: str) -> Optional[str]:
+    """Extract querySpanId from line."""
+
+    return extract_field(line, "querySpanId")
+
+
+def extract_breaker_id(line: str) -> Optional[str]:
+    """Extract BreakerQuerySpanId from line."""
+
+    return extract_field(line, "breakerQuerySpanId")
+
+
+def extract_breaker_tx_id(line: str) -> Optional[str]:
+    """Extract breakerTxSpanId from line."""
+
+    return extract_field(line, "breakerTxSpanId")
+
+
+def check_query_id_in_line(line: str, query_id: str) -> bool:
+    """Check if query_id appears in line."""
+
+    query_id = query_id.strip()
+
+    id = extract_field(line, "querySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "victimQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "victimTxSpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "breakerQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    id = extract_field(line, "breakerTxSpanId")
+    if id and id.strip() == query_id:
+        return True
+    return False
+
+
+def check_victim_query_id_in_line(line: str, query_id: str) -> bool:
+    """Check if query_id appears in line."""
+
+    query_id = query_id.strip()
+
+    id = extract_field(line, "victimQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
+    return False
+
+
+def in_window(t: float, start: float, end: float) -> bool:
+    """Check if timestamp is within window."""
+    return start <= t <= end
+
+
+def print_tx_block(title: str, items: List[Tuple[str, str]], highlight_id: Optional[str], use_color: bool):
+    """Print transaction block with optional highlighting."""
+    print_section_header(title, use_color)
+    if not items:
+        print("(not found)")
+        return
+
+    for i, (qid, qtext) in enumerate(items):
+        text_to_print = qtext
+        if highlight_id and qid == highlight_id:
+            text_to_print = color_red(text_to_print, use_color)
+        print(text_to_print)
+        if i != len(items) - 1:
+            print()
+
+
+# ==================== Main Logic ====================
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Find TLI chain by VictimQuerySpanId in logs."
+    )
+    ap.add_argument("victim_id", help="VictimQuerySpanId (number)")
+    ap.add_argument("logfile", help="Path to log file")
+    ap.add_argument("--window-sec", type=float, default=10.0, help="Chain time window +/- seconds (default: 10)")
+    ap.add_argument("--no-color", action="store_true", help="Disable ANSI colors/styles")
+    args = ap.parse_args()
+
+    victim_id = args.victim_id
+    path = args.logfile
+    W = float(args.window_sec)
+    use_color = use_color_enabled(args.no_color)
+
+    tp = FastTimeParser()
+
+    # Collected data
+    victim_query_text = ""
+    anchor_t: Optional[float] = None
+    breaker_log_ds: Optional[str] = None     # DataShard "broke other locks" line
+    breaker_id: Optional[str] = None
+    breaker_sa_with_text_by_id: Dict[str, str] = {}
+
+    # First pass: find anchor time and collect all relevant lines
+    # Since logs may be unsorted, we need to scan the entire file
+    relevant_lines: List[Tuple[float, str]] = []
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                # Quick filter to skip irrelevant lines
+                if not (
+                    (victim_id in line) or
+                    ("was a victim of broken locks" in line) or
+                    ("broke other locks" in line) or
+                    ("had broken other locks" in line)
+                ):
+                    continue
+
+                t = tp.parse(line)
+                if t is None:
+                    continue
+
+                # Find anchor: first line containing victim_id
+                if anchor_t is None and (victim_id in line):
+                    anchor_t = t
+
+                relevant_lines.append((t, line))
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        err_msg = f"Failed to open log file '{path}': {e}"
+        print(style(err_msg, color=ANSI_RED, bold=True, enable=use_color), file=sys.stderr)
+        sys.exit(1)
+
+    if anchor_t is None:
+        print(f"Error: VictimQuerySpanId {victim_id} not found in log file.", file=sys.stderr)
+        sys.exit(1)
+
+    w_start = anchor_t - W
+    w_end = anchor_t + W
+
+    # Process all relevant lines within the time window
+
+    victim_tx_items: List[Tuple[str, str]] = []
+    breaker_tx_items: List[Tuple[str, str]] = []
+    breaker_query_text = None
+
+    for t, line in relevant_lines:
+        if not in_window(t, w_start, w_end):
+            continue
+
+        line = line.rstrip("\n")
+
+        # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
+        if ("was a victim of broken locks" in line) and ("component=SessionActor" in line) and check_query_id_in_line(line, victim_id):
+
+            line_query_id = extract_field(line, "querySpanId")
+            line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+
+            if line_query_id and line_query_text:
+                victim_tx_span_id = extract_field(line, "victimTxSpanId")
+                if victim_tx_span_id == line_query_id:
+                    victim_query_text = line_query_text
+                victim_tx_items.append((line_query_id, line_query_text))
+
+        # Breaker DataShard line: "broke other locks" + Component: DataShard
+        if breaker_log_ds is None:
+            if ("broke other locks" in line) and \
+               ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
+               check_victim_query_id_in_line(line, victim_id):
+                breaker_log_ds = line
+                breaker_id = extract_breaker_id(line)
+
+    for t, line in relevant_lines:
+        if not in_window(t, w_start, w_end):
+            continue
+
+        line = line.rstrip("\n")
+
+        # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
+        # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
+        if ("had broken other locks" in line) and ("component=SessionActor" in line):
+            bid = extract_breaker_tx_id(line)
+            if bid == breaker_id:
+                line_query_id = extract_field(line, "querySpanId")
+                line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+                if line_query_id and line_query_text:
+                    breaker_tx_items.append((line_query_id, line_query_text))
+                    if line_query_id == breaker_id:
+                        breaker_sa_with_text_by_id[bid] = line_query_text
+
+    if breaker_id and (breaker_id in breaker_sa_with_text_by_id):
+        breaker_query_text = breaker_sa_with_text_by_id[breaker_id]
+
+    # Output results
+    print_section_header("TLI Chain", use_color)
+
+    print_kv_header("VictimQuerySpanId", use_color)
+    print(victim_id)
+    print()
+
+    print_kv_header("VictimQueryText", use_color)
+    print(victim_query_text if victim_query_text else "(not found)")
+    print("\n")
+
+    print_kv_header("BreakerQuerySpanId", use_color)
+    print(breaker_id if breaker_id else "(not found)")
+    print()
+
+    print_kv_header("BreakerQueryText", use_color)
+    print(breaker_query_text if breaker_query_text else "(not found)")
+
+    print_tx_block("VictimTx", victim_tx_items, victim_id, use_color)
+
+    print_tx_block("BreakerTx", breaker_tx_items, breaker_id, use_color)
+
+
+if __name__ == "__main__":
+    main()

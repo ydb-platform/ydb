@@ -1,0 +1,20 @@
+diff --git a/memory.cc b/memory.cc
+index 7beb048..bb6cc74 100644
+--- a/memory.cc
++++ b/memory.cc
+@@ -59,13 +59,13 @@ namespace std
+ 	 * Sets a function to be called when there is a failure in new.
+ 	 */
+ 	__attribute__((weak))
+-	new_handler set_new_handler(new_handler handler)
++	new_handler set_new_handler(new_handler handler) noexcept
+ 	{
+ 		return new_handl.exchange(handler);
+ 	}
+ 
+ 	__attribute__((weak))
+-	new_handler get_new_handler(void)
++	new_handler get_new_handler(void) noexcept
+ 	{
+ 		return new_handl.load();
+ 	}

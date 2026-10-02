@@ -22,7 +22,7 @@ using TEmaCounterWindowRates = TCompactVector<double, WindowCount>;
 //! A helper structure for maintaining a monotonic counter and
 //! estimating its average rate over a set of configured time windows
 //! using EMA (exponential moving average) technique.
-template<typename T, int WindowCount = TypicalWindowCount>
+template <typename T, int WindowCount = TypicalWindowCount>
     requires std::is_arithmetic_v<T>
 struct TEmaCounter
 {
@@ -36,6 +36,8 @@ struct TEmaCounter
     //! i.e. #Count delta divided by the time delta measured in seconds
     //! according to the last update.
     double ImmediateRate = 0.0;
+    //! Duration of the last observed interval; zero before the first interval or after merging.
+    TDuration LastUpdateInterval;
 
     //! Durations of configured time windows.
     TEmaCounterWindowDurations<WindowCount> WindowDurations;
@@ -45,7 +47,13 @@ struct TEmaCounter
     explicit TEmaCounter(TEmaCounterWindowDurations<WindowCount> windowDurations);
 
     //! Set new value of counter, optionally providing a current timestamp.
+    //! Monotonic updates at the same timestamp contribute to the same observed interval.
+    //! Before the first interval, they only update the initial counter value.
     void Update(T newCount, TInstant newTimestamp = TInstant::Now());
+
+    void Scale(double scaleFactor);
+
+    void Merge(const TEmaCounter<T, WindowCount>& other, TInstant currentTimestamp = TInstant::Now());
 
     //! Returns the rate for the given window after enough time has passed
     //! for the values to be accurate (at least the duration of the window itself).

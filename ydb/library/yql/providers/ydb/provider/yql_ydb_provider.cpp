@@ -6,7 +6,7 @@ namespace NYql {
 
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver) {
     return [driver, credentialsFactory, dbResolver] (
         const TString& userName,
@@ -32,6 +32,7 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
         auto state = MakeIntrusive<TYdbState>();
 
         state->Types = typeCtx.Get();
+        state->Configuration = MakeIntrusive<TYdbConfiguration>(typeCtx->StrictConfigValidation);
         state->FunctionRegistry = functionRegistry;
         state->CredentialsFactory = credentialsFactory;
         state->DbResolver = dbResolver;

@@ -55,7 +55,7 @@ namespace NKikimr {
             using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
 
         public:
-            TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired);
+            TSyncLogRecovery(const TString& logPrefix, std::unique_ptr<TSyncLogRepaired> &&repaired);
             void PutLogoBlob(
                 const TBlobStorageGroupType &gtype,
                 ui64 lsn,
@@ -86,6 +86,7 @@ namespace NKikimr {
         private:
             TString ToString() const;
 
+            const TString VDiskLogPrefix;
             std::unique_ptr<TSyncLogRepaired> Repaired;
             ui64 AddSegs = 0;
             ui64 LogoBlobs = 0;

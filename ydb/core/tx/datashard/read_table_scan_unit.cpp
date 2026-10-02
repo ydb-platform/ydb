@@ -3,6 +3,8 @@
 #include "execution_unit_ctors.h"
 #include "read_table_scan.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -64,7 +66,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                                              const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     // Pass aborted operations (e.g. while waiting for stream clearance, or because of a split/merge)
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
@@ -96,7 +98,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         const auto& record = tx->GetDataTx()->GetReadTableTransaction();
 
         if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            Y_ABORT_UNLESS(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
+            Y_ENSURE(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
 
             bool wait = false;
             TRowVersion snapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -106,7 +108,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 }
                 op->AddVolatileDependency(info->TxId);
                 bool ok = DataShard.GetVolatileTxManager().AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
+                Y_ENSURE(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
                 wait = true;
             }
 
@@ -133,7 +135,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         } else {
             // Note: this mode is only used in legacy tests and may not work with volatile transactions
             // With mvcc we have to mark all preceding transactions as logically complete
-            auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
+            auto readVersion = DataShard.GetMvccVersion(tx);
             hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(readVersion, txc);
             if (op->IsMvccSnapshotRepeatable() || !op->IsImmediate()) {
                 hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
@@ -153,9 +155,11 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
     if (op->HasScanResult()) {
         auto *result = CheckedCast<TReadTableProd*>(op->ScanResult().Get());
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "ReadTable scan complete for " << *op << " at "
-                    << DataShard.TabletID() << " error: " << result->Error << ", IsFatalError: " << result->IsFatalError);
+        YDB_LOG_TRACE_CTX(ctx, "ReadTable scan complete",
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
+            {"error", result->Error},
+            {"isFatalError", result->IsFatalError});
 
         tx->SetScanTask(0);
 
@@ -200,9 +204,9 @@ void TReadTableScanUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &ev,
         IgnoreFunc(TEvTxProcessing::TEvStreamClearancePending);
         IgnoreFunc(TEvTxProcessing::TEvStreamClearanceResponse);
     default:
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TReadTableScanUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+        YDB_LOG_ERROR_CTX(ctx, "TReadTableScanUnit::ProcessEvent unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         Y_DEBUG_ABORT("unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }
@@ -223,7 +227,7 @@ void TReadTableScanUnit::Abort(const TString &err,
                                const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
     if (tx->GetScanSnapshotId()) {
@@ -237,7 +241,8 @@ void TReadTableScanUnit::Abort(const TString &err,
         tx->SetScanTask(0);
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+    YDB_LOG_NOTICE_CTX(ctx, "TReadTableScanUnit::Abort: aborting operation",
+        {"errorMessage", err});
 
     op->ResetWaitingForScanFlag();
 }
@@ -255,3 +260,7 @@ THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

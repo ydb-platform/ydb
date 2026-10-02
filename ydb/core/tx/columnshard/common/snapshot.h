@@ -1,9 +1,10 @@
 #pragma once
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <util/datetime/base.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
-#include <util/datetime/base.h>
 
 namespace NKikimrColumnShardProto {
 class TSnapshot;
@@ -23,7 +24,14 @@ private:
 public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
-        , TxId(txId) {
+        , TxId(txId)
+    {
+    }
+
+    constexpr TSnapshot(const TPositiveIncreasingControlInteger planStep, const ui64 txId) noexcept
+        : PlanStep(planStep.Val())
+        , TxId(txId)
+    {
     }
 
     NJson::TJsonValue SerializeToJson() const;
@@ -45,7 +53,7 @@ public:
     }
 
     constexpr bool Valid() const noexcept {
-        return PlanStep && TxId;
+        return PlanStep != 0 && TxId != 0;
     }
 
     static constexpr TSnapshot Zero() noexcept {
@@ -59,6 +67,8 @@ public:
     static TSnapshot MaxForPlanInstant(const TInstant planInstant) noexcept;
 
     static TSnapshot MaxForPlanStep(const ui64 planStep) noexcept;
+
+    static TSnapshot MaxForPlanStep(const TPositiveIncreasingControlInteger planStep) noexcept;
 
     constexpr bool operator==(const TSnapshot&) const noexcept = default;
 
@@ -95,6 +105,19 @@ public:
 
     TString DebugString() const;
     NJson::TJsonValue DebugJson() const;
+
+    explicit operator size_t() const {
+        return CombineHashes(PlanStep, TxId);
+    }
+
+    TSnapshot GetPreviousSnapshot() const {
+        AFL_VERIFY(Valid());
+        if (TxId == 0) {
+            return TSnapshot(PlanStep - 1, ::Max<ui64>());
+        } else {
+            return TSnapshot(PlanStep, TxId - 1);
+        }
+    }
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

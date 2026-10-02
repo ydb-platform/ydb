@@ -20,7 +20,7 @@ public:
     int GetInvocationIndex() const;
     int GetInvocationCount() const;
 
-    //! backoffstrategy.GetBackoff return value changes only after
+    //! backoffStrategy.GetBackoff return value changes only after
     //! Next or Restart calls.
     TDuration GetBackoff() const;
 

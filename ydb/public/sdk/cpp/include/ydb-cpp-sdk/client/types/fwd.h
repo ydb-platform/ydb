@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TDerived>
 struct TRequestSettings;
@@ -29,6 +29,7 @@ class ITokenSource;
 
 namespace NStatusHelpers {
 class TYdbErrorException;
+class TYdbRangeErrorException;
 }
 
 }  // namespace NYdb

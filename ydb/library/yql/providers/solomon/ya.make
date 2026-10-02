@@ -1,7 +1,10 @@
 RECURSE(
-    async_io
+    actors
+    common
+    events
     expr_nodes
     gateway
     provider
     scheme
+    solomon_accessor
 )

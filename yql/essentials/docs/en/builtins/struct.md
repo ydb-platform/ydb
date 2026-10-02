@@ -36,7 +36,7 @@ Arguments:
 * The first argument passes the source structure to be expanded.
 * All the other arguments must be named, each argument adds a new field and the argument's name is used as the field's name (as in [AsStruct](basic.md#asstruct)).
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1|>;
@@ -60,7 +60,7 @@ Arguments:
 2. Name of the new field.
 3. Value of the new field.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1|>;
@@ -70,6 +70,30 @@ SELECT
     "b",
     2
   ) AS ab;
+```
+
+## ReplaceMember {#replacemember}
+
+Changing the field in the structure, including changing its type. If it is necessary to change several fields, it is preferable to use [RemoveMembers](#removemembers) and [ExpandStruct](#expandstruct).
+
+If the entered field does not exist, an error is returned.
+
+Arguments:
+
+1. struct - the original structure;
+2. key - the name of the field;
+3. new_value - a new value of the field.
+
+#### Examples
+
+```yql
+$struct = <|a:1, b:2|>;
+SELECT
+  ReplaceMember(
+    $struct,
+    "b",
+    "foo"
+  ) AS ab; -- ("a": 1, "b": "foo")
 ```
 
 ## RemoveMember {#removemember}
@@ -83,7 +107,7 @@ Arguments:
 1. Source structure.
 2. Field name.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -105,7 +129,7 @@ Arguments:
 1. Source structure.
 2. Field name.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -127,7 +151,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -149,7 +173,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -171,7 +195,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -190,7 +214,7 @@ If the resulting field set contains duplicate values, an error is returned.
 
 Arguments: two or more structures.
 
-### Examples
+#### Examples
 
 ```yql
 $struct1 = <|a:1, b:2|>;
@@ -210,7 +234,7 @@ If the resulting field set contains duplicate values, an error is returned.
 
 Arguments: two or more tuples of two items: prefix and structure.
 
-### Examples
+#### Examples
 
 ```yql
 $struct1 = <|a:1, b:2|>;
@@ -228,7 +252,7 @@ Returns an unordered list of field names (possibly removing one Optional level) 
 
 Argument: structure
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -245,7 +269,7 @@ Arguments:
 1. Source structure.
 2. A tuple of field names: the original name, the new name.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -262,7 +286,7 @@ Arguments:
 1. Source structure.
 2. A tuple of field names: the original name, the new name.
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -276,7 +300,7 @@ Returns an unordered list of tuples including the field name and value. For the 
 
 Argument: structure
 
-### Examples
+#### Examples
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -293,7 +317,7 @@ Arguments:
 1. List of tuples: field name, field value.
 2. A list of all possible field names in the structure.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -309,14 +333,14 @@ Arguments:
 1. List of tuples: field name, field value.
 2. A list of all possible field names in the structure.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
 
-## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference
+## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference {#struct-combining}
 
 Combine two structures using one of the four methods (using the provided lambda to merge fields with the same name):
 
@@ -325,7 +349,7 @@ Combine two structures using one of the four methods (using the provided lambda 
 * `StructDifference` adds only the fields of `left`, which are absent in `right`.
 * `StructSymmetricDifference` adds all fields that are present in exactly one of the structures.
 
-### Signatures
+#### Signatures
 
 ```yql
 StructUnion(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
@@ -340,7 +364,7 @@ Arguments:
 2. `right` - second structure.
 3. `mergeLambda` - _(optional)_ function to merge fields with the same name (arguments: field name, `Optional` field value of the first struct, `Optional` field value of the second struct - arguments are `Nothing<T?>` in case of absence of the corresponding struct field). By default, if present, the first structure's field value is used; otherwise, the second one's value is used.
 
-### Examples
+#### Examples
 
 ```yql
 $merge = ($name, $l, $r) -> {

@@ -1,0 +1,19 @@
+LibTIFF Security Issue Handling
+===============================
+
+Libtiff can be a significant security risk as many tools use it to read
+TIFF files which can come from hostile sources.  Thus buffer overflows
+and other security holes in libtiff put many users at risk.  To that end
+we try to deal with security problems fairly quickly and to provide advance
+notice to various interested parties to role out security fixes before they
+go out in a standard release. 
+
+This document is new and will presumably evolve.
+
+1) The mailing list distros@vs.openwall.org can be used to notify folks
+at various linux OS distributions as well as the BSD folks about problems
+in libtiff.  Make sure to prefix subject with [vs].  More info at:
+
+  http://oss-security.openwall.org/wiki/mailing-lists/distros
+
+... to be continued ...

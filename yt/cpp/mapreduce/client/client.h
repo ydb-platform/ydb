@@ -38,6 +38,18 @@ public:
     ITransactionPtr StartTransaction(
         const TStartTransactionOptions& options) override;
 
+    // distributed write API
+
+    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) override;
+
+    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) override;
+
     // cypress
 
     TNodeId Create(
@@ -101,6 +113,11 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options) override;
 
+    TFilePartitions GetFilePartitions(
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options) override;
+
     TMaybe<TYPath> GetFileFromCache(
         const TString& md5Signature,
         const TYPath& cachePath,
@@ -116,9 +133,17 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options) override;
 
+    IFileReaderPtr CreateFilePartitionReader(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options) override;
+
     IFileWriterPtr CreateFileWriter(
         const TRichYPath& path,
         const TFileWriterOptions& options) override;
+
+    IFileFragmentWriterPtr CreateFileFragmentWriter(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) override;
 
     TTableWriterPtr<::google::protobuf::Message> CreateTableWriter(
         const TRichYPath& path,
@@ -129,6 +154,11 @@ public:
         const TRichYPath& path,
         const TFormat& format,
         const TTableReaderOptions& options) override;
+
+    TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options) override;
 
     TRawTableWriterPtr CreateRawWriter(
         const TRichYPath& path,
@@ -222,8 +252,6 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
-
     IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
@@ -268,7 +296,24 @@ private:
         const TRichYPath& path,
         const TTableReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) override;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) override;
+
+    ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options) override;
+
+    ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) override;
 
     ::TIntrusivePtr<INodeWriterImpl> CreateNodeWriter(
         const TRichYPath& path, const TTableWriterOptions& options) override;
@@ -279,6 +324,19 @@ private:
     ::TIntrusivePtr<IProtoWriterImpl> CreateProtoWriter(
         const TRichYPath& path,
         const TTableWriterOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> CreateYaMRFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<Message>> CreateProtoFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options,
         const Message* prototype) override;
 };
 
@@ -318,7 +376,7 @@ public:
         const TYPath& path,
         const TUnlockOptions& options) override;
 
-    void Commit() override;
+    void Commit(const TCommitTransactionOptions& options = {}) override;
 
     void Abort() override;
 
@@ -327,6 +385,8 @@ public:
     void Detach() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
 protected:
     TClientPtr GetParentClientImpl() override;
@@ -415,6 +475,9 @@ public:
         const TReplicaId& replicaId,
         const TAlterTableReplicaOptions& alterTableReplicaOptions) override;
 
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) override;
+
     ui64 GenerateTimestamp() override;
 
     TAuthorizationInfo WhoAmI() override;
@@ -457,8 +520,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) override;
 
     TNode::TListType SkyShareTable(
@@ -476,6 +540,8 @@ public:
         const TVector<int>& tabletIndexes,
         const TGetTabletInfosOptions& options) override;
 
+    const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile) override;
+
     void SuspendOperation(
         const TOperationId& operationId,
         const TSuspendOperationOptions& options) override;
@@ -484,9 +550,29 @@ public:
         const TOperationId& operationId,
         const TResumeOperationOptions& options) override;
 
+    void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) override;
+
+    void FinishDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) override;
+
+    void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) override;
+
+    void FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) override;
+
     void Shutdown() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
     // Helper methods
     TYtPoller& GetYtPoller();
@@ -503,13 +589,25 @@ private:
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
     std::unique_ptr<TYtPoller> YtPoller_;
+
+    // Cached cluster configuration to be returned from |GetClusterConfig|.
+    TMutex ClusterConfigLock_;
+    std::optional<TNode::TMapType> ClusterConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options);
+
 TClientPtr CreateClientImpl(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

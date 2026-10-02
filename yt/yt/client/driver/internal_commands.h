@@ -40,7 +40,7 @@ public:
 private:
     NYTree::TYPath Path;
     int TabletIndex;
-    std::vector<TString> Payloads;
+    std::vector<std::string> Payloads;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -187,6 +187,70 @@ private:
     NHydra::TCellId ChaosCellId_;
     NHydra::TCellId CoordinatorCellId_;
 
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TForsakeChaosShortcut
+    : public TTypedCommand<NApi::TForsakeChaosShortcutOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TForsakeChaosShortcut);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CoordinatorCellId_;
+    NChaosClient::TChaosObjectId ChaosObjectId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemoveChaosCellMailbox
+    : public TTypedCommand<NApi::TRemoveChaosCellMailboxOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemoveChaosCellMailbox);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId ChaosCellId_;
+    NHydra::TCellId DestinationCellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetOrderedTabletSafeTrimRowCount
+    : public TTypedCommand<NApi::TGetOrderedTabletSafeTrimRowCountOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetOrderedTabletSafeTrimRowCount);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::vector<NApi::TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr> Requests_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetConnectionOrchidValue
+    : public TTypedCommand<NApi::TGetConnectionOrchidValueOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetConnectionOrchidValue);
+
+    static void Register(TRegistrar registrar);
+
+private:
     void DoExecute(ICommandContextPtr context) override;
 };
 

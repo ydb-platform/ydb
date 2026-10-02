@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/rpc/client.h>
 #include <yt/yt/core/rpc/service.h>
+#include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/rpc/unittests/lib/test_service.pb.h>
 
@@ -26,6 +27,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, PassCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, AllocationCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RegularAttachments);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DirectPlacementAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NullAndEmptyAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, Compression);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, DoNothing);
@@ -36,6 +38,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, LatchedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NoReply);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, FlakyCall);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DelayedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequireCoolFeature);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequestBytesThrottledCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, StreamingEcho,
@@ -46,9 +49,12 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NTestRpc, ServerNotWriting,
         .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, StreamingStatistics,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetTraceBaggage);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, CustomMetadata);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetChannelFailureError);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, ManuallyCanceledByServer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -60,6 +66,7 @@ struct ITestService
 {
     virtual TFuture<void> GetSlowCallCanceled() const = 0;
     virtual TFuture<void> GetServerStreamsAborted() const = 0;
+    virtual TFuture<TAttachmentsOutputStreamStatistics> GetStreamingStatistics() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ITestService)
@@ -72,7 +79,8 @@ ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
-    IMemoryUsageTrackerPtr memoryUsageTracker);
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    bool useAuthenticator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -11,6 +11,8 @@ class ByteBuffer;
 
 namespace NYdbGrpc {
 
+struct ICounterBlock;
+
 extern const char* GRPC_USER_AGENT_HEADER;
 
 struct TAuthState {
@@ -102,6 +104,9 @@ public:
     //! Use validated database name for counters
     virtual void UseDatabase(const TString& database) = 0;
 
+    //! Returns a borrowed counter block owned by this context, if available
+    virtual ICounterBlock* GetCounterBlock() const { return nullptr; }
+
     // Streaming part
 
     //! Set callback. The callback will be called when response deliverid to the client
@@ -120,6 +125,11 @@ public:
     //! Returns peer address
     virtual TString GetPeer() const = 0;
 
+    //! Returns HTTP/2 :authority (or gRPC equivalent). Empty when unavailable.
+    virtual TString GetAuthority() const {
+        return {};
+    }
+
     //! Returns true if server is using ssl
     virtual bool SslServer() const = 0;
 
@@ -127,6 +137,8 @@ public:
     virtual bool IsClientLost() const = 0;
 
     virtual TString GetEndpointId() const = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 } // namespace NYdbGrpc

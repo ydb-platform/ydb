@@ -1,3 +1,6 @@
+# lfalloc crashes on Windows.
+NO_BUILD_IF(OS_WINDOWS)
+
 Y_BENCHMARK()
 
 ALLOCATOR(B)
@@ -16,6 +19,5 @@ SRCS(
     pack_num_bench.cpp
 )
 
-INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 
 END()

@@ -30,7 +30,8 @@ public:
     }
 
     TCleanGranuleIdNormalizer(const TNormalizationController::TInitContext& context)
-        : TBase(context) {
+        : TBase(context)
+    {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(

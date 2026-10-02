@@ -8,9 +8,10 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/strbuf.h>
 #include <util/system/mutex.h>
 
 namespace NKikimr {
@@ -79,15 +80,36 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
+        }
     }
 
     bool IsShuttingDown() const {
         return AtomicGet(ShuttingDown_);
     }
 
-    TVector<TString> GetClusters() const {
+    TVector<TString> GetClusters(TStringBuf authority) const {
         auto g(Guard(Lock));
-        return Clusters;
+        if (ClustersList) {
+            const auto& selected = ClustersList->GetClusters(authority);
+            TVector<TString> names;
+            names.reserve(selected.size());
+            for (const auto& cluster : selected) {
+                names.push_back(cluster.Name);
+            }
+            return names;
+        }
+        return {};
+    }
+    bool HasClustersList() const {
+        auto g(Guard(Lock));
+        return ClustersList != nullptr;
     }
     TString GetLocalCluster() const {
         auto g(Guard(Lock));
@@ -102,7 +124,7 @@ public:
 private:
     ui64 NextCookie();
 
-    void CheckClustersListChange(const TVector<TString>& clusters) override;
+    void ClustersListUpdated(NPQ::NClusterTracker::TClustersList::TConstPtr list) override;
     void CheckClusterChange(const TString& localCluster, const bool enabled) override;
     void NetClassifierUpdated(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier) override;
     void UpdateTopicsHandler();
@@ -127,7 +149,7 @@ private:
     TMutex Lock;
     THashMap<ui64, TSessionRef> Sessions;
 
-    TVector<TString> Clusters;
+    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
     TString LocalCluster;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
@@ -139,6 +161,8 @@ private:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 
     bool NeedDiscoverClusters;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
+
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };

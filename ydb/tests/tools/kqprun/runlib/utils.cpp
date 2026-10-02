@@ -6,7 +6,7 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -15,42 +15,6 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimrRun {
-
-namespace {
-
-void TerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-
-void SegmentationFaultHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void FloatingPointExceptionHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-}  // nonymous namespace
-
 
 TRequestResult::TRequestResult()
     : Status(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
@@ -93,6 +57,7 @@ void TStatsPrinter::PrintPlan(const TString& plan, IOutputStream& output) const 
 
     NYdb::NConsoleClient::TQueryPlanPrinter printer(PlanFormat, true, output);
     printer.Print(plan);
+    output.Flush();
 }
 
 void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream& output) const {
@@ -108,28 +73,25 @@ void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream
 
     try {
         double cpuUsage = 0.0;
-        auto fullStat = StatProcessor->GetQueryStat(convertedPlan, cpuUsage, nullptr);
+        auto fullStat = StatProcessor->GetQueryStat(convertedPlan, cpuUsage, nullptr, nullptr);
         auto flatStat = StatProcessor->GetFlatStat(convertedPlan);
         auto publicStat = StatProcessor->GetPublicStat(fullStat);
 
         output << "\nCPU usage: " << cpuUsage << Endl;
-        PrintStatistics(fullStat, flatStat, publicStat, output);
+        PrintStatistics(fullStat, flatStat, publicStat, convertedPlan, output);
     } catch (const NJson::TJsonException& ex) {
         output << "Error stat conversion: " << ex.what() << Endl;
         return;
     }
-
-    output << "\nPlan visualization:" << Endl;
-    PrintPlan(convertedPlan, output);
 }
 
 void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
-    TPlanVisualizer planVisualizer;
+    NPlan2Svg::TPlanVisualizer planVisualizer;
     planVisualizer.LoadPlans(plan);
     output.Write(planVisualizer.PrintSvg());
 }
 
-void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
+void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const {
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
@@ -168,6 +130,9 @@ void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TStr
         output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
     }
 
+    output << "\nPlan visualization:" << Endl;
+    PrintPlan(plan, output);
+
     output << "\nFull statistics:" << Endl;
     NJson::TJsonValue statsJson;
     NJson::ReadJsonTree(fullStat, &statsJson);
@@ -190,6 +155,27 @@ TString TStatsPrinter::FormatNumber(i64 number) {
     stream.imbue(std::locale(stream.getloc(), new TSeparator()));
     stream << number;
     return stream.str();
+}
+
+TCachedPrinter::TCachedPrinter(const TString& output, TPrinter printer)
+    : Output(output)
+    , Printer(printer)
+{}
+
+void TCachedPrinter::Print(const TString& data, bool allowEmpty) {
+    if ((!data && !allowEmpty) || (PrintedData && data == *PrintedData)) {
+        return;
+    }
+
+    IOutputStream* stream = &Cout;
+    if (Output != "-") {
+        FileOutput = std::make_unique<TFileOutput>(Output);
+        stream = &(*FileOutput);
+    }
+
+    Printer(data, *stream);
+    stream->Flush();
+    PrintedData = data;
 }
 
 TString LoadFile(const TString& file) {
@@ -233,10 +219,18 @@ void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestA
     }
 }
 
-void SetupSignalActions() {
-    std::set_terminate(&TerminateHandler);
-    signal(SIGSEGV, &SegmentationFaultHandler);
-    signal(SIGFPE, &FloatingPointExceptionHandler);
+TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName) {
+    return TChoices<NActors::NLog::EPriority>({
+        {"emerg", NActors::NLog::EPriority::PRI_EMERG},
+        {"alert", NActors::NLog::EPriority::PRI_ALERT},
+        {"crit", NActors::NLog::EPriority::PRI_CRIT},
+        {"error", NActors::NLog::EPriority::PRI_ERROR},
+        {"warn", NActors::NLog::EPriority::PRI_WARN},
+        {"notice", NActors::NLog::EPriority::PRI_NOTICE},
+        {"info", NActors::NLog::EPriority::PRI_INFO},
+        {"debug", NActors::NLog::EPriority::PRI_DEBUG},
+        {"trace", NActors::NLog::EPriority::PRI_TRACE},
+    }, optionName, false);
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

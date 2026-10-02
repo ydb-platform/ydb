@@ -112,11 +112,15 @@ namespace boost
                last_term = term;
             }
             last_term = 0;
+            T betaf_lim = betaf * tools::epsilon<T>() * 4;
             for(auto i = k + 1; ; ++i)
             {
                poisf *= l2 / i;
                xtermf *= (x * (a + b + i - 2)) / (a + i - 1);
                betaf -= xtermf;
+               
+               if (betaf < betaf_lim)
+                  break; // nothing but garbage bits in betaf!!
 
                T term = poisf * betaf;
                sum += term;
@@ -191,10 +195,10 @@ namespace boost
             //
             T last_term = 0;
             boost::math::uintmax_t count = 0;
-            for(auto i = k + 1; ; ++i)
+            for(long long i = k + 1; ; ++i)
             {
                poisf *= l2 / i;
-               xtermf *= (x * (a + b + i - 2)) / (a + i - 1);
+               xtermf *= (x * (a + b + (i - 2))) / (a + (i - 1));
                betaf += xtermf;
 
                T term = poisf * betaf;

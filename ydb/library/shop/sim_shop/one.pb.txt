@@ -1,0 +1,18 @@
+Machine {
+    Name: "srv"
+    Scheduler { FIFO { Name: "fifo" } }
+    WorkerCount: 10
+    Wait { Distr { Name: "wait" Gauss { Mean: 0.05 Disp: 0.005 } MinRelValue: 0.1 MaxRelValue: 10 } }
+    FlowCtl { Name: "srv" }
+}
+
+Source {
+    Name: "src"
+    InterArrival { Distr { Name: "ia" Exp { Period: 0.0002 } MaxRelValue: 10 } }
+    Operation {
+        Name: "exec"
+        Machine: "srv"
+        EstCost { Distr { Gauss { Mean: 0.02 Disp: 0.01 } MinRelValue: 0.1 MaxRelValue: 10 } }
+        EstCostOverRealCost { Distr { Const: 1.0 } }
+    }
+}

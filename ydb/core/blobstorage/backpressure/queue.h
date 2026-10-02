@@ -4,6 +4,8 @@
 #include "common.h"
 #include "event.h"
 
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
+
 namespace NKikimr::NBsQueue {
 
 static constexpr size_t MaxUnusedItems = 1024;
@@ -34,7 +36,7 @@ class TBlobStorageQueue {
     struct TItem {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         TEventHolder Event;
         ui64 MsgId;
         ui64 SequenceId;
@@ -64,10 +66,9 @@ class TBlobStorageQueue {
             , DirtyCost(true)
             , ProcessingTimer(useActorSystemTime)
         {
-            if (Span) {
-                Span
-                    .Attribute("event", TypeName<TEvent>())
-                    .Attribute("local", local);
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("event", TypeName<TEvent>());
+                wilsonSpan->Attribute("local", local);
             }
         }
 
@@ -142,6 +143,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedItems;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueConnected;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
 
 public:

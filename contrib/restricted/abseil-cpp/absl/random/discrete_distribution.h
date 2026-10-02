@@ -16,14 +16,16 @@
 #define ABSL_RANDOM_DISCRETE_DISTRIBUTION_H_
 
 #include <cassert>
-#include <cmath>
+#include <cstddef>
+#include <initializer_list>
 #include <istream>
 #include <limits>
-#include <numeric>
+#include <ostream>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "absl/base/config.h"
 #include "absl/random/bernoulli_distribution.h"
 #include "absl/random/internal/iostream_state_saver.h"
 #include "absl/random/uniform_int_distribution.h"
@@ -36,7 +38,7 @@ ABSL_NAMESPACE_BEGIN
 // A discrete distribution produces random integers i, where 0 <= i < n
 // distributed according to the discrete probability function:
 //
-//     P(i|p0,...,pn−1)=pi
+//     P(i|p0,...,pn-1)=pi
 //
 // This class is an implementation of discrete_distribution (see
 // [rand.dist.samp.discrete]).
@@ -103,7 +105,7 @@ class discrete_distribution {
     std::vector<double> p_;                     // normalized probabilities
     std::vector<std::pair<double, size_t>> q_;  // (acceptance, alternate) pairs
 
-    static_assert(std::is_integral<result_type>::value,
+    static_assert(std::is_integral_v<result_type>,
                   "Class-template absl::discrete_distribution<> must be "
                   "parameterized using an integral type.");
   };

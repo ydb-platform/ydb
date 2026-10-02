@@ -35,8 +35,10 @@ public:
         HeavyPool_->SetPollingPeriod(config->HeavyPoolPollingPeriod);
         CompressionPool_->SetThreadCount(config->CompressionPoolSize);
         FairShareCompressionPool_->SetThreadCount(config->CompressionPoolSize);
-        AlertOnMissingRequestInfo_.store(config->AlertOnMissingRequestInfo);
+        AlertOnMissingRequestAnnotation_.store(config->AlertOnMissingRequestAnnotation);
         SendTracingBaggage_.store(config->SendTracingBaggage);
+        DefaultRequestTimeout_.store(config->DefaultRequestTimeout);
+        AlertOnUnsetRequestTimeout_.store(config->AlertOnUnsetRequestTimeout);
     }
 
     const IInvokerPtr& GetLightInvoker()
@@ -59,14 +61,24 @@ public:
         return FairShareCompressionPool_;
     }
 
-    bool ShouldAlertOnMissingRequestInfo()
+    bool ShouldAlertOnMissingRequestAnnotation()
     {
-        return AlertOnMissingRequestInfo_.load(std::memory_order::relaxed);
+        return AlertOnMissingRequestAnnotation_.load(std::memory_order::relaxed);
     }
 
     bool ShouldSendTracingBaggage()
     {
         return SendTracingBaggage_.load(std::memory_order::relaxed);
+    }
+
+    TDuration GetDefaultRequestTimeout()
+    {
+        return DefaultRequestTimeout_.load(std::memory_order::relaxed);
+    }
+
+    bool ShouldAlertOnUnsetRequestTimeout()
+    {
+        return AlertOnUnsetRequestTimeout_.load(std::memory_order::relaxed);
     }
 
     const IInvokerPtr& GetCompressionPoolInvoker()
@@ -92,8 +104,11 @@ private:
 
     TLazyIntrusivePtr<IPrioritizedInvoker> CompressionPoolInvoker_;
 
-    std::atomic<bool> AlertOnMissingRequestInfo_;
+    std::atomic<bool> AlertOnMissingRequestAnnotation_;
     std::atomic<bool> SendTracingBaggage_;
+
+    std::atomic<TDuration> DefaultRequestTimeout_;
+    std::atomic<bool> AlertOnUnsetRequestTimeout_;
 
     TAtomicIntrusivePtr<IServiceDiscovery> ServiceDiscovery_;
 };
@@ -141,14 +156,24 @@ const IFairShareThreadPoolPtr& TDispatcher::GetFairShareCompressionThreadPool()
     return Impl_->GetFairShareCompressionThreadPool();
 }
 
-bool TDispatcher::ShouldAlertOnMissingRequestInfo()
+bool TDispatcher::ShouldAlertOnMissingRequestAnnotation()
 {
-    return Impl_->ShouldAlertOnMissingRequestInfo();
+    return Impl_->ShouldAlertOnMissingRequestAnnotation();
 }
 
 bool TDispatcher::ShouldSendTracingBaggage()
 {
     return Impl_->ShouldSendTracingBaggage();
+}
+
+TDuration TDispatcher::GetDefaultRequestTimeout()
+{
+    return Impl_->GetDefaultRequestTimeout();
+}
+
+bool TDispatcher::ShouldAlertOnUnsetRequestTimeout()
+{
+    return Impl_->ShouldAlertOnUnsetRequestTimeout();
 }
 
 IServiceDiscoveryPtr TDispatcher::GetServiceDiscovery()

@@ -6,6 +6,7 @@ A wheel is a built archive format.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -14,21 +15,21 @@ import struct
 import sys
 import sysconfig
 import warnings
+from collections.abc import Iterable, Sequence
 from email.generator import BytesGenerator, Generator
 from email.policy import EmailPolicy
 from glob import iglob
 from shutil import rmtree
-from typing import TYPE_CHECKING, Callable, Iterable, Literal, Sequence, cast
+from typing import TYPE_CHECKING, Callable, Literal, cast
 from zipfile import ZIP_DEFLATED, ZIP_STORED
 
 import setuptools
+from packaging import tags
+from packaging import version as _packaging_version
 from setuptools import Command
 
 from . import __version__ as wheel_version
-from .metadata import pkginfo_to_metadata
-from .util import log
-from .vendored.packaging import tags
-from .vendored.packaging import version as _packaging_version
+from ._metadata import pkginfo_to_metadata
 from .wheelfile import WheelFile
 
 if TYPE_CHECKING:
@@ -42,6 +43,8 @@ except ImportError:
     from . import _setuptools_logging
 
     _setuptools_logging.configure()
+
+log = logging.getLogger("wheel")
 
 
 def safe_name(name: str) -> str:
@@ -370,9 +373,9 @@ class bdist_wheel(Command):
             supported_tags = [
                 (t.interpreter, t.abi, plat_name) for t in tags.sys_tags()
             ]
-            assert (
-                tag in supported_tags
-            ), f"would build wheel with unsupported tag {tag}"
+            assert tag in supported_tags, (
+                f"would build wheel with unsupported tag {tag}"
+            )
         return tag
 
     def run(self):

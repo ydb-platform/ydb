@@ -5,108 +5,110 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-
 ui64 g_Yield = std::numeric_limits<ui64>::max();
-ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
-ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
+auto g_TestStreamData = std::to_array<ui64>({0, 0, 1, 0, 0, 0, 1, 2, 3});
+auto g_TestYieldStreamData = std::to_array<ui64>({0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2});
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
-    typedef TMutableComputationNode<TTestStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, ui64 count)
             : TBase(memInfo)
-            , Count(count)
+            , Count_(count)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index == Count) {
+            if (Index_ == Count_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            result = NUdf::TUnboxedValuePod(g_TestStreamData[Index++]);
+            result = NUdf::TUnboxedValuePod(g_TestStreamData[Index_++]);
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
-        ui64 Index = 0;
-        const ui64 Count;
+        ui64 Index_ = 0;
+        const ui64 Count_;
     };
 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
-        , Count(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
+        , Count_(Min<ui64>(count, g_TestStreamData.size()))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(Count);
+        return ctx.HolderFactory.Create<TStreamValue>(Count_);
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 
-private:
-    const ui64 Count;
+    const ui64 Count_;
 };
 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
-    typedef TMutableComputationNode<TTestYieldStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTestYieldStreamWrapper>;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo)
-            , CompCtx(compCtx) {}
+            , CompCtx_(compCtx)
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index == Y_ARRAY_SIZE(g_TestYieldStreamData)) {
+            if (Index_ == g_TestYieldStreamData.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            const auto value = g_TestYieldStreamData[Index];
+            const auto value = g_TestYieldStreamData[Index_];
             if (value == g_Yield) {
-                ++Index;
+                ++Index_;
                 return NUdf::EFetchStatus::Yield;
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(value);
-            items[1] = MakeString(ToString(Index));
+            items[1] = MakeString(ToString(Index_));
 
-            ++Index;
+            ++Index_;
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
-        TComputationContext& CompCtx;
-        ui64 Index = 0;
+        TComputationContext& CompCtx_;
+        ui64 Index_ = 0;
     };
 
-    TTestYieldStreamWrapper(TComputationMutables& mutables)
-        : TBaseComputation(mutables) {}
+    explicit TTestYieldStreamWrapper(TComputationMutables& mutables)
+        : TBaseComputation(mutables)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 };
 
 IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -115,13 +117,12 @@ IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFact
     return new TTestStreamWrapper(ctx.Mutables, count);
 }
 
-
 IComputationNode* WrapTestYieldStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args");
     return new TTestYieldStreamWrapper(ctx.Mutables);
 }
 
-}
+} // namespace
 
 TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     return [customFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -148,5 +149,4 @@ TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     };
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

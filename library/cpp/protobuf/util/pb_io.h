@@ -1,7 +1,10 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include <util/generic/fwd.h>
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 
 struct IBinSaver;
 
@@ -24,7 +27,7 @@ namespace NProtoBuf {
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     template <typename T>
-    static T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
+    T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
         T m;
         ParseFromBase64String(dataBase64, m, allowUneven);
         return m;
@@ -56,6 +59,48 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
 // use enum id instead of enum name for all enum fields.
 void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out);
 
+enum class ESerializeToTextFormatOption : ui64 {
+    // Print unknown fields (the ones present in the binary data, but missing from the message
+    // descriptor) using their field numbers instead of silently dropping them:
+    //
+    //     Foo: 42
+    //     2: 7
+    //
+    // Such output can not be reliably parsed back, hence this option is meant for debugging.
+    PrintUnknownFields = 1,
+
+    // Print google.protobuf.Any fields in expanded (human-readable) form.
+    // By default, Any is printed as-is, i. e. as a type URL followed by the serialized message bytes:
+    //
+    //     Any {
+    //       type_url: "type.googleapis.com/NPackage.TMessage"
+    //       value: "\010*"
+    //     }
+    //
+    // With this option, the packed message is decoded and printed as a text-format submessage
+    // with the type URL in square brackets serving as a field name:
+    //
+    //     Any {
+    //       [type.googleapis.com/NPackage.TMessage] {
+    //         Foo: 42
+    //       }
+    //     }
+    //
+    // The packed type is looked up in the descriptor pool of the message being printed.
+    // If the type is not found or its bytes can not be parsed, Any is printed in the default form.
+    //
+    // Both forms are accepted by ParseFromTextFormat and ParseTextFormatFromString,
+    // though parsing the expanded form requires the packed type to be linked into the binary.
+    ExpandAny = 2,
+};
+
+Y_DECLARE_FLAGS(ESerializeToTextFormatOptions, ESerializeToTextFormatOption);
+
+// Return a textual representation of the given message.
+// Unlike NProtoBuf::TextFormat::PrintToString, unknown fields are omitted unless requested
+// so that the result can always be parsed back by ParseTextFormatFromString.
+TString SerializeToTextFormatString(const NProtoBuf::Message& m, const ESerializeToTextFormatOptions options = {});
+
 enum class EParseFromTextFormatOption : ui64 {
     // Unknown fields will be ignored by the parser
     AllowUnknownField = 1
@@ -82,8 +127,8 @@ bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `ParseFromTextFormat`
 template <typename T>
-static T ParseFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(fileName, message, options, warningStream);
     return message;
@@ -92,12 +137,26 @@ static T ParseFromTextFormat(const TString& fileName,
 // @see `ParseFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
-                             IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
+                      IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(in, message, options, warningStream);
     return message;
 }
+
+void ParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m,
+                               const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
+
+template <typename T>
+T ParseTextFormatFromString(TStringBuf in, const EParseFromTextFormatOptions options = {},
+                            IOutputStream* warningStream = nullptr) {
+    T message;
+    ParseTextFormatFromString(in, message, options, warningStream);
+    return message;
+}
+
+bool TryParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m, const EParseFromTextFormatOptions options = {},
+                                  IOutputStream* warningStream = nullptr);
 
 // Merge a text-format protocol message from the given file into message object.
 //
@@ -120,8 +179,8 @@ bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `MergeFromTextFormat`
 template <typename T>
-static T MergeFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(fileName, message, options);
     return message;
@@ -130,8 +189,8 @@ static T MergeFromTextFormat(const TString& fileName,
 // @see `MergeFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T MergeFromTextFormat(IInputStream& in,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(IInputStream& in,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(in, message, options);
     return message;

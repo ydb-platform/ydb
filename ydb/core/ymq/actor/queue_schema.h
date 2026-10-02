@@ -1,14 +1,22 @@
 #pragma once
-#include "defs.h"
 
+#include "action.h"
 #include "schema.h"
+
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 
+#include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
+
 #include <util/generic/maybe.h>
+
+#include <ctime>
+#include <random>
 
 namespace NKikimr::NSQS {
 
@@ -16,7 +24,8 @@ class TCreateQueueSchemaActorV2
     : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
-     TCreateQueueSchemaActorV2(const TQueuePath& path,
+     TCreateQueueSchemaActorV2(const TString& accountName,
+                               const TQueuePath& path,
                                const TCreateQueueRequest& req,
                                const TActorId& sender,
                                const TString& requestId,
@@ -26,7 +35,11 @@ public:
                                const bool enableQueueAttributesValidation,
                                TIntrusivePtr<TUserCounters> userCounters,
                                TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
-                               const TString& tagsJson);
+                               const TString& tagsJson,
+                               const TString& userSid,
+                               const TString& maskedToken,
+                               const TString& authType,
+                               const TString& sourceAddress);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -50,6 +63,7 @@ public:
 
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
+    void RegisterMakeTopicActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
@@ -60,6 +74,7 @@ public:
     void Step();
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev);
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
@@ -96,14 +111,18 @@ public:
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
+        MakeTopic,
         MakeShards,
         MakeTables,
         DiscoverLeaderTabletId,
         AddQuoterResource,
         Commit
     };
+private:
+    static TString GenerateCommitQueueParamsQuery();
 
 private:
+    const TString AccountName_;
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
     const TActorId Sender_;
@@ -125,12 +144,17 @@ private:
     TString ExistingQueueResourceId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
+    const TString TagsJson_;
+    const TString UserSid_;
+    const TString MaskedToken_;
+    const TString AuthType_;
+    const TString SourceAddress_;
+
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
     TVector<TTable> RequiredTables_;
     ui64 CreatedTablesCount_ = 0;
     TQueueAttributes ValidatedAttributes_;
-    TString TagsJson_;
 
     ui64 LeaderTabletId_ = 0;
     TActorId CreateTableWithLeaderTabletActorId_;
@@ -140,6 +164,8 @@ private:
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 
     TActorId AddQuoterResourceActor_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 class TDeleteQueueSchemaActorV2
@@ -151,7 +177,13 @@ public:
                               ui32 tablesFormat,
                               const TActorId& sender,
                               const TString& requestId,
-                              TIntrusivePtr<TUserCounters> userCounters);
+                              TIntrusivePtr<TUserCounters> userCounters,
+                              const TString& folderId,
+                              const TString& tagsJson,
+                              const TString& userSid,
+                              const TString& maskedToken,
+                              const TString& authType,
+                              const TString& sourceAddress);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               bool isFifo,
@@ -161,7 +193,13 @@ public:
                               TIntrusivePtr<TUserCounters> userCounters,
                               const ui64 advisedQueueVersion,
                               const ui64 advisedShardCount,
-                              const bool advisedIsFifoFlag);
+                              const bool advisedIsFifoFlag,
+                              const TString& folderId,
+                              const TString& tagsJson,
+                              const TString& userSid,
+                              const TString& maskedToken,
+                              const TString& authType,
+                              const TString& sourceAddress);
 
     void Bootstrap();
 
@@ -170,6 +208,8 @@ public:
     }
 
 private:
+    static TString GenerateEraseQueueRecordQuery();
+
     void PrepareCleanupPlan(const bool isFifo, const ui64 shardCount);
 
     void NextAction();
@@ -196,6 +236,7 @@ public:
         EraseQueueRecord,
         RemoveTables,
         RemoveShards,
+        RemoveTopic,
         RemoveQueueVersionDirectory,
         RemoveQueueDirectory,
         DeleteQuoterResource,
@@ -214,6 +255,12 @@ private:
     TIntrusivePtr<TUserCounters> UserCounters_;
     ui64 Version_ = 0;
     TActorId DeleteQuoterResourceActor_;
+    const TString TagsJson_;
+    const TString UserSid_;
+    const TString MaskedToken_;
+    const TString AuthType_;
+    const TString FolderId_;
+    const TString SourceAddress_;
 };
 
 } // namespace NKikimr::NSQS

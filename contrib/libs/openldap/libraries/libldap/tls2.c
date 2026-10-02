@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ typedef struct oid_name {
 	struct berval name;
 } oid_name;
 
-static oid_name oids[] = {
+static const oid_name oids[] = {
 	{ BER_BVC("2.5.4.3"), BER_BVC("cn") },
 	{ BER_BVC("2.5.4.4"), BER_BVC("sn") },
 	{ BER_BVC("2.5.4.6"), BER_BVC("c") },
@@ -1388,7 +1388,7 @@ ldap_start_tls_s ( LDAP *ld,
 #define	LBER_TAG_UNIVERSAL	((ber_tag_t) 0x1cUL)
 #define	LBER_TAG_BMP		((ber_tag_t) 0x1eUL)
 
-static oid_name *
+static const oid_name *
 find_oid( struct berval *oid )
 {
 	int i;
@@ -1513,7 +1513,7 @@ ldap_X509dn2bv( void *x509_name, struct berval *bv, LDAPDN_rewrite_func *func,
 	int csize;
 	ber_tag_t tag;
 	ber_len_t len;
-	oid_name *oidname;
+	const oid_name *oidname;
 
 	struct berval	Oid, Val, oid2, *in = x509_name;
 

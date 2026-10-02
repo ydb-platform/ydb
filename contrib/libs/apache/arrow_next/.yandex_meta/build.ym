@@ -1,0 +1,20 @@
+{% extends '//builtin/nix.ym' %}
+
+{% block current_version %}20.0.0{% endblock %}
+
+{% block run_license_analyzer %}
+{{super()}}
+
+sed -e 's|END()||' \
+    -e 's|.*Lic.*scancode.*||' \
+    -i ${OUTPUT}/ya.make
+
+cat << EOF >> ${OUTPUT}/ya.make
+IF (SANITIZER_TYPE == "memory")
+    NO_OPTIMIZE()
+ENDIF()
+
+END()
+
+EOF
+{% endblock %}

@@ -1,9 +1,9 @@
-IF (OS_LINUX AND NOT WITH_VALGRIND)
+IF (OS_LINUX)
     UNITTEST()
 
     SIZE(LARGE)
 
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
     IF (BUILD_TYPE != "DEBUG")
         SRCS(

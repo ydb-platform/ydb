@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 ONLY_TAGS(CPP_PROTO)
 
@@ -8,7 +9,7 @@ PEERDIR(
 )
 
 SRCS(
-    range.proto
+    partition.proto
     source.proto
 )
 

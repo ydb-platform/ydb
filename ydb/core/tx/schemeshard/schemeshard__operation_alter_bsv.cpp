@@ -1,11 +1,13 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/public/config.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -13,6 +15,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterBlockStoreVolume: public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterBlockStoreVolume"; }
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -66,13 +69,14 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterBlockStoreVolume, item->PathId);
         txState.State = TTxState::CreateParts;
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "AlterBlockStoreVolume opId# " << operationId
-                    << " AlterVersion# " << volume->AlterData->AlterVersion
-                    << " DefaultPartitions#" << volume->DefaultPartitionCount
-                    << "->" << volume->AlterData->DefaultPartitionCount
-                    << " ExplicitChannelProfiles#" << volume->ExplicitChannelProfileCount
-                    << "->" << volume->AlterData->ExplicitChannelProfileCount);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterBlockStoreVolume",
+            {"operationId", operationId},
+            {"alterVersion", volume->AlterData->AlterVersion},
+            {"defaultPartitionsFrom", volume->DefaultPartitionCount},
+            {"defaultPartitionsTo", volume->AlterData->DefaultPartitionCount},
+            {"explicitChannelProfilesFrom", volume->ExplicitChannelProfileCount},
+            {"explicitChannelProfilesTo", volume->AlterData->ExplicitChannelProfileCount},
+        );
 
         bool needMoreShards = ApplySharding(
             operationId.GetTxId(),
@@ -157,7 +161,9 @@ public:
                 }
             }
 
-            if (volume->VolumeConfig.GetTabletVersion() == 2) {
+            if (volume->VolumeConfig.GetTabletVersion() == 3) {
+                txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartitionDirect, partitionOp);
+            } else if (volume->VolumeConfig.GetTabletVersion() == 2) {
                 txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition2, partitionOp);
             } else {
                 txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition, partitionOp);
@@ -167,7 +173,10 @@ public:
         // create new shards
         for (ui64 i = 0; i < shardsToCreate; ++i) {
             TShardIdx shardIdx;
-            if (volume->VolumeConfig.GetTabletVersion() == 2) {
+            if (volume->VolumeConfig.GetTabletVersion() == 3) {
+                shardIdx = context.SS->RegisterShardInfo(TShardInfo::BlockStorePartitionDirectInfo(txId, pathId));
+                context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT].Add(1);
+            } else if (volume->VolumeConfig.GetTabletVersion() == 2) {
                 shardIdx = context.SS->RegisterShardInfo(TShardInfo::BlockStorePartition2Info(txId, pathId));
                 context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
             } else {
@@ -197,7 +206,11 @@ public:
                 volumeOp = TTxState::CreateParts;
             }
         }
-        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, volumeOp);
+        if (volume->VolumeConfig.GetTabletVersion() == 3) {
+            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolumeDirect, volumeOp);
+        } else {
+            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, volumeOp);
+        }
 
         return shardsToCreate > 0;
     }
@@ -377,7 +390,7 @@ public:
         return true;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterBlockStoreVolume();
@@ -387,12 +400,10 @@ public:
         const TPathId pathId = alter.HasPathId()
             ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", pathId},
+        );
 
         auto result = MakeHolder<TProposeResponse>(
             NKikimrScheme::StatusAccepted,
@@ -626,16 +637,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterBlockStoreVolume");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterBlockStoreVolume AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterBlockStoreVolume AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -655,3 +666,5 @@ ISubOperation::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -1,12 +1,12 @@
 #include "interconnect_stream.h"
 #include "interconnect_common.h"
-#include "logging.h"
-#include "poller_actor.h"
-#include <library/cpp/openssl/init/init.h>
 #include <util/network/socket.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
+
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 
 #if defined(_win_)
 #include <util/system/file.h>
@@ -27,7 +27,7 @@
 namespace NInterconnect {
     namespace {
         inline int
-        LastSocketError() {
+        LastSocketError() noexcept {
 #if defined(_win_)
             return WSAGetLastError();
 #else
@@ -92,6 +92,27 @@ namespace NInterconnect {
         return err;
     }
 
+    std::variant<TAddress, int> TSocket::GetSockName() const noexcept {
+        sockaddr_storage addr;
+        Zero(addr);
+
+        socklen_t len = sizeof(addr);
+
+        if (getsockname(Descriptor, (sockaddr*)&addr, &len) == -1) {
+            return LastSocketError();
+        }
+
+        if (addr.ss_family == AF_INET) {
+            sockaddr_in* addr_in = (sockaddr_in*)&addr;
+            return TAddress(addr_in->sin_addr, addr_in->sin_port);
+        } else if (addr.ss_family == AF_INET6) {
+            sockaddr_in6* addr_in6 = (sockaddr_in6*)&addr;
+            return TAddress(addr_in6->sin6_addr, addr_in6->sin6_port);
+        } else {
+            return EINVAL;
+        }
+    }
+
     /////////////////////////////////////////////////////////////////
 
     TIntrusivePtr<TStreamSocket> TStreamSocket::Make(int domain, int *error) {
@@ -113,12 +134,28 @@ namespace NInterconnect {
 
     ssize_t
     TStreamSocket::Send(const void* msg, size_t len, TString* /*err*/) const {
-        const auto ret = ::send(Descriptor, static_cast<const char*>(msg), int(len), 0);
+        return SendWithFlags(msg, len, 0);
+    }
+
+    ssize_t
+    TStreamSocket::SendWithFlags(const void* msg, size_t len, int flags) const {
+        const auto ret = ::send(Descriptor, static_cast<const char*>(msg), int(len), flags);
         if (ret < 0)
             return -LastSocketError();
 
         return ret;
     }
+
+#if defined(__linux__)
+    ssize_t
+    TStreamSocket::RecvErrQueue(struct msghdr* msg) const {
+        const auto ret = ::recvmsg(Descriptor, msg, MSG_ERRQUEUE);
+        if (ret < 0)
+            return -LastSocketError();
+
+        return ret;
+    }
+#endif
 
     ssize_t
     TStreamSocket::Recv(void* buf, size_t len, TString* /*err*/) const {
@@ -295,7 +332,6 @@ namespace NInterconnect {
             : Common(std::move(common))
         {
             int ret;
-            InitOpenSSL();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
             Ctx.reset(SSL_CTX_new(TLSv1_2_method()));
             Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");

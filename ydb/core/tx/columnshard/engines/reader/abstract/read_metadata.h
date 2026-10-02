@@ -1,6 +1,6 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
@@ -17,42 +17,27 @@ namespace NKikimr::NOlap::NReader {
 class TScanIteratorBase;
 class TReadContext;
 
-class TDataStorageAccessor {
-private:
-    const std::unique_ptr<NOlap::TInsertTable>& InsertTable;
-    const std::unique_ptr<NOlap::IColumnEngine>& Index;
-
-public:
-    TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
-};
-
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
-public:
-    enum class ESorting {
-        NONE = 0 /* "not_sorted" */,
-        ASC /* "ascending" */,
-        DESC /* "descending" */,
-    };
-
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
-    const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
+    const ERequestSorting RequestSorting = ERequestSorting::ASC;   // order inside the returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
-    std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
+    const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
+    const ui64 TabletId;
+
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {
     }
 
@@ -60,21 +45,50 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<NKikimrDataEvents::ELockMode> LockMode;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
-    void SetRequestedLimit(const ui64 value) { 
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
+    // The transaction has written something and its lock is broken, so it can no longer commit,
+    // and it does not make sense to execute scans for it too.
+    virtual bool HasWritesAndBroken() const {
+        return false;
+    }
+
+    bool NeedToDetectConflicts() const {
+        // do not detect conflicts for snapshot isolated transactions or txs with no lock
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+    }
+
+    void SetRequestedLimit(const ui64 value) {
         AFL_VERIFY(!RequestedLimit);
         if (value == 0 || value >= Max<i64>()) {
             return;
         }
         RequestedLimit = value;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"requestedLimitDetected", RequestedLimit});
+    }
+
+    std::optional<ui64> GetRequestedLimitOptional() const {
+        return RequestedLimit;
     }
 
     i64 GetLimitRobust() const {
         return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
+    }
+
+    std::optional<i64> GetLimitRobustOptional() const {
+        if (HasLimit()) {
+            return GetLimitRobust();
+        } else {
+            return std::nullopt;
+        }
     }
 
     bool HasLimit() const {
@@ -110,21 +124,27 @@ public:
         return *IndexVersionsPointer;
     }
 
+    const std::shared_ptr<const TVersionedIndex>& GetIndexVersionsPtr() const {
+        AFL_VERIFY(IndexVersionsPointer);
+        return IndexVersionsPointer;
+    }
+
     const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
         return RequestShardingInfo;
     }
 
     void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
         AFL_VERIFY(value);
-        Y_ABORT_UNLESS(IsSorted() && value->IsReverse() == IsDescSorted());
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {
             FilteredCountLimit = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
             if (FilteredCountLimit) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", FilteredCountLimit);
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filterLimitDetected", FilteredCountLimit});
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString());
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filterLimitNotDetected", PKRangesFilter->DebugString()});
             }
         }
     }
@@ -144,6 +164,10 @@ public:
         return ResultIndexSchema;
     }
 
+    bool HasResultSchema() const {
+        return !!ResultIndexSchema;
+    }
+
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     NArrow::TSchemaLiteView GetBlobSchema(const ui64 version) const {
@@ -158,42 +182,51 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const ui64 pathId) {
+    void InitShardingInfo(const std::shared_ptr<ITableMetadataAccessor>& metadataAccessor) {
         AFL_VERIFY(!RequestShardingInfo);
-        RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
+        RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
-        : Sorting(sorting)
+    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ERequestSorting requestSorting,
+        const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot,
+        const std::shared_ptr<IScanCursor>& scanCursor, const ui64 tabletId)
+        : RequestSorting(requestSorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
+        , TabletId(tabletId)
         , ResultIndexSchema(schema)
     {
+        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
+                                                                "tablet_id", TabletId);
     }
+
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-            << " " << Sorting << " sorted";
+                                << " " << RequestSorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result;
-        for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
-        }
+        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
+
+    ERequestSorting GetRequestSorting() const {
+        return RequestSorting;
+    }
+
     bool IsAscSorted() const {
-        return Sorting == ESorting::ASC;
+        return RequestSorting == ERequestSorting::ASC;
     }
+
     bool IsDescSorted() const {
-        return Sorting == ESorting::DESC;
+        return RequestSorting == ERequestSorting::DESC;
     }
+
     bool IsSorted() const {
         return IsAscSorted() || IsDescSorted();
     }

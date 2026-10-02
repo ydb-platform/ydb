@@ -9,7 +9,9 @@
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/service/query_interval.h>
+#include <ydb/core/tablet/detailed_metrics/processor_database_metrics_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
@@ -41,7 +43,9 @@ private:
     struct TTxAggregate;
     struct TTxIntervalSummary;
     struct TTxIntervalMetrics;
+    struct TTxIntervalMetricsFailure;
     struct TTxTopPartitions;
+    struct TTxCleanupHourMetrics;
 
     struct TEvPrivate {
         enum EEv {
@@ -52,6 +56,7 @@ private:
             EvApplyCounters,
             EvApplyLabeledCounters,
             EvSendNavigate,
+            EvCleanupHourMetrics,
             EvEnd
         };
 
@@ -68,6 +73,9 @@ private:
         struct TEvApplyLabeledCounters : public TEventLocal<TEvApplyLabeledCounters, EvApplyLabeledCounters> {};
 
         struct TEvSendNavigate : public TEventLocal<TEvSendNavigate, EvSendNavigate> {};
+
+        struct TEvCleanupHourMetrics : public TEventLocal<TEvCleanupHourMetrics, EvCleanupHourMetrics> {};
+
     };
 
     struct TTopQuery {
@@ -95,9 +103,27 @@ private:
         TString Text;
     };
 
+    struct TQueryMetricsCoverage {
+        ui64 Nodes = 0;
+        ui64 TotalCpuTimeUs = 0;
+        ui64 NodeRetainedCpuTimeUs = 0;
+        ui64 SummaryNodes = 0;
+        ui64 ProcessorRetainedCpuTimeUs = 0;
+        ui64 RequestedNodes = 0;
+        ui64 RespondedNodes = 0;
+        ui64 FailedNodes = 0;
+    };
+
+    using TQueryMetricsRank = std::pair<ui64, TQueryHash>;
+    using TRankedQueryMetrics = std::vector<TQueryMetricsRank>;
+
 private:
     static bool TopQueryCompare(const TTopQuery& l, const TTopQuery& r) {
         return l.Value == r.Value ? l.Hash > r.Hash : l.Value > r.Value;
+    }
+
+    static bool QueryMetricsRankCompare(const TQueryMetricsRank& l, const TQueryMetricsRank& r) {
+        return l.first != r.first ? l.first > r.first : l.second < r.second;
     }
 
     void OnDetach(const TActorContext& ctx) override;
@@ -126,6 +152,7 @@ private:
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvSendNavigate::TPtr& ev);
+    void Handle(TEvPrivate::TEvCleanupHourMetrics::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev);
@@ -137,10 +164,29 @@ private:
     void PersistDatabase(NIceDb::TNiceDb& db);
     void PersistStage(NIceDb::TNiceDb& db);
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
+    void PersistLastFinalizedQueryMetricsIntervalEnd(
+        NIceDb::TNiceDb& db, TInstant intervalEnd);
+
+    enum class EIntervalMetricsResult {
+        Responded,
+        Failed,
+        Stale,
+    };
+    void CompleteIntervalMetricsRequest(
+        NIceDb::TNiceDb& db, ui64 requestId, EIntervalMetricsResult result);
 
     template <typename TSchema>
     void PersistQueryTopResults(NIceDb::TNiceDb& db,
         TQueryTop& top, TResultStatsMap& results, TInstant intervalEnd);
+    TRankedQueryMetrics RankMinuteQueryMetrics() const;
+    TRankedQueryMetrics RankCurrentHourQueryMetrics() const;
+    ui32 PersistMinuteQueryMetrics(NIceDb::TNiceDb& db,
+        const TRankedQueryMetrics& rankedMetrics);
+    void MergeCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd);
+    ui32 PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd,
+        const TRankedQueryMetrics& rankedMetrics);
+    void UpdateAndLogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics);
+    void FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db);
     void PersistQueryResults(NIceDb::TNiceDb& db);
 
     template <typename TSchema>
@@ -154,18 +200,20 @@ private:
     void ScheduleApplyCounters();
     void ScheduleApplyLabeledCounters();
     void ScheduleSendNavigate();
+    void ScheduleCleanupHourMetrics();
 
     template <typename TSchema, typename TMap>
     void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
 
-    static TInstant EndOfHourInterval(TInstant intervalEnd);
 
     void ClearIntervalSummaries(NIceDb::TNiceDb& db);
 
     void Reset(NIceDb::TNiceDb& db, const TActorContext& ctx);
 
+    static constexpr size_t HourMetricsCleanupBatchSize = 1024;
+
     void SendRequests();
-    void IgnoreFailure(TNodeId nodeId);
+    void HandleIntervalMetricsFailure(ui64 requestId);
 
     static void EntryToProto(NKikimrSysView::TQueryMetricsEntry& dst, const TQueryToMetrics& src);
     static void EntryToProto(NKikimrSysView::TQueryStatsEntry& dst, const NKikimrSysView::TQueryStats& src);
@@ -183,6 +231,9 @@ private:
     void AttachInternalCounters();
     void DetachExternalCounters();
     void DetachInternalCounters();
+    void AttachDetailedCounters();
+    void DetachDetailedCounters();
+    TProcessorDatabaseMetricsAggregator* GetDetailedAggregator();
     void SendNavigate();
 
     STFUNC(StateInit) {
@@ -194,10 +245,11 @@ private:
             IgnoreFunc(TEvSysView::TEvSendTopPartitions);
             IgnoreFunc(TEvSysView::TEvGetTopPartitionsRequest);
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
+            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateInit unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateInit unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
@@ -215,8 +267,8 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateOffline unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateOffline unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
@@ -238,6 +290,7 @@ private:
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
             hFunc(TEvPrivate::TEvApplyLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
+            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
@@ -248,17 +301,13 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext  , NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateWork unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
 
 private:
-    // limit on number of distinct queries when gathering summaries
-    static constexpr size_t DistinctQueriesLimit = 1024;
-    // limit on number of queries to aggregate metrics
-    static constexpr size_t TopCountLimit = 256;
     // limit on number of concurrent metrics requests from services
     static constexpr size_t MaxInFlightRequests = 16;
     // limit on scan batch size
@@ -291,9 +340,16 @@ private:
     std::unordered_map<TQueryHash, TQueryToNodes> Queries;
     std::multimap<ui64, TQueryHash> ByCpu;
     std::unordered_set<TNodeId> SummaryNodes;
+    TQueryMetricsCoverage QueryMetricsCoverage;
 
     // IntervalMetrics
     std::unordered_map<TQueryHash, TQueryToMetrics> QueryMetrics;
+
+    // IntervalMetricsOneHour
+    std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
+    TInstant CurrentHourEnd;
+    TInstant LastFinalizedQueryMetricsIntervalEnd;
+    bool HourMetricsCleanupInFlight = false;
 
     // NodesToRequest
     using THashVector = std::vector<TQueryHash>;
@@ -307,7 +363,10 @@ private:
         THashVector ByRequestUnits;
     };
     std::vector<TNodeToQueries> NodesToRequest;
-    std::unordered_map<TNodeId, TNodeToQueries> NodesInFlight;
+    // Cookies identify send attempts within this actor incarnation. After a
+    // reboot the new actor id prevents old replies from reaching this state.
+    ui64 NextMetricsRequestId = 0;
+    std::unordered_map<ui64, TNodeToQueries> RequestsInFlight;
 
     // IntervalTops
     TQueryTop ByDurationMinute;
@@ -336,12 +395,16 @@ private:
     TResultStatsMap TopByRequestUnitsOneHour;
 
     // IntervalPartitionTops
-    TPartitionTop PartitionTopMinute;
-    TPartitionTop PartitionTopHour;
+    TPartitionTop PartitionTopByCpuMinute;
+    TPartitionTop PartitionTopByCpuHour;
+    TPartitionTop PartitionTopByTliMinute;
+    TPartitionTop PartitionTopByTliHour;
 
     // TopPartitions...
-    TResultPartitionsMap TopPartitionsOneMinute;
-    TResultPartitionsMap TopPartitionsOneHour;
+    TResultPartitionsMap TopPartitionsByCpuOneMinute;
+    TResultPartitionsMap TopPartitionsByCpuOneHour;
+    TResultPartitionsMap TopPartitionsByTliOneMinute;
+    TResultPartitionsMap TopPartitionsByTliOneHour;
 
     // limited queue of user requests
     static constexpr size_t PendingRequestsLimit = 5;
@@ -357,10 +420,15 @@ private:
     TString CloudId;
     TString FolderId;
     TString DatabaseId;
+    TString MonitoringProjectId;
 
     ::NMonitoring::TDynamicCounterPtr ExternalGroup;
     ::NMonitoring::TDynamicCounterPtr LabeledGroup;
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
+
+    ::NMonitoring::TDynamicCounterPtr DetailedGroup;
+    ::NMonitoring::TDynamicCounterPtr DetailedRawGroup;
+    TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;
@@ -380,4 +448,3 @@ private:
 
 } // NSysView
 } // NKikimr
-

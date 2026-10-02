@@ -2,10 +2,11 @@
 
 #include "node.h"
 #include "interrupter.h"
+#include "port_manager.h"
 
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/core/events.h>
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/noncopyable.h>
 
@@ -17,30 +18,51 @@ public:
         bool Disconnect;
     };
 
+    enum Flags : ui64 {
+        EMPTY = 0,
+        USE_ZC = 1,
+        USE_TLS = 1 << 1,
+        RDMA_POLLING_CQ = 1 << 2,
+        DISABLE_RDMA = 1 << 3,
+    };
+
+    using TCheckerFactory = std::function<IActor*(ui32)>;
+
 private:
     const ui32 NumNodes;
     const TString Address = "::1";
-    TDuration DeadPeerTimeout = TDuration::Seconds(2);
+    const TDuration DeadPeerTimeout;
     NMonitoring::TDynamicCounterPtr Counters;
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
+    THashMap<ui32, TTrafficInterrupter*> InterrupterByNode;
     NActors::TChannelsConfig ChannelsConfig;
-    TPortManager PortManager;
+    NInterconnectTest::IPortManager::TPtr PortManager;
     TIntrusivePtr<NLog::TSettings> LoggerSettings;
+    TNode::TLogBackendFactory LogBackendFactory;
+    const ui32 NumThreads;
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
-                   TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr)
+                   TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
+                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight(),
+                   std::function<void(ui32, NActors::TInterconnectSettings&)> settingsCustomizer = {},
+                   TNode::TLogBackendFactory logBackendFactory = {}, ui32 numThreads = 1,
+                   TVector<ui32> interconnectSessionPoolIds = {0})
         : NumNodes(numNodes)
+        , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
+        , PortManager(NInterconnectTest::CreatePortmanager())
         , LoggerSettings(loggerSettings)
+        , LogBackendFactory(std::move(logBackendFactory))
+        , NumThreads(numThreads)
     {
         THashMap<ui32, ui16> nodeToPortMap;
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
-            nodeToPortMap.emplace(i, PortManager.GetPort());
+            nodeToPortMap.emplace(i, PortManager->GetPort());
         }
 
         if (tiSettings) {
@@ -50,24 +72,52 @@ public:
             for (auto& item : nodeToPortMap) {
                 nodeId = item.first;
                 listenPort = item.second;
-                forwardPort = PortManager.GetPort();
+                forwardPort = PortManager->GetPort();
 
                 specificNodePortMap[nodeId] = nodeToPortMap;
                 specificNodePortMap[nodeId].at(nodeId) = forwardPort;
                 interrupters.emplace_back(Address, listenPort, forwardPort, tiSettings->RejectingTrafficTimeout, tiSettings->BandWidth, tiSettings->Disconnect);
-                interrupters.back().Start();
+                TTrafficInterrupter& interrupter = interrupters.back();
+                InterrupterByNode.emplace(nodeId, &interrupter);
+                interrupter.Start();
             }
         }
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
-                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings));
+                /*numDynamicNodes=*/0, NumThreads, LoggerSettings, inflight,
+                flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
+                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,
+                !(flags & DISABLE_RDMA),
+                settingsCustomizer,
+                LogBackendFactory,
+                interconnectSessionPoolIds));
         }
     }
 
     TNode* GetNode(ui32 id) {
         return Nodes[id].Get();
+    }
+
+    NMonitoring::TDynamicCounterPtr GetCounters() const {
+        return Counters;
+    }
+
+    void StartBlackhole(ui32 nodeId) {
+        auto it = InterrupterByNode.find(nodeId);
+        Y_ABORT_UNLESS(it != InterrupterByNode.end());
+        it->second->StartBlackhole();
+    }
+
+    void StopBlackhole(ui32 nodeId) {
+        auto it = InterrupterByNode.find(nodeId);
+        Y_ABORT_UNLESS(it != InterrupterByNode.end());
+        it->second->StopBlackhole();
+    }
+
+    void StopNode(ui32 nodeId) {
+        Nodes.at(nodeId)->Stop();
     }
 
     ~TTestICCluster() {
@@ -84,4 +134,67 @@ public:
     void KillActor(ui32 nodeId, const TActorId& id) {
         Nodes[nodeId]->Send(id, new NActors::TEvents::TEvPoisonPill);
     }
+
+    NThreading::TFuture<TString> GetSessionDbg(ui32 me, ui32 peer) {
+        NThreading::TPromise<TString> promise = NThreading::NewPromise<TString>();
+
+        class TGetHttpInfoActor : public NActors::TActorBootstrapped<TGetHttpInfoActor> {
+        public:
+            TGetHttpInfoActor(const TActorId& id, NThreading::TPromise<TString> promise)
+                : IcProxy(id)
+                , Promise(promise)
+                {}
+
+            void Bootstrap() {
+                NMonitoring::TMonService2HttpRequest monReq(nullptr, nullptr, nullptr, nullptr, "", nullptr);
+                Send(IcProxy, new NMon::TEvHttpInfo(monReq));
+                Become(&TGetHttpInfoActor::StateFunc);
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(NMon::TEvHttpInfoRes, Handle);
+            )
+        private:
+            void Handle(NMon::TEvHttpInfoRes::TPtr& ev) {
+                TStringStream str;
+                ev->Get()->Output(str);
+                Promise.SetValue(str.Str());
+                PassAway();
+            }
+            const TActorId IcProxy;
+            NThreading::TPromise<TString> Promise;
+        };
+
+        IActor* actor = new TGetHttpInfoActor(Nodes[me]->InterconnectProxy(peer), promise); 
+        Nodes[me]->RegisterActor(actor);
+
+        return promise.GetFuture();
+    }
 };
+
+struct TPatternNotFound : public yexception {};
+
+inline TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
+    auto httpResp = testCluster.GetSessionDbg(me, peer);
+    if (!httpResp.Wait(TDuration::Seconds(2))) {
+        ythrow TPatternNotFound() << "session debug page request timed out";
+    }
+    const TString& resp = httpResp.GetValueSync();
+    auto pos = resp.find(patternStart);
+    if (pos == std::string::npos) {
+        ythrow TPatternNotFound() << "pattern was not found";
+    }
+    pos += patternStart.size();
+    size_t end = resp.find(patternEnd, pos);
+    Y_ABORT_UNLESS(end != std::string::npos);
+    return resp.substr(pos, end - pos);
+
+}
+
+inline TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
+}
+
+inline TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
+}

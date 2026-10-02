@@ -12,7 +12,6 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
-    ydb/core/persqueue/config
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
@@ -25,8 +24,12 @@ END()
 RECURSE(
     balance_coverage
     columnshard
+    conveyor
+    conveyor_composite
     coordinator
     datashard
+    general_cache
+    limiter
     locks
     long_tx_service
     mediator

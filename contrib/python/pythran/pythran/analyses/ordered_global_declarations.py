@@ -7,12 +7,9 @@ from pythran.passmanager import ModuleAnalysis
 import gast as ast
 
 
-class OrderedGlobalDeclarations(ModuleAnalysis):
+class OrderedGlobalDeclarationsHelper(ModuleAnalysis[StrictAliases, GlobalDeclarations]):
     '''Order all global functions according to their callgraph depth'''
-    def __init__(self):
-        self.result = dict()
-        super(OrderedGlobalDeclarations, self).__init__(
-            StrictAliases, GlobalDeclarations)
+    ResultType = dict
 
     def visit_FunctionDef(self, node):
         self.curr = node
@@ -29,10 +26,15 @@ class OrderedGlobalDeclarations(ModuleAnalysis):
                         if alias in self.global_declarations:
                             self.result[self.curr].add(alias)
 
-    def run(self, node):
+
+class OrderedGlobalDeclarations(ModuleAnalysis[OrderedGlobalDeclarationsHelper]):
+    '''Order all global functions according to their callgraph depth'''
+    ResultType = list
+
+    def visit_Module(self, node):
         # compute the weight of each function
         # the weight of a function is the number functions it references
-        result = super(OrderedGlobalDeclarations, self).run(node)
+        result = self.ordered_global_declarations_helper
         old_count = -1
         new_count = 0
         # iteratively propagate weights
@@ -42,6 +44,6 @@ class OrderedGlobalDeclarations(ModuleAnalysis):
             old_count = new_count
             new_count = sum(len(value) for value in result.values())
         # return functions, the one with the greatest weight first
-        self.result = sorted(self.result.keys(), reverse=True,
-                             key=lambda s: len(self.result[s]))
+        self.result = sorted(result.keys(), reverse=True,
+                             key=lambda s: len(result[s]))
         return self.result

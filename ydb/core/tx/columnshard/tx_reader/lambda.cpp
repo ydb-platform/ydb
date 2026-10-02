@@ -1,5 +1,3 @@
 #include "lambda.h"
 
-namespace NKikimr {
-
-}
+namespace NKikimr {}

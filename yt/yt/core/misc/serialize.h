@@ -1,11 +1,11 @@
 #pragma once
 
 #include "public.h"
-#include "property.h"
 #include "serialize_dump.h"
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <util/stream/buffered.h>
@@ -167,11 +167,13 @@ private:
 
     struct TScope
     {
-        size_t ScopeNameLength;
+        size_t NameLength;
+        bool FilterMatch;
         char* CurrentChecksumPtr;
         TChecksum CurrentChecksum = {};
     };
 
+    TSerializationDumpScopeFilter ScopeFilter_;
     std::vector<TScope> ScopeStack_;
     std::string CurrentScopePath_;
 
@@ -181,6 +183,7 @@ private:
     void UpdateScopesChecksum();
     void UpdateScopesCurrentChecksumPtr();
 
+    void ConfigureScopeFilter(TSerializationDumpScopeFilter scopeFilter);
     void BeginScope(TStringBuf name);
     void EndScope();
 };
@@ -201,10 +204,14 @@ public:
 
     TLoadContextStream* GetInput();
 
+    void ConfigureDump(
+        ESerializationDumpMode mode,
+        TSerializationDumpScopeFilter scopeFilter = {});
     void BeginScope(TStringBuf name);
     void EndScope();
 
 protected:
+    bool DumpConfigured_ = false;
     TLoadContextStream Input_;
 };
 

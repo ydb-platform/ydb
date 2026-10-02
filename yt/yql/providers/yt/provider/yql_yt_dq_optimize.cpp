@@ -98,8 +98,10 @@ public:
             return read;
         }
 
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false)) {
+        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false, selectionMode)) {
             return read;
         }
 
@@ -107,7 +109,7 @@ public:
         if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)) {
             return read;
         }
-        if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges; })) {
+        if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges || pathInfo.QLFilter; })) {
             return read;
         }
 

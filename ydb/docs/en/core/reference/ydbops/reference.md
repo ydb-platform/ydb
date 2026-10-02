@@ -1,12 +1,12 @@
-# ydbops reference sheet
+# YDBOps Reference Sheet
 
 ## ydbops options
 
-### DB connection options
+### Database Connection Options
 
 DB connection options are described in [Connecting to and authenticating with a database](../ydb-cli/connect.md#command-line-pars).
 
-### Service options
+### Service Options
 
 - `--verbose`: increases output verbosity.
 - `--profile-file`: use profiles from the specified file. By default, profiles from the `$HOME/ydb/ydbops/config/config.yaml file are used`.
@@ -16,21 +16,21 @@ DB connection options are described in [Connecting to and authenticating with a 
 - `--grpc-skip-verify`: do not verify server hostname when using gRPCs.
 - `--ca-file <filepath>`: path to root ca file, appends to system pool.
 
-## ydbops restart options
+## Restart Options
 
 - `--storage`: only include storage nodes. If no `--storage` or `--tenant` is specified, both `--storage` and `--tenant` become active, as it is assumed that the intention is to restart the whole cluster.
 - `--tenant`: only include tenant nodes. Additionally, you can specify:
 
   - `--tenant-list=<tenant-name-1>,<tenant-name-2>`
 
-- `--availability-mode <strong|weak|force>`: see the [article about maintenance without downtime](../../devops/manual/maintenance-without-downtime). Defaults to `strong`.
+- `--availability-mode <strong|weak|force>`: see the [article about maintenance without downtime](../../devops/concepts/maintenance-without-downtime.md). Defaults to `strong`.
 - `--restart-duration <int>`: multiplied by `--restart-retry-number`, this gives the total duration in seconds for the maintenance operation. In other words, it is a promise to CMS that a single node restart will finish within given duration. Defaults to 60 (which makes the default CMS request duration 180 seconds in combination with the default value of `--restart-retry-number`)
 - `--restart-retry-number <int>`: if restarting a specific node failed, repeat the restart operation this much times. Defaults to 3.
 - `--cms-query-interval <int>`: how often to query for updates from CMS while waiting for new nodes. Defaults to 10 seconds.
 - `--nodes-inflight <int>`: the maximum number of nodes that are concurrently being restarted.
 - `--delay-between-restarts <duration>`: delay before initiating the next node restart.
 
-### Filtering options
+### Filtering Options
 
 Filtering options allow you to narrow down the list of nodes to restart.
 
@@ -44,7 +44,7 @@ Filtering options allow you to narrow down the list of nodes to restart.
   - example: `ydbops restart --version '>24.3.1'`
   - the command works with ydb processes that have their version in the following format: `ydb-stable-<major>-<minor>-<patch>.*`. Hotfix versions (e.g. `ydb-stable-24-1-14-hotfix-9`) have the same major, minor, patch numbers as their non-hotfix `24.1.14`. For example, `ydb-stable-24-1-14-hotfix-9` is treated in the same way as `ydb-stable-24-1-14`.
 
-### Kubernetes options
+### Kubernetes Options
 
 If `--kubeconfig` is specified, it is assumed that the cluster to be restarted runs under Kubernetes, and node restart will be achieved by deleting pods as opposed to other ways of restart (e.g. systemd units).
 

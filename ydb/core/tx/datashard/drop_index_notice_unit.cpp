@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
@@ -19,10 +20,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasDropIndexNotice()) {
@@ -32,17 +33,24 @@ public:
         const auto& params = schemeTx.GetDropIndexNotice();
 
         const auto pathId = TPathId::FromProto(params.GetPathId());
-        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_ABORT_UNLESS(version);
+        Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
+        bool readyIndexDropped = false;
         if (params.HasIndexPathId()) {
             const auto indexPathId = TPathId::FromProto(params.GetIndexPathId());
 
             const auto& userTables = DataShard.GetUserTables();
-            Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
+            Y_ENSURE(userTables.contains(pathId.LocalPathId));
+
+            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
+            if (const auto it = indexes.find(indexPathId); it != indexes.end()) {
+                readyIndexDropped = it->second.State == NKikimrSchemeOp::EIndexStateReady;
+            }
+
             userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&](const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             });
@@ -52,12 +60,16 @@ public:
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
-        Y_ABORT_UNLESS(tableInfo);
+        Y_ENSURE(tableInfo);
         TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        DataShard.ReplaceUserTable(pathId, tableInfo, locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
+
+        if (readyIndexDropped) {
+            PersistCdcSchemaChange(DataShard, txc, op, pathId, *tableInfo);
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -66,7 +78,8 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
         if (RemoveSender) {
             ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
         }

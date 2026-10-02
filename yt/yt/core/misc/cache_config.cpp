@@ -2,12 +2,15 @@
 
 namespace NYT {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity)
+TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity, int shardCount)
 {
     auto result = New<TSlruCacheConfig>();
     result->Capacity = capacity;
+    result->ShardCount = shardCount;
     return result;
 }
 
@@ -33,6 +36,8 @@ void TSlruCacheConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0.0);
     registrar.Parameter("enable_ghost_caches", &TThis::EnableGhostCaches)
         .Default(true);
+    registrar.Parameter("reject_oversized_items", &TThis::RejectOversizedItems)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (!IsPowerOf2(config->ShardCount)) {
@@ -54,12 +59,16 @@ void TSlruCacheDynamicConfig::Register(TRegistrar registrar)
         .InRange(0.0, 1.0);
     registrar.Parameter("enable_ghost_caches", &TThis::EnableGhostCaches)
         .Default(true);
+    registrar.Parameter("reject_oversized_items", &TThis::RejectOversizedItems)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("shard_count", &TThis::ShardCount)
+        .Default(1);
     registrar.Parameter("expire_after_access_time", &TThis::ExpireAfterAccessTime)
         .Default(TDuration::Seconds(300));
     registrar.Parameter("expire_after_successful_update_time", &TThis::ExpireAfterSuccessfulUpdateTime)
@@ -71,14 +80,16 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
     registrar.Parameter("refresh_time", &TThis::RefreshTime)
         .Alias("success_probation_time")
         .Default(TDuration::Seconds(10));
+    registrar.Parameter("expiration_period", &TThis::ExpirationPeriod)
+        .Default(TDuration::Seconds(10));
     registrar.Parameter("batch_update", &TThis::BatchUpdate)
         .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->RefreshTime && *config->RefreshTime && *config->RefreshTime > config->ExpireAfterSuccessfulUpdateTime) {
             THROW_ERROR_EXCEPTION("\"refresh_time\" must be less than \"expire_after_successful_update_time\"")
-                << TErrorAttribute("refresh_time", config->RefreshTime)
-                << TErrorAttribute("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
+                .With("refresh_time", config->RefreshTime)
+                .With("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
         }
     });
 }
@@ -86,13 +97,24 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
 void TAsyncExpiringCacheConfig::ApplyDynamicInplace(
     const TAsyncExpiringCacheDynamicConfigPtr& dynamicConfig)
 {
-    ExpireAfterAccessTime = dynamicConfig->ExpireAfterAccessTime.value_or(ExpireAfterAccessTime);
-    ExpireAfterSuccessfulUpdateTime = dynamicConfig->ExpireAfterSuccessfulUpdateTime.value_or(ExpireAfterSuccessfulUpdateTime);
-    ExpireAfterFailedUpdateTime = dynamicConfig->ExpireAfterFailedUpdateTime.value_or(ExpireAfterFailedUpdateTime);
-    RefreshTime = dynamicConfig->RefreshTime.has_value()
-        ? dynamicConfig->RefreshTime
-        : RefreshTime;
-    BatchUpdate = dynamicConfig->BatchUpdate.value_or(BatchUpdate);
+    if (dynamicConfig->ExpireAfterAccessTime) {
+        ExpireAfterAccessTime = *dynamicConfig->ExpireAfterAccessTime;
+    }
+    if (dynamicConfig->ExpireAfterSuccessfulUpdateTime) {
+        ExpireAfterSuccessfulUpdateTime = *dynamicConfig->ExpireAfterSuccessfulUpdateTime;
+    }
+    if (dynamicConfig->ExpireAfterFailedUpdateTime) {
+        ExpireAfterFailedUpdateTime = *dynamicConfig->ExpireAfterFailedUpdateTime;
+    }
+    if (dynamicConfig->RefreshTime) {
+        RefreshTime = *dynamicConfig->RefreshTime;
+    }
+    if (dynamicConfig->ExpirationPeriod) {
+        ExpirationPeriod = *dynamicConfig->ExpirationPeriod;
+    }
+    if (dynamicConfig->BatchUpdate) {
+        BatchUpdate = *dynamicConfig->BatchUpdate;
+    }
 }
 
 TAsyncExpiringCacheConfigPtr TAsyncExpiringCacheConfig::ApplyDynamic(

@@ -1,0 +1,37 @@
+(
+(let res_sink (DataSink 'result))
+
+(let $row1 (AsStruct '('"key" (Int32 '"101")) '('"switch" (Int32 '"1"))))
+(let $row2 (AsStruct '('"key" (Int32 '"102")) '('"switch" (Int32 '"2"))))
+(let $row3 (AsStruct '('"key" (Int32 '"103")) '('"switch" (Int32 '"1"))))
+(let $row4 (AsStruct '('"key" (Int32 '"104")) '('"switch" (Int32 '"3"))))
+(let $row5 (AsStruct '('"key" (Int32 '"105")) '('"switch" (Int32 '"1"))))
+(let $input (AsList $row1 $row2 $row3 $row4 $row5))
+
+(let $wideFlowAdapter (lambda '($flow $handler)  (block '(
+    (let $wideFlow (ExpandMap $flow (lambda '($row) (Member $row '"key") (Member $row '"switch"))))
+    (let $handled (Apply $handler $wideFlow))
+    (return (NarrowMap $handled (lambda '($key $switch) (AsStruct '('"key" $key) '('"rand" $switch)))))
+))))
+
+# test multiple clients of TWideFlowProxyComputationNode
+(let $chopper1 (lambda '($wideFlow) (WideChopper $wideFlow (lambda '($key $switch) $key) (lambda '($key1 $key2 $switch) (== $switch (Int32 '1))) (lambda '($key $part) (block '(
+    (let $partHandler (lambda '($key $switch) $key (RandomNumber (DependsOn $part))))
+    (return (WideMap $part $partHandler))
+))))))
+(let $result1 (Collect (Apply $wideFlowAdapter (ToFlow $input) $chopper1)))
+(let world (Write! world res_sink (Key) (Collect $result1) '('('type))))
+
+# test multiple clients of TFlowBaseComputationNode derivatives (e.g. NarrowMap)
+(let $chopper2 (lambda '($wideFlow) (WideChopper $wideFlow (lambda '($key $switch) $key) (lambda '($key1 $key2 $switch) (== $switch (Int32 '1))) (lambda '($key $part) (block '(
+    (let $narrowedPart (NarrowMap $part (lambda '($key $switch) (AsStruct '('"key" $key) '('"switch" $switch)))))
+    (let $partHandler (lambda '($row) (Member $row '"key") (RandomNumber (DependsOn $narrowedPart))))
+    # prevent NarrowMap peephole optimization
+    (return (ExpandMap (ToFlow (Collect $narrowedPart)) $partHandler))
+))))))
+(let $result2 (Collect (Apply $wideFlowAdapter (ToFlow $input) $chopper2)))
+(let world (Write! world res_sink (Key) (Collect $result2) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

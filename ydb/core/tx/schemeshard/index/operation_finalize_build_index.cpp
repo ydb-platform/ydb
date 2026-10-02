@@ -1,0 +1,395 @@
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
+
+class TConfigureParts: public TSubOperationState {
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+private:
+    TOperationId OperationId;
+public:
+    TConfigureParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
+    }
+
+    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
+
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
+        Y_ABORT_UNLESS(txState->BuildIndexId);
+
+        TPathId pathId = txState->TargetPathId;
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+
+        txState->ClearShardsInProgress();
+
+        const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+        const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
+
+        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
+            TShardIdx shardIdx = txState->Shards[i].Idx;
+            TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
+
+            auto seqNo = context.SS->StartRound(*txState);
+
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            auto* op = tx.MutableFinalizeBuildIndex();
+            pathId.ToProto(op->MutablePathId());
+
+            op->SetSnapshotTxId(ui64(snapshotTxId));
+            op->SetSnapshotStep(ui64(snapshotStepId));
+            op->SetTableSchemaVersion(table->AlterVersion+1);
+            op->SetBuildIndexId(ui64(txState->BuildIndexId));
+            if (txState->BuildIndexOutcome) {
+                op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
+            }
+
+            context.SS->FillSeqNo(tx, seqNo);
+
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Sending TFlatSchemeTransaction to datashard with drop snapshot request",
+                {"datashard", datashardId},
+                {"seqNo", seqNo},
+            );
+
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
+        }
+
+        txState->UpdateShardsInProgress();
+        return false;
+    }
+};
+
+class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+private:
+    TOperationId OperationId;
+public:
+    TPropose(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        const auto& evRecord = ev->Get()->Record;
+
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "Schema changed triggered early",
+            {"message", evRecord.ShortDebugString()},
+        );
+
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        TStepId step = TStepId(ev->Get()->StepId);
+
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        TPathId tableId = txState->TargetPathId;
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tableId);
+        context.SS->SnapshotsStepIds.erase(snapshotTxId);
+        context.SS->SnapshotTables.at(snapshotTxId).erase(tableId);
+        if (context.SS->SnapshotTables.at(snapshotTxId).empty()) {
+            context.SS->SnapshotTables.erase(snapshotTxId);
+        }
+        context.SS->TablesWithSnapshots.erase(tableId);
+
+        context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+
+        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
+        tableInfo->AlterVersion += 1;
+
+        for(auto& column: tableInfo->Columns) {
+            if (column.second.IsDropped())
+                continue;
+
+            if (!column.second.IsBuildInProgress)
+                continue;
+
+            YDB_LOG_INFO_CTX(context.Ctx, "Terminating build column process",
+                {"column", column.second.Name},
+            );
+
+            column.second.IsBuildInProgress = false;
+            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
+        }
+
+        context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+
+        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+
+        auto tablePath = context.SS->PathsById.at(tableId);
+        context.SS->ClearDescribePathCaches(tablePath);
+        context.OnComplete.PublishToSchemeBoard(OperationId, tableId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
+
+        TSet<TTabletId> shardSet;
+        for (const auto& shard : txState->Shards) {
+            TShardIdx idx = shard.Idx;
+            TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
+            shardSet.insert(tablet);
+        }
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
+        return false;
+    }
+};
+
+class TCreateTxShards: public TSubOperationState {
+    virtual const char* Name() const override final { return "TCreateTxShards"; }
+private:
+    TOperationId OperationId;
+public:
+    TCreateTxShards(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages({});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"txType", TTxState::TypeName(txState->TxType)},
+        );
+
+        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+            YDB_LOG_INFO_CTX(context.Ctx, "SourceTablePartitioningChangedForModification",
+                {"txType", TTxState::TypeName(txState->TxType)},
+            );
+            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+        }
+
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
+
+        return true;
+    }
+};
+
+class TFinalizeBuildIndex: public TSubOperation {
+    virtual const char* Name() const override final { return "TFinalizeBuildIndex"; }
+
+    static TTxState::ETxState NextState() {
+        return TTxState::CreateParts;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
+        case TTxState::Propose:
+            return TTxState::ProposedWaitParts;
+        case TTxState::ProposedWaitParts:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateTxShards>(OperationId);
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
+        case TTxState::Propose:
+            return MakeHolder<TPropose>(OperationId);
+        case TTxState::ProposedWaitParts:
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
+
+public:
+    using TSubOperation::TSubOperation;
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        const TTabletId ssId = context.SS->SelfTabletId();
+
+        auto finalizeMainTable = Transaction.GetFinalizeBuildIndexMainTable();
+
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& tableName = finalizeMainTable.GetTableName();
+
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << tableName},
+        );
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+
+        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
+
+        {
+            TPath::TChecker checks = path.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderDeleting()
+                .NotUnderOperation();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        TPath parent = path.Parent();
+        {
+            TPath::TChecker checks = parent.Check();
+            checks
+                .NotEmpty()
+                .IsResolved()
+                .NotDeleted();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+
+        TString errStr;
+
+        TPathElement::TPtr pathEl = path.Base();
+        TPathId tablePathId = pathEl->PathId;
+        result->SetPathId(tablePathId.LocalPathId);
+
+        if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
+        if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
+            errStr = TStringBuilder()
+                << "No snapshot presents for table"
+                << ", tableId:" << tablePathId
+                << ", txId: " << OperationId.GetTxId();
+            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
+            return result;
+        }
+
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
+        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
+            errStr = TStringBuilder()
+                << "No snapshot with requested txId presents for table"
+                << ", tableId:" << tablePathId
+                << ", txId: " << OperationId.GetTxId()
+                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
+                << ", snapshotTxId: " << snapshotTxId
+                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
+            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
+            return result;
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        pathEl->LastTxId = OperationId.GetTxId();
+        pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxFinalizeBuildIndex, tablePathId);
+        txState.BuildIndexId = TTxId(finalizeMainTable.GetBuildIndexId());
+
+        if (finalizeMainTable.HasOutcome()) {
+            txState.BuildIndexOutcome = std::make_shared<NKikimrSchemeOp::TBuildIndexOutcome>();
+            txState.BuildIndexOutcome->CopyFrom(finalizeMainTable.GetOutcome());
+        }
+
+        context.SS->PersistTxState(db, OperationId);
+
+        TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
+        Y_ABORT_UNLESS(table->GetSplitOpsInFlight().empty());
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
+        context.OnComplete.ActivateTx(OperationId);
+
+        SetState(NextState());
+        return result;
+    }
+
+    void AbortPropose(TProposeContext&) override {
+        Y_ABORT("no AbortPropose for TFinalizeBuildIndex");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TFinalizeBuildIndex AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
+
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
+}
+
+namespace NKikimr::NSchemeShard {
+
+ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TFinalizeBuildIndex>(id, tx);
+}
+
+ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state) {
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
+    return MakeSubOperation<TFinalizeBuildIndex>(id, state);
+}
+
+}
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

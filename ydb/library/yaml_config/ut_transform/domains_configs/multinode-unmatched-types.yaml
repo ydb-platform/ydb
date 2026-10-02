@@ -1,0 +1,13 @@
+hosts:
+- host: host1
+  drive:
+    - path: ydb.data
+    - type: SSD
+- host: host2
+  drive:
+    - path: ydb.data
+    - type: ROT
+erasure: block-4-2
+domains_config:
+  domain:
+  - name: "Root"

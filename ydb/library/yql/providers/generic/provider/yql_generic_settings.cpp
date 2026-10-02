@@ -2,6 +2,7 @@
 #include "yql_generic_settings.h"
 #include "yql_generic_utils.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -9,7 +10,9 @@ namespace NYql {
 
     const TString TGenericSettings::TDefault::DateTimeFormat = "string";
 
-    TGenericConfiguration::TGenericConfiguration() {
+    TGenericConfiguration::TGenericConfiguration(bool strictConfigValidation)
+        : NCommon::TSettingDispatcher(GenericProviderName, TQContext(), strictConfigValidation)
+    {
         REGISTER_SETTING(*this, UsePredicatePushdown);
         REGISTER_SETTING(*this, DateTimeFormat);
     }
@@ -21,7 +24,30 @@ namespace NYql {
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
 
+        DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? 
+                               TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds()) :
+                               TDuration::Seconds(60);
+
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
+            // This token handling is used for backward compatibility with YQv1. 
+            // You can safely delete this code as soon as YQv1 is no longer supported.
+            TString structuredToken;
+
+            if (cluster.credentials().has_basic()) {
+                const auto& basic = cluster.credentials().basic();
+                structuredToken = ComposeStructuredTokenJsonForBasicAuth(basic.username(), basic.password());
+            } else if (cluster.has_serviceaccountid() && cluster.has_serviceaccountid()) {
+                structuredToken = ComposeStructuredTokenJsonForServiceAccount(
+                    cluster.GetServiceAccountId(), 
+                    cluster.GetServiceAccountIdSignature(), 
+                    cluster.GetToken());
+            } else {
+                ythrow yexception() << "Unsupported credentials type";
+            }
+
+            Tokens[cluster.name()] = structuredToken;
+    
+            // Register cluster
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
 
@@ -58,22 +84,11 @@ namespace NYql {
             YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
         }
 
-        // NOTE: Tokens map is filled just because it's required by DQ/KQP.
-        // The only reason for provider to store these tokens is
-        // to keep compatibility with these engines.
-        // Real credentials are stored in TGenericClusterConfig.
-        Tokens[clusterConfig.GetName()] =
-            TStructuredTokenBuilder()
-                .SetBasicAuth(
-                    clusterConfig.GetCredentials().basic().username(),
-                    clusterConfig.GetCredentials().basic().password())
-                .ToJson();
-
         // preserve cluster config entirely for the further use
         ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
 
         // Add cluster to the list of valid clusters
-        this->ValidClusters.insert(clusterConfig.GetName());
+        this->AddValidCluster(clusterConfig.GetName());
     }
 
     // Structured tokens are used to access MDB API. They can be constructed either from IAM tokens, or from SA credentials.
@@ -101,7 +116,7 @@ namespace NYql {
     }
 
     bool TGenericConfiguration::HasCluster(TStringBuf cluster) const {
-        return ValidClusters.contains(cluster);
+        return GetValidClusters().contains(cluster);
     }
 
 } // namespace NYql

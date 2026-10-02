@@ -6,8 +6,8 @@ namespace NYT::NClient::NFederated {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TFederationConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionConfig)
+DECLARE_REFCOUNTED_STRUCT(TFederationConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

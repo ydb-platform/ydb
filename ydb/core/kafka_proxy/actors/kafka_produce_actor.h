@@ -3,10 +3,13 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include "actors.h"
+
+#include <optional>
 
 namespace NKafka {
 
@@ -19,21 +22,19 @@ using namespace NKikimrClient;
 // Each request can contain data for writing to several topics, and in each topic to several partitions.
 // When a request to write to an unknown topic arrives, the actor changes the state to Init until it receives
 // information about all the topics needed to process the request.
-// 
-// Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
-// The order of responses to requests is also guaranteed.
 //
-// When the request begins to be processed, the actor enters the Accepting state. In this state, responses
-// are expected from all TPartitionWriters confirming acceptance of the request (TEvWriteAccepted). After that,
-// the actor switches back to the Work state. This guarantees the order of writing to each partition.
+// The connection processes one in-flight Kafka request at a time, so this actor also processes
+// one Produce request at a time.
 //
-class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
+class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
+                        , public TKafkaExceptionHandler<TKafkaProduceActor> {
     struct TPendingRequest;
 
     enum ETopicStatus {
         OK,
         NOT_FOUND,
-        UNAUTHORIZED
+        UNAUTHORIZED,
+        PRODUCER_FENCED
     };
 
 public:
@@ -45,16 +46,26 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_PRODUCE_ACTOR; }
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     void PassAway() override;
 
     // Handlers for many StateFunc
     void Handle(TEvKafka::TEvWakeup::TPtr request, const TActorContext& ctx);
+
+    void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& ctx);
-    void EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx);
+
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void FailPendingWrites(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage, std::optional<ui32> partitionId = std::nullopt);
+    void DropPartitionWriter(const TString& topicPath, ui32 partitionId);
+    void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
 
     // StateInit - describe topics
     void HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -64,9 +75,12 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleInit);
 
-            HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
+            HFunc(TEvKafka::TEvProduceRequest, Handle);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -83,8 +97,11 @@ private:
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvProduceRequest, Handle);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -93,43 +110,21 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
-
-    // StateAccepting - enqueue ProduceRequest parts to PartitionWriters
-    // This guarantees the order of responses according order of request
-    void HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
-
-    STATEFN(StateAccepting) {
-        LogEvent(*ev.Get());
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
-
-            HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
-            HFunc(TEvPartitionWriter::TEvInitResult, Handle);
-            HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
-
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-
-            HFunc(TEvKafka::TEvWakeup, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
 
     // Logic
-    void ProcessRequests(const TActorContext& ctx);
+    void StartPendingRequest(const TActorContext& ctx);
     void ProcessRequest(std::shared_ptr<TPendingRequest> pendingRequest, const TActorContext& ctx);
 
     void SendResults(const TActorContext& ctx);
 
-    size_t EnqueueInitialization();
+    bool NeedTopicInitialization(const TEvKafka::TEvProduceRequest::TPtr& request);
     void ProcessInitializationRequests(const TActorContext& ctx);
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
+    std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
+    bool WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage);
 
-    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx);
-
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
     void LogEvent(IEventHandle& ev);
     void SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx);
 
@@ -140,7 +135,6 @@ private:
     TString ClientDC;
 
     ui64 Cookie = 0;
-    TDeque<TEvKafka::TEvProduceRequest::TPtr> Requests;
 
     struct TPendingRequest {
         using TPtr = std::shared_ptr<TPendingRequest>;
@@ -155,6 +149,7 @@ private:
             EKafkaErrors ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
             TString ErrorMessage;
             TEvPartitionWriter::TEvWriteResponse::TPtr Value;
+            size_t RecordsCount = 0;
         };
         std::vector<TPartitionResult> Results;
 
@@ -163,12 +158,13 @@ private:
 
         TInstant StartTime;
     };
-    TDeque<TPendingRequest::TPtr> PendingRequests;
+    TPendingRequest::TPtr PendingRequest;
 
     struct TCookieInfo {
         TString TopicPath;
         ui32 PartitionId;
         size_t Position;
+        bool RuPerRequest;
 
         TPendingRequest::TPtr Request;
     };
@@ -182,15 +178,32 @@ private:
 
         NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
         std::shared_ptr<IPartitionChooser> PartitionChooser;
+        TIntrusivePtr<TSecurityObject> SecurityObject;
     };
     std::map<TString, TTopicInfo> Topics;
 
     struct TWriterInfo {
         TActorId ActorId;
         TInstant LastAccessed;
+        // identifies the transactional producer (if transactional)
+        TProducerInstanceId ProducerInstanceId;
     };
     // TopicPath -> PartitionId -> TPartitionWriter
-    std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> Writers;
+    std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> NonTransactionalWriters;
+    std::unordered_map<TTopicPartition, TWriterInfo, TTopicPartitionHashFn> TransactionalWriters;
+
+    void RecreatePartitionWriterAndRetry(ui64 cookie, const TActorContext& ctx);
+    void SendWriteRequest(const TProduceRequestData::TTopicProduceData::TPartitionProduceData& partitionData,
+                            const TString& topicName,
+                            TPendingRequest::TPtr pendingRequest,
+                            size_t position,
+                            bool& ruPerRequest,
+                            const TActorContext& ctx
+                        );
+    void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId, TStringBuf reason);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
 };
 
 }

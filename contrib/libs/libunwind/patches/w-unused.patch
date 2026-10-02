@@ -1,0 +1,11 @@
+--- contrib/libs/libunwind/src/libunwind.cpp	(index)
++++ contrib/libs/libunwind/src/libunwind.cpp	(working tree)
+@@ -254,7 +254,7 @@ _LIBUNWIND_WEAK_ALIAS(__unw_get_proc_info, unw_get_proc_info)
+ /// instruction relatively to the amount of `walkedFrames` then resume execution
+ /// at cursor position (aka longjump).
+ _LIBUNWIND_HIDDEN int __unw_resume_with_frames_walked(unw_cursor_t *cursor,
+-                                                      unsigned walkedFrames) {
++                                                      [[maybe_unused]] unsigned walkedFrames) {
+   _LIBUNWIND_TRACE_API("__unw_resume(cursor=%p, walkedFrames=%u)",
+                        static_cast<void *>(cursor), walkedFrames);
+ #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)

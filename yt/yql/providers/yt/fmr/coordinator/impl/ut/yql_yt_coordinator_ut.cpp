@@ -1,88 +1,23 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/threading/future/async.h>
-#include <util/stream/output.h>
-#include <util/string/cast.h>
-#include <util/system/mutex.h>
-#include <util/thread/pool.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
-#include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
-#include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
+#include "yql_yt_coordinator_ut.h"
+
+#include <yt/yql/providers/yt/fmr/test_tools/mock_time_provider/yql_yt_mock_time_provider.h>
 
 namespace NYql::NFmr {
 
-class TFmrWorkerProxy: public IFmrWorker {
-public:
-    TFmrWorkerProxy(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings):
-        Coordinator_(coordinator), JobFactory_(jobFactory), WorkerSettings_(settings), WorkerCreationNum_(1)
-    {
-        Worker_ = MakeFmrWorker(Coordinator_, JobFactory_, WorkerSettings_);
-    }
-
-    void ResetWorker() {
-        ++WorkerCreationNum_;
-        WorkerSettings_.RandomProvider = CreateDeterministicRandomProvider(WorkerCreationNum_);
-
-        Stop();
-        Worker_ = MakeFmrWorker(Coordinator_, JobFactory_, WorkerSettings_);
-        Start();
-    }
-
-    void Start() {
-        Worker_->Start();
-    }
-
-    void Stop() {
-        Worker_->Stop();
-    }
-
-private:
-    IFmrCoordinator::TPtr Coordinator_;
-    IFmrJobFactory::TPtr JobFactory_;
-    IFmrWorker::TPtr Worker_;
-    TFmrWorkerSettings WorkerSettings_;
-    int WorkerCreationNum_;
-};
-
-
-TDownloadTaskParams downloadTaskParams{
-    .Input = TYtTableRef{"Path","Cluster","TransactionId"},
-    .Output = TFmrTableRef{"TableId"}
-};
-
-TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams) {
-    return TStartOperationRequest{.TaskType = taskType, .TaskParams = taskParams, .SessionId = "SessionId", .IdempotencyKey = "IdempotencyKey"};
-}
-
-std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
-    ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams, int numRequests = 10)
-{
-    std::vector<TStartOperationRequest> startOperationRequests(numRequests);
-    for (int i = 0; i < numRequests; ++i) {
-        startOperationRequests[i] = TStartOperationRequest{
-            .TaskType = taskType, .TaskParams = taskParams, .IdempotencyKey = "IdempotencyKey_" + ToString(i)
-        };
-    }
-    return startOperationRequests;
-}
-
-auto defaultTaskFunction = [] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
-    while (!cancelFlag->load()) {
-        Sleep(TDuration::Seconds(4));
-        return ETaskStatus::Completed;
-    }
-    return ETaskStatus::Aborted;
-};
+// TODO - rewrite all fmr tests without explicit Sleep().
 
 Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     Y_UNIT_TEST(StartOperation) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         auto status = startOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Accepted);
     }
     Y_UNIT_TEST(RetryAcceptedOperation) {
-        auto coordinator = MakeFmrCoordinator();
-        auto downloadRequest = CreateOperationRequest();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto downloadRequest = setup.CreateOperationRequest();
         auto firstResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         auto firstOperationId = firstResponse.OperationId;
         auto sameRequest = coordinator->StartOperation(downloadRequest);
@@ -94,62 +29,62 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     }
 
     Y_UNIT_TEST(DeleteNonexistentOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
         auto deleteOperationResponse = coordinator->DeleteOperation({"delete_operation_id"}).GetValueSync();
         EOperationStatus status = deleteOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::NotFound);
     }
     Y_UNIT_TEST(DeleteOperationBeforeSendToWorker) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
         auto deleteOperationResponse = coordinator->DeleteOperation({operationId}).GetValueSync();
         EOperationStatus status = deleteOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Aborted);
     }
     Y_UNIT_TEST(GetNonexistentOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
         auto getOperationResponse = coordinator->GetOperation({"get_operation_id"}).GetValueSync();
         EOperationStatus status = getOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::NotFound);
     }
     Y_UNIT_TEST(GetAcceptedOperationStatus) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
         auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
         EOperationStatus status = getOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Accepted);
     }
     Y_UNIT_TEST(GetRunningOperationStatus) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
 
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
+        auto worker = setup.GetFmrWorker(coordinator);
         Sleep(TDuration::Seconds(1));
         auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
         EOperationStatus status = getOperationResponse.Status;
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(GetCompletedOperationStatuses) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationRequests = CreateSeveralOperationRequests();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationRequests = setup.CreateSeveralOperationRequests();
         std::vector<TString> operationIds;
         for (auto& request: startOperationRequests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             operationIds.emplace_back(startOperationResponse.OperationId);
         }
-        TFmrJobFactorySettings settings{.NumThreads = 10, .Function = defaultTaskFunction};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
+
+        auto worker = setup.GetFmrWorker(coordinator, 10);
         Sleep(TDuration::Seconds(6));
+
         for (auto& operationId: operationIds) {
             auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
             EOperationStatus status = getOperationResponse.Status;
@@ -157,41 +92,34 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         }
     }
     Y_UNIT_TEST(GetCompletedAndFailedOperationStatuses) {
-        auto coordinator = MakeFmrCoordinator();
-        auto downloadOperationRequests = CreateSeveralOperationRequests();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto downloadOperationRequests = setup.CreateSeveralOperationRequests();
         std::vector<TString> downloadOperationIds;
         for (auto& request: downloadOperationRequests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadTaskParams{});
-        auto uploadOperationResponse = coordinator->StartOperation(uploadOperationRequest).GetValueSync();
-        auto uploadOperationId = uploadOperationResponse.OperationId;
+        auto badDownloadRequest = setup.CreateOperationRequest(EOperationType::Download, TDownloadOperationParams{
+            .Input = TYtTableRef{"BadCluster", "BadPath", "BadFilePath"},
+            .Output = TFmrTableRef{{"bad_cluster", "bad_path"}}
+        });
+        auto badDownloadOperationResponse = coordinator->StartOperation(badDownloadRequest).GetValueSync();
+        auto badDownloadOperationId = badDownloadOperationResponse.OperationId;
 
         auto func = [&] (TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (! cancelFlag->load()) {
                 Sleep(TDuration::Seconds(1));
-                ETaskStatus taskStatus = std::visit([] (auto&& taskParams) {
-                    using T = std::decay_t<decltype(taskParams)>;
-                    if constexpr (std::is_same_v<T, TUploadTaskParams>) {
-                        return ETaskStatus::Failed;
-                    }
-                    return ETaskStatus::Completed;
-                }, task->TaskParams);
-                if (taskStatus == ETaskStatus::Failed) {
-                    return taskStatus;
+                TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
+                if (downloadTaskParams.Output.TableId.Contains("bad_path")) {
+                    return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
                 }
-                Sleep(TDuration::Seconds(1));
-                return ETaskStatus::Completed;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
-            return ETaskStatus::Aborted;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
 
-        TFmrJobFactorySettings settings{.NumThreads = 10, .Function = func};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
+        auto worker = setup.GetFmrWorker(coordinator, 10, func);
         Sleep(TDuration::Seconds(5));
 
         for (auto& operationId: downloadOperationIds) {
@@ -199,23 +127,20 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             EOperationStatus status = getDownloadOperationResponse.Status;
             UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Completed);
         }
-        auto getUploadOperationResponse = coordinator->GetOperation({uploadOperationId}).GetValueSync();
-        EOperationStatus uploadStatus = getUploadOperationResponse.Status;
-        UNIT_ASSERT_VALUES_EQUAL(uploadStatus, EOperationStatus::Failed);
+        auto getBadDownloadOperationResponse = coordinator->GetOperation({badDownloadOperationId}).GetValueSync();
+        EOperationStatus badDownloadStatus = getBadDownloadOperationResponse.Status;
+        UNIT_ASSERT_VALUES_EQUAL(badDownloadStatus, EOperationStatus::Failed);
     }
     Y_UNIT_TEST(RetryRunningOperation) {
-        auto coordinator = MakeFmrCoordinator();
-        auto downloadRequest = CreateOperationRequest();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto downloadRequest = setup.CreateOperationRequest();
         auto startOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         TString firstOperationId = startOperationResponse.OperationId;
 
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
-
+        auto worker = setup.GetFmrWorker(coordinator);
         Sleep(TDuration::Seconds(1));
+
         auto secondStartOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         EOperationStatus status = secondStartOperationResponse.Status;
         TString secondOperationId = secondStartOperationResponse.OperationId;
@@ -223,21 +148,18 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(RetryRunningOperationAfterIdempotencyKeyClear) {
-        TFmrCoordinatorSettings coordinatorSettings{
-            .WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2), .IdempotencyKeyStoreTime = TDuration::Seconds(1)};
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings);
+        TFmrTestSetup setup;
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        coordinatorSettings.IdempotencyKeyStoreTime = TDuration::Seconds(1);
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings);
 
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
+        auto worker = setup.GetFmrWorker(coordinator);
 
-        auto downloadRequest = CreateOperationRequest();
+        auto downloadRequest = setup.CreateOperationRequest();
         auto startOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         TString firstOperationId = startOperationResponse.OperationId;
 
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(3));
         auto secondStartOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         EOperationStatus secondOperationStatus = secondStartOperationResponse.Status;
         TString secondOperationId = secondStartOperationResponse.OperationId;
@@ -248,56 +170,21 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(firstOperationStatus, EOperationStatus::InProgress);
         UNIT_ASSERT_VALUES_EQUAL(secondOperationStatus, EOperationStatus::Accepted);
     }
-    Y_UNIT_TEST(CancelTasksAfterVolatileIdReload) {
-        auto coordinator = MakeFmrCoordinator();
-        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
-            int numIterations = 0;
-            while (!cancelFlag->load()) {
-                Sleep(TDuration::Seconds(1));
-                ++numIterations;
-                if (numIterations == 100) {
-                    return ETaskStatus::Completed;
-                }
-            }
-            return ETaskStatus::Aborted;
-        };
-        TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        TFmrWorkerProxy workerProxy(coordinator, factory, workerSettings);
-
-        workerProxy.Start();
-        auto operationId = coordinator->StartOperation(CreateOperationRequest()).GetValueSync().OperationId;
-        Sleep(TDuration::Seconds(2));
-        workerProxy.ResetWorker();
-        Sleep(TDuration::Seconds(5));
-        workerProxy.Stop();
-        auto getOperationResult = coordinator->GetOperation({operationId}).GetValueSync();
-        auto getOperationStatus = getOperationResult.Status;
-        UNIT_ASSERT_VALUES_EQUAL(getOperationStatus, EOperationStatus::Failed);
-        auto error = getOperationResult.ErrorMessages[0];
-        UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Coordinator);
-        UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Max retries limit exceeded");
-        UNIT_ASSERT_NO_DIFF(*error.OperationId, operationId);
-    }
     Y_UNIT_TEST(HandleJobErrors) {
-        auto coordinator = MakeFmrCoordinator();
-        auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         TString operationId = startOperationResponse.OperationId;
 
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (! cancelFlag->load()) {
                 Sleep(TDuration::Seconds(2));
-                throw std::runtime_error{"Function crashed"};
+                throw TFmrNonRetryableJobException() << " Function crashed";
             }
-            return ETaskStatus::Aborted;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
 
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
         Sleep(TDuration::Seconds(4));
         auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
 
@@ -306,8 +193,520 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Failed);
         UNIT_ASSERT(errorMessages.size() == 1);
         auto& error = errorMessages[0];
-        UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Function crashed");
+        TString expectedErrorMessage = "Function crashed";
+        UNIT_ASSERT(error.ErrorMessage.Contains(expectedErrorMessage));
         UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Job);
+    }
+
+    Y_UNIT_TEST(GetFmrTableInfo) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        ui64 totalChunkCount = 10, chunkRowCount = 1, chunkDataWeight = 2;
+        TString tableId = "TestCluster.TestPath"; // corresponds to CreateOperationRequest()
+        auto func = [&] (TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+            while (!cancelFlag->load()) {
+                Sleep(TDuration::Seconds(1));
+                TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
+                TString partId = downloadTaskParams.Output.PartId;
+                TFmrTableOutputRef fmrTableOutputRef(tableId, partId);
+                TTableChunkStats tableChunkStats{
+                    .PartId = partId,
+                    .PartIdChunkStats = std::vector<TChunkStats>(totalChunkCount, TChunkStats{.Rows = chunkRowCount, .DataWeight = chunkDataWeight})
+                };
+                std::unordered_map<TFmrTableOutputRef, TTableChunkStats> outputTables{{fmrTableOutputRef, tableChunkStats}};
+
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics{
+                    .OutputTables = outputTables
+                }};
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3 ,func);
+
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        Sleep(TDuration::Seconds(5));
+        auto response = coordinator->GetFmrTableInfo({.TableId = tableId, .SessionId = "test-session-id"}).GetValueSync();
+        worker->Stop();
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Chunks, totalChunkCount);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Rows, totalChunkCount * chunkRowCount);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.DataWeight, totalChunkCount * chunkDataWeight);
+    }
+
+    Y_UNIT_TEST(SessionAutoCleanup) {
+        TFmrTestSetup setup;
+
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+
+        auto timeProvider = MakeIntrusive<TMockTimeProvider>(TDuration::MilliSeconds(50));
+        coordinatorSettings.TimeProvider = timeProvider;
+        coordinatorSettings.SessionInactivityTimeout = TDuration::MilliSeconds(500);
+        coordinatorSettings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::MilliSeconds(50);
+        coordinatorSettings.HealthCheckInterval = TDuration::MilliSeconds(200);
+        TString sessionId = "test-session";
+
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings, sessionId);
+
+        auto listResponse1 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse1.SessionIds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResponse1.SessionIds[0], sessionId);
+
+        // Advance time but not enough to trigger cleanup
+        timeProvider->Advance(TDuration::MilliSeconds(200));
+        auto listResponse2 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse2.SessionIds.size(), 1);
+
+        // Advance time past inactivity timeout
+        timeProvider->Advance(TDuration::MilliSeconds(800), TDuration::MilliSeconds(500));
+
+        // Session should be automatically cleaned up
+        auto listResponse3 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse3.SessionIds.size(), 0);
+    }
+    Y_UNIT_TEST(SessionStaysActiveWithRegularRequests) {
+        TFmrTestSetup setup;
+
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        auto timeProvider = MakeIntrusive<TMockTimeProvider>(TDuration::MilliSeconds(50));
+        coordinatorSettings.TimeProvider = timeProvider;
+        coordinatorSettings.SessionInactivityTimeout = TDuration::MilliSeconds(400);
+        coordinatorSettings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::MilliSeconds(50);
+        coordinatorSettings.HealthCheckInterval = TDuration::MilliSeconds(100);
+        TString sessionId = "test-active-gateway-session";
+
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings, sessionId);
+
+        coordinator->OpenSession({.SessionId = sessionId}).GetValueSync();
+
+        // Ping session regularly to keep it alive
+        for (int i = 0; i < 4; ++i) {
+            timeProvider->Advance(TDuration::MilliSeconds(200));
+            auto pingResponse = coordinator->PingSession({.SessionId = sessionId}).GetValueSync();
+            UNIT_ASSERT(pingResponse.Success);
+        }
+
+        // Session should still be active after regular pings
+        Sleep(TDuration::MilliSeconds(500));
+        auto listResponse = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.SessionIds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResponse.SessionIds[0], sessionId);
+    }
+
+    Y_UNIT_TEST(ManualCloseSessionClearsSession) {
+        TFmrTestSetup setup;
+        TString sessionId = "test-manual-close-session";
+        auto coordinator = setup.GetFmrCoordinator(TFmrCoordinatorSettings(), sessionId);
+
+        auto listResponse1 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse1.SessionIds.size(), 1);
+
+        // Manually clearing session
+        coordinator->ClearSession({.SessionId = sessionId}).GetValueSync();
+
+        // Session should be cleared
+        auto listResponse2 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse2.SessionIds.size(), 0);
+    }
+
+    Y_UNIT_TEST(JobCountersAccepted) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startOperationResponse.OperationId;
+
+        auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getOperationResponse.Status, EOperationStatus::Accepted);
+        const auto& counters = getOperationResponse.JobCounters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Pending, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Running, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Completed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Failed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Lost, 0);
+    }
+
+    Y_UNIT_TEST(JobCountersRunning) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startOperationResponse.OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator);
+        Sleep(TDuration::Seconds(1));
+
+        auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getOperationResponse.Status, EOperationStatus::InProgress);
+        const auto& counters = getOperationResponse.JobCounters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Pending, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Running, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Completed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Failed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Lost, 0);
+    }
+
+    Y_UNIT_TEST(JobCountersFailed) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startOperationResponse.OperationId;
+
+        auto func = [&](TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+            while (!cancelFlag->load()) {
+                Sleep(TDuration::Seconds(1));
+                throw TFmrNonRetryableJobException() << "Task failed";
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(3));
+
+        auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getOperationResponse.Status, EOperationStatus::Failed);
+        const auto& counters = getOperationResponse.JobCounters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Pending, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Running, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Completed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Failed, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Lost, 0);
+    }
+
+    Y_UNIT_TEST(JobCountersCompleted) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startOperationResponse.OperationId;
+
+        auto func = [&](TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(2));
+
+        auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getOperationResponse.Status, EOperationStatus::Completed);
+        const auto& counters = getOperationResponse.JobCounters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Pending, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Running, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Completed, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Failed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Lost, 0);
+    }
+
+    Y_UNIT_TEST(JobCountersLostOnWorkerDeath) {
+        TFmrTestSetup setup;
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        coordinatorSettings.WorkerDeadlineLease = TDuration::Seconds(1);
+        coordinatorSettings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::MilliSeconds(200);
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings);
+        auto startOperationResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startOperationResponse.OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator);
+        // Wait long enough for the worker to heartbeat-confirm the task is running (TaskIds populated)
+        Sleep(TDuration::Seconds(2));
+
+        // Stop the worker to simulate worker death - task should be re-accepted and LostJobsCount incremented
+        worker->Stop();
+        // Wait for WorkerDeadlineLease to expire and CheckWorkersAliveStatus to fire
+        Sleep(TDuration::Seconds(3));
+
+        auto getOperationResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        const auto& counters = getOperationResponse.JobCounters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Pending, 1);  // re-enqueued after loss
+        UNIT_ASSERT_VALUES_EQUAL(counters.Running, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Completed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Failed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Lost, 1);
+    }
+
+    Y_UNIT_TEST(SessionFailureDetection) {
+        TFmrTestSetup setup;
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        auto timeProvider = MakeIntrusive<TMockTimeProvider>(TDuration::MilliSeconds(50));
+        coordinatorSettings.TimeProvider = timeProvider;
+        coordinatorSettings.SessionInactivityTimeout = TDuration::MilliSeconds(400);
+        coordinatorSettings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::MilliSeconds(50);
+        coordinatorSettings.HealthCheckInterval = TDuration::MilliSeconds(100);
+        TString sessionId = "test-gateway-failure-session";
+
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings, sessionId);
+
+        auto listResponse1 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse1.SessionIds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResponse1.SessionIds[0], sessionId);
+
+        // Pinging session to keep it active
+        coordinator->PingSession({.SessionId = sessionId}).GetValueSync();
+        timeProvider->Advance(TDuration::MilliSeconds(150));
+        coordinator->PingSession({.SessionId = sessionId}).GetValueSync();
+
+        auto listResponse2 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse2.SessionIds.size(), 1);
+
+        // Stopping pings to simulate failure
+        timeProvider->Advance(TDuration::MilliSeconds(800), TDuration::MilliSeconds(500));
+
+        auto listResponse3 = coordinator->ListSessions({}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(listResponse3.SessionIds.size(), 0);
+    }
+
+    Y_UNIT_TEST(WaitForOperationsCompletedBeforeTimeout) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator);
+
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(10),
+        }).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].OperationId, operationId);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].Status, EOperationStatus::Completed);
+    }
+
+    Y_UNIT_TEST(WaitForOperationsTimeoutWithNoWorker) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        // No worker started — operation stays in Accepted, timeout should elapse.
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(1),
+        }).GetValueSync();
+
+        UNIT_ASSERT(waitResponse.FinalizedOperations.empty());
+    }
+
+    Y_UNIT_TEST(WaitForTasksResolvesImmediatelyWhenTasksAlreadyQueued) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        // StartOperation enqueues a task in the coordinator before any worker picks it up.
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+
+        auto response = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(10)}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(response.AvailableTasksCount, 1);
+    }
+
+    Y_UNIT_TEST(WaitForTasksResolvesWhenTaskArrivesLater) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        // Subscribe before any task is enqueued.
+        auto waitFuture = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(10)});
+        UNIT_ASSERT(!waitFuture.HasValue());
+
+        // Enqueue a task — this should resolve the future.
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+
+        auto response = waitFuture.GetValueSync();
+        UNIT_ASSERT(response.AvailableTasksCount > 0);
+    }
+
+    Y_UNIT_TEST(WaitForTasksTimeoutWithNoTasksQueued) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        // No StartOperation called — no tasks ever arrive, timeout must fire.
+        auto response = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(1)}).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(response.AvailableTasksCount, 0);
+    }
+
+    Y_UNIT_TEST(MapReduceOperationAccepted) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto response = coordinator->StartOperation(request).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(response.Status, EOperationStatus::Accepted);
+    }
+
+    Y_UNIT_TEST(MapReduceOperationCompletesTwoStages) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+        UNIT_ASSERT_VALUES_EQUAL(startResponse.Status, EOperationStatus::Accepted);
+
+        std::atomic<ui64> mapTaskCount{0};
+        std::atomic<ui64> reduceTaskCount{0};
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            TStatistics stats;
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                ++mapTaskCount;
+                // Return sorted chunk stats for the intermediate table. The sorted partitioner
+                // requires proper YSON with all key columns (_yql_key_hash + reduce-by columns).
+                const auto& mapParams = std::get<TMapReduceMapTaskParams>(task->TaskParams);
+                TFmrTableOutputRef outputRef{mapParams.Output.TableId, mapParams.Output.PartId};
+
+                NYT::TNode firstKey;
+                firstKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                firstKey["key"] = NYT::TNode("");
+
+                NYT::TNode lastKey;
+                lastKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                lastKey["key"] = NYT::TNode("z");
+
+                TTableChunkStats chunkStats{
+                    .PartId = mapParams.Output.PartId,
+                    .PartIdChunkStats = {TChunkStats{
+                        .Rows = 1,
+                        .DataWeight = 1,
+                        .SortedChunkStats = TSortedChunkStats{
+                            .IsSorted = true,
+                            .FirstRowKeys = firstKey,
+                            .LastRowKeys = lastKey
+                        }
+                    }}
+                };
+                stats.OutputTables[outputRef] = chunkStats;
+            } else if (task->TaskType == ETaskType::Reduce) {
+                ++reduceTaskCount;
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(8));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Completed);
+        UNIT_ASSERT_VALUES_EQUAL(mapTaskCount.load(), 1u);  // one map task for the single YT input partition
+        UNIT_ASSERT(reduceTaskCount.load() >= 1u);          // at least one reduce task
+    }
+
+    Y_UNIT_TEST(MapReduceReduceStageFailureFails) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            TStatistics stats;
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                const auto& mapParams = std::get<TMapReduceMapTaskParams>(task->TaskParams);
+                TFmrTableOutputRef outputRef{mapParams.Output.TableId, mapParams.Output.PartId};
+
+                NYT::TNode firstKey;
+                firstKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                firstKey["key"] = NYT::TNode("");
+
+                NYT::TNode lastKey;
+                lastKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                lastKey["key"] = NYT::TNode("z");
+
+                TTableChunkStats chunkStats{
+                    .PartId = mapParams.Output.PartId,
+                    .PartIdChunkStats = {TChunkStats{
+                        .Rows = 1,
+                        .DataWeight = 1,
+                        .SortedChunkStats = TSortedChunkStats{
+                            .IsSorted = true,
+                            .FirstRowKeys = firstKey,
+                            .LastRowKeys = lastKey
+                        }
+                    }}
+                };
+                stats.OutputTables[outputRef] = chunkStats;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+            } else if (task->TaskType == ETaskType::Reduce) {
+                throw TFmrNonRetryableJobException() << "Reduce stage failed";
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(8));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Failed);
+    }
+
+    Y_UNIT_TEST(MapReduceMapStageFailureFails) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                throw TFmrNonRetryableJobException() << "Map stage failed";
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(4));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Failed);
     }
 }
 

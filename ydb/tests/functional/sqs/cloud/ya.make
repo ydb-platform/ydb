@@ -4,27 +4,27 @@ TEST_SRCS(
     test_common.py
     test_yandex_cloud_mode.py
     test_yandex_cloud_queue_counters.py
+    test_yandex_audit.py
 )
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:32 cpu:2)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/sqs
     contrib/python/xmltodict
-    contrib/python/boto3
     contrib/python/botocore
 )
 

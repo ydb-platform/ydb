@@ -17,7 +17,7 @@ def post_install(self):
 
 
 sqlite3 = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "g:maps-mrc"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/sqlite3",
     nixattr="sqlite",
     makeflags=["libsqlite3.la"],
@@ -25,6 +25,7 @@ sqlite3 = GNUMakeNixProject(
     disable_includes=[
         "sqlite3rtree.h",
         "sqlite_tcl.h",
+        "sys/cygwin.h",
         # if defined(SQLITE_ENABLE_ICU)
         "unicode/",
         "vxWorks.h",

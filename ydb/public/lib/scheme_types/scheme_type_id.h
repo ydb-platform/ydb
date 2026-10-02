@@ -11,6 +11,7 @@ namespace NScheme {
 constexpr ui32 DECIMAL_MAX_PRECISION = 35;
 constexpr ui32 DECIMAL_PRECISION = 22;
 constexpr ui32 DECIMAL_SCALE = 9;
+constexpr ui32 FSB_SIZE = 16; // fixed_size_binary size
 
 using TTypeId = ui16;
 
@@ -100,6 +101,18 @@ constexpr bool IsYqlTypeImpl(TTypeId typeId, ui32 i) {
 
 constexpr bool IsYqlType(TTypeId typeId) {
     return IsYqlTypeImpl(typeId, 0);
+}
+
+// Json/Yson/JsonDocument are YQL types but have no TPresortEncoder::Encode() case.
+constexpr bool IsPresortEncodable(TTypeId typeId) {
+    switch (typeId) {
+    case Json:
+    case Yson:
+    case JsonDocument:
+        return false;
+    default:
+        return IsYqlType(typeId);
+    }
 }
 
 constexpr bool IsParametrizedType(TTypeId typeId) {

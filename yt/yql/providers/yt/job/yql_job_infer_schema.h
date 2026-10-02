@@ -8,13 +8,19 @@
 
 namespace NYql {
 
-class TYqlInferSchemaJob : public TYqlJobBase {
+class TYqlInferSchemaJob : public TYqlJobBase, public NYT::IRawJob {
 public:
     TYqlInferSchemaJob() = default;
     ~TYqlInferSchemaJob() = default;
 
-protected:
-    void DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) override;
+public:
+    void Do(const NYT::TRawJobContext& jobContext) override;
+
+    void Save(IOutputStream& stream) const override;
+    void Load(IInputStream& stream) override;
+
+private:
+    void DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles);
 };
 
 } // NYql

@@ -5,9 +5,9 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/protos/sqs.pb.h>
-#include <ydb/core/persqueue/partition.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
@@ -23,6 +23,8 @@
 
 #include "utils.h"
 #include "ydb/core/ymq/actor/log.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 
 using namespace NActors;
@@ -53,6 +55,7 @@ namespace NKikimr::NYmq::V1 {
     static const TString CONTENT_BASED_DEDUPLICATION = "ContentBasedDeduplication";
     static const TString CREATED_TIMESTAMP = "CreatedTimestamp";
     static const TString DELAY_SECONDS = "DelaySeconds";
+    static const TString FIFO_QUEUE = "FifoQueue";
     static const TString LAST_MODIFIED_TIMESTAMP = "LastModifiedTimestamp";
     static const TString MAXIMUM_MESSAGE_SIZE = "MaximumMessageSize";
     static const TString MESSAGE_RETENTION_PERIOD = "MessageRetentionPeriod";
@@ -131,21 +134,18 @@ namespace NKikimr::NYmq::V1 {
         , UserSid(GetMetaValue(request, USER_SID))
         , RequestId(GetMetaValue(request, REQUEST_ID))
         , SecurityToken(GetMetaValue(request, SECURITY_TOKEN))
+        , SourceAddress(GetMetaValue(request, SOURCE_ADDRESS))
         {
         }
 
         ~TBaseRpcRequestActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            LOG_DEBUG_S(
-                ctx,
-                NKikimrServices::SQS,
-                TStringBuilder() << "Got new request in YMQ proxy."
-                << " FolderId: " << FolderId
-                << ", CloudId: " << CloudId
-                << ", UserSid: " << UserSid
-                << ", RequestId: " << RequestId;
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Got new request in YMQ proxy",
+                {"folderId", FolderId},
+                {"cloudId", CloudId},
+                {"userSid", UserSid},
+                {"requestId", RequestId});
             TSqsRequest sqsRequest;
 
             sqsRequest.SetRequestId(RequestId);
@@ -155,6 +155,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
             request->MutableAuth()->SetUserSID(UserSid);
+            request->MutableAuth()->SetSourceAddress(SourceAddress);
 
             if (SecurityToken) {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
@@ -169,12 +170,16 @@ namespace NKikimr::NYmq::V1 {
     protected:
         virtual TRequest* GetRequest(TSqsRequest&) = 0;
         virtual THolder<TReplyCallback> CreateReplyCallback() = 0;
+
     private:
         const TString FolderId;
         const TString CloudId;
         const TString UserSid;
         const TString RequestId;
         const TString SecurityToken;
+
+    protected:
+        const TString SourceAddress;
     };
 
     template<class TEvYmqRequest, class TRequest, class TReplyCallback>
@@ -248,6 +253,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TCreateQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableCreateQueue();
             result->SetQueueName(GetProtoRequest()->queue_name());
+            result->SetSourceAddress(SourceAddress);
             for (auto &srcAttribute : GetProtoRequest()->attributes()) {
                 auto dstAttribute = result->MutableAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
@@ -485,6 +491,9 @@ namespace NKikimr::NYmq::V1 {
             if (attrs.HasDelaySeconds()) {
                 AddAttribute(result, DELAY_SECONDS, attrs.GetDelaySeconds());
             }
+            if (attrs.HasFifoQueue()) {
+                AddAttribute(result, FIFO_QUEUE, attrs.GetFifoQueue());
+            }
             if (attrs.HasLastModifiedTimestamp()) {
                 AddAttribute(result, LAST_MODIFIED_TIMESTAMP, attrs.GetLastModifiedTimestamp());
             }
@@ -667,6 +676,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TDeleteQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableDeleteQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             return result;
         }
     };
@@ -1040,6 +1050,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TTagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableTagQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             for (const auto& [key, value]: GetProtoRequest()->Gettags()) {
                 auto tag = requestHolder.MutableTagQueue()->MutableTags()->Add();
                 tag->SetKey(key);
@@ -1087,8 +1098,9 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TUntagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableUntagQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             for (const auto& key: GetProtoRequest()->Gettag_keys()) {
-                requestHolder.MutableUntagQueue()->AddTagKeys(key);
+                result->AddTagKeys(key);
             }
             return result;
         }

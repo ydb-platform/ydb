@@ -1,10 +1,12 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -15,32 +17,25 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterSequence TConfigureParts"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr& ev,
             TOperationContext& context) override {
 
-        auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TAlterSequence TConfigureParts HandleReply TEvUpdateSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"shardId", tabletId},
+            {"status", status},
+        );
 
         switch (status) {
             case NKikimrTxSequenceShard::TEvUpdateSequenceResult::SUCCESS:
@@ -49,12 +44,10 @@ public:
 
             default:
                 // Treat all other replies as unexpected and spurious
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TAlterSequence TConfigureParts HandleReply ignoring unexpected TEvUpdateSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+                YDB_LOG_WARN_CTX(context.Ctx, "HandleReply ignoring unexpected TEvUpdateSequenceResult",
+                    {"shardId", tabletId},
+                    {"status", status},
+                );
                 return false;
         }
 
@@ -65,12 +58,10 @@ public:
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TAlterSequence TConfigureParts HandleReply ignoring duplicate TEvUpdateSequenceResult"
-                << " shardId# " << tabletId
-                << " status# " << status
-                << " operationId# " << OperationId
-                << " at tablet " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "HandleReply ignoring duplicate TEvUpdateSequenceResult",
+                {"shardId", tabletId},
+                {"status", status},
+            );
             return false;
         }
 
@@ -86,11 +77,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -140,11 +127,9 @@ public:
                 event->Record.SetNextUsed(alterData->Description.GetSetVal().GetNextUsed());
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TAlterSequence TConfigureParts ProgressState"
-                        << " sending TEvUpdateSequence to tablet " << tabletId
-                        << " operationId# " << OperationId
-                        << " at tablet " << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState sending TEvUpdateSequence to tablet",
+                {"tabletId", tabletId},
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, txState->TargetPathId, event.Release());
 
@@ -160,26 +145,21 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterSequence TPropose"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::EventType});
+        IgnoreMessages({NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -198,7 +178,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -219,11 +199,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -368,6 +344,8 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
 }
 
 class TAlterSequence: public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterSequence"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
     }
@@ -403,7 +381,7 @@ class TAlterSequence: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& sequenceAlter = Transaction.GetSequence();
@@ -411,12 +389,10 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = sequenceAlter.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterSequence Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", transaction: " << Transaction.ShortDebugString()
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"transaction", Transaction.ShortDebugString()},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -429,18 +405,26 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
 
             if (checks) {
-                if (parentPath->IsTable()) {
+                if (parentPath.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath();
+                    // Index sequences can be altered only by internal transactions (build_index__progress)
+                    if (!Transaction.GetInternal()) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
+                    }
+                } else if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
+                    checks.IsCommonSensePath();
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                        .IsLikeDirectory();
                 }
             }
 
@@ -488,7 +472,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+                sequenceInfo->Description, sequenceAlter, *typeRegistry, AppData()->FeatureFlags.GetEnableTablePgTypes(), errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
@@ -524,6 +508,7 @@ public:
 
         sequencePath->PathState = TPathElement::EPathState::EPathStateAlter;
         sequencePath->LastTxId = OperationId.GetTxId();
+        context.SS->PersistSequenceAlter(db, dstPath->PathId, *alterData);
         context.SS->PersistLastTxId(db, sequencePath);
         context.SS->PersistTxState(db, OperationId);
 
@@ -531,16 +516,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterSequence");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterSequence AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSequence AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -560,3 +545,5 @@ ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState stat
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

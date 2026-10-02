@@ -1,0 +1,30 @@
+PY3TEST()
+FORK_SUBTESTS()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
+
+TEST_SRCS(
+    test_quota_exhaustion.py
+)
+
+REQUIREMENTS(cpu:4)
+
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+DEPENDS(
+    ydb/apps/ydb
+)
+
+PEERDIR(
+ydb/tests/library
+ydb/tests/library/test_meta
+)
+
+END()

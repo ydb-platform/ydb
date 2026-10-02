@@ -29,7 +29,6 @@ message TIndexChunk {
 message TPortionInfo {
     optional uint64 PathId = 1;
     optional uint64 PortionId = 2;
-    optional NKikimrColumnShardProto.TSnapshot MinSnapshotDeprecated = 3;
     optional NKikimrColumnShardProto.TSnapshot RemoveSnapshot = 4;
     optional NKikimrTxColumnShard.TIndexPortionMeta Meta = 5;
     repeated TColumnRecord Records = 6;

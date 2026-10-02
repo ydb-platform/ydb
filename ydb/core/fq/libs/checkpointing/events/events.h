@@ -1,10 +1,15 @@
 #pragma once
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
+
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/yql/dq/proto/dq_state_load_plan.pb.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#include <util/generic/hash.h>
 
 namespace NFq {
 
@@ -15,7 +20,9 @@ struct TEvCheckpointCoordinator {
         EvCoordinatorRegistered,
         EvZeroCheckpointDone,
         EvRunGraph,
-
+        EvReadyState,
+        EvRaiseTransientIssues,
+        EvPrepareStateLoadPlanResult,
         EvEnd,
     };
 
@@ -24,6 +31,11 @@ struct TEvCheckpointCoordinator {
     // Events.
 
     struct TEvScheduleCheckpointing : NActors::TEventLocal<TEvScheduleCheckpointing, EvScheduleCheckpointing> {
+        explicit TEvScheduleCheckpointing(const bool waitStatistics)
+            : WaitStatistics(waitStatistics)
+        {}
+
+        const bool WaitStatistics = false;
     };
 
     struct TEvCoordinatorRegistered : NActors::TEventLocal<TEvCoordinatorRegistered, EvCoordinatorRegistered> {
@@ -36,6 +48,41 @@ struct TEvCheckpointCoordinator {
 
     // When run actor saved restore info after zero checkpoint, it sends this event to checkpoint coordinator.
     struct TEvRunGraph : public NActors::TEventLocal<TEvRunGraph, EvRunGraph> {
+    };
+
+    struct TEvReadyState : public NActors::TEventLocal<TEvReadyState, EvReadyState> {
+        struct TTask {
+            ui64 Id = 0;
+            bool IsCheckpointingEnabled = false;
+            bool IsIngress = false;
+            bool IsEgress = false;
+            bool HasState = false;
+            NActors::TActorId ActorId;
+        };
+        std::vector<TTask> Tasks;
+    };
+
+    struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, EvRaiseTransientIssues> {
+        TEvRaiseTransientIssues() = default;
+
+        explicit TEvRaiseTransientIssues(NYql::TIssues issues)
+            : TransientIssues(std::move(issues))
+        {
+        }
+
+        NYql::TIssues TransientIssues;
+    };
+
+    struct TEvPrepareStateLoadPlanResult : public NActors::TEventLocal<TEvPrepareStateLoadPlanResult, EvPrepareStateLoadPlanResult> {
+        TEvPrepareStateLoadPlanResult(bool result, THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> plan, NYql::TIssues issues)
+            : Result(result)
+            , Plan(std::move(plan))
+            , Issues(std::move(issues))
+        {}
+
+        const bool Result = true;
+        const THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> Plan;
+        NYql::TIssues Issues;
     };
 };
 

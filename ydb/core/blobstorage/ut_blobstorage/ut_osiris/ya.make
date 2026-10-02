@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     osiris.cpp

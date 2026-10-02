@@ -4,6 +4,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/iam
+    ydb/public/sdk/cpp/src/client/iam_private
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
@@ -12,12 +14,17 @@ PEERDIR(
 )
 
 SRCS(
+    topic_message.cpp
     ydb_proxy.cpp
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    local_proxy
+)
 
 RECURSE_FOR_TESTS(
     ut

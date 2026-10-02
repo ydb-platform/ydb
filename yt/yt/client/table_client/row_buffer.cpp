@@ -11,10 +11,8 @@ namespace NYT::NTableClient {
 TRowBuffer::TRowBuffer(
     TRefCountedTypeCookie tagCookie,
     IMemoryChunkProviderPtr chunkProvider,
-    size_t startChunkSize,
-    IMemoryUsageTrackerPtr tracker)
-    : MemoryTracker_(std::move(tracker))
-    , Pool_(
+    size_t startChunkSize)
+    : Pool_(
         tagCookie,
         std::move(chunkProvider),
         startChunkSize)
@@ -28,7 +26,6 @@ TChunkedMemoryPool* TRowBuffer::GetPool()
 TMutableUnversionedRow TRowBuffer::AllocateUnversioned(int valueCount)
 {
     auto result = TMutableUnversionedRow::Allocate(&Pool_, valueCount);
-    ValidateNoOverflow();
     return result;
 }
 
@@ -44,7 +41,6 @@ TMutableVersionedRow TRowBuffer::AllocateVersioned(
         valueCount,
         writeTimestampCount,
         deleteTimestampCount);
-    ValidateNoOverflow();
     return result;
 }
 
@@ -55,8 +51,6 @@ void TRowBuffer::CaptureValue(TUnversionedValue* value)
         memcpy(dst, value->Data.String, value->Length);
         value->Data.String = dst;
     }
-
-    ValidateNoOverflow();
 }
 
 TVersionedValue TRowBuffer::CaptureValue(const TVersionedValue& value)
@@ -106,8 +100,6 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
             CaptureValue(&capturedBegin[index]);
         }
     }
-
-    ValidateNoOverflow();
 
     return capturedRow;
 }
@@ -175,8 +167,6 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
         capturedRow[valueCount++] = *addend;
     }
 
-    ValidateNoOverflow();
-
     return capturedRow;
 }
 
@@ -200,8 +190,6 @@ TMutableVersionedRow TRowBuffer::CaptureRow(TVersionedRow row, bool captureValue
     if (captureValues) {
         CaptureValues(capturedRow);
     }
-
-    ValidateNoOverflow();
 
     return capturedRow;
 }
@@ -310,15 +298,12 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         }
     }
 
-    ValidateNoOverflow();
-
     return capturedRow;
 }
 
 void TRowBuffer::Absorb(TRowBuffer&& other)
 {
     Pool_.Absorb(std::move(other.Pool_));
-    ValidateNoOverflow();
 }
 
 i64 TRowBuffer::GetSize() const
@@ -333,31 +318,12 @@ i64 TRowBuffer::GetCapacity() const
 
 void TRowBuffer::Clear()
 {
-    MemoryGuard_.reset();
     Pool_.Clear();
 }
 
 void TRowBuffer::Purge()
 {
-    MemoryGuard_.reset();
     Pool_.Purge();
-}
-
-void TRowBuffer::ValidateNoOverflow()
-{
-    if (!MemoryTracker_) {
-        return;
-    }
-
-    auto capacity = Pool_.GetCapacity();
-
-    if (!MemoryGuard_) {
-        MemoryGuard_ = TMemoryUsageTrackerGuard::TryAcquire(MemoryTracker_, capacity)
-            .ValueOrThrow();
-    } else {
-        MemoryGuard_->TrySetSize(capacity)
-            .ThrowOnError();
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -11,6 +11,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -59,8 +61,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
-        LOG_D("TExport::TTxCancel, cancelling manually"
-            << ", info: " << exportInfo->ToString()
+        YDB_LOG_DEBUG("TExport::TTxCancel, cancelling manually",
+            {"info", exportInfo->ToString()},
         );
 
         exportInfo->Issue = "Cancelled manually";
@@ -78,9 +80,9 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                     continue;
                 }
 
-                exportInfo->State = TExportInfo::EState::Cancellation;
                 if (item.WaitTxId != InvalidTxId) {
-                    Send(Self->SelfId(), CancelPropose(exportInfo, item.WaitTxId), 0, exportInfo->Id);
+                    exportInfo->State = TExportInfo::EState::Cancellation;
+                    Send(Self->SelfId(), CancelPropose(*exportInfo, item.WaitTxId), 0, exportInfo->Id);
                 }
             }
         }
@@ -90,7 +92,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistExportState(db, exportInfo);
+        Self->PersistExportState(db, *exportInfo);
+        Self->EraseEncryptionKey(db, *exportInfo);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         SendNotificationsIfFinished(exportInfo);
@@ -108,11 +111,18 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
+    const ui64 ExportId;
+    const TTxId TxId;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf* self, ui64 exportId, TTxId txId)
         : TXxport::TTxBase(self)
-        , CancelResult(ev)
+        , ExportId(exportId)
+        , TxId(txId)
+    {
+    }
+
+    explicit TTxCancelAck(TSelf* self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+        : TTxCancelAck(self, ev->Cookie, TTxId(ev->Get()->Record.GetTargetTxId()))
     {
     }
 
@@ -121,14 +131,11 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
-        const ui64 id = CancelResult->Cookie;
-        const auto backupTxId = TTxId(CancelResult->Get()->Record.GetTargetTxId());
-
-        if (!Self->Exports.contains(id)) {
+        if (!Self->Exports.contains(ExportId)) {
             return true;
         }
 
-        TExportInfo::TPtr exportInfo = Self->Exports.at(id);
+        TExportInfo::TPtr exportInfo = Self->Exports.at(ExportId);
 
         if (exportInfo->State != TExportInfo::EState::Cancellation) {
             return true;
@@ -150,7 +157,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 ++cancellableItems;
             }
 
-            if (item.WaitTxId == backupTxId) {
+            if (item.WaitTxId == TxId) {
                 found = true;
 
                 item.State = TExportInfo::EState::Cancelled;
@@ -166,15 +173,16 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             return true;
         }
 
-        Self->TxIdToExport.erase(backupTxId);
+        Self->TxIdToExport.erase(TxId);
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistExportItemState(db, exportInfo, itemIdx);
+        Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
         if (cancelledItems == cancellableItems) {
             exportInfo->State = TExportInfo::EState::Cancelled;
             exportInfo->EndTime = TAppData::TimeProvider->Now();
-            Self->PersistExportState(db, exportInfo);
+            Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
         }
 
         SendNotificationsIfFinished(exportInfo);
@@ -201,3 +209,5 @@ ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxR
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

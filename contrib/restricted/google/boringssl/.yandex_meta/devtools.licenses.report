@@ -1,0 +1,898 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           0e8699c5f5ea602534a6558430df2b8d
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        crypto/aes/aes.cc [3:13]
+        crypto/asn1/a_bitstr.cc [3:13]
+        crypto/asn1/a_bool.cc [3:13]
+        crypto/asn1/a_d2i_fp.cc [3:13]
+        crypto/asn1/a_dup.cc [3:13]
+        crypto/asn1/a_gentm.cc [3:13]
+        crypto/asn1/a_i2d_fp.cc [3:13]
+        crypto/asn1/a_int.cc [3:13]
+        crypto/asn1/a_mbstr.cc [3:13]
+        crypto/asn1/a_object.cc [3:13]
+        crypto/asn1/a_octet.cc [3:13]
+        crypto/asn1/a_strex.cc [3:13]
+        crypto/asn1/a_strnid.cc [3:13]
+        crypto/asn1/a_time.cc [3:13]
+        crypto/asn1/a_type.cc [3:13]
+        crypto/asn1/a_utctm.cc [3:13]
+        crypto/asn1/asn1_lib.cc [3:13]
+        crypto/asn1/asn1_par.cc [3:13]
+        crypto/asn1/asn_pack.cc [3:13]
+        crypto/asn1/f_int.cc [3:13]
+        crypto/asn1/f_string.cc [3:13]
+        crypto/asn1/internal.h [3:13]
+        crypto/asn1/posix_time.cc [3:13]
+        crypto/asn1/tasn_dec.cc [3:13]
+        crypto/asn1/tasn_enc.cc [3:13]
+        crypto/asn1/tasn_fre.cc [3:13]
+        crypto/asn1/tasn_new.cc [3:13]
+        crypto/asn1/tasn_typ.cc [3:13]
+        crypto/asn1/tasn_utl.cc [3:13]
+        crypto/base64/base64.cc [3:13]
+        crypto/bcm_support.h [3:13]
+        crypto/bio/bio.cc [3:13]
+        crypto/bio/bio_mem.cc [3:13]
+        crypto/bio/connect.cc [3:13]
+        crypto/bio/errno.cc [3:13]
+        crypto/bio/fd.cc [3:13]
+        crypto/bio/file.cc [3:13]
+        crypto/bio/hexdump.cc [3:13]
+        crypto/bio/internal.h [3:13]
+        crypto/bio/pair.cc [3:13]
+        crypto/bio/printf.cc [3:13]
+        crypto/bio/socket.cc [3:13]
+        crypto/bio/socket_helper.cc [3:13]
+        crypto/blake2/blake2.cc [3:13]
+        crypto/bn/bn_asn1.cc [3:13]
+        crypto/bn/convert.cc [3:13]
+        crypto/bn/div.cc [3:13]
+        crypto/bn/exponentiation.cc [3:13]
+        crypto/bn/sqrt.cc [3:13]
+        crypto/buf/buf.cc [3:13]
+        crypto/bytestring/asn1_compat.cc [3:13]
+        crypto/bytestring/ber.cc [3:13]
+        crypto/bytestring/cbb.cc [3:13]
+        crypto/bytestring/cbs.cc [3:13]
+        crypto/bytestring/internal.h [3:13]
+        crypto/bytestring/unicode.cc [3:13]
+        crypto/chacha/chacha.cc [3:13]
+        crypto/chacha/internal.h [3:13]
+        crypto/cipher/derive_key.cc [3:13]
+        crypto/cipher/e_aesctrhmac.cc [3:13]
+        crypto/cipher/e_aeseax.cc [3:13]
+        crypto/cipher/e_aesgcmsiv.cc [3:13]
+        crypto/cipher/e_chacha20poly1305.cc [3:13]
+        crypto/cipher/e_des.cc [3:13]
+        crypto/cipher/e_null.cc [3:13]
+        crypto/cipher/e_rc2.cc [3:13]
+        crypto/cipher/e_rc4.cc [3:13]
+        crypto/cipher/e_tls.cc [3:13]
+        crypto/cipher/get_cipher.cc [3:13]
+        crypto/cipher/internal.h [3:13]
+        crypto/cipher/tls_cbc.cc [3:13]
+        crypto/cms/cms.cc [3:13]
+        crypto/conf/conf.cc [3:13]
+        crypto/conf/internal.h [3:13]
+        crypto/cpu_aarch64_apple.cc [3:13]
+        crypto/cpu_aarch64_fuchsia.cc [3:13]
+        crypto/cpu_aarch64_linux.cc [3:13]
+        crypto/cpu_aarch64_openbsd.cc [3:13]
+        crypto/cpu_aarch64_sysreg.cc [3:13]
+        crypto/cpu_aarch64_win.cc [4:14]
+        crypto/cpu_arm_freebsd.cc [3:13]
+        crypto/cpu_arm_linux.cc [3:13]
+        crypto/cpu_arm_linux.h [3:13]
+        crypto/cpu_intel.cc [3:13]
+        crypto/crypto.cc [3:13]
+        crypto/curve25519/curve25519.cc [3:13]
+        crypto/curve25519/curve25519_64_adx.cc [3:13]
+        crypto/curve25519/curve25519_tables.h [3:13]
+        crypto/curve25519/internal.h [3:13]
+        crypto/curve25519/spake25519.cc [3:13]
+        crypto/des/des.cc [3:13]
+        crypto/des/internal.h [3:13]
+        crypto/dh/dh_asn1.cc [3:13]
+        crypto/dh/params.cc [3:13]
+        crypto/digest/digest_extra.cc [3:13]
+        crypto/dsa/dsa.cc [3:13]
+        crypto/dsa/dsa_asn1.cc [3:13]
+        crypto/dsa/internal.h [3:13]
+        crypto/ec/ec_asn1.cc [3:13]
+        crypto/ec/ec_derive.cc [3:13]
+        crypto/ec/hash_to_curve.cc [3:13]
+        crypto/ec/internal.h [3:13]
+        crypto/ecdh/ecdh.cc [4:14]
+        crypto/ecdsa/ecdsa_asn1.cc [3:13]
+        crypto/ecdsa/ecdsa_p1363.cc [3:13]
+        crypto/engine/engine.cc [3:13]
+        crypto/err/err.cc [3:13]
+        crypto/err/internal.h [3:13]
+        crypto/evp/evp.cc [3:13]
+        crypto/evp/evp_asn1.cc [3:13]
+        crypto/evp/evp_ctx.cc [3:13]
+        crypto/evp/evp_kem.cc [3:13]
+        crypto/evp/internal.h [3:13]
+        crypto/evp/p_dh.cc [3:13]
+        crypto/evp/p_dsa.cc [3:13]
+        crypto/evp/p_ec.cc [3:13]
+        crypto/evp/p_ed25519.cc [3:13]
+        crypto/evp/p_hkdf.cc [3:13]
+        crypto/evp/p_mldsa.cc [3:13]
+        crypto/evp/p_mlkem.cc [3:13]
+        crypto/evp/p_rsa.cc [3:13]
+        crypto/evp/p_x25519.cc [3:13]
+        crypto/evp/pbkdf.cc [3:13]
+        crypto/evp/print.cc [3:13]
+        crypto/evp/scrypt.cc [3:13]
+        crypto/evp/sign.cc [3:13]
+        crypto/ex_data.cc [3:13]
+        crypto/fipsmodule/aes/aes.cc.inc [3:13]
+        crypto/fipsmodule/aes/aes_nohw.cc.inc [3:13]
+        crypto/fipsmodule/aes/cbc.cc.inc [3:13]
+        crypto/fipsmodule/aes/cfb.cc.inc [3:13]
+        crypto/fipsmodule/aes/ctr.cc.inc [3:13]
+        crypto/fipsmodule/aes/gcm.cc.inc [3:13]
+        crypto/fipsmodule/aes/gcm_nohw.cc.inc [3:13]
+        crypto/fipsmodule/aes/internal.h [3:13]
+        crypto/fipsmodule/aes/key_wrap.cc.inc [3:13]
+        crypto/fipsmodule/aes/mode_wrappers.cc.inc [3:13]
+        crypto/fipsmodule/aes/ofb.cc.inc [3:13]
+        crypto/fipsmodule/bcm.cc [3:13]
+        crypto/fipsmodule/bcm_interface.h [3:13]
+        crypto/fipsmodule/bn/add.cc.inc [3:13]
+        crypto/fipsmodule/bn/asm/x86_64-gcc.cc.inc [3:13]
+        crypto/fipsmodule/bn/bn.cc.inc [3:13]
+        crypto/fipsmodule/bn/bytes.cc.inc [3:13]
+        crypto/fipsmodule/bn/cmp.cc.inc [3:13]
+        crypto/fipsmodule/bn/ctx.cc.inc [3:13]
+        crypto/fipsmodule/bn/div.cc.inc [3:13]
+        crypto/fipsmodule/bn/div_extra.cc.inc [3:13]
+        crypto/fipsmodule/bn/exponentiation.cc.inc [3:13]
+        crypto/fipsmodule/bn/gcd.cc.inc [3:13]
+        crypto/fipsmodule/bn/gcd_extra.cc.inc [3:13]
+        crypto/fipsmodule/bn/generic.cc.inc [3:13]
+        crypto/fipsmodule/bn/internal.h [4:14]
+        crypto/fipsmodule/bn/jacobi.cc.inc [3:13]
+        crypto/fipsmodule/bn/montgomery.cc.inc [3:13]
+        crypto/fipsmodule/bn/montgomery_inv.cc.inc [3:13]
+        crypto/fipsmodule/bn/mul.cc.inc [3:13]
+        crypto/fipsmodule/bn/prime.cc.inc [3:13]
+        crypto/fipsmodule/bn/random.cc.inc [3:13]
+        crypto/fipsmodule/bn/rsaz_exp.cc.inc [4:14]
+        crypto/fipsmodule/bn/rsaz_exp.h [4:14]
+        crypto/fipsmodule/bn/shift.cc.inc [3:13]
+        crypto/fipsmodule/bn/sqrt.cc.inc [3:13]
+        crypto/fipsmodule/cipher/aead.cc.inc [3:13]
+        crypto/fipsmodule/cipher/cipher.cc.inc [3:13]
+        crypto/fipsmodule/cipher/e_aes.cc.inc [3:13]
+        crypto/fipsmodule/cipher/e_aesccm.cc.inc [3:13]
+        crypto/fipsmodule/cipher/internal.h [3:13]
+        crypto/fipsmodule/cmac/cmac.cc.inc [3:13]
+        crypto/fipsmodule/delocate.h [3:13]
+        crypto/fipsmodule/dh/check.cc.inc [3:13]
+        crypto/fipsmodule/dh/dh.cc.inc [3:13]
+        crypto/fipsmodule/dh/internal.h [3:13]
+        crypto/fipsmodule/digest/digest.cc.inc [3:13]
+        crypto/fipsmodule/digest/digests.cc.inc [3:13]
+        crypto/fipsmodule/digest/internal.h [3:13]
+        crypto/fipsmodule/digest/md32_common.h [3:13]
+        crypto/fipsmodule/digestsign/digestsign.cc.inc [3:13]
+        crypto/fipsmodule/ec/builtin_curves.h [3:13]
+        crypto/fipsmodule/ec/ec.cc.inc [4:14]
+        crypto/fipsmodule/ec/ec_key.cc.inc [4:14]
+        crypto/fipsmodule/ec/ec_montgomery.cc.inc [4:14]
+        crypto/fipsmodule/ec/felem.cc.inc [3:13]
+        crypto/fipsmodule/ec/internal.h [4:14]
+        crypto/fipsmodule/ec/oct.cc.inc [4:14]
+        crypto/fipsmodule/ec/p224-64.cc.inc [3:13]
+        crypto/fipsmodule/ec/p256-nistz-table.h [4:14]
+        crypto/fipsmodule/ec/p256-nistz.cc.inc [4:14]
+        crypto/fipsmodule/ec/p256-nistz.h [4:14]
+        crypto/fipsmodule/ec/p256.cc.inc [3:13]
+        crypto/fipsmodule/ec/p256_table.h [3:13]
+        crypto/fipsmodule/ec/scalar.cc.inc [3:13]
+        crypto/fipsmodule/ec/simple.cc.inc [4:14]
+        crypto/fipsmodule/ec/simple_mul.cc.inc [3:13]
+        crypto/fipsmodule/ec/util.cc.inc [3:13]
+        crypto/fipsmodule/ec/wnaf.cc.inc [4:14]
+        crypto/fipsmodule/ecdh/ecdh.cc.inc [4:14]
+        crypto/fipsmodule/ecdsa/ecdsa.cc.inc [3:13]
+        crypto/fipsmodule/ecdsa/internal.h [3:13]
+        crypto/fipsmodule/entropy/internal.h [3:13]
+        crypto/fipsmodule/entropy/jitter.cc.inc [3:13]
+        crypto/fipsmodule/entropy/sha512.cc.inc [3:13]
+        crypto/fipsmodule/fips_shared_support.cc [3:13]
+        crypto/fipsmodule/hkdf/hkdf.cc.inc [3:13]
+        crypto/fipsmodule/hmac/hmac.cc.inc [3:13]
+        crypto/fipsmodule/keccak/internal.h [3:13]
+        crypto/fipsmodule/keccak/keccak.cc.inc [3:13]
+        crypto/fipsmodule/mldsa/mldsa.cc.inc [3:13]
+        crypto/fipsmodule/mlkem/mlkem.cc.inc [3:13]
+        crypto/fipsmodule/rand/ctrdrbg.cc.inc [3:13]
+        crypto/fipsmodule/rand/internal.h [3:13]
+        crypto/fipsmodule/rand/rand.cc.inc [3:13]
+        crypto/fipsmodule/rsa/internal.h [3:13]
+        crypto/fipsmodule/rsa/padding.cc.inc [3:13]
+        crypto/fipsmodule/rsa/rsa.cc.inc [3:13]
+        crypto/fipsmodule/rsa/rsa_impl.cc.inc [3:13]
+        crypto/fipsmodule/self_check/fips.cc.inc [3:13]
+        crypto/fipsmodule/self_check/self_check.cc.inc [3:13]
+        crypto/fipsmodule/service_indicator/internal.h [3:13]
+        crypto/fipsmodule/service_indicator/service_indicator.cc.inc [3:13]
+        crypto/fipsmodule/sha/internal.h [3:13]
+        crypto/fipsmodule/sha/sha1.cc.inc [3:13]
+        crypto/fipsmodule/sha/sha256.cc.inc [3:13]
+        crypto/fipsmodule/sha/sha512.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/address.h [3:13]
+        crypto/fipsmodule/slhdsa/fors.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/fors.h [3:13]
+        crypto/fipsmodule/slhdsa/merkle.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/merkle.h [3:13]
+        crypto/fipsmodule/slhdsa/params.h [3:13]
+        crypto/fipsmodule/slhdsa/slhdsa.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/thash.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/thash.h [3:13]
+        crypto/fipsmodule/slhdsa/wots.cc.inc [3:13]
+        crypto/fipsmodule/slhdsa/wots.h [3:13]
+        crypto/fipsmodule/tls/internal.h [3:13]
+        crypto/fipsmodule/tls/kdf.cc.inc [3:13]
+        crypto/fuzzer_mode.cc [3:13]
+        crypto/hpke/hpke.cc [3:13]
+        crypto/hrss/asm/poly_rq_mul.S [3:13]
+        crypto/hrss/hrss.cc [3:13]
+        crypto/hrss/internal.h [3:13]
+        crypto/internal.h [3:13]
+        crypto/kyber/internal.h [3:13]
+        crypto/kyber/kyber.cc [3:13]
+        crypto/lhash/internal.h [3:13]
+        crypto/lhash/lhash.cc [3:13]
+        crypto/md4/md4.cc [3:13]
+        crypto/md5/internal.h [3:13]
+        crypto/md5/md5.cc [3:13]
+        crypto/mem.cc [3:13]
+        crypto/mem_internal.h [3:13]
+        crypto/mldsa/mldsa.cc [3:13]
+        crypto/mlkem/mlkem.cc [3:13]
+        crypto/obj/obj.cc [3:13]
+        crypto/obj/obj_dat.h [3:13]
+        crypto/obj/obj_xref.cc [3:13]
+        crypto/params_internal.h [3:13]
+        crypto/pem/internal.h [3:13]
+        crypto/pem/pem_all.cc [3:13]
+        crypto/pem/pem_info.cc [3:13]
+        crypto/pem/pem_lib.cc [3:13]
+        crypto/pem/pem_oth.cc [3:13]
+        crypto/pem/pem_pk8.cc [3:13]
+        crypto/pem/pem_pkey.cc [3:13]
+        crypto/pem/pem_x509.cc [3:13]
+        crypto/pem/pem_xaux.cc [3:13]
+        crypto/pkcs7/internal.h [3:13]
+        crypto/pkcs7/pkcs7.cc [3:13]
+        crypto/pkcs7/pkcs7_x509.cc [3:13]
+        crypto/pkcs8/internal.h [3:13]
+        crypto/pkcs8/p5_pbev2.cc [3:13]
+        crypto/pkcs8/pkcs8.cc [3:13]
+        crypto/pkcs8/pkcs8_x509.cc [3:13]
+        crypto/poly1305/internal.h [3:13]
+        crypto/poly1305/poly1305.cc [3:13]
+        crypto/poly1305/poly1305_arm.cc [3:13]
+        crypto/poly1305/poly1305_vec.cc [3:13]
+        crypto/pool/internal.h [3:13]
+        crypto/pool/pool.cc [3:13]
+        crypto/rand/deterministic.cc [3:13]
+        crypto/rand/fork_detect.cc [3:13]
+        crypto/rand/forkunsafe.cc [3:13]
+        crypto/rand/getentropy.cc [3:13]
+        crypto/rand/internal.h [3:13]
+        crypto/rand/ios.cc [3:13]
+        crypto/rand/passive.cc [3:13]
+        crypto/rand/rand.cc [3:13]
+        crypto/rand/trusty.cc [3:13]
+        crypto/rand/urandom.cc [3:13]
+        crypto/rand/windows.cc [3:13]
+        crypto/rc4/rc4.cc [3:13]
+        crypto/refcount.cc [3:13]
+        crypto/rsa/internal.h [3:13]
+        crypto/rsa/rsa_asn1.cc [3:13]
+        crypto/rsa/rsa_crypt.cc [3:13]
+        crypto/rsa/rsa_extra.cc [3:13]
+        crypto/rsa/rsa_print.cc [3:13]
+        crypto/sha/sha1.cc [3:13]
+        crypto/sha/sha256.cc [3:13]
+        crypto/sha/sha512.cc [3:13]
+        crypto/siphash/siphash.cc [3:13]
+        crypto/slhdsa/slhdsa.cc [3:13]
+        crypto/spake2plus/internal.h [3:13]
+        crypto/spake2plus/spake2plus.cc [3:13]
+        crypto/stack/stack.cc [3:13]
+        crypto/thread.cc [3:13]
+        crypto/thread_none.cc [3:13]
+        crypto/thread_pthread.cc [3:13]
+        crypto/thread_win.cc [3:13]
+        crypto/trust_token/internal.h [3:13]
+        crypto/trust_token/pmbtoken.cc [3:13]
+        crypto/trust_token/trust_token.cc [3:13]
+        crypto/trust_token/voprf.cc [3:13]
+        crypto/x509/a_digest.cc [3:13]
+        crypto/x509/a_sign.cc [3:13]
+        crypto/x509/a_verify.cc [3:13]
+        crypto/x509/algorithm.cc [3:13]
+        crypto/x509/asn1_gen.cc [3:13]
+        crypto/x509/by_dir.cc [3:13]
+        crypto/x509/by_file.cc [3:13]
+        crypto/x509/i2d_pr.cc [3:13]
+        crypto/x509/internal.h [3:13]
+        crypto/x509/name_print.cc [3:13]
+        crypto/x509/policy.cc [3:13]
+        crypto/x509/rsa_pss.cc [3:13]
+        crypto/x509/t_crl.cc [3:13]
+        crypto/x509/t_req.cc [3:13]
+        crypto/x509/t_x509.cc [3:13]
+        crypto/x509/t_x509a.cc [3:13]
+        crypto/x509/v3_akey.cc [3:13]
+        crypto/x509/v3_akeya.cc [3:13]
+        crypto/x509/v3_alt.cc [3:13]
+        crypto/x509/v3_bcons.cc [3:13]
+        crypto/x509/v3_bitst.cc [3:13]
+        crypto/x509/v3_conf.cc [3:13]
+        crypto/x509/v3_cpols.cc [3:13]
+        crypto/x509/v3_crld.cc [3:13]
+        crypto/x509/v3_enum.cc [3:13]
+        crypto/x509/v3_extku.cc [3:13]
+        crypto/x509/v3_genn.cc [3:13]
+        crypto/x509/v3_ia5.cc [3:13]
+        crypto/x509/v3_info.cc [3:13]
+        crypto/x509/v3_int.cc [3:13]
+        crypto/x509/v3_lib.cc [3:13]
+        crypto/x509/v3_ncons.cc [3:13]
+        crypto/x509/v3_ocsp.cc [3:13]
+        crypto/x509/v3_pcons.cc [3:13]
+        crypto/x509/v3_pmaps.cc [3:13]
+        crypto/x509/v3_prn.cc [3:13]
+        crypto/x509/v3_purp.cc [3:13]
+        crypto/x509/v3_skey.cc [3:13]
+        crypto/x509/v3_utl.cc [3:13]
+        crypto/x509/x509.cc [3:13]
+        crypto/x509/x509_att.cc [3:13]
+        crypto/x509/x509_cmp.cc [3:13]
+        crypto/x509/x509_d2.cc [3:13]
+        crypto/x509/x509_def.cc [3:13]
+        crypto/x509/x509_ext.cc [3:13]
+        crypto/x509/x509_lu.cc [3:13]
+        crypto/x509/x509_obj.cc [3:13]
+        crypto/x509/x509_req.cc [3:13]
+        crypto/x509/x509_set.cc [3:13]
+        crypto/x509/x509_trs.cc [3:13]
+        crypto/x509/x509_txt.cc [3:13]
+        crypto/x509/x509_v3.cc [3:13]
+        crypto/x509/x509_vfy.cc [3:13]
+        crypto/x509/x509_vpm.cc [3:13]
+        crypto/x509/x509cset.cc [3:13]
+        crypto/x509/x509name.cc [3:13]
+        crypto/x509/x509rset.cc [3:13]
+        crypto/x509/x509spki.cc [3:13]
+        crypto/x509/x_algor.cc [3:13]
+        crypto/x509/x_all.cc [3:13]
+        crypto/x509/x_attrib.cc [3:13]
+        crypto/x509/x_crl.cc [3:13]
+        crypto/x509/x_exten.cc [3:13]
+        crypto/x509/x_name.cc [3:13]
+        crypto/x509/x_pubkey.cc [3:13]
+        crypto/x509/x_req.cc [3:13]
+        crypto/x509/x_sig.cc [3:13]
+        crypto/x509/x_spki.cc [3:13]
+        crypto/x509/x_x509.cc [3:13]
+        crypto/x509/x_x509a.cc [3:13]
+        crypto/xwing/xwing.cc [3:13]
+        decrepit/bio/base64_bio.cc [3:13]
+        decrepit/blowfish/blowfish.cc [3:13]
+        decrepit/cast/cast.cc [3:13]
+        decrepit/cast/cast_tables.cc [3:13]
+        decrepit/cast/internal.h [3:13]
+        decrepit/cfb/cfb.cc [3:13]
+        decrepit/des/cfb64ede.cc [3:13]
+        decrepit/dh/dh_decrepit.cc [3:13]
+        decrepit/dsa/dsa_decrepit.cc [3:13]
+        decrepit/evp/dss1.cc [3:13]
+        decrepit/evp/evp_do_all.cc [3:13]
+        decrepit/macros.h [3:13]
+        decrepit/obj/obj_decrepit.cc [3:13]
+        decrepit/rc4/rc4_decrepit.cc [3:13]
+        decrepit/ripemd/ripemd.cc [3:13]
+        decrepit/rsa/rsa_decrepit.cc [3:13]
+        decrepit/ssl/ssl_decrepit.cc [3:13]
+        decrepit/x509/x509_decrepit.cc [3:13]
+        decrepit/xts/xts.cc [3:13]
+        gen/bcm/sha256-armv8-apple.S [9:19]
+        gen/bcm/sha256-armv8-linux.S [9:19]
+        gen/bcm/sha256-armv8-win.S [9:19]
+        gen/bcm/sha512-armv8-apple.S [9:19]
+        gen/bcm/sha512-armv8-linux.S [9:19]
+        gen/bcm/sha512-armv8-win.S [9:19]
+        gen/crypto/err_data.cc [3:13]
+        include/openssl/aead.h [3:13]
+        include/openssl/aes.h [3:13]
+        include/openssl/arm_arch.h [3:13]
+        include/openssl/asm_base.h [3:13]
+        include/openssl/asn1.h [3:13]
+        include/openssl/asn1_mac.h [3:13]
+        include/openssl/asn1t.h [3:13]
+        include/openssl/base.h [3:13]
+        include/openssl/base64.h [3:13]
+        include/openssl/bio.h [3:13]
+        include/openssl/blake2.h [3:13]
+        include/openssl/blowfish.h [3:13]
+        include/openssl/bn.h [4:14]
+        include/openssl/buf.h [3:13]
+        include/openssl/buffer.h [3:13]
+        include/openssl/bytestring.h [3:13]
+        include/openssl/cast.h [3:13]
+        include/openssl/chacha.h [3:13]
+        include/openssl/cipher.h [3:13]
+        include/openssl/cmac.h [3:13]
+        include/openssl/cms.h [3:13]
+        include/openssl/conf.h [3:13]
+        include/openssl/cpu.h [3:13]
+        include/openssl/crypto.h [3:13]
+        include/openssl/ctrdrbg.h [3:13]
+        include/openssl/curve25519.h [3:13]
+        include/openssl/des.h [3:13]
+        include/openssl/dh.h [3:13]
+        include/openssl/digest.h [3:13]
+        include/openssl/dsa.h [3:13]
+        include/openssl/dtls1.h [3:13]
+        include/openssl/e_os2.h [3:13]
+        include/openssl/ec.h [4:14]
+        include/openssl/ec_key.h [4:14]
+        include/openssl/ecdh.h [4:14]
+        include/openssl/ecdsa.h [3:13]
+        include/openssl/engine.h [3:13]
+        include/openssl/err.h [3:13]
+        include/openssl/evp.h [3:13]
+        include/openssl/evp_errors.h [3:13]
+        include/openssl/ex_data.h [3:13]
+        include/openssl/hkdf.h [3:13]
+        include/openssl/hmac.h [3:13]
+        include/openssl/hpke.h [3:13]
+        include/openssl/hrss.h [3:13]
+        include/openssl/is_boringssl.h [3:13]
+        include/openssl/kdf.h [3:13]
+        include/openssl/lhash.h [3:13]
+        include/openssl/md4.h [3:13]
+        include/openssl/md5.h [3:13]
+        include/openssl/mem.h [3:13]
+        include/openssl/mldsa.h [3:13]
+        include/openssl/mlkem.h [3:13]
+        include/openssl/nid.h [3:13]
+        include/openssl/obj.h [3:13]
+        include/openssl/obj_mac.h [3:13]
+        include/openssl/objects.h [3:13]
+        include/openssl/opensslconf.h [3:13]
+        include/openssl/opensslv.h [3:13]
+        include/openssl/ossl_typ.h [3:13]
+        include/openssl/params.h [3:13]
+        include/openssl/pem.h [3:13]
+        include/openssl/pkcs12.h [3:13]
+        include/openssl/pkcs7.h [3:13]
+        include/openssl/pkcs8.h [3:13]
+        include/openssl/poly1305.h [3:13]
+        include/openssl/pool.h [3:13]
+        include/openssl/posix_time.h [3:13]
+        include/openssl/prefix_symbols.h [3:13]
+        include/openssl/prefix_symbols_internal_S.h [3:13]
+        include/openssl/prefix_symbols_internal_c.h [3:13]
+        include/openssl/rand.h [3:13]
+        include/openssl/rc4.h [3:13]
+        include/openssl/ripemd.h [3:13]
+        include/openssl/rsa.h [3:13]
+        include/openssl/safestack.h [3:13]
+        include/openssl/service_indicator.h [3:13]
+        include/openssl/sha.h [3:13]
+        include/openssl/sha2.h [3:13]
+        include/openssl/siphash.h [3:13]
+        include/openssl/slhdsa.h [3:13]
+        include/openssl/span.h [3:13]
+        include/openssl/srtp.h [3:13]
+        include/openssl/ssl.h [5:15]
+        include/openssl/ssl3.h [4:14]
+        include/openssl/stack.h [3:13]
+        include/openssl/target.h [3:13]
+        include/openssl/thread.h [3:13]
+        include/openssl/time.h [3:13]
+        include/openssl/tls1.h [5:15]
+        include/openssl/tls_prf.h [3:13]
+        include/openssl/trust_token.h [3:13]
+        include/openssl/type_check.h [3:13]
+        include/openssl/x509.h [4:14]
+        include/openssl/x509_vfy.h [3:13]
+        include/openssl/x509v3.h [3:13]
+        include/openssl/x509v3_errors.h [3:13]
+        include/openssl/xwing.h [3:13]
+        ssl/bio_ssl.cc [3:13]
+        ssl/d1_both.cc [3:13]
+        ssl/d1_lib.cc [3:13]
+        ssl/d1_pkt.cc [3:13]
+        ssl/d1_srtp.cc [5:15]
+        ssl/dtls_method.cc [3:13]
+        ssl/dtls_record.cc [3:13]
+        ssl/encrypted_client_hello.cc [3:13]
+        ssl/extensions.cc [3:13]
+        ssl/handoff.cc [3:13]
+        ssl/handshake.cc [4:14]
+        ssl/handshake_client.cc [5:15]
+        ssl/handshake_server.cc [5:15]
+        ssl/internal.h [5:15]
+        ssl/s3_both.cc [4:14]
+        ssl/s3_lib.cc [5:15]
+        ssl/s3_pkt.cc [3:13]
+        ssl/ssl_aead_ctx.cc [3:13]
+        ssl/ssl_asn1.cc [4:14]
+        ssl/ssl_buffer.cc [3:13]
+        ssl/ssl_cert.cc [4:14]
+        ssl/ssl_cipher.cc [5:15]
+        ssl/ssl_credential.cc [3:13]
+        ssl/ssl_file.cc [3:13]
+        ssl/ssl_key_share.cc [3:13]
+        ssl/ssl_lib.cc [5:15]
+        ssl/ssl_privkey.cc [3:13]
+        ssl/ssl_session.cc [4:14]
+        ssl/ssl_stat.cc [4:14]
+        ssl/ssl_transcript.cc [4:14]
+        ssl/ssl_versions.cc [3:13]
+        ssl/ssl_x509.cc [5:15]
+        ssl/t1_enc.cc [4:14]
+        ssl/tls13_both.cc [3:13]
+        ssl/tls13_client.cc [3:13]
+        ssl/tls13_enc.cc [3:13]
+        ssl/tls13_server.cc [3:13]
+        ssl/tls_method.cc [3:13]
+        ssl/tls_record.cc [3:13]
+
+KEEP     Apache-2.0           1fe1585473edc209b6c341b02b64321b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CONTRIBUTING.md [109:119]
+
+KEEP     LicenseRef-scancode-generic-cla 202c55093e2c797e9ded17a2f9c796d7
+BELONGS ya.make
+    License text:
+        [Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [5:5]
+
+KEEP     Apache-2.0           24942189bff3de2eae51e820729deaeb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 80.73
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        crypto/curve25519/asm/x25519-asm-arm.S [3:17]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     LicenseRef-scancode-proprietary-license 3185fc34c4175cd9f05768d140d532c6
+BELONGS ya.make
+    License text:
+        // |X509_STORE|'s verification parameters may not be modified concurrently with
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        include/openssl/x509.h [2779:2779]
+
+KEEP     Apache-2.0           34ef0c6d1296bad9c0b8ea4447611e19
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        PRESUBMIT.py [3:13]
+
+KEEP     OpenSSL              397172de5076dc6f38c97c746c1b413b
+BELONGS ya.make
+    License text:
+         * Rights for redistribution and usage in source and binary forms are
+         * granted according to the License. Warranty of any kind is disclaimed.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 95.65
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/fipsmodule/bn/asm/x86_64-gcc.cc.inc [20:21]
+
+KEEP     Public-Domain        4a076a0b48e13510f20b3b4ffbb362ab
+BELONGS ya.make
+    License text:
+         * SUPERCOP 20141124 (http://bench.cr.yp.to/supercop.html). That code is public
+         * domain licensed but the standard Apache 2.0 license is included above to keep
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/curve25519/asm/x25519-asm-arm.S [16:17]
+
+KEEP     Apache-2.0           5699acbc0e62a032af3faa912ea0bc40
+BELONGS ya.make
+    License text:
+        the Apache 2.0 appendix. Thus new files should begin with the following header:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CONTRIBUTING.md [105:105]
+
+KEEP     OpenSSL              5992da89445b71dedf4364238ccae562
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 93.10
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/fipsmodule/bn/asm/x86_64-gcc.cc.inc [17:21]
+
+KEEP     Apache-2.0           6bff05f3186e7bca05cec1b02591b112
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [9:19]
+        gen/bcm/sha256-armv4-linux.S [9:19]
+        gen/bcm/sha512-armv4-linux.S [9:19]
+
+KEEP     Apache-2.0           6daa5d0a3df49b5ad21479adec3c9229
+BELONGS ya.make
+    License text:
+        License: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        third_party/fiat/README.chromium [6:6]
+
+KEEP     BSD-3-Clause         81f1634e09063200aeea05033ac4ac7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [214:238]
+
+KEEP     Apache-2.0           8a986c6261e78a5ebd7aebc8eab8f2a9
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: third_party/fiat/LICENSE at line 3
+FILE_INCLUDE third_party/fiat/AUTHORS found in files: third_party/fiat/LICENSE at line 3
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 87.38
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        third_party/fiat/LICENSE [1:15]
+
+KEEP     Public-Domain        8f8b35e0882ff4913937ab5f61313bd4
+BELONGS ya.make
+    License text:
+        // This implementation was taken from the public domain, neon2 version in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_arm.cc [15:15]
+
+KEEP     MIT                  9638e94775d834f8bbe0fd7595cd01ab
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/METADATA at line 12
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/METADATA at line 12
+    License text:
+          local_modifications: "Files renamed to .h for BoringSSL integration. LICENSE file is LICENSE-MIT from upstream."
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/fiat/METADATA [12:12]
+
+KEEP     Apache-2.0           aaa1039f9047f119c3b63008b080dda8
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/README.md at line 6
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/README.md at line 6
+    License text:
+        library of arithmetic-implementation templates. These files are included under
+        the Apache 2.0 license. (See LICENSE file.)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        third_party/fiat/README.md [5:6]
+
+KEEP     LicenseRef-scancode-generic-cla af49df574096c1b6ab30c50438f3f7f7
+BELONGS ya.make
+    License text:
+        [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [142:142]
+
+KEEP     Apache-2.0           b0c3f933f79de155ff43c41eff229411
+BELONGS ya.make
+    License text:
+        The Apache License, Version 2.0 (Apache-2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        third_party/fiat/LICENSE [1:1]
+
+KEEP     Public-Domain        bed14e30b41cf62cb682e5353696d248
+BELONGS ya.make
+    License text:
+        // (Public Domain)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/asn1/posix_time.cc [87:87]
+        crypto/asn1/posix_time.cc [114:114]
+
+KEEP     Public-Domain        c07251d8d970afc5f43e4b497bcb6d4d
+BELONGS ya.make
+    License text:
+        // (https://github.com/floodyberry/poly1305-donna) and released as public
+        // domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305.cc [16:17]
+
+KEEP     Public-Domain        d9295d5ccad1629fc8818715feebbd6f
+BELONGS ya.make
+    License text:
+        \# This implementation was taken from the public domain, neon2 version in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_arm_asm.S [5:5]
+
+KEEP     Public-Domain        f34c423ba9f884c509d71da283c260b1
+BELONGS ya.make
+    License text:
+        // public domain. Other parts have been replaced to call into code generated by
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/curve25519/curve25519.cc [17:17]
+
+KEEP     Public-Domain        f47bcc398d958fff3e59c60458ba80db
+BELONGS ya.make
+    License text:
+        // Adapted from the public domain, estream code by D. Bernstein.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 81.43
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/chacha/chacha.cc [15:15]
+
+KEEP     Public-Domain        fb6dda5aef570b42b80d2894bb70f1c4
+BELONGS ya.make
+    License text:
+        // (https://github.com/floodyberry/poly1305-donna) and released as public
+        // domain. It implements SIMD vectorization based on the algorithm described in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_vec.cc [16:17]

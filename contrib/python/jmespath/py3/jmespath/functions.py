@@ -168,7 +168,7 @@ class Functions(metaclass=FunctionRegistry):
     @signature({'types': ['array-number']})
     def _func_avg(self, arg):
         if arg:
-            return sum(arg) / float(len(arg))
+            return sum(arg) / len(arg)
         else:
             return None
 

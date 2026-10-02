@@ -29,7 +29,7 @@ DEFINE_REFCOUNTED_TYPE(TSharedRefOutputStream)
 inline const TContentEncoding IdentityContentEncoding = "identity";
 const std::vector<TContentEncoding>& GetSupportedContentEncodings();
 bool IsContentEncodingSupported(const TContentEncoding& contentEncoding);
-TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientAcceptEncodingHeader);
+TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAcceptEncodingHeader);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,6 +40,14 @@ NConcurrency::IFlushableAsyncOutputStreamPtr CreateCompressingAdapter(
 NConcurrency::IAsyncInputStreamPtr CreateDecompressingAdapter(
     NConcurrency::IAsyncZeroCopyInputStreamPtr underlying,
     TContentEncoding contentEncoding,
+    IInvokerPtr compressionInvoker);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Decodes the request body per Content-Encoding and encodes the response body
+//! per Accept-Encoding, transparently to |underlying|.
+IHttpHandlerPtr CreateContentEncodingHttpHandler(
+    IHttpHandlerPtr underlying,
     IInvokerPtr compressionInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////

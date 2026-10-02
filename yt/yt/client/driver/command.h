@@ -317,7 +317,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-class TTypedCommand
+struct TTypedCommand
     : public virtual TTypedCommandBase<TOptions>
     , public TTransactionalCommandBase<TOptions>
     , public TTabletReadCommandBase<TOptions>

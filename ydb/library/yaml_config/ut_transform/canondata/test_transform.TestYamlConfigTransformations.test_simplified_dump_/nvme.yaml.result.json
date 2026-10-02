@@ -668,17 +668,20 @@
                 {
                   "ErasureSpecies":"block-4-2",
                   "PDiskCategory":2,
-                  "VDiskCategory":"Default"
+                  "VDiskCategory":"Default",
+                  "StoragePoolKind":"nvme"
                 },
                 {
                   "ErasureSpecies":"block-4-2",
                   "PDiskCategory":2,
-                  "VDiskCategory":"Default"
+                  "VDiskCategory":"Default",
+                  "StoragePoolKind":"nvme"
                 },
                 {
                   "ErasureSpecies":"block-4-2",
                   "PDiskCategory":2,
-                  "VDiskCategory":"Default"
+                  "VDiskCategory":"Default",
+                  "StoragePoolKind":"nvme"
                 }
               ]
           }

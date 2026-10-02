@@ -3,7 +3,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -15,7 +15,10 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi, const NScheme::TTypeIn
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    return ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+    const char* result = ToString(val, MaxPrecision /*typeInfo.GetDecimalType().GetPrecision()*/, typeInfo.GetDecimalType().GetScale());
+    Y_ENSURE(result);
+
+    return result;
 }
 
 TString DyNumberToString(TStringBuf data) {
@@ -24,23 +27,27 @@ TString DyNumberToString(TStringBuf data) {
     TStringBuilder err;
 
     bool success = DyNumberToStream(data, out, err);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
 
     return result;
 }
 
 TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
-    Y_ABORT_UNLESS(pgResult.Error.Empty());
+    Y_ENSURE(pgResult.Error.Empty());
     return pgResult.Str;
 }
 
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err, const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(err);
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    out << ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+    const char* result = ToString(val, MaxPrecision /*typeInfo.GetDecimalType().GetPrecision()*/, typeInfo.GetDecimalType().GetScale());
+    if (!result) [[unlikely]] {
+        err = "Invalid Decimal binary representation";
+        return false;
+    }
+    out << result;
     return true;
 }
 

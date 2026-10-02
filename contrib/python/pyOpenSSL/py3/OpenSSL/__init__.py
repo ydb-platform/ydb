@@ -5,7 +5,7 @@
 pyOpenSSL - A simple wrapper around the OpenSSL library
 """
 
-from OpenSSL import crypto, SSL
+from OpenSSL import SSL, crypto
 from OpenSSL.version import (
     __author__,
     __copyright__,
@@ -17,10 +17,8 @@ from OpenSSL.version import (
     __version__,
 )
 
-
 __all__ = [
     "SSL",
-    "crypto",
     "__author__",
     "__copyright__",
     "__email__",
@@ -29,4 +27,5 @@ __all__ = [
     "__title__",
     "__uri__",
     "__version__",
+    "crypto",
 ]

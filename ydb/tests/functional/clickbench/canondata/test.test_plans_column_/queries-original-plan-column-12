@@ -60,6 +60,8 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "Blocks": "True",
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -68,12 +70,24 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
+                                                                        "Aggregation": "{SUM(1)}",
+                                                                        "GroupBy": "item.SearchPhrase",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
+                                                                    },
+                                                                    {
+                                                                        "Blocks": "True",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
@@ -85,14 +99,12 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
-                                                                            "SearchPhrase"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                            "SearchPhrase"
                                                                         ],
                                                                         "Scan": "Parallel",
                                                                         "SsaProgram": {
@@ -135,38 +147,15 @@
                                                                                     }
                                                                                 },
                                                                                 {
-                                                                                    "GroupBy": {
-                                                                                        "Aggregates": [
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 108
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "KeyColumns": [
-                                                                                            {
-                                                                                                "Id": 40
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 40
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 108
                                                                                             }
                                                                                         ]
                                                                                     }
                                                                                 }
-                                                                            ],
-                                                                            "Version": 5
+                                                                            ]
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

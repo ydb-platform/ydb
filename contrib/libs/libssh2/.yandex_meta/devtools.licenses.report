@@ -1,0 +1,172 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         03ab7a9ca12c46b880f8e34cce0b9044
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [11:42]
+        include/libssh2.h [6:37]
+        include/libssh2_publickey.h [4:35]
+        include/libssh2_sftp.h [4:35]
+        src/agent.c [6:37]
+        src/agent.h [8:39]
+        src/agent_win.c [6:37]
+        src/channel.c [7:38]
+        src/channel.h [7:38]
+        src/comp.c [5:36]
+        src/comp.h [5:36]
+        src/crypt.c [5:36]
+        src/crypto.h [7:38]
+        src/global.c [5:36]
+        src/hostkey.c [5:36]
+        src/keepalive.c [4:35]
+        src/kex.c [5:36]
+        src/knownhost.c [5:36]
+        src/libssh2_priv.h [8:39]
+        src/mac.c [4:35]
+        src/mac.h [5:36]
+        src/misc.c [6:37]
+        src/misc.h [7:38]
+        src/openssl.c [7:38]
+        src/openssl.h [8:39]
+        src/packet.c [7:38]
+        src/packet.h [7:38]
+        src/pem.c [5:36]
+        src/publickey.c [5:36]
+        src/scp.c [5:36]
+        src/session.c [6:37]
+        src/session.h [8:39]
+        src/sftp.c [6:37]
+        src/sftp.h [7:38]
+        src/transport.c [5:36]
+        src/transport.h [7:38]
+        src/userauth.c [6:37]
+        src/userauth.h [7:38]
+        src/version.c [3:34]
+
+KEEP     SSH-short            0c7eacf58b0d044ca0f018097e010ee4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: SSH-short
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/SSH-short
+    Files with this license:
+        src/agent_win.c [81:85]
+
+KEEP     BSD-2-Clause         10ff882f46a69d240bf0825aa388b36e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/agent_win.c [90:108]
+
+KEEP     BSD-2-Clause         5910ab87b025a22bc77e66e1e3b30815
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/agent_win.c [115:134]
+
+KEEP     Public-Domain        5fe1de9f547f6c5b9a48e6b2a9434fa5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        src/misc.c [613:621]
+
+KEEP     BSD-3-Clause         84641c88058eeb909ee6556511fd471c
+BELONGS ya.make
+    License text:
+        libssh2 is a library implementing the SSH2 protocol, available under
+        the revised BSD license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 27.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README [4:5]
+        README.md [3:4]
+
+KEEP     BSD-3-Clause         b2a6cb0575a14e3bd41a17c0ffa26b78
+BELONGS ya.make
+    License text:
+        [BSD Licensed](https://libssh2.org/license.html)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [10:10]
+
+KEEP     BSD-4-Clause         c1cf560fc014569f1814c9828bfb4c4b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-4-Clause
+        Score           : 99.12
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, http://www.xfree86.org/3.3.6/COPYRIGHT2.html#6, https://spdx.org/licenses/BSD-4-Clause
+    Files with this license:
+        src/blf.h [10:33]
+        src/blowfish.c [9:32]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/bcrypt_pbkdf.c [5:15]

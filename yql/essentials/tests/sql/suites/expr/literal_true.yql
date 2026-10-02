@@ -1,0 +1,2 @@
+/* postgres returns "t" as string representation */
+select true;

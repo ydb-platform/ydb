@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/yexception.h>
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
 
@@ -13,3 +14,9 @@
 
 #define Y_ABORT_S(msg) Y_ABORT("%s", (TStringBuilder() << msg).c_str())
 #define Y_DEBUG_ABORT_S(msg) Y_DEBUG_ABORT("%s", (TStringBuilder() << msg).c_str())
+
+#ifndef NDEBUG
+    #define Y_VALIDATE(expr, msg) Y_VERIFY_S(expr, msg)
+#else
+    #define Y_VALIDATE(expr, msg) Y_ENSURE(expr, msg)
+#endif

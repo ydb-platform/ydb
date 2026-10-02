@@ -195,7 +195,7 @@ public:
     virtual void Config(TConfig& config) override {
         TConsoleClientCommand::Config(config);
         config.Opts->AddLongOption("dry-run", "Execute configure request in dry-run mode")
-            .NoArgument().SetFlag(&DryRun);
+            .StoreTrue(&DryRun);
         config.Opts->AddLongOption("out-dir", "Output affected configs into specified directory")
             .RequiredArgument("PATH").StoreResult(&OutDir);
         config.SetFreeArgsNum(1);
@@ -525,10 +525,10 @@ public:
     virtual void Config(TConfig& config) override {
         TConsoleClientCommand::Config(config);
         config.Opts->AddLongOption("merge", "Merge provided config with the current one")
-            .NoArgument().SetFlag(&Merge);
+            .StoreTrue(&Merge);
         config.Opts->AddLongOption("merge-overwrite-repeated", "Merge provided config with the current one"
                                    " but overwrite those repeated field which are not empty in provided config")
-            .NoArgument().SetFlag(&MergeOverwriteRepeated);
+            .StoreTrue(&MergeOverwriteRepeated);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<CONFIG-PROTO>", "Console config protobuf or file with protobuf");
     }

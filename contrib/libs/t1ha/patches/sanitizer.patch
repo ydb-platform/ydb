@@ -1,0 +1,17 @@
+--- a/t1ha.h	(44cadc7fea4c04518cd850f024c8561d18e228e0)
++++ b/t1ha.h	(1327e1c4adff73eca2f0de6afee8b1a31967ef8b)
+@@ -377,6 +377,8 @@
+ #define T1HA_ALIGN_SUFFIX
+ #endif /* GCC x86 */
+ 
++#include <util/system/compiler.h>
++
+ #ifndef T1HA_USE_INDIRECT_FUNCTIONS
+ /* GNU ELF indirect functions usage control. For more info please see
+  * https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+@@ 386,4 +386,4 @@
+ #if defined(__ELF__) && defined(__amd64__) &&                                  \
+     (__has_attribute(__ifunc__) ||                                             \
+      (!defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 4 &&             \
+-      !defined(__SANITIZE_ADDRESS__) && !defined(__SSP_ALL__)))
++      !defined(_asan_enabled_) && !defined(_tsan_enabled_) && !defined(__SSP_ALL__)))

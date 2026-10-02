@@ -74,7 +74,7 @@ template< typename Rec >
 transfer_t context_exit( transfer_t t) noexcept {
     Rec * rec = static_cast< Rec * >( t.data);
 #if BOOST_CONTEXT_SHADOW_STACK
-    // destory shadow stack
+    // destroy shadow stack
     std::size_t ss_size = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 16));
     long unsigned int ss_base = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 8));
     munmap((void *)ss_base, ss_size);
@@ -174,7 +174,7 @@ fcontext_t create_context1( StackAlloc && salloc, Fn && fn) {
 	void * storage = reinterpret_cast< void * >(
 			( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     Record * record = new ( storage) Record{
             sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top
@@ -216,7 +216,7 @@ fcontext_t create_context2( preallocated palloc, StackAlloc && salloc, Fn && fn)
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( palloc.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context-stack
+    // placement new for control structure on context-stack
     Record * record = new ( storage) Record{
             palloc.sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top

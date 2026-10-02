@@ -56,16 +56,16 @@ using EPermissionSet = EPermission;
 
 const EPermissionSet NonePermissions = EPermissionSet(0x0000);
 
-std::vector<TString> FormatPermissions(EPermissionSet permissions);
+std::vector<std::string> FormatPermissions(EPermissionSet permissions);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Describes the set of objects for which permissions must be checked.
-DEFINE_BIT_ENUM(EPermissionCheckScope,
-    ((None)            (0x0000))
-    ((This)            (0x0001))
-    ((Parent)          (0x0002))
-    ((Descendants)     (0x0004))
+DEFINE_ENUM(EPermissionCheckScope,
+    ((This)            (1))
+    ((Parent)          (2))
+    ((Descendants)     (3))
+    ((Subtree)         (4))  // Parent + Descendants.
 );
 
 ////////////////////////////////////////////////////////////////////////////////

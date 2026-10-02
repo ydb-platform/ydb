@@ -1,0 +1,34 @@
+diff --git a/configure.ac b/configure.ac
+index f6d25f33..35700af1 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -262,7 +262,6 @@ if test "x$GCC" = "xyes" ; then
+   dnl This one too.
+   JE_CFLAGS_ADD([-Wno-missing-field-initializers])
+   JE_CFLAGS_ADD([-Wno-missing-attributes])
+-  JE_CFLAGS_ADD([-pipe])
+   JE_CFLAGS_ADD([-g3])
+ elif test "x$je_cv_msvc" = "xyes" ; then
+   CC="$CC -nologo"
+diff --git a/configure b/configure
+index 6989405c..8641ad8a 100755
+--- a/configure
++++ b/configure
+@@ -4330,17 +4330,6 @@ fi
+ 
+ 
+ 
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether compiler supports -pipe" >&5
+-$as_echo_n "checking whether compiler supports -pipe... " >&6; }
+-T_CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS}"
+-T_APPEND_V=-pipe
+-  if test "x${CONFIGURE_CFLAGS}" = "x" -o "x${T_APPEND_V}" = "x" ; then
+-  CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS}${T_APPEND_V}"
+-else
+-  CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS} ${T_APPEND_V}"
+-fi
+-
+-
+ if test "x${CONFIGURE_CFLAGS}" = "x" -o "x${SPECIFIED_CFLAGS}" = "x" ; then
+   CFLAGS="${CONFIGURE_CFLAGS}${SPECIFIED_CFLAGS}"
+ else

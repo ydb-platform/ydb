@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import six
 import json
 import logging
 import hashlib
@@ -22,6 +21,7 @@ from functools import partial
 from collections import defaultdict
 from abc import abstractmethod, abstractproperty
 
+from json.decoder import JSONDecodeError
 from urllib3.exceptions import ProtocolError, MaxRetryError
 
 from kubernetes import __version__
@@ -32,7 +32,7 @@ from .resource import Resource, ResourceList
 DISCOVERY_PREFIX = 'apis'
 
 
-class Discoverer(object):
+class Discoverer:
     """
         A convenient container for storing discovered API resources. Allows
         easy searching and retrieval of specific resources.
@@ -42,9 +42,7 @@ class Discoverer(object):
 
     def __init__(self, client, cache_file):
         self.client = client
-        default_cache_id = self.client.configuration.host
-        if six.PY3:
-            default_cache_id = default_cache_id.encode('utf-8')
+        default_cache_id = self.client.configuration.host.encode('utf-8')
         try:
             default_cachefile_name = 'osrcp-{0}.json'.format(hashlib.md5(default_cache_id, usedforsecurity=False).hexdigest())
         except TypeError:
@@ -59,7 +57,7 @@ class Discoverer(object):
             refresh = True
         else:
             try:
-                with open(self.__cache_file, 'r') as f:
+                with open(self.__cache_file) as f:
                     self._cache = json.load(f, cls=partial(CacheDecoder, self.client))
                 if self._cache.get('library_version') != __version__:
                     # Version mismatch, need to refresh cache
@@ -164,7 +162,8 @@ class Discoverer(object):
         path = '/'.join(filter(None, [prefix, group, version]))
         try:
             resources_response = self.client.request('GET', path).resources or []
-        except ServiceUnavailableError:
+        except (ServiceUnavailableError, JSONDecodeError):
+            # Handle both service unavailable errors and JSON decode errors
             resources_response = []
 
         resources_raw = list(filter(lambda resource: '/' not in resource['name'], resources_response))
@@ -311,7 +310,7 @@ class LazyDiscoverer(Discoverer):
                             prefix, group, version, rg.preferred)
                         self._cache['resources'][prefix][group][version] = rg
                         self.__update_cache = True
-                    for _, resource in six.iteritems(rg.resources):
+                    for _, resource in rg.resources.items():
                         yield resource
         self.__maybe_write_cache()
 
@@ -395,7 +394,7 @@ class EagerDiscoverer(Discoverer):
                         yield resource
 
 
-class ResourceGroup(object):
+class ResourceGroup:
     """Helper class for Discoverer container"""
     def __init__(self, preferred, resources=None):
         self.preferred = preferred

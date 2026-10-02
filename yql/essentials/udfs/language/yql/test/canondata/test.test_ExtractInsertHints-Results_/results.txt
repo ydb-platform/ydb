@@ -1,0 +1,104 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "q";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "insert into plato.foo with (truncate,user_attrs='{}') select 1";
+                        [
+                            [
+                                [
+                                    "INSERT_HINT";
+                                    "truncate";
+                                    "1"
+                                ];
+                                [
+                                    "INSERT_HINT";
+                                    "user_attrs";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "insert into plato.foo with columns struct<a:int32> select 1";
+                        [
+                            [
+                                [
+                                    "INSERT_HINT";
+                                    "columns";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "insert into plato.foo with schema(a int32) select 1";
+                        [
+                            [
+                                [
+                                    "INSERT_HINT";
+                                    "schema";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "insert into plato.foo with truncate select 1";
+                        [
+                            [
+                                [
+                                    "INSERT_HINT";
+                                    "truncate";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -24,7 +24,7 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     engine.GetActualizationController()->FinishActualization(RWAddress);
     if (IsAborted()) {
-        THashMap<ui64, THashSet<ui64>> restoreIndexAddresses;
+        THashMap<TInternalPathId, THashSet<ui64>> restoreIndexAddresses;
         for (auto&& i : PortionsToEvict) {
             AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo()->GetPathId()].emplace(i.GetPortionInfo()->GetPortionId()).second);
         }
@@ -58,6 +58,9 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
             AddPortionToRemove(info.GetPortionInfo(), false);
+            for (const auto& x : pwb->MutableBlobs()) {
+                AFL_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
+            }
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

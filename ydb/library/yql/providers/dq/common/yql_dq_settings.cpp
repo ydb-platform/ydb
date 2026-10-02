@@ -1,9 +1,14 @@
 #include "yql_dq_settings.h"
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 #include <util/string/split.h>
 
 namespace NYql {
 
-TDqConfiguration::TDqConfiguration() {
+TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(DqProviderName, TQContext(), strictConfigValidation)
+{
     REGISTER_SETTING(*this, DataSizePerJob);
     REGISTER_SETTING(*this, MaxDataSizePerJob);
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -53,6 +58,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, _EnablePrecompute);
     REGISTER_SETTING(*this, EnableDqReplicate);
     REGISTER_SETTING(*this, WatermarksMode);
+    REGISTER_SETTING(*this, WatermarksIdleTimeoutMs);
     REGISTER_SETTING(*this, WatermarksGranularityMs);
     REGISTER_SETTING(*this, WatermarksLateArrivalDelayMs);
     REGISTER_SETTING(*this, WatermarksEnableIdlePartitions);
@@ -92,6 +98,10 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+    REGISTER_SETTING(*this, ValuePackerVersion).Parser([](const TString& v) {
+            return FromString<TDqSettings::EValuePackerVersion>(v);
+        });
+
     REGISTER_SETTING(*this, DisableLLVMForBlockStages);
     REGISTER_SETTING(*this, SplitStageOnDqReplicate)
         .ValueSetter([this](const TString&, bool value) {
@@ -119,6 +129,13 @@ TDqConfiguration::TDqConfiguration() {
         });
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, Scheduler);
+    REGISTER_SETTING(*this, Clique)
+        .Validator([this](const TString&, const TString& value) {
+            if (CliqueValidator) {
+                CliqueValidator(value);
+            }
+        });
+    REGISTER_SETTING(*this, _EnableSortConstraintProcessing);
 }
 
 } // namespace NYql

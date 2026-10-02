@@ -1,5 +1,6 @@
 #include "tablet.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -14,6 +15,7 @@ private:
     ui32 RequestsLeft;
     TVector<ui32> LightYellowMoveGroups;
     TVector<ui32> YellowStopGroups;
+    TVector<ui32> LightOrangeGroups;
 
     void Handle(TEvBlobStorage::TEvStatusResult::TPtr &ev, const TActorContext &ctx) {
         const TEvBlobStorage::TEvStatusResult *msg = ev->Get();
@@ -22,13 +24,17 @@ private:
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
             LightYellowMoveGroups.push_back(ev->Cookie);
         }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+        if (msg->StatusFlags.Check(StopWritingStatusFlag(DataKindByTabletType(Info->TabletType)))) {
             YellowStopGroups.push_back(ev->Cookie);
+        }
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {
+            LightOrangeGroups.push_back(ev->Cookie);
         }
 
         if (RequestsLeft == 0) {
             ctx.Send(ReplyTo, new TEvTablet::TEvCheckBlobstorageStatusResult(std::move(LightYellowMoveGroups),
-                        std::move(YellowStopGroups)));
+                        std::move(YellowStopGroups),
+                        std::move(LightOrangeGroups)));
             return Die(ctx);
         }
     }

@@ -3,7 +3,7 @@ import pytest
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
-from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import configure_runner
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 
 from conftest import docker_compose_dir
@@ -41,19 +41,17 @@ one_time_waiter = OneTimeWaiter(
 )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
 @pytest.mark.usefixtures("settings")
 def test_select_positive(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
     # Let ms_sql_server initialize
     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_positive(
         settings=settings,
         runner=runner,
@@ -62,19 +60,17 @@ def test_select_positive(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_datetime'), ids=tc_collection.ids('select_datetime'))
 @pytest.mark.usefixtures("settings")
 def test_select_datetime(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
     # Let ms_sql_server initialize
     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_positive(
         settings=settings,
         runner=runner,
@@ -83,7 +79,6 @@ def test_select_datetime(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize(
     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
 )
@@ -91,13 +86,12 @@ def test_select_datetime(
 def test_select_missing_database(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_missing_database.TestCase,
 ):
     # Let ms_sql_server initialize
     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_missing_database(
         settings=settings,
         runner=runner,
@@ -106,7 +100,6 @@ def test_select_missing_database(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize(
     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
 )
@@ -114,13 +107,12 @@ def test_select_missing_database(
 def test_select_missing_table(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
     # Let ms_sql_server initialize
     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,
         settings=settings,

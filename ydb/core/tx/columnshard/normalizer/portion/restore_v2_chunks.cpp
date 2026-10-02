@@ -18,7 +18,7 @@ public:
         return PortionAddress;
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PortionAddress.GetPathId();
     }
 
@@ -44,7 +44,8 @@ public:
     }
 
     TV2BuildTask(const TPortionAddress& address)
-        : PortionAddress(address) {
+        : PortionAddress(address)
+    {
     }
 };
 
@@ -54,8 +55,10 @@ private:
 
 public:
     TChangesAddV2(std::vector<TV2BuildTask>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -63,7 +66,7 @@ public:
         for (auto&& i : Patches) {
             auto metaProto = i.BuildProto();
             db.Table<IndexColumnsV2>()
-                .Key(i.GetPathId(), i.GetPortionId())
+                .Key(i.GetPathId().GetRawValue(), i.GetPortionId())
                 .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(metaProto.SerializeAsString()));
         }
 
@@ -85,7 +88,8 @@ public:
     }
 
     TPatchItemRemoveV1(const TColumnChunkLoadContextV1& chunkInfo)
-        : ChunkInfo(chunkInfo) {
+        : ChunkInfo(chunkInfo)
+    {
     }
 };
 
@@ -95,15 +99,17 @@ private:
 
 public:
     TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             db.Table<IndexColumnsV1>()
-                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
+                .Key(i.GetChunkInfo().GetPathId().GetRawValue(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
                     i.GetChunkInfo().GetAddress().GetChunkIdx())
                 .Delete();
         }
@@ -136,7 +142,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
 
         while (!rowset.EndOfSet()) {
-            AFL_VERIFY(readyPortions.emplace(TPortionAddress(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>(),
+            AFL_VERIFY(readyPortions.emplace(TPortionAddress(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
                 rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())).second);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -170,7 +176,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (buildPortions.empty()) {
         return tasks;
     }
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage()) {
+        return tasks;
+    }
 
     {
         std::vector<TV2BuildTask> package;
@@ -191,4 +199,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NRestoreV1Chunks
+}   // namespace NKikimr::NOlap::NRestoreV2Chunks

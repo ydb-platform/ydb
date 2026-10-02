@@ -1330,7 +1330,7 @@ PyDoc_STRVAR(
  );
 
 #define COMPRESS_KWARGS_DOCSTRING                                       \
-  "    block_size (int): Sepcifies the maximum blocksize to use.\n"     \
+  "    block_size (int): Specifies the maximum blocksize to use.\n"     \
   "        Options:\n\n"                                                \
   "        - `lz4.frame.BLOCKSIZE_DEFAULT`: the lz4 library default\n" \
   "        - `lz4.frame.BLOCKSIZE_MAX64KB`: 64 kB\n"             \
@@ -1466,7 +1466,7 @@ PyDoc_STRVAR
  "data will also be included in the returned data.\n"                   \
  "\n"                                                                   \
  "If the ``end_frame`` argument is ``True``, the compression context will be\n" \
- "reset and can be re-used.\n"                                          \
+ "reset and can be reused.\n"                                          \
  "\n"                                                                   \
  "Args:\n"                                                              \
  "    context (cCtx): Compression context\n"                            \
@@ -1676,6 +1676,10 @@ PyInit__frame(void)
   PyModule_AddIntConstant (module, "BLOCKSIZE_MAX256KB", LZ4F_max256KB);
   PyModule_AddIntConstant (module, "BLOCKSIZE_MAX1MB", LZ4F_max1MB);
   PyModule_AddIntConstant (module, "BLOCKSIZE_MAX4MB", LZ4F_max4MB);
+
+  #ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+  #endif
 
   return module;
 }

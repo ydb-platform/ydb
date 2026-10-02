@@ -19,10 +19,9 @@ DEFINE_ENUM(EJsonAttributesMode,
     (OnDemand)
 );
 
-class TJsonFormatConfig
+struct TJsonFormatConfig
     : public NYTree::TYsonStruct
 {
-public:
     EJsonFormat Format;
     EJsonAttributesMode AttributesMode;
     bool Plain;
@@ -52,6 +51,21 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TJsonFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+struct TWebJsonFormatConfig
+    : public NYTree::TYsonStruct
+{
+    EJsonFormat Format;
+
+    REGISTER_YSON_STRUCT(TWebJsonFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TWebJsonFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.2.13)
+VERSION(0.8.2)
 
 LICENSE(MIT)
 
@@ -11,9 +11,50 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     wcwidth/__init__.py
+    wcwidth/_clip.py
+    wcwidth/_constants.py
+    wcwidth/_wcswidth.py
+    wcwidth/_wcwidth.py
+    wcwidth/_width.py
+    wcwidth/align.py
+    wcwidth/bisearch.py
+    wcwidth/control_codes.py
+    wcwidth/escape_sequences.py
+    wcwidth/grapheme.py
+    wcwidth/hyperlink.py
+    wcwidth/sgr_state.py
+    wcwidth/table_ambiguous.py
+    wcwidth/table_grapheme.py
+    wcwidth/table_grapheme_overrides/__init__.py
+    wcwidth/table_grapheme_overrides/_known_27e0693f.py
+    wcwidth/table_grapheme_overrides/_known_3d4826b8.py
+    wcwidth/table_grapheme_overrides/_known_45d92e98.py
+    wcwidth/table_grapheme_overrides/_known_4cdf59ce.py
+    wcwidth/table_grapheme_overrides/_known_50bf0759.py
+    wcwidth/table_grapheme_overrides/_known_529fbb4a.py
+    wcwidth/table_grapheme_overrides/_known_5bfac390.py
+    wcwidth/table_grapheme_overrides/_known_813fee16.py
+    wcwidth/table_grapheme_overrides/_known_8589765c.py
+    wcwidth/table_grapheme_overrides/_known_8f94b404.py
+    wcwidth/table_grapheme_overrides/_known_970dbe10.py
+    wcwidth/table_grapheme_overrides/_known_c0a2cdbf.py
+    wcwidth/table_grapheme_overrides/_known_c2157f7e.py
+    wcwidth/table_grapheme_overrides/_known_c3db41c0.py
+    wcwidth/table_grapheme_overrides/_known_da9ceb0a.py
+    wcwidth/table_grapheme_overrides/_known_e08bd75e.py
+    wcwidth/table_grapheme_overrides/_known_e22030f3.py
+    wcwidth/table_grapheme_overrides/_known_fcc05a0f.py
+    wcwidth/table_grapheme_overrides/_known_fd9d4c44.py
+    wcwidth/table_grapheme_overrides/_registry.py
+    wcwidth/table_mc.py
+    wcwidth/table_overrides.py
+    wcwidth/table_term_programs.py
+    wcwidth/table_vs15.py
     wcwidth/table_vs16.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py
+    wcwidth/text_sizing.py
+    wcwidth/textwrap.py
     wcwidth/unicode_versions.py
     wcwidth/wcwidth.py
 )
@@ -22,6 +63,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/wcwidth/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    wcwidth/py.typed
 )
 
 END()

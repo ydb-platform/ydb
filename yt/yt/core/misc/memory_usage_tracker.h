@@ -1,22 +1,24 @@
 #pragma once
 
-#include "error.h"
+#include "public.h"
+
+#include <library/cpp/yt/error/error.h>
 
 #include <library/cpp/yt/memory/blob.h>
+#include <library/cpp/yt/memory/simple_memory_usage_tracker.h>
+#include <library/cpp/yt/memory/ref.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IMemoryUsageTracker
-    : public TRefCounted
+    : public ISimpleMemoryUsageTracker
 {
     virtual TError TryAcquire(i64 size) = 0;
     virtual TError TryChange(i64 size) = 0;
-    //! Returns true unless overcommit occurred.
-    virtual bool Acquire(i64 size) = 0;
-    virtual void Release(i64 size) = 0;
     virtual void SetLimit(i64 size) = 0;
+    virtual void AdjustLimit(i64 adjustedLimit) = 0;
     virtual i64 GetLimit() const = 0;
     virtual i64 GetUsed() const = 0;
     virtual i64 GetFree() const = 0;
@@ -54,6 +56,27 @@ DEFINE_REFCOUNTED_TYPE(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Delegates all methods to the underlying tracker. Additionally keeps track
+//! of memory usage and peak usage for acquire/release operations performed
+//! via this tracker.
+//! Does not support reference tracking (|Track| and similar) and setting the
+//! limits.
+struct IScopedMemoryUsageTracker
+    : public IMemoryUsageTracker
+{
+    //! Returns the amount of memory currently acquired via this tracker.
+    virtual i64 GetSelfUsed() const = 0;
+
+    //! Returns the peak amount of memory ever acquired via this tracker.
+    virtual i64 GetSelfPeakUsed() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IScopedMemoryUsageTracker)
+
+IScopedMemoryUsageTrackerPtr CreateScopedMemoryTracker(IMemoryUsageTrackerPtr underlying);
+
+////////////////////////////////////////////////////////////////////////////////
+
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,11 +87,11 @@ class TMemoryUsageTrackerGuard
 public:
     TMemoryUsageTrackerGuard() = default;
     TMemoryUsageTrackerGuard(const TMemoryUsageTrackerGuard& other) = delete;
-    TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other);
+    TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other) noexcept;
     ~TMemoryUsageTrackerGuard();
 
     TMemoryUsageTrackerGuard& operator=(const TMemoryUsageTrackerGuard& other) = delete;
-    TMemoryUsageTrackerGuard& operator=(TMemoryUsageTrackerGuard&& other);
+    TMemoryUsageTrackerGuard& operator=(TMemoryUsageTrackerGuard&& other) noexcept;
 
     static TMemoryUsageTrackerGuard Build(
         IMemoryUsageTrackerPtr tracker,
@@ -82,11 +105,11 @@ public:
         i64 size,
         i64 granularity = 1);
 
-    void Release();
+    void Release() noexcept;
 
     //! Releases the guard but does not return memory to the tracker.
     //! The caller should care about releasing memory itself.
-    void ReleaseNoReclaim();
+    void ReleaseNoReclaim() noexcept;
 
     explicit operator bool() const;
 
@@ -103,7 +126,7 @@ private:
     i64 AcquiredSize_ = 0;
     i64 Granularity_ = 0;
 
-    void MoveFrom(TMemoryUsageTrackerGuard&& other);
+    void MoveFrom(TMemoryUsageTrackerGuard&& other) noexcept;
     TError SetSizeImpl(i64 size, auto acquirer);
 };
 
@@ -118,11 +141,11 @@ public:
 
     TMemoryTrackedBlob() = default;
     TMemoryTrackedBlob(const TMemoryTrackedBlob& other) = delete;
-    TMemoryTrackedBlob(TMemoryTrackedBlob&& other) = default;
+    TMemoryTrackedBlob(TMemoryTrackedBlob&& other) noexcept = default;
     ~TMemoryTrackedBlob() = default;
 
     TMemoryTrackedBlob& operator=(const TMemoryTrackedBlob& other) = delete;
-    TMemoryTrackedBlob& operator=(TMemoryTrackedBlob&& other) = default;
+    TMemoryTrackedBlob& operator=(TMemoryTrackedBlob&& other) noexcept = default;
 
     void Resize(
         i64 size,
@@ -160,11 +183,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TErrorOr<TSharedRef> TryTrackMemory(
-    const IMemoryUsageTrackerPtr& tracker,
-    TSharedRef reference,
-    bool keepExistingTracking = false);
-
-TSharedRef TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRef reference,
     bool keepExistingTracking = false);

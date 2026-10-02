@@ -14,13 +14,11 @@ namespace builtins
   namespace str
   {
 
-    bool startswith(types::str const &s, types::str const &prefix, long start,
-                    long end)
+    bool startswith(types::str const &s, types::str const &prefix, long start, long end)
     {
       if (end < 0)
         end = s.size();
-      return (end - start) >= prefix.size() &&
-             s.compare(start, prefix.size(), prefix) == 0;
+      return (end - start) >= prefix.size() && s.compare(start, prefix.size(), prefix) == 0;
     }
   } // namespace str
 } // namespace builtins

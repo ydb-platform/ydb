@@ -15,9 +15,13 @@
 #ifndef ABSL_HASH_HASH_TESTING_H_
 #define ABSL_HASH_HASH_TESTING_H_
 
+#include <cstddef>
 #include <initializer_list>
+#include <string>
 #include <tuple>
 #include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -128,7 +132,7 @@ ABSL_NAMESPACE_BEGIN
 //   }
 //   friend bool operator==(Bad4 x, Bad4 y) {
 //    // Compare two ranges for equality. C++14 code can instead use std::equal.
-//     return absl::equal(x.p, x.p + x.size, y.p, y.p + y.size);
+//     return std::equal(x.p, x.p + x.size, y.p, y.p + y.size);
 //   }
 // };
 //
@@ -141,21 +145,20 @@ ABSL_NAMESPACE_BEGIN
 // }
 //
 template <int&... ExplicitBarrier, typename Container>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(const Container& values);
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    const Container& values);
 
 template <int&... ExplicitBarrier, typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals);
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    const Container& values, Eq equals);
 
 template <int&..., typename T>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values);
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    std::initializer_list<T> values);
 
 template <int&..., typename T, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
-                                      Eq equals);
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    std::initializer_list<T> values, Eq equals);
 
 namespace hash_internal {
 
@@ -184,17 +187,17 @@ struct ExpandVisitor {
 };
 
 template <typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    const Container& values, Eq equals) {
   using V = typename Container::value_type;
 
   struct Info {
     const V& value;
     size_t index;
     std::string ToString() const {
-      return absl::visit(PrintVisitor{index}, value);
+      return std::visit(PrintVisitor{index}, value);
     }
-    SpyHashState expand() const { return absl::visit(ExpandVisitor{}, value); }
+    SpyHashState expand() const { return std::visit(ExpandVisitor{}, value); }
   };
 
   using EqClass = std::vector<Info>;
@@ -205,7 +208,7 @@ VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
   for (const auto& value : values) {
     EqClass* c = nullptr;
     for (auto& eqclass : classes) {
-      if (absl::visit(EqVisitor<Eq>{equals}, value, eqclass[0].value)) {
+      if (std::visit(EqVisitor<Eq>{equals}, value, eqclass[0].value)) {
         c = &eqclass;
         break;
       }
@@ -244,7 +247,8 @@ VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
       if (v.expand() != expected) {
         return testing::AssertionFailure()
                << "Values " << c[0].ToString() << " and " << v.ToString()
-               << " evaluate as equal but have an unequal hash expansion.";
+               << " evaluate as equal but have unequal hash expansions ("
+               << expected << " vs. " << v.expand() << ").";
       }
     }
 
@@ -256,17 +260,18 @@ VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
         case SpyHashState::CompareResult::kEqual:
           return testing::AssertionFailure()
                  << "Values " << c[0].ToString() << " and " << c2[0].ToString()
-                 << " evaluate as unequal but have an equal hash expansion.";
+                 << " evaluate as unequal but have an equal hash expansion:"
+                 << c2_hash << ".";
         case SpyHashState::CompareResult::kBSuffixA:
           return testing::AssertionFailure()
-                 << "Hash expansion of " << c2[0].ToString()
+                 << "Hash expansion of " << c2[0].ToString() << ";" << c2_hash
                  << " is a suffix of the hash expansion of " << c[0].ToString()
-                 << ".";
+                 << ";" << expected << ".";
         case SpyHashState::CompareResult::kASuffixB:
           return testing::AssertionFailure()
-                 << "Hash expansion of " << c[0].ToString()
-                 << " is a suffix of the hash expansion of " << c2[0].ToString()
-                 << ".";
+                 << "Hash expansion of " << c[0].ToString() << ";"
+                 << expected << " is a suffix of the hash expansion of "
+                 << c2[0].ToString() << ";" << c2_hash << ".";
         case SpyHashState::CompareResult::kUnequal:
           break;
       }
@@ -277,7 +282,7 @@ VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
 
 template <typename... T>
 struct TypeSet {
-  template <typename U, bool = disjunction<std::is_same<T, U>...>::value>
+  template <typename U, bool = std::disjunction_v<std::is_same<T, U>...>>
   struct Insert {
     using type = TypeSet<U, T...>;
   };
@@ -297,11 +302,11 @@ struct MakeTypeSet<T, Ts...> : MakeTypeSet<Ts...>::template Insert<T>::type {};
 
 template <typename... T>
 using VariantForTypes = typename MakeTypeSet<
-    const typename std::decay<T>::type*...>::template apply<absl::variant>;
+    const std::decay_t<T>*...>::template apply<std::variant>;
 
 template <typename Container>
 struct ContainerAsVector {
-  using V = absl::variant<const typename Container::value_type*>;
+  using V = std::variant<const typename Container::value_type*>;
   using Out = std::vector<V>;
 
   static Out Do(const Container& values) {
@@ -317,12 +322,12 @@ struct ContainerAsVector<std::tuple<T...>> {
   using Out = std::vector<V>;
 
   template <size_t... I>
-  static Out DoImpl(const std::tuple<T...>& tuple, absl::index_sequence<I...>) {
+  static Out DoImpl(const std::tuple<T...>& tuple, std::index_sequence<I...>) {
     return Out{&std::get<I>(tuple)...};
   }
 
   static Out Do(const std::tuple<T...>& values) {
-    return DoImpl(values, absl::index_sequence_for<T...>());
+    return DoImpl(values, std::index_sequence_for<T...>());
   }
 };
 
@@ -341,32 +346,31 @@ struct DefaultEquals {
 }  // namespace hash_internal
 
 template <int&..., typename Container>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(const Container& values) {
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    const Container& values) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<Container>::Do(values),
       hash_internal::DefaultEquals{});
 }
 
 template <int&..., typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    const Container& values, Eq equals) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<Container>::Do(values), equals);
 }
 
 template <int&..., typename T>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values) {
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    std::initializer_list<T> values) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<std::initializer_list<T>>::Do(values),
       hash_internal::DefaultEquals{});
 }
 
 template <int&..., typename T, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
-VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
-                                      Eq equals) {
+testing::AssertionResult VerifyTypeImplementsAbslHashCorrectly(
+    std::initializer_list<T> values, Eq equals) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<std::initializer_list<T>>::Do(values),
       equals);

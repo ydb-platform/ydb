@@ -5,14 +5,33 @@
     "endpointPrefix":"outposts",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"Outposts",
     "serviceFullName":"AWS Outposts",
     "serviceId":"Outposts",
     "signatureVersion":"v4",
     "signingName":"outposts",
-    "uid":"outposts-2019-12-03"
+    "uid":"outposts-2019-12-03",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
+    "CancelCapacityTask":{
+      "name":"CancelCapacityTask",
+      "http":{
+        "method":"POST",
+        "requestUri":"/outposts/{OutpostId}/capacity/{CapacityTaskId}"
+      },
+      "input":{"shape":"CancelCapacityTaskInput"},
+      "output":{"shape":"CancelCapacityTaskOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Cancels the capacity task.</p>"
+    },
     "CancelOrder":{
       "name":"CancelOrder",
       "http":{
@@ -117,6 +136,22 @@
       ],
       "documentation":"<p>Deletes the specified site.</p>"
     },
+    "GetCapacityTask":{
+      "name":"GetCapacityTask",
+      "http":{
+        "method":"GET",
+        "requestUri":"/outposts/{OutpostId}/capacity/{CapacityTaskId}"
+      },
+      "input":{"shape":"GetCapacityTaskInput"},
+      "output":{"shape":"GetCapacityTaskOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Gets details of the specified capacity task.</p>"
+    },
     "GetCatalogItem":{
       "name":"GetCatalogItem",
       "http":{
@@ -128,6 +163,7 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"NotFoundException"},
+        {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Gets information about the specified catalog item.</p>"
@@ -179,6 +215,21 @@
       ],
       "documentation":"<p>Gets information about the specified Outpost.</p>"
     },
+    "GetOutpostBillingInformation":{
+      "name":"GetOutpostBillingInformation",
+      "http":{
+        "method":"GET",
+        "requestUri":"/outpost/{OutpostIdentifier}/billing-information"
+      },
+      "input":{"shape":"GetOutpostBillingInformationInput"},
+      "output":{"shape":"GetOutpostBillingInformationOutput"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"},
+        {"shape":"NotFoundException"}
+      ],
+      "documentation":"<p>Gets current and historical billing information about the specified Outpost.</p>"
+    },
     "GetOutpostInstanceTypes":{
       "name":"GetOutpostInstanceTypes",
       "http":{
@@ -194,6 +245,22 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Gets the instance types for the specified Outpost.</p>"
+    },
+    "GetOutpostSupportedInstanceTypes":{
+      "name":"GetOutpostSupportedInstanceTypes",
+      "http":{
+        "method":"GET",
+        "requestUri":"/outposts/{OutpostId}/supportedInstanceTypes"
+      },
+      "input":{"shape":"GetOutpostSupportedInstanceTypesInput"},
+      "output":{"shape":"GetOutpostSupportedInstanceTypesOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Gets the instance types that an Outpost can support in <code>InstanceTypeCapacity</code>. This will generally include instance types that are not currently configured and therefore cannot be launched with the current Outpost capacity configuration.</p>"
     },
     "GetSite":{
       "name":"GetSite",
@@ -227,6 +294,22 @@
       ],
       "documentation":"<p> Gets the site address of the specified site. </p>"
     },
+    "ListAssetInstances":{
+      "name":"ListAssetInstances",
+      "http":{
+        "method":"GET",
+        "requestUri":"/outposts/{OutpostId}/assetInstances"
+      },
+      "input":{"shape":"ListAssetInstancesInput"},
+      "output":{"shape":"ListAssetInstancesOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>A list of Amazon EC2 instances, belonging to all accounts, running on the specified Outpost. Does not include Amazon EBS or Amazon S3 instances.</p>"
+    },
     "ListAssets":{
       "name":"ListAssets",
       "http":{
@@ -243,6 +326,38 @@
       ],
       "documentation":"<p>Lists the hardware assets for the specified Outpost.</p> <p>Use filters to return specific results. If you specify multiple filters, the results include only the resources that match all of the specified filters. For a filter where you can specify multiple values, the results include items that match any of the values that you specify for the filter.</p>"
     },
+    "ListBlockingInstancesForCapacityTask":{
+      "name":"ListBlockingInstancesForCapacityTask",
+      "http":{
+        "method":"GET",
+        "requestUri":"/outposts/{OutpostId}/capacity/{CapacityTaskId}/blockingInstances"
+      },
+      "input":{"shape":"ListBlockingInstancesForCapacityTaskInput"},
+      "output":{"shape":"ListBlockingInstancesForCapacityTaskOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>A list of Amazon EC2 instances running on the Outpost and belonging to the account that initiated the capacity task. Use this list to specify the instances you cannot stop to free up capacity to run the capacity task.</p>"
+    },
+    "ListCapacityTasks":{
+      "name":"ListCapacityTasks",
+      "http":{
+        "method":"GET",
+        "requestUri":"/capacity/tasks"
+      },
+      "input":{"shape":"ListCapacityTasksInput"},
+      "output":{"shape":"ListCapacityTasksOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists the capacity tasks for your Amazon Web Services account.</p> <p>Use filters to return specific results. If you specify multiple filters, the results include only the resources that match all of the specified filters. For a filter where you can specify multiple values, the results include items that match any of the values that you specify for the filter.</p>"
+    },
     "ListCatalogItems":{
       "name":"ListCatalogItems",
       "http":{
@@ -254,6 +369,7 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"NotFoundException"},
+        {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Lists the items in the catalog.</p> <p>Use filters to return specific results. If you specify multiple filters, the results include only the resources that match all of the specified filters. For a filter where you can specify multiple values, the results include items that match any of the values that you specify for the filter.</p>"
@@ -319,6 +435,23 @@
       ],
       "documentation":"<p>Lists the tags for the specified resource.</p>"
     },
+    "StartCapacityTask":{
+      "name":"StartCapacityTask",
+      "http":{
+        "method":"POST",
+        "requestUri":"/outposts/{OutpostId}/capacity"
+      },
+      "input":{"shape":"StartCapacityTaskInput"},
+      "output":{"shape":"StartCapacityTaskOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"NotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ConflictException"}
+      ],
+      "documentation":"<p>Starts the specified capacity task. You can have one active capacity task for each order and each Outpost.</p>"
+    },
     "StartConnection":{
       "name":"StartConnection",
       "http":{
@@ -334,6 +467,23 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<note> <p> Amazon Web Services uses this action to install Outpost servers.</p> </note> <p> Starts the connection required for Outpost server installation. </p> <p> Use CloudTrail to monitor this action or Amazon Web Services managed policy for Amazon Web Services Outposts to secure it. For more information, see <a href=\"https://docs.aws.amazon.com/outposts/latest/userguide/security-iam-awsmanpol.html\"> Amazon Web Services managed policies for Amazon Web Services Outposts</a> and <a href=\"https://docs.aws.amazon.com/outposts/latest/userguide/logging-using-cloudtrail.html\"> Logging Amazon Web Services Outposts API calls with Amazon Web Services CloudTrail</a> in the <i>Amazon Web Services Outposts User Guide</i>. </p>"
+    },
+    "StartOutpostDecommission":{
+      "name":"StartOutpostDecommission",
+      "http":{
+        "method":"POST",
+        "requestUri":"/outposts/{OutpostId}/decommission"
+      },
+      "input":{"shape":"StartOutpostDecommissionInput"},
+      "output":{"shape":"StartOutpostDecommissionOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"NotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Starts the decommission process to return the Outposts racks or servers.</p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -435,6 +585,21 @@
     }
   },
   "shapes":{
+    "AWSServiceName":{
+      "type":"string",
+      "enum":[
+        "AWS",
+        "EC2",
+        "ELASTICACHE",
+        "ELB",
+        "RDS",
+        "ROUTE53"
+      ]
+    },
+    "AWSServiceNameList":{
+      "type":"list",
+      "member":{"shape":"AWSServiceName"}
+    },
     "AccessDeniedException":{
       "type":"structure",
       "members":{
@@ -451,9 +616,15 @@
       "min":12,
       "pattern":"\\d{12}"
     },
+    "AccountIdList":{
+      "type":"list",
+      "member":{"shape":"AccountId"}
+    },
     "Address":{
       "type":"structure",
       "required":[
+        "ContactName",
+        "ContactPhoneNumber",
         "AddressLine1",
         "City",
         "StateOrRegion",
@@ -544,12 +715,22 @@
       "min":1,
       "pattern":"^(\\w+)$"
     },
+    "AssetIdInput":{
+      "type":"string",
+      "max":10,
+      "min":10,
+      "pattern":"\\d{10}"
+    },
+    "AssetIdList":{
+      "type":"list",
+      "member":{"shape":"AssetId"}
+    },
     "AssetInfo":{
       "type":"structure",
       "members":{
         "AssetId":{
           "shape":"AssetId",
-          "documentation":"<p> The ID of the asset. </p>"
+          "documentation":"<p> The ID of the asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
         },
         "RackId":{
           "shape":"RackId",
@@ -569,6 +750,55 @@
         }
       },
       "documentation":"<p> Information about hardware assets. </p>"
+    },
+    "AssetInstance":{
+      "type":"structure",
+      "members":{
+        "InstanceId":{
+          "shape":"InstanceId",
+          "documentation":"<p>The ID of the instance.</p>"
+        },
+        "InstanceType":{
+          "shape":"OutpostInstanceType",
+          "documentation":"<p>The type of instance.</p>"
+        },
+        "AssetId":{
+          "shape":"AssetId",
+          "documentation":"<p>The ID of the asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
+        },
+        "AccountId":{"shape":"AccountId"},
+        "AwsServiceName":{
+          "shape":"AWSServiceName",
+          "documentation":"<p>The Amazon Web Services service name of the instance.</p>"
+        }
+      },
+      "documentation":"<p>An Amazon EC2 instance.</p>"
+    },
+    "AssetInstanceCapacityList":{
+      "type":"list",
+      "member":{"shape":"AssetInstanceTypeCapacity"}
+    },
+    "AssetInstanceList":{
+      "type":"list",
+      "member":{"shape":"AssetInstance"}
+    },
+    "AssetInstanceTypeCapacity":{
+      "type":"structure",
+      "required":[
+        "InstanceType",
+        "Count"
+      ],
+      "members":{
+        "InstanceType":{
+          "shape":"InstanceTypeName",
+          "documentation":"<p>The type of instance.</p>"
+        },
+        "Count":{
+          "shape":"InstanceTypeCount",
+          "documentation":"<p>The number of each instance type.</p>"
+        }
+      },
+      "documentation":"<p>The capacity for each instance type.</p>"
     },
     "AssetListDefinition":{
       "type":"list",
@@ -622,6 +852,41 @@
       "max":5,
       "min":1
     },
+    "BlockingInstance":{
+      "type":"structure",
+      "members":{
+        "InstanceId":{
+          "shape":"InstanceId",
+          "documentation":"<p>The ID of the blocking instance.</p>"
+        },
+        "AccountId":{"shape":"AccountId"},
+        "AwsServiceName":{
+          "shape":"AWSServiceName",
+          "documentation":"<p>The Amazon Web Services service name that owns the specified blocking instance.</p>"
+        }
+      },
+      "documentation":"<p>A running Amazon EC2 instance that can be stopped to free up capacity needed to run the capacity task.</p>"
+    },
+    "BlockingInstancesList":{
+      "type":"list",
+      "member":{"shape":"BlockingInstance"}
+    },
+    "BlockingResourceType":{
+      "type":"string",
+      "enum":[
+        "EC2_INSTANCE",
+        "OUTPOST_RAM_SHARE",
+        "LGW_ROUTING_DOMAIN",
+        "LGW_ROUTE_TABLE",
+        "LGW_VIRTUAL_INTERFACE_GROUP",
+        "OUTPOST_ORDER_CANCELLABLE",
+        "OUTPOST_ORDER_INTERVENTION_REQUIRED"
+      ]
+    },
+    "BlockingResourceTypeList":{
+      "type":"list",
+      "member":{"shape":"BlockingResourceType"}
+    },
     "CIDR":{
       "type":"string",
       "max":18,
@@ -631,6 +896,31 @@
     "CIDRList":{
       "type":"list",
       "member":{"shape":"CIDR"}
+    },
+    "CancelCapacityTaskInput":{
+      "type":"structure",
+      "required":[
+        "CapacityTaskId",
+        "OutpostIdentifier"
+      ],
+      "members":{
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>ID of the capacity task that you want to cancel.</p>",
+          "location":"uri",
+          "locationName":"CapacityTaskId"
+        },
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>ID or ARN of the Outpost associated with the capacity task that you want to cancel.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        }
+      }
+    },
+    "CancelCapacityTaskOutput":{
+      "type":"structure",
+      "members":{}
     },
     "CancelOrderInput":{
       "type":"structure",
@@ -646,8 +936,100 @@
     },
     "CancelOrderOutput":{
       "type":"structure",
+      "members":{}
+    },
+    "CapacityTaskFailure":{
+      "type":"structure",
+      "required":["Reason"],
       "members":{
-      }
+        "Reason":{
+          "shape":"CapacityTaskStatusReason",
+          "documentation":"<p>The reason that the specified capacity task failed.</p>"
+        },
+        "Type":{
+          "shape":"CapacityTaskFailureType",
+          "documentation":"<p>The type of failure.</p>"
+        }
+      },
+      "documentation":"<p>The capacity tasks that failed.</p>"
+    },
+    "CapacityTaskFailureType":{
+      "type":"string",
+      "enum":[
+        "UNSUPPORTED_CAPACITY_CONFIGURATION",
+        "UNEXPECTED_ASSET_STATE",
+        "BLOCKING_INSTANCES_NOT_EVACUATED",
+        "INTERNAL_SERVER_ERROR",
+        "RESOURCE_NOT_FOUND"
+      ]
+    },
+    "CapacityTaskId":{
+      "type":"string",
+      "max":21,
+      "min":21,
+      "pattern":"^cap-[a-f0-9]{17}$"
+    },
+    "CapacityTaskList":{
+      "type":"list",
+      "member":{"shape":"CapacityTaskSummary"}
+    },
+    "CapacityTaskStatus":{
+      "type":"string",
+      "enum":[
+        "REQUESTED",
+        "IN_PROGRESS",
+        "FAILED",
+        "COMPLETED",
+        "WAITING_FOR_EVACUATION",
+        "CANCELLATION_IN_PROGRESS",
+        "CANCELLED"
+      ]
+    },
+    "CapacityTaskStatusList":{
+      "type":"list",
+      "member":{"shape":"CapacityTaskStatus"}
+    },
+    "CapacityTaskStatusReason":{
+      "type":"string",
+      "max":128
+    },
+    "CapacityTaskSummary":{
+      "type":"structure",
+      "members":{
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>The ID of the specified capacity task.</p>"
+        },
+        "OutpostId":{
+          "shape":"OutpostId",
+          "documentation":"<p>The ID of the Outpost associated with the specified capacity task.</p>"
+        },
+        "OrderId":{
+          "shape":"OrderId",
+          "documentation":"<p>The ID of the Amazon Web Services Outposts order of the host associated with the capacity task.</p>"
+        },
+        "AssetId":{
+          "shape":"AssetId",
+          "documentation":"<p>The ID of the asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
+        },
+        "CapacityTaskStatus":{
+          "shape":"CapacityTaskStatus",
+          "documentation":"<p>The status of the capacity task.</p>"
+        },
+        "CreationDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date that the specified capacity task was created.</p>"
+        },
+        "CompletionDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date that the specified capacity task successfully ran.</p>"
+        },
+        "LastModifiedDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date that the specified capacity was last modified.</p>"
+        }
+      },
+      "documentation":"<p>The summary of the capacity task.</p>"
     },
     "CatalogItem":{
       "type":"structure",
@@ -745,6 +1127,14 @@
         "InstanceFamilies":{
           "shape":"InstanceFamilies",
           "documentation":"<p>A list of the names of instance families that are currently associated with a given asset.</p>"
+        },
+        "InstanceTypeCapacities":{
+          "shape":"AssetInstanceCapacityList",
+          "documentation":"<p>The instance type capacities configured for this asset. This can be changed through a capacity task.</p>"
+        },
+        "MaxVcpus":{
+          "shape":"VCPUCount",
+          "documentation":"<p>The maximum number of vCPUs possible for the specified asset.</p>"
         }
       },
       "documentation":"<p> Information about compute hardware assets. </p>"
@@ -828,7 +1218,6 @@
       "type":"structure",
       "required":[
         "OutpostIdentifier",
-        "LineItems",
         "PaymentOption"
       ],
       "members":{
@@ -924,13 +1313,21 @@
         "Site":{"shape":"Site"}
       }
     },
+    "DecommissionRequestStatus":{
+      "type":"string",
+      "enum":[
+        "SKIPPED",
+        "BLOCKED",
+        "REQUESTED"
+      ]
+    },
     "DeleteOutpostInput":{
       "type":"structure",
       "required":["OutpostId"],
       "members":{
         "OutpostId":{
           "shape":"OutpostId",
-          "documentation":"<p> The ID or the Amazon Resource Name (ARN) of the Outpost. </p>",
+          "documentation":"<p> The ID or ARN of the Outpost. </p>",
           "location":"uri",
           "locationName":"OutpostId"
         }
@@ -938,8 +1335,7 @@
     },
     "DeleteOutpostOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteSiteInput":{
       "type":"structure",
@@ -955,8 +1351,7 @@
     },
     "DeleteSiteOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeviceSerialNumber":{
       "type":"string",
@@ -970,6 +1365,7 @@
       "min":1,
       "pattern":"^\\S[\\S ]*"
     },
+    "DryRun":{"type":"boolean"},
     "EC2Capacity":{
       "type":"structure",
       "members":{
@@ -1014,6 +1410,84 @@
         "SINGLE_MODE",
         "MULTI_MODE"
       ]
+    },
+    "GetCapacityTaskInput":{
+      "type":"structure",
+      "required":[
+        "CapacityTaskId",
+        "OutpostIdentifier"
+      ],
+      "members":{
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>ID of the capacity task.</p>",
+          "location":"uri",
+          "locationName":"CapacityTaskId"
+        },
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>ID or ARN of the Outpost associated with the specified capacity task.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        }
+      }
+    },
+    "GetCapacityTaskOutput":{
+      "type":"structure",
+      "members":{
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>ID of the capacity task.</p>"
+        },
+        "OutpostId":{
+          "shape":"OutpostId",
+          "documentation":"<p>ID of the Outpost associated with the specified capacity task.</p>"
+        },
+        "OrderId":{
+          "shape":"OrderId",
+          "documentation":"<p>ID of the Amazon Web Services Outposts order associated with the specified capacity task.</p>"
+        },
+        "AssetId":{
+          "shape":"AssetId",
+          "documentation":"<p>The ID of the Outpost asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
+        },
+        "RequestedInstancePools":{
+          "shape":"RequestedInstancePools",
+          "documentation":"<p>List of instance pools requested in the capacity task.</p>"
+        },
+        "InstancesToExclude":{
+          "shape":"InstancesToExclude",
+          "documentation":"<p>Instances that the user specified they cannot stop in order to free up the capacity needed to run the capacity task.</p>"
+        },
+        "DryRun":{
+          "shape":"DryRun",
+          "documentation":"<p>Performs a dry run to determine if you are above or below instance capacity.</p>"
+        },
+        "CapacityTaskStatus":{
+          "shape":"CapacityTaskStatus",
+          "documentation":"<p>Status of the capacity task.</p> <p>A capacity task can have one of the following statuses:</p> <ul> <li> <p> <code>REQUESTED</code> - The capacity task was created and is awaiting the next step by Amazon Web Services Outposts.</p> </li> <li> <p> <code>IN_PROGRESS</code> - The capacity task is running and cannot be cancelled.</p> </li> <li> <p> <code>FAILED</code> - The capacity task could not be completed.</p> </li> <li> <p> <code>COMPLETED</code> - The capacity task has completed successfully.</p> </li> <li> <p> <code>WAITING_FOR_EVACUATION</code> - The capacity task requires capacity to run. You must stop the recommended EC2 running instances to free up capacity for the task to run.</p> </li> <li> <p> <code>CANCELLATION_IN_PROGRESS</code> - The capacity task has been cancelled and is in the process of cleaning up resources.</p> </li> <li> <p> <code>CANCELLED</code> - The capacity task is cancelled.</p> </li> </ul>"
+        },
+        "Failed":{
+          "shape":"CapacityTaskFailure",
+          "documentation":"<p>Reason why the capacity task failed.</p>"
+        },
+        "CreationDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date the capacity task was created.</p>"
+        },
+        "CompletionDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date the capacity task ran successfully.</p>"
+        },
+        "LastModifiedDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date the capacity task was last modified.</p>"
+        },
+        "TaskActionOnBlockingInstances":{
+          "shape":"TaskActionOnBlockingInstances",
+          "documentation":"<p>User-specified option in case an instance is blocking the capacity task from running. Shows one of the following options:</p> <ul> <li> <p> <code>WAIT_FOR_EVACUATION</code> - Checks every 10 minutes over 48 hours to determine if instances have stopped and capacity is available to complete the task.</p> </li> <li> <p> <code>FAIL_TASK</code> - The capacity task fails.</p> </li> </ul>"
+        }
+      }
     },
     "GetCatalogItemInput":{
       "type":"structure",
@@ -1079,13 +1553,49 @@
         "Order":{"shape":"Order"}
       }
     },
+    "GetOutpostBillingInformationInput":{
+      "type":"structure",
+      "required":["OutpostIdentifier"],
+      "members":{
+        "NextToken":{
+          "shape":"Token",
+          "location":"querystring",
+          "locationName":"NextToken"
+        },
+        "MaxResults":{
+          "shape":"MaxResults1000",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID or ARN of the Outpost.</p>",
+          "location":"uri",
+          "locationName":"OutpostIdentifier"
+        }
+      }
+    },
+    "GetOutpostBillingInformationOutput":{
+      "type":"structure",
+      "members":{
+        "NextToken":{"shape":"Token"},
+        "Subscriptions":{
+          "shape":"SubscriptionList",
+          "documentation":"<p>The subscription details for the specified Outpost.</p>"
+        },
+        "ContractEndDate":{
+          "shape":"String",
+          "documentation":"<p>The date the current contract term ends for the specified Outpost. You must start the renewal or decommission process at least 5 business days before the current term for your Amazon Web Services Outposts ends. Failing to complete these steps at least 5 business days before the current term ends might result in unanticipated charges.</p>"
+        }
+      }
+    },
     "GetOutpostInput":{
       "type":"structure",
       "required":["OutpostId"],
       "members":{
         "OutpostId":{
           "shape":"OutpostId",
-          "documentation":"<p> The ID or the Amazon Resource Name (ARN) of the Outpost. </p>",
+          "documentation":"<p>The ID or ARN of the Outpost.</p>",
           "location":"uri",
           "locationName":"OutpostId"
         }
@@ -1097,7 +1607,7 @@
       "members":{
         "OutpostId":{
           "shape":"OutpostId",
-          "documentation":"<p> The ID or the Amazon Resource Name (ARN) of the Outpost. </p>",
+          "documentation":"<p> The ID or ARN of the Outpost. </p>",
           "location":"uri",
           "locationName":"OutpostId"
         },
@@ -1129,6 +1639,47 @@
       "type":"structure",
       "members":{
         "Outpost":{"shape":"Outpost"}
+      }
+    },
+    "GetOutpostSupportedInstanceTypesInput":{
+      "type":"structure",
+      "required":["OutpostIdentifier"],
+      "members":{
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID or ARN of the Outpost.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        },
+        "OrderId":{
+          "shape":"OrderId",
+          "documentation":"<p>The ID for the Amazon Web Services Outposts order.</p>",
+          "location":"querystring",
+          "locationName":"OrderId"
+        },
+        "AssetId":{
+          "shape":"AssetIdInput",
+          "documentation":"<p>The ID of the Outpost asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>",
+          "location":"querystring",
+          "locationName":"AssetId"
+        },
+        "MaxResults":{
+          "shape":"MaxResults1000",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "location":"querystring",
+          "locationName":"NextToken"
+        }
+      }
+    },
+    "GetOutpostSupportedInstanceTypesOutput":{
+      "type":"structure",
+      "members":{
+        "InstanceTypes":{"shape":"InstanceTypeListDefinition"},
+        "NextToken":{"shape":"Token"}
       }
     },
     "GetSiteAddressInput":{
@@ -1205,14 +1756,51 @@
       "min":1,
       "pattern":"^(?:.{1,200}/)?(?:[a-z0-9-_A-Z])+$"
     },
+    "InstanceId":{
+      "type":"string",
+      "max":32,
+      "min":11,
+      "pattern":"^i-[0-9a-z]+$"
+    },
+    "InstanceIdList":{
+      "type":"list",
+      "member":{"shape":"InstanceId"}
+    },
     "InstanceType":{
       "type":"string",
       "documentation":"<p>The instance type.</p>"
     },
+    "InstanceTypeCapacity":{
+      "type":"structure",
+      "required":[
+        "InstanceType",
+        "Count"
+      ],
+      "members":{
+        "InstanceType":{
+          "shape":"InstanceTypeName",
+          "documentation":"<p>The instance type of the hosts.</p>"
+        },
+        "Count":{
+          "shape":"InstanceTypeCount",
+          "documentation":"<p>The number of instances for the specified instance type.</p>"
+        }
+      },
+      "documentation":"<p>The instance type that you specify determines the combination of CPU, memory, storage, and networking capacity.</p>"
+    },
+    "InstanceTypeCount":{
+      "type":"integer",
+      "max":9999,
+      "min":0
+    },
     "InstanceTypeItem":{
       "type":"structure",
       "members":{
-        "InstanceType":{"shape":"InstanceType"}
+        "InstanceType":{"shape":"InstanceType"},
+        "VCPUs":{
+          "shape":"VCPUCount",
+          "documentation":"<p>The number of default VCPUs in an instance type.</p>"
+        }
       },
       "documentation":"<p>Information about an instance type.</p>"
     },
@@ -1220,6 +1808,30 @@
       "type":"list",
       "member":{"shape":"InstanceTypeItem"},
       "documentation":"<p>Information about the instance types.</p>"
+    },
+    "InstanceTypeName":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"^[a-z0-9\\-]+\\.[a-z0-9\\-]+$"
+    },
+    "InstancesToExclude":{
+      "type":"structure",
+      "members":{
+        "Instances":{
+          "shape":"InstanceIdList",
+          "documentation":"<p>List of user-specified instances that must not be stopped.</p>"
+        },
+        "AccountIds":{
+          "shape":"AccountIdList",
+          "documentation":"<p>IDs of the accounts that own each instance that must not be stopped.</p>"
+        },
+        "Services":{
+          "shape":"AWSServiceNameList",
+          "documentation":"<p>Names of the services that own each instance that must not be stopped in order to free up the capacity needed to run the capacity task.</p>"
+        }
+      },
+      "documentation":"<p>User-specified instances that must not be stopped. These instances will not appear in the list of instances that Amazon Web Services recommends to stop in order to free up capacity.</p>"
     },
     "InternalServerException":{
       "type":"structure",
@@ -1286,7 +1898,7 @@
       "members":{
         "AssetId":{
           "shape":"AssetId",
-          "documentation":"<p> The ID of the asset. </p>"
+          "documentation":"<p> The ID of the asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
         },
         "MacAddressList":{
           "shape":"MacAddressList",
@@ -1309,7 +1921,6 @@
     },
     "LineItemQuantity":{
       "type":"integer",
-      "max":20,
       "min":1
     },
     "LineItemRequest":{
@@ -1351,6 +1962,62 @@
       "key":{"shape":"LineItemStatus"},
       "value":{"shape":"LineItemQuantity"}
     },
+    "ListAssetInstancesInput":{
+      "type":"structure",
+      "required":["OutpostIdentifier"],
+      "members":{
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID of the Outpost.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        },
+        "AssetIdFilter":{
+          "shape":"AssetIdList",
+          "documentation":"<p>Filters the results by asset ID.</p>",
+          "location":"querystring",
+          "locationName":"AssetIdFilter"
+        },
+        "InstanceTypeFilter":{
+          "shape":"OutpostInstanceTypeList",
+          "documentation":"<p>Filters the results by instance ID.</p>",
+          "location":"querystring",
+          "locationName":"InstanceTypeFilter"
+        },
+        "AccountIdFilter":{
+          "shape":"AccountIdList",
+          "documentation":"<p>Filters the results by account ID.</p>",
+          "location":"querystring",
+          "locationName":"AccountIdFilter"
+        },
+        "AwsServiceFilter":{
+          "shape":"AWSServiceNameList",
+          "documentation":"<p>Filters the results by Amazon Web Services service.</p>",
+          "location":"querystring",
+          "locationName":"AwsServiceFilter"
+        },
+        "MaxResults":{
+          "shape":"MaxResults1000",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "location":"querystring",
+          "locationName":"NextToken"
+        }
+      }
+    },
+    "ListAssetInstancesOutput":{
+      "type":"structure",
+      "members":{
+        "AssetInstances":{
+          "shape":"AssetInstanceList",
+          "documentation":"<p>List of instances owned by all accounts on the Outpost. Does not include Amazon EBS or Amazon S3 instances.</p>"
+        },
+        "NextToken":{"shape":"Token"}
+      }
+    },
     "ListAssetsInput":{
       "type":"structure",
       "required":["OutpostIdentifier"],
@@ -1391,6 +2058,84 @@
         "Assets":{
           "shape":"AssetListDefinition",
           "documentation":"<p>Information about the hardware assets.</p>"
+        },
+        "NextToken":{"shape":"Token"}
+      }
+    },
+    "ListBlockingInstancesForCapacityTaskInput":{
+      "type":"structure",
+      "required":[
+        "OutpostIdentifier",
+        "CapacityTaskId"
+      ],
+      "members":{
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID or ARN of the Outpost associated with the specified capacity task.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        },
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>The ID of the capacity task.</p>",
+          "location":"uri",
+          "locationName":"CapacityTaskId"
+        },
+        "MaxResults":{
+          "shape":"MaxResults1000",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "location":"querystring",
+          "locationName":"NextToken"
+        }
+      }
+    },
+    "ListBlockingInstancesForCapacityTaskOutput":{
+      "type":"structure",
+      "members":{
+        "BlockingInstances":{
+          "shape":"BlockingInstancesList",
+          "documentation":"<p>A list of all running Amazon EC2 instances on the Outpost. Stopping one or more of these instances can free up the capacity needed to run the capacity task.</p>"
+        },
+        "NextToken":{"shape":"Token"}
+      }
+    },
+    "ListCapacityTasksInput":{
+      "type":"structure",
+      "members":{
+        "OutpostIdentifierFilter":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>Filters the results by an Outpost ID or an Outpost ARN.</p>",
+          "location":"querystring",
+          "locationName":"OutpostIdentifierFilter"
+        },
+        "MaxResults":{
+          "shape":"MaxResults1000",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "location":"querystring",
+          "locationName":"NextToken"
+        },
+        "CapacityTaskStatusFilter":{
+          "shape":"CapacityTaskStatusList",
+          "documentation":"<p>A list of statuses. For example, <code>REQUESTED</code> or <code>WAITING_FOR_EVACUATION</code>.</p>",
+          "location":"querystring",
+          "locationName":"CapacityTaskStatusFilter"
+        }
+      }
+    },
+    "ListCapacityTasksOutput":{
+      "type":"structure",
+      "members":{
+        "CapacityTasks":{
+          "shape":"CapacityTaskList",
+          "documentation":"<p>Lists all the capacity tasks.</p>"
         },
         "NextToken":{"shape":"Token"}
       }
@@ -1618,6 +2363,7 @@
       "error":{"httpStatusCode":404},
       "exception":true
     },
+    "NullableDouble":{"type":"double"},
     "OpticalStandard":{
       "type":"string",
       "enum":[
@@ -1649,7 +2395,7 @@
         },
         "Status":{
           "shape":"OrderStatus",
-          "documentation":"<p>The status of the order.</p> <ul> <li> <p> <code>PREPARING</code> - Order is received and being prepared.</p> </li> <li> <p> <code>IN_PROGRESS</code> - Order is either being built, shipped, or installed. To get more details, see the line item status.</p> </li> <li> <p> <code>COMPLETED</code> - Order is complete.</p> </li> <li> <p> <code>CANCELLED</code> - Order is cancelled.</p> </li> <li> <p> <code>ERROR</code> - Customer should contact support.</p> </li> </ul> <note> <p>The following status are deprecated: <code>RECEIVED</code>, <code>PENDING</code>, <code>PROCESSING</code>, <code>INSTALLING</code>, and <code>FULFILLED</code>. </p> </note>"
+          "documentation":"<p>The status of the order.</p> <ul> <li> <p> <code>PREPARING</code> - Order is received and being prepared.</p> </li> <li> <p> <code>IN_PROGRESS</code> - Order is either being built or shipped. To get more details, see the line item status.</p> </li> <li> <p> <code>DELIVERED</code> - Order was delivered to the Outpost site.</p> </li> <li> <p> <code>COMPLETED</code> - Order is complete.</p> </li> <li> <p> <code>CANCELLED</code> - Order is cancelled.</p> </li> <li> <p> <code>ERROR</code> - Customer should contact support.</p> </li> </ul> <note> <p>The following status are deprecated: <code>RECEIVED</code>, <code>PENDING</code>, <code>PROCESSING</code>, <code>INSTALLING</code>, and <code>FULFILLED</code>. </p> </note>"
         },
         "LineItems":{
           "shape":"LineItemListDefinition",
@@ -1684,6 +2430,10 @@
       "min":1,
       "pattern":"oo-[a-f0-9]{17}$"
     },
+    "OrderIdList":{
+      "type":"list",
+      "member":{"shape":"String"}
+    },
     "OrderStatus":{
       "type":"string",
       "enum":[
@@ -1695,6 +2445,7 @@
         "CANCELLED",
         "PREPARING",
         "IN_PROGRESS",
+        "DELIVERED",
         "COMPLETED",
         "ERROR"
       ]
@@ -1803,6 +2554,16 @@
       "min":1,
       "pattern":"^(arn:aws([a-z-]+)?:outposts:[a-z\\d-]+:\\d{12}:outpost/)?op-[a-f0-9]{17}$"
     },
+    "OutpostInstanceType":{
+      "type":"string",
+      "max":30,
+      "min":3,
+      "pattern":"[a-z0-9\\-\\.]+"
+    },
+    "OutpostInstanceTypeList":{
+      "type":"list",
+      "member":{"shape":"OutpostInstanceType"}
+    },
     "OutpostName":{
       "type":"string",
       "documentation":"<p>The name of the Outpost.</p>",
@@ -1829,7 +2590,8 @@
       "type":"string",
       "enum":[
         "THREE_YEARS",
-        "ONE_YEAR"
+        "ONE_YEAR",
+        "FIVE_YEARS"
       ]
     },
     "PostalCode":{
@@ -1844,7 +2606,8 @@
         "L6_30P",
         "IEC309",
         "AH530P7W",
-        "AH532P6W"
+        "AH532P6W",
+        "CS8365C"
       ]
     },
     "PowerDrawKva":{
@@ -1925,6 +2688,10 @@
       },
       "documentation":"<p> Information about the physical and logistical details for racks at sites. For more information about hardware requirements for racks, see <a href=\"https://docs.aws.amazon.com/outposts/latest/userguide/outposts-requirements.html#checklist\">Network readiness checklist</a> in the Amazon Web Services Outposts User Guide. </p>"
     },
+    "RequestedInstancePools":{
+      "type":"list",
+      "member":{"shape":"InstanceTypeCapacity"}
+    },
     "ResourceType":{
       "type":"string",
       "enum":[
@@ -1953,7 +2720,8 @@
         "DHL",
         "DBS",
         "FEDEX",
-        "UPS"
+        "UPS",
+        "EXPEDITORS"
       ]
     },
     "ShipmentInformation":{
@@ -2045,10 +2813,105 @@
       "min":1,
       "pattern":"OR-[A-Z0-9]{7}"
     },
+    "StartCapacityTaskInput":{
+      "type":"structure",
+      "required":[
+        "OutpostIdentifier",
+        "InstancePools"
+      ],
+      "members":{
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID or ARN of the Outposts associated with the specified capacity task.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        },
+        "OrderId":{
+          "shape":"OrderId",
+          "documentation":"<p>The ID of the Amazon Web Services Outposts order associated with the specified capacity task.</p>"
+        },
+        "AssetId":{
+          "shape":"AssetIdInput",
+          "documentation":"<p>The ID of the Outpost asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
+        },
+        "InstancePools":{
+          "shape":"RequestedInstancePools",
+          "documentation":"<p>The instance pools specified in the capacity task.</p>"
+        },
+        "InstancesToExclude":{
+          "shape":"InstancesToExclude",
+          "documentation":"<p>List of user-specified running instances that must not be stopped in order to free up the capacity needed to run the capacity task.</p>"
+        },
+        "DryRun":{
+          "shape":"DryRun",
+          "documentation":"<p>You can request a dry run to determine if the instance type and instance size changes is above or below available instance capacity. Requesting a dry run does not make any changes to your plan.</p>"
+        },
+        "TaskActionOnBlockingInstances":{
+          "shape":"TaskActionOnBlockingInstances",
+          "documentation":"<p>Specify one of the following options in case an instance is blocking the capacity task from running.</p> <ul> <li> <p> <code>WAIT_FOR_EVACUATION</code> - Checks every 10 minutes over 48 hours to determine if instances have stopped and capacity is available to complete the task.</p> </li> <li> <p> <code>FAIL_TASK</code> - The capacity task fails.</p> </li> </ul>"
+        }
+      }
+    },
+    "StartCapacityTaskOutput":{
+      "type":"structure",
+      "members":{
+        "CapacityTaskId":{
+          "shape":"CapacityTaskId",
+          "documentation":"<p>ID of the capacity task that you want to start.</p>"
+        },
+        "OutpostId":{
+          "shape":"OutpostId",
+          "documentation":"<p>ID of the Outpost associated with the capacity task.</p>"
+        },
+        "OrderId":{
+          "shape":"OrderId",
+          "documentation":"<p>ID of the Amazon Web Services Outposts order of the host associated with the capacity task.</p>"
+        },
+        "AssetId":{
+          "shape":"AssetId",
+          "documentation":"<p>The ID of the asset. An Outpost asset can be a single server within an Outposts rack or an Outposts server configuration.</p>"
+        },
+        "RequestedInstancePools":{
+          "shape":"RequestedInstancePools",
+          "documentation":"<p>List of the instance pools requested in the specified capacity task.</p>"
+        },
+        "InstancesToExclude":{
+          "shape":"InstancesToExclude",
+          "documentation":"<p>User-specified instances that must not be stopped in order to free up the capacity needed to run the capacity task.</p>"
+        },
+        "DryRun":{
+          "shape":"DryRun",
+          "documentation":"<p>Results of the dry run showing if the specified capacity task is above or below the available instance capacity.</p>"
+        },
+        "CapacityTaskStatus":{
+          "shape":"CapacityTaskStatus",
+          "documentation":"<p>Status of the specified capacity task.</p>"
+        },
+        "Failed":{
+          "shape":"CapacityTaskFailure",
+          "documentation":"<p>Reason that the specified capacity task failed.</p>"
+        },
+        "CreationDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>Date that the specified capacity task was created.</p>"
+        },
+        "CompletionDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>Date that the specified capacity task ran successfully.</p>"
+        },
+        "LastModifiedDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>Date that the specified capacity task was last modified.</p>"
+        },
+        "TaskActionOnBlockingInstances":{
+          "shape":"TaskActionOnBlockingInstances",
+          "documentation":"<p>User-specified option in case an instance is blocking the capacity task from running.</p> <ul> <li> <p> <code>WAIT_FOR_EVACUATION</code> - Checks every 10 minutes over 48 hours to determine if instances have stopped and capacity is available to complete the task.</p> </li> <li> <p> <code>FAIL_TASK</code> - The capacity task fails.</p> </li> </ul>"
+        }
+      }
+    },
     "StartConnectionRequest":{
       "type":"structure",
       "required":[
-        "DeviceSerialNumber",
         "AssetId",
         "ClientPublicKey",
         "NetworkInterfaceDeviceIndex"
@@ -2060,7 +2923,7 @@
         },
         "AssetId":{
           "shape":"AssetId",
-          "documentation":"<p> The ID of the Outpost server. </p>"
+          "documentation":"<p> The ID of the Outpost server.</p>"
         },
         "ClientPublicKey":{
           "shape":"WireGuardPublicKey",
@@ -2085,6 +2948,35 @@
         }
       }
     },
+    "StartOutpostDecommissionInput":{
+      "type":"structure",
+      "required":["OutpostIdentifier"],
+      "members":{
+        "OutpostIdentifier":{
+          "shape":"OutpostIdentifier",
+          "documentation":"<p>The ID or ARN of the Outpost that you want to decommission.</p>",
+          "location":"uri",
+          "locationName":"OutpostId"
+        },
+        "ValidateOnly":{
+          "shape":"ValidateOnly",
+          "documentation":"<p>Validates the request without starting the decommission process.</p>"
+        }
+      }
+    },
+    "StartOutpostDecommissionOutput":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"DecommissionRequestStatus",
+          "documentation":"<p>The status of the decommission request.</p>"
+        },
+        "BlockingResourceTypes":{
+          "shape":"BlockingResourceTypeList",
+          "documentation":"<p>The resources still associated with the Outpost that you are decommissioning.</p>"
+        }
+      }
+    },
     "StateOrRegion":{
       "type":"string",
       "max":50,
@@ -2106,6 +2998,64 @@
       "max":1000,
       "min":1,
       "pattern":"^[\\S \\n]+$"
+    },
+    "Subscription":{
+      "type":"structure",
+      "members":{
+        "SubscriptionId":{
+          "shape":"String",
+          "documentation":"<p>The ID of the subscription that appears on the Amazon Web Services Billing Center console.</p>"
+        },
+        "SubscriptionType":{
+          "shape":"SubscriptionType",
+          "documentation":"<p>The type of subscription which can be one of the following:</p> <ul> <li> <p> <b>ORIGINAL</b> - The first order on the Amazon Web Services Outposts.</p> </li> <li> <p> <b>RENEWAL</b> - Renewal requests, both month to month and longer term.</p> </li> <li> <p> <b>CAPACITY_INCREASE</b> - Capacity scaling orders.</p> </li> </ul>"
+        },
+        "SubscriptionStatus":{
+          "shape":"SubscriptionStatus",
+          "documentation":"<p>The status of subscription which can be one of the following:</p> <ul> <li> <p> <b>INACTIVE</b> - Subscription requests that are inactive.</p> </li> <li> <p> <b>ACTIVE</b> - Subscription requests that are in progress and have an end date in the future.</p> </li> <li> <p> <b>CANCELLED</b> - Subscription requests that are cancelled.</p> </li> </ul>"
+        },
+        "OrderIds":{
+          "shape":"OrderIdList",
+          "documentation":"<p>The order ID for your subscription.</p>"
+        },
+        "BeginDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date your subscription starts.</p>"
+        },
+        "EndDate":{
+          "shape":"ISO8601Timestamp",
+          "documentation":"<p>The date your subscription ends.</p>"
+        },
+        "MonthlyRecurringPrice":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The amount you are billed each month in the subscription period.</p>"
+        },
+        "UpfrontPrice":{
+          "shape":"NullableDouble",
+          "documentation":"<p>The amount billed when the subscription is created. This is a one-time charge.</p>"
+        }
+      },
+      "documentation":"<p>Provides information about your Amazon Web Services Outposts subscriptions.</p>"
+    },
+    "SubscriptionList":{
+      "type":"list",
+      "member":{"shape":"Subscription"}
+    },
+    "SubscriptionStatus":{
+      "type":"string",
+      "enum":[
+        "ACTIVE",
+        "INACTIVE",
+        "CANCELLED"
+      ]
+    },
+    "SubscriptionType":{
+      "type":"string",
+      "enum":[
+        "ORIGINAL",
+        "RENEWAL",
+        "CAPACITY_INCREASE"
+      ]
     },
     "SupportedHardwareType":{
       "type":"string",
@@ -2170,13 +3120,19 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
       "max":256,
       "pattern":"^[\\S \\n]+$"
+    },
+    "TaskActionOnBlockingInstances":{
+      "type":"string",
+      "enum":[
+        "WAIT_FOR_EVACUATION",
+        "FAIL_TASK"
+      ]
     },
     "Token":{
       "type":"string",
@@ -2220,8 +3176,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateOutpostInput":{
       "type":"structure",
@@ -2229,7 +3184,7 @@
       "members":{
         "OutpostId":{
           "shape":"OutpostId",
-          "documentation":"<p> The ID or the Amazon Resource Name (ARN) of the Outpost. </p>",
+          "documentation":"<p> The ID or ARN of the Outpost. </p>",
           "location":"uri",
           "locationName":"OutpostId"
         },
@@ -2328,7 +3283,7 @@
         },
         "PowerConnector":{
           "shape":"PowerConnector",
-          "documentation":"<p>The power connector that Amazon Web Services should plan to provide for connections to the hardware. Note the correlation between <code>PowerPhase</code> and <code>PowerConnector</code>. </p> <ul> <li> <p>Single-phase AC feed</p> <ul> <li> <p> <b>L6-30P</b> – (common in US); 30A; single phase</p> </li> <li> <p> <b>IEC309 (blue)</b> – P+N+E, 6hr; 32 A; single phase</p> </li> </ul> </li> <li> <p>Three-phase AC feed</p> <ul> <li> <p> <b>AH530P7W (red)</b> – 3P+N+E, 7hr; 30A; three phase</p> </li> <li> <p> <b>AH532P6W (red)</b> – 3P+N+E, 6hr; 32A; three phase</p> </li> </ul> </li> </ul>"
+          "documentation":"<p>The power connector that Amazon Web Services should plan to provide for connections to the hardware. Note the correlation between <code>PowerPhase</code> and <code>PowerConnector</code>. </p> <ul> <li> <p>Single-phase AC feed</p> <ul> <li> <p> <b>L6-30P</b> – (common in US); 30A; single phase</p> </li> <li> <p> <b>IEC309 (blue)</b> – P+N+E, 6hr; 32 A; single phase</p> </li> </ul> </li> <li> <p>Three-phase AC feed</p> <ul> <li> <p> <b>AH530P7W (red)</b> – 3P+N+E, 7hr; 30A; three phase</p> </li> <li> <p> <b>AH532P6W (red)</b> – 3P+N+E, 6hr; 32A; three phase</p> </li> <li> <p> <b>CS8365C</b> – (common in US); 3P+E, 50A; three phase</p> </li> </ul> </li> </ul>"
         },
         "PowerFeedDrop":{
           "shape":"PowerFeedDrop",
@@ -2386,6 +3341,11 @@
         "UPLINK_100G"
       ]
     },
+    "VCPUCount":{
+      "type":"integer",
+      "box":true
+    },
+    "ValidateOnly":{"type":"boolean"},
     "ValidationException":{
       "type":"structure",
       "members":{

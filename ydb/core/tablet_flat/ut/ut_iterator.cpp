@@ -19,7 +19,7 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
-    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize) noexcept
+    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize)
     {
         NPage::TConf conf;
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
             : AutoLoad(autoLoad)
         {}
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override {
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override {
             if (lob == ELargeObj::Extern) {
                 if (AutoLoad) {
                     if (LoadedExtern.insert(ref).second) {
@@ -182,7 +182,8 @@ Y_UNIT_TEST_SUITE(TIterator) {
             return NTest::TTestEnv::Locate(part, ref, lob);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+            auto pageId = ResolvePageId(part, location, groupId);
             if (AutoLoad) {
                 if (Loaded[groupId].insert(pageId).second) {
                     return nullptr;
@@ -192,7 +193,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
                 return nullptr;
             }
 
-            return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+            return NTest::TTestEnv::TryGetPage(part, location, groupId);
         }
 
         void Load() {

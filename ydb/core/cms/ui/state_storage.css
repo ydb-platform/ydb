@@ -1,0 +1,80 @@
+#state-storage-state table,
+#state-storage-state th,
+#state-storage-state td {
+  font: 12px/18px Arial, Sans-serif;
+  border-bottom: #dee2e6 1px solid;
+}
+
+#state-storage-state th {
+    background-color: #99bfe6;
+    font-weight: bold;
+}
+
+#state-storage-state .red {
+    font-weight: bold;
+    color: red;
+}
+
+#state-storage-state .yellow {
+    font-weight: bold;
+    color: goldenrod;
+}
+
+#state-storage-state .green {
+    font-weight: bold;
+    color: green;
+}
+
+#state-storage-loader {
+    display: none;
+}
+
+.active > #state-storage-loader {
+    display: inline-block;
+}
+
+#state-storage-state table {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+#state-storage-state .side {
+  width: 22px;
+  writing-mode: vertical-lr;
+}
+
+circle {
+  fill: transparent;
+  stroke: #5555ff;
+  stroke-width: 10px;
+  stroke-dasharray: 33;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+#state-storage-state .highlight {
+    animation: highlight 5s linear;
+}
+
+@keyframes highlight {
+    0% {
+        background: grey;
+    }
+    100% {
+        background: none;
+    }
+}
+
+#state-storage-loader .anim {
+  animation: clock-animation 5s linear;
+}
+
+@keyframes clock-animation {
+  0% {
+    stroke-dashoffset: 33;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}

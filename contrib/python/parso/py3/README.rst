@@ -68,6 +68,8 @@ Resources
 Installation
 ============
 
+.. code-block:: bash
+
     pip install parso
 
 Future
@@ -88,8 +90,7 @@ Acknowledgements
 
 - Guido van Rossum (@gvanrossum) for creating the parser generator pgen2
   (originally used in lib2to3).
-- `Salome Schneider <https://www.crepes-schnaegg.ch/cr%C3%AApes-schn%C3%A4gg/kunst-f%C3%BCrs-cr%C3%AApes-mobil/>`_
-  for the extremely awesome parso logo.
+- Salome Schneider for the extremely awesome parso logo.
 
 
 .. _jedi: https://github.com/davidhalter/jedi

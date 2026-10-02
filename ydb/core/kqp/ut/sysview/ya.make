@@ -7,11 +7,12 @@ ADDINCL(
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(
@@ -22,7 +23,9 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg_dummy
+    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()

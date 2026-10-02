@@ -1,0 +1,8 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["event_dt";["OptionalType";["DataType";"String"]]];
+        ["key";["OptionalType";["DataType";"String"]]];
+        ["subkey";["OptionalType";["DataType";"String"]]];
+        ["value";["OptionalType";["DataType";"String"]]]
+    ]];
+}}

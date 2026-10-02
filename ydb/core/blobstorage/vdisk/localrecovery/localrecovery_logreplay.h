@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_data.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/base/blobstorage.h>
@@ -37,6 +38,7 @@ namespace NKikimr {
         TIntrusivePtr<NSyncLog::TSyncLogRecovery> SyncLogRecovery;
         std::shared_ptr<NHuge::THullHugeKeeperPersState> RepairedHuge;
         TIntrusivePtr<TSyncerData> SyncerData;
+        std::unique_ptr<TChunkKeeperData> ChunkKeeperData;
 
         // owned chunks as reported by PDisk
         TVector<TChunkIdx> ReportedOwnedChunks;

@@ -116,21 +116,21 @@ public:
         return EndRowId;
     }
 
-    TPageId GetPageId() const override {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
-        return Iter->GetPageId();
+    TPageLocation GetLocation() const override {
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
+        return Part->GetPageLocation(Iter->GetPageId(), GroupId);
     }
 
     TRowId GetRowId() const override {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         return Iter->GetRowId();
     }
 
     TRowId GetNextRowId() const override {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         auto next = Iter + 1;
         return next
             ? next->GetRowId()
@@ -138,22 +138,22 @@ public:
     }
 
     TPos GetKeyCellsCount() const override {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         return GroupInfo.KeyTypes.size();
     }
 
     TCell GetKeyCell(TPos index) const override {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         return Iter.GetRecord()->Cell(GroupInfo.ColsKeyIdx[index]);
     }
 
     void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
         keyCells.clear();
 
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         
         auto record = Iter.GetRecord();
         for (auto index : xrange(GroupInfo.KeyTypes.size())) {
@@ -162,15 +162,15 @@ public:
     }
 
     const TRecord * GetRecord() const {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter);
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter);
         return Iter.GetRecord();
     }
 
     // currently this method is needed for tests only, but it's worth to keep it for future optimizations
     const TRecord * GetLastRecord() const {
-        Y_ABORT_UNLESS(Index);
-        Y_ABORT_UNLESS(Iter, "Should be called only after SeekLast call");
+        Y_ENSURE(Index);
+        Y_ENSURE(Iter, "Should be called only after SeekLast call");
         return Index->GetLastKeyRecord();
     }
 
@@ -184,7 +184,8 @@ private:
             return &*Index;
         }
         auto pageId = Part->IndexPages.GetFlat(GroupId);
-        auto page = Env->TryGetPage(Part, pageId, {});
+        auto location = Part->GetPageLocation(pageId, {});
+        auto page = Env->TryGetPage(Part, location, {});
         if (page) {
             Index = TIndex(*page);
             Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");

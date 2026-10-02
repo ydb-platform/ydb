@@ -4,21 +4,19 @@ Internal hook annotation, representation and calling machinery.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from collections.abc import Mapping
+from collections.abc import Sequence
+from collections.abc import Set
 import inspect
 import sys
 from types import ModuleType
-from typing import AbstractSet
 from typing import Any
 from typing import Callable
 from typing import Final
 from typing import final
-from typing import Generator
-from typing import List
-from typing import Mapping
 from typing import Optional
 from typing import overload
-from typing import Sequence
-from typing import Tuple
 from typing import TYPE_CHECKING
 from typing import TypedDict
 from typing import TypeVar
@@ -34,7 +32,7 @@ _Namespace = Union[ModuleType, type]
 _Plugin = object
 _HookExec = Callable[
     [str, Sequence["HookImpl"], Mapping[str, object], bool],
-    Union[object, List[object]],
+    Union[object, list[object]],
 ]
 _HookImplFunction = Callable[..., Union[_T, Generator[None, Result[_T], None]]]
 
@@ -302,12 +300,12 @@ def varnames(func: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if inspect.isclass(func):
         try:
             func = func.__init__
-        except AttributeError:
+        except AttributeError:  # pragma: no cover - pypy special case
             return (), ()
     elif not inspect.isroutine(func):  # callable object?
         try:
             func = getattr(func, "__call__", func)
-        except Exception:
+        except Exception:  # pragma: no cover - pypy special case
             return (), ()
 
     try:
@@ -315,7 +313,7 @@ def varnames(func: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
         sig = inspect.signature(
             func.__func__ if inspect.ismethod(func) else func  # type:ignore[arg-type]
         )
-    except TypeError:
+    except TypeError:  # pragma: no cover
         return (), ()
 
     _valid_param_kinds = (
@@ -347,7 +345,7 @@ def varnames(func: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
     # pypy3 uses "obj" instead of "self" for default dunder methods
     if not _PYPY:
         implicit_names: tuple[str, ...] = ("self",)
-    else:
+    else:  # pragma: no cover
         implicit_names = ("self", "obj")
     if args:
         qualname: str = getattr(func, "__qualname__", "")
@@ -376,7 +374,7 @@ class HookRelay:
 _HookRelay = HookRelay
 
 
-_CallHistory = List[Tuple[Mapping[str, object], Optional[Callable[[Any], None]]]]
+_CallHistory = list[tuple[Mapping[str, object], Optional[Callable[[Any], None]]]]
 
 
 class HookCaller:
@@ -485,12 +483,13 @@ class HookCaller:
                     notincall = ", ".join(
                         repr(argname)
                         for argname in self.spec.argnames
-                        # Avoid self.spec.argnames - kwargs.keys() - doesn't preserve order.
+                        # Avoid self.spec.argnames - kwargs.keys()
+                        # it doesn't preserve order.
                         if argname not in kwargs.keys()
                     )
                     warnings.warn(
-                        "Argument(s) {} which are declared in the hookspec "
-                        "cannot be found in this hook call".format(notincall),
+                        f"Argument(s) {notincall} which are declared in the hookspec "
+                        "cannot be found in this hook call",
                         stacklevel=2,
                     )
                     break
@@ -504,9 +503,9 @@ class HookCaller:
         Returns the result(s) of calling all registered plugins, see
         :ref:`calling`.
         """
-        assert (
-            not self.is_historic()
-        ), "Cannot directly call a historic hook - use call_historic instead."
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
         self._verify_all_args_are_provided(kwargs)
         firstresult = self.spec.opts.get("firstresult", False) if self.spec else False
         # Copy because plugins may register other plugins during iteration (#438).
@@ -545,9 +544,9 @@ class HookCaller:
         """Call the hook with some additional temporarily participating
         methods using the specified ``kwargs`` as call parameters, see
         :ref:`call_extra`."""
-        assert (
-            not self.is_historic()
-        ), "Cannot directly call a historic hook - use call_historic instead."
+        assert not self.is_historic(), (
+            "Cannot directly call a historic hook - use call_historic instead."
+        )
         self._verify_all_args_are_provided(kwargs)
         opts: HookimplOpts = {
             "wrapper": False,
@@ -608,7 +607,7 @@ class _SubsetHookCaller(HookCaller):
         "_remove_plugins",
     )
 
-    def __init__(self, orig: HookCaller, remove_plugins: AbstractSet[_Plugin]) -> None:
+    def __init__(self, orig: HookCaller, remove_plugins: Set[_Plugin]) -> None:
         self._orig = orig
         self._remove_plugins = remove_plugins
         self.name = orig.name  # type: ignore[misc]

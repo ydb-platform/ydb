@@ -1,6 +1,8 @@
-from hamcrest.core.selfdescribing import SelfDescribing
-
 import warnings
+from typing import Any
+
+from hamcrest.core.description import Description
+from hamcrest.core.selfdescribing import SelfDescribing
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
@@ -17,11 +19,10 @@ class SelfDescribingValue(SelfDescribing):
 
     """
 
-    def __init__(self, value):
-        warnings.warn('SelfDescribingValue no longer needed',
-                      DeprecationWarning)
+    def __init__(self, value: Any) -> None:
+        warnings.warn("SelfDescribingValue no longer needed", DeprecationWarning)
         self.value = value
 
-    def describe_to(self, description):
+    def describe_to(self, description: Description) -> None:
         """Generates a description of the value."""
-        description.append_value(self.value)
+        description.append_description_of(self.value)

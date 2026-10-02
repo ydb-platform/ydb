@@ -1,0 +1,188 @@
+#include "yql_yt_job_launcher.h"
+
+#include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
+#include <util/generic/algorithm.h>
+#include <util/system/shellcommand.h>
+#include <util/folder/tempdir.h>
+#include <util/stream/file.h>
+#include <util/system/condvar.h>
+#include <util/system/thread.h>
+#include <yql/essentials/utils/log/log.h>
+
+namespace NYql::NFmr {
+
+TFmrUserJobLauncher::TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& options)
+    : RunInSeparateProcess_(options.RunInSeparateProcess)
+    , FmrJobBinaryPath_(options.FmrJobBinaryPath)
+    , TableDataServiceDiscoveryFilePath_(options.TableDataServiceDiscoveryFilePath)
+    , GatewayType_(options.GatewayType)
+{
+}
+
+void TFmrUserJobLauncher::InitializeJobEnvironment(
+    const TString& jobEnvironmentDir,
+    const std::vector<TFileInfo>& jobFiles,
+    const std::vector<TYtResourceInfo>& jobYtResources,
+    const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+) {
+    YQL_ENSURE(!jobEnvironmentDir.empty());
+    std::vector<std::pair<TString, TString>> filePaths; // LocalPath, FileAlias
+
+    for (auto& fileInfo: jobFiles) {
+        TString filePath = fileInfo.Alias.empty() ? fileInfo.LocalPath : fileInfo.Alias;
+        filePaths.emplace_back(fileInfo.LocalPath, filePath);
+    }
+
+    for (auto& remoteFileInfo: jobYtResources) {
+        YQL_ENSURE(remoteFileInfo.RichPath.FileName_.Defined());
+        filePaths.emplace_back(remoteFileInfo.LocalPath, *remoteFileInfo.RichPath.FileName_);
+    }
+
+    for (auto& fmrResourceInfo: jobFmrResources) {
+        filePaths.emplace_back(fmrResourceInfo.LocalPath, fmrResourceInfo.Alias);
+    }
+
+    for (auto& [localPath, alias]: filePaths) {
+        YQL_ENSURE(!localPath.empty());
+        auto jobFilePath = TFsPath(jobEnvironmentDir) / alias;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Setting hardlink from local path " << localPath << " to new path " << jobFilePath.GetPath();
+        NFs::SetExecutable(localPath, true);
+        NFs::HardLink(localPath, jobFilePath);
+    }
+}
+
+std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
+    TFmrUserJob& job,
+    const TMaybe<TString>& jobEnvironmentDir,
+    const std::vector<TFileInfo>& jobFiles,
+    const std::vector<TYtResourceInfo>& jobYtResources,
+    const std::vector<TFmrResourceTaskInfo>& jobFmrResources,
+    std::shared_ptr<std::atomic<bool>> cancelFlag)
+{
+    if (!RunInSeparateProcess_) {
+        bool hasFmrJobResource = AnyOf(jobYtResources, [](const auto& r) {
+            return r.RichPath.FileName_.Defined() && *r.RichPath.FileName_ == "fmrjob";
+        });
+        if (!hasFmrJobResource) {
+            YQL_ENSURE(jobFiles.empty() && jobYtResources.empty(), "Fmr job with linked resource files should be launched only in separate process");
+            return job.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
+        }
+        // Fall through to separate-process launch using the fmrjob resource.
+    }
+
+    YQL_ENSURE(GatewayType_ == "native" || GatewayType_ == "file");
+
+    YQL_ENSURE(jobEnvironmentDir.Defined());
+    auto jobtmpDir = TFsPath(*jobEnvironmentDir);
+
+    InitializeJobEnvironment(*jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+
+    TString binaryPath = FmrJobBinaryPath_;
+    if (binaryPath.empty()) {
+        for (const auto& ytResource : jobYtResources) {
+            if (ytResource.RichPath.FileName_.Defined() && *ytResource.RichPath.FileName_ == "fmrjob") {
+                binaryPath = jobtmpDir.Child("fmrjob").GetPath();
+                break;
+            }
+        }
+        YQL_ENSURE(!binaryPath.empty(), "FmrJob binary is not available: neither FmrJobBinaryPath nor FmrJob resource is set");
+    }
+
+    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateAlways | RdWr);
+    TFile jobResultStatsFile(jobtmpDir.Child("stats.bin"), CreateAlways | RdWr);
+
+    if (!TableDataServiceDiscoveryFilePath_.empty()) {
+        TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
+        NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, jobtmpDir.Child(tmpDirTableDataServiceDiscoveryPath));
+        job.SetTableDataService(tmpDirTableDataServiceDiscoveryPath);
+    }
+    // If TableDataServiceDiscoveryFilePath_ is empty, the job is expected to carry
+    // its own discovery info (e.g. TVanillaInfo set via FillMapFmrJob).
+
+    job.SetYtJobServiceType(GatewayType_);
+
+    TFileOutput jobStateFileOutputStream(jobStateFile);
+    job.Save(jobStateFileOutputStream);
+    jobStateFileOutputStream.Flush();
+
+    // execute fmrJob in separate process
+    TShellCommandOptions opts;
+    TStringStream fmrJobOutputStream, fmrJobErrorStream;
+    opts.SetUseShell(false).SetDetachSession(false).SetOutputStream(&fmrJobOutputStream).SetErrorStream(&fmrJobErrorStream);
+
+    TShellCommand command(binaryPath, {}, opts, jobtmpDir);
+    command.Run();
+
+    // Monitor cancel flag in a background thread; terminate the process if set.
+    // The main thread calls Wait() so it wakes immediately when the process exits.
+    // A TCondVar lets the watcher wake immediately once Wait() returns instead of
+    // sleeping out the rest of its poll interval.
+    TMutex mutex;
+    TCondVar processFinished;
+    bool finished = false;
+    bool cancelled = false;
+    THolder<TThread> cancelWatcher;
+    if (cancelFlag) {
+        cancelWatcher = MakeHolder<TThread>([&] {
+            TGuard<TMutex> guard(mutex);
+            while (!finished) {
+                processFinished.WaitT(mutex, TDuration::MilliSeconds(50));
+                if (finished) {
+                    break;
+                }
+                if (cancelFlag->load()) {
+                    cancelled = true;
+                    command.Terminate();
+                    break;
+                }
+            }
+        });
+        cancelWatcher->Start();
+    }
+
+    command.Wait();
+
+    {
+        TGuard<TMutex> guard(mutex);
+        finished = true;
+        processFinished.BroadCast();
+    }
+    if (cancelWatcher) {
+        cancelWatcher->Join();
+    }
+    if (cancelled) {
+        return TFmrError{
+            .Reason = EFmrErrorReason::Unknown,
+            .ErrorMessage = "Job process terminated due to cancellation"
+        };
+    }
+
+    auto code = command.GetExitCode();
+    if (code != 0) {
+        TString errorStr = fmrJobErrorStream.Str();
+        EFmrErrorReason errorReason = ParseFmrReasonFromErrorMessage(errorStr);
+
+        return TFmrError{
+            .Reason = errorReason,
+            .ErrorMessage = TStringBuilder() << "Process terminated with exit code " << code << " and error message " << fmrJobErrorStream.Str()
+        };
+    }
+
+    YQL_CLOG(DEBUG, FastMapReduce) << "Process cerr: " << fmrJobErrorStream.Str();
+
+    TFileInput statsStream(jobResultStatsFile);
+    auto serializedProtoStats = statsStream.ReadAll();
+    NProto::TStatistics protoStats;
+    protoStats.ParseFromStringOrThrow(serializedProtoStats);
+    return StatisticsFromProto(protoStats);
+}
+
+bool TFmrUserJobLauncher::RunInSeperateProcess() const {
+    return RunInSeparateProcess_;
+}
+
+TString TFmrUserJobLauncher::GetFmrJobBinaryPath() const {
+    return FmrJobBinaryPath_;
+}
+
+} // namespace NYql::NFmr

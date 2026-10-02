@@ -1,6 +1,6 @@
 #include "offsets_collector.h"
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 std::vector<TTopicOffsets> TOffsetsCollector::GetOffsets() const
 {
@@ -59,12 +59,12 @@ void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TDataReceivedEve
     if (event.HasCompressedMessages()) {
         for (auto& message : event.GetCompressedMessages()) {
             uint64_t offset = message.GetOffset();
-            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + message.GetLogicalMessageCount());
         }
     } else {
         for (auto& message : event.GetMessages()) {
             uint64_t offset = message.GetOffset();
-            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + message.GetLogicalMessageCount());
         }
     }
 }

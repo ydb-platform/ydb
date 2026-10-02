@@ -5,7 +5,10 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NConsole {
 

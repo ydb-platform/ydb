@@ -60,7 +60,12 @@ struct TEnumTraitsWithKnownDomain<T, /*DomainSizeKnown*/ true>
     static constexpr int GetDomainSize();
 
     static constexpr const std::array<TStringBuf, GetDomainSize()>& GetDomainNames();
+    template <bool AllowAmbiguousValues = false>
     static constexpr const std::array<T, GetDomainSize()>& GetDomainValues();
+
+    //! Returns the domain with duplicates dropped: the first declared alias of each value
+    //! wins and declaration order is preserved.
+    static constexpr const auto& GetUniqueDomainValues();
 
     // For non-bit enums only.
     static constexpr T GetMinValue()
@@ -84,18 +89,18 @@ struct TEnumTraits<T, true>
     static constexpr bool IsStringSerializableEnum = TEnumTraitsImpl<T>::IsStringSerializableEnum;
     static constexpr bool IsMonotonic = TEnumTraitsImpl<T>::IsMonotonic;
 
-    static TStringBuf GetTypeName();
+    static constexpr TStringBuf GetTypeName();
 
     static constexpr std::optional<T> TryGetUnknownValue();
-    static std::optional<TStringBuf> FindLiteralByValue(T value);
-    static std::optional<T> FindValueByLiteral(TStringBuf literal);
+    static constexpr std::optional<TStringBuf> FindLiteralByValue(T value);
+    static constexpr std::optional<T> FindValueByLiteral(TStringBuf literal);
 
     static constexpr bool IsKnownValue(T value)
         requires (!TEnumTraitsImpl<T>::IsBitEnum);
     static constexpr bool IsValidValue(T value);
 
-    static TString ToString(T value);
-    static T FromString(TStringBuf literal);
+    static std::string ToString(T value);
+    static constexpr T FromString(TStringBuf literal);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,15 +207,37 @@ struct TEnumTraits<T, true>
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+concept CEnum = TEnumTraits<T>::IsEnum;
+
+template <typename T>
+concept CBitEnum = TEnumTraits<T>::IsBitEnum;
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Returns |true| iff the enumeration value is not bitwise zero.
-template <typename E>
-    requires TEnumTraits<E>::IsBitEnum
+template <CBitEnum E>
 constexpr bool Any(E value) noexcept;
 
 //! Returns |true| iff the enumeration value is bitwise zero.
-template <typename E>
-    requires TEnumTraits<E>::IsBitEnum
+template <CBitEnum E>
 constexpr bool None(E value) noexcept;
+
+//! Returns the number of set bits in |value|.
+//!
+//! Note that this may not be equivalent of "number of set variants", because
+//! variants themselves are not required to have popcount of 1.
+//!
+//! For example, given an enum:
+//! DEFINE_BIT_ENUM(EMyEnum,
+//!    ((Read)  (1))
+//!    ((Write) (2))
+//!    ((Both)  (3))
+//! );
+//!
+//! `PopCount(EMyEnum::Both)` will return 2.
+template <CBitEnum E>
+constexpr int PopCount(E value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

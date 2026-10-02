@@ -2,7 +2,9 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-#include <aws/checksums/private/crc_priv.h>
+#include <aws/checksums/crc.h>
+#include <aws/checksums/private/crc32_priv.h>
+#include <aws/checksums/private/crc_util.h>
 #include <stddef.h>
 
 /* The Ethernet, gzip, et.al CRC32 polynomial (reverse of 0x04C11DB7) */
@@ -1149,7 +1151,7 @@ static uint32_t s_crc_generic_sb4(const uint8_t *input, int length, uint32_t crc
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 4) {
-        crc ^= *current++;
+        crc ^= aws_bswap32_if_be(*current++);
         crc = (*table)[3][crc & 0xff] ^ (*table)[2][(crc >> 8) & 0xff] ^ (*table)[1][(crc >> 16) & 0xff] ^
               (*table)[0][crc >> 24];
         remaining -= 4;
@@ -1165,8 +1167,8 @@ static uint32_t s_crc_generic_sb8(const uint8_t *input, int length, uint32_t crc
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 8) {
-        uint32_t c1 = *current++ ^ crc;
-        uint32_t c2 = *current++;
+        uint32_t c1 = aws_bswap32_if_be(*current++) ^ crc;
+        uint32_t c2 = aws_bswap32_if_be(*current++);
         uint32_t t1 = (*table)[7][c1 & 0xff] ^ (*table)[6][(c1 >> 8) & 0xff] ^ (*table)[5][(c1 >> 16) & 0xff] ^
                       (*table)[4][(c1 >> 24) & 0xff];
         uint32_t t2 = (*table)[3][c2 & 0xff] ^ (*table)[2][(c2 >> 8) & 0xff] ^ (*table)[1][(c2 >> 16) & 0xff] ^
@@ -1185,10 +1187,10 @@ static uint32_t s_crc_generic_sb16(const uint8_t *input, int length, uint32_t cr
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 16) {
-        uint32_t c1 = *current++ ^ crc;
-        uint32_t c2 = *current++;
-        uint32_t c3 = *current++;
-        uint32_t c4 = *current++;
+        uint32_t c1 = aws_bswap32_if_be(*current++) ^ crc;
+        uint32_t c2 = aws_bswap32_if_be(*current++);
+        uint32_t c3 = aws_bswap32_if_be(*current++);
+        uint32_t c4 = aws_bswap32_if_be(*current++);
         uint32_t t1 = (*table)[15][c1 & 0xff] ^ (*table)[14][(c1 >> 8) & 0xff] ^ (*table)[13][(c1 >> 16) & 0xff] ^
                       (*table)[12][(c1 >> 24) & 0xff];
         uint32_t t2 = (*table)[11][c2 & 0xff] ^ (*table)[10][(c2 >> 8) & 0xff] ^ (*table)[9][(c2 >> 16) & 0xff] ^
@@ -1288,3 +1290,71 @@ uint32_t aws_checksums_crc32c_sw(const uint8_t *input, int length, uint32_t prev
 
     return s_crc32c_no_slice(input, length, previousCrc32c);
 }
+
+#if defined(__SIZEOF_INT128__)
+static inline uint32_t s_combine_crc32_sw(
+    const aws_checksums_crc32_constants_t cc[1],
+    uint32_t crc1,
+    uint32_t crc2,
+    uint64_t len2) {
+    if (AWS_UNLIKELY(len2 == 0)) {
+        return crc1;
+    }
+
+    int idx = 0;
+    while (len2) {
+        uint8_t nibble = len2 & 0xf;
+        if (nibble) {
+            uint32_t shift_factor = (uint32_t)(cc->shift_factors[idx][nibble][1] >> 32);
+            crc1 = aws_checksums_multiply_mod_p_reflected(cc->mu_poly[1], shift_factor, crc1);
+        }
+        idx++;
+        len2 >>= 4;
+    }
+
+    return crc1 ^ crc2;
+}
+
+uint32_t aws_checksums_crc32_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    return s_combine_crc32_sw(&aws_checksums_crc32_constants, crc1, crc2, len2);
+}
+
+uint32_t aws_checksums_crc32c_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    return s_combine_crc32_sw(&aws_checksums_crc32c_constants, crc1, crc2, len2);
+}
+#else
+
+static uint32_t s_crc32_shift_one_zero(uint32_t poly, uint32_t crc) {
+    for (int i = 0; i < 8; i++) {
+        crc = (crc >> 1) ^ ((crc & 1) ? poly : 0);
+    }
+    return crc;
+}
+
+uint32_t aws_checksums_crc32_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    static const uint32_t crc32_poly = 0xEDB88320UL;
+
+    for (size_t i = 0; i < len2; i++) {
+        crc1 = s_crc32_shift_one_zero(crc32_poly, crc1);
+    }
+    return crc1 ^ crc2;
+}
+
+uint32_t aws_checksums_crc32c_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    static const uint32_t crc32_poly = 0x82F63B78;
+
+    for (size_t i = 0; i < len2; i++) {
+        crc1 = s_crc32_shift_one_zero(crc32_poly, crc1);
+    }
+    return crc1 ^ crc2;
+}
+
+#endif

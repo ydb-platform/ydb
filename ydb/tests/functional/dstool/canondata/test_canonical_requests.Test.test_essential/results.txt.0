@@ -1,0 +1,8 @@
+dstool -e <endpoint> --mon-port <mon_port> --unknown-arg
+Exit Status: 1
+===== stdout =====
+To see more info run 'dstool --help'
+
+===== stderr =====
+dstool [global options ...] <global_command>
+Unknown options --unknown-arg

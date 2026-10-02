@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -23,7 +25,9 @@ public:
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         SideEffects.Reset(Self->SelfId());
-        BLOG_D("THive::TTxReleaseTablets::Execute " << request);
+        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Execute releasing tablets from parent hive",
+            {"logPrefix", GetLogPrefix()},
+            {"request", request});
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
             TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
@@ -78,15 +82,19 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"requestRecord", Request->Get()->Record},
+            {"sideEffects", SideEffects});
+        SideEffects.Complete(ctx, Self->Requests);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
             ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first, NKikimrHive::LOCK_LOST_REASON_TABLET_RELEASED));
         }
-        ctx.Send(Request->Sender, Response.Release());
+        ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         if (NeedToProcessPendingOperations) {
-            BLOG_D("THive::TTxReleaseTablets::Complete - retrying pending operations");
+            YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete retrying pending operations",
+                {"logPrefix", GetLogPrefix()});
             Self->ProcessPendingOperations();
         }
     }

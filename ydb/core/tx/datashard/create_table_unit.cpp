@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -42,7 +44,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
                                            const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     const auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
@@ -52,7 +54,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
@@ -63,10 +65,10 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to CREATE TABLE at " << DataShard.TabletID()
-               << " tableId# " << tableId
-               << " schema version# " << schemaVersion);
+    YDB_LOG_INFO_CTX(ctx, "TCreateTableUnit::Execute: trying to create table",
+        {"tabletId", DataShard.TabletID()},
+        {"tableId", tableId},
+        {"version", schemaVersion});
 
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
@@ -103,3 +105,7 @@ THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

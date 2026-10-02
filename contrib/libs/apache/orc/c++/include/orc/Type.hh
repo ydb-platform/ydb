@@ -25,6 +25,18 @@
 
 namespace orc {
 
+  namespace geospatial {
+    enum EdgeInterpolationAlgorithm {
+      SPHERICAL = 0,
+      VINCENTY = 1,
+      THOMAS = 2,
+      ANDOYER = 3,
+      KARNEY = 4
+    };
+    std::string AlgoToString(EdgeInterpolationAlgorithm algo);
+    EdgeInterpolationAlgorithm AlgoFromString(const std::string& algo);
+  }  // namespace geospatial
+
   enum TypeKind {
     BOOLEAN = 0,
     BYTE = 1,
@@ -44,7 +56,9 @@ namespace orc {
     DATE = 15,
     VARCHAR = 16,
     CHAR = 17,
-    TIMESTAMP_INSTANT = 18
+    TIMESTAMP_INSTANT = 18,
+    GEOMETRY = 19,
+    GEOGRAPHY = 20
   };
 
   class Type {
@@ -59,6 +73,10 @@ namespace orc {
     virtual uint64_t getMaximumLength() const = 0;
     virtual uint64_t getPrecision() const = 0;
     virtual uint64_t getScale() const = 0;
+    // for geospatial types only
+    virtual const std::string& getCrs() const = 0;
+    // for geography type only
+    virtual geospatial::EdgeInterpolationAlgorithm getAlgorithm() const = 0;
     virtual Type& setAttribute(const std::string& key, const std::string& value) = 0;
     virtual bool hasAttributeKey(const std::string& key) const = 0;
     virtual Type& removeAttribute(const std::string& key) = 0;
@@ -115,6 +133,10 @@ namespace orc {
   std::unique_ptr<Type> createListType(std::unique_ptr<Type> elements);
   std::unique_ptr<Type> createMapType(std::unique_ptr<Type> key, std::unique_ptr<Type> value);
   std::unique_ptr<Type> createUnionType();
+  std::unique_ptr<Type> createGeometryType(const std::string& crs = "OGC:CRS84");
+  std::unique_ptr<Type> createGeographyType(
+      const std::string& crs = "OGC:CRS84",
+      geospatial::EdgeInterpolationAlgorithm algo = geospatial::SPHERICAL);
 
 }  // namespace orc
 #endif

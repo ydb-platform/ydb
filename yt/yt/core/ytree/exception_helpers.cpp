@@ -1,14 +1,10 @@
 #include "exception_helpers.h"
-#include "attributes.h"
+
 #include "node.h"
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/rpc/public.h>
-
 #include <yt/yt/core/ypath/token.h>
-
-#include <yt/yt/core/ytree/helpers.h>
 
 namespace NYT::NYTree {
 
@@ -18,7 +14,7 @@ using namespace NYPath;
 
 namespace {
 
-TString GetNodePath(const IConstNodePtr& node)
+std::string GetNodePath(const IConstNodePtr& node)
 {
     auto path = node->GetPath();
     return path.empty() ? "Root node" : Format("Node %v", path);
@@ -39,7 +35,7 @@ void ThrowInvalidNodeType(const IConstNodePtr& node, ENodeType expectedType, ENo
 void ValidateNodeType(
     const IConstNodePtr& node,
     const THashSet<ENodeType>& expectedTypes,
-    const TString& expectedTypesStringRepresentation)
+    const std::string& expectedTypesStringRepresentation)
 {
     if (!expectedTypes.contains(node->GetType())) {
         THROW_ERROR_EXCEPTION(
@@ -99,16 +95,25 @@ void ThrowNoSuchBuiltinAttribute(TStringBuf key)
         ToYPathLiteral(key));
 }
 
-void ThrowMethodNotSupported(TStringBuf method, const std::optional<TString>& resolveType)
+void ThrowMethodNotSupported(TStringBuf method, const std::optional<std::string>& resolveType)
 {
     auto error = TError(
-        NRpc::EErrorCode::NoSuchMethod,
+        NYTree::EErrorCode::NoSuchYPathMethod,
         "%Qv method is not supported",
         method);
     if (resolveType) {
-        error <<= TErrorAttribute("resolve_type", *resolveType);
+        error.Add("resolve_type", *resolveType);
     }
     THROW_ERROR(error);
+}
+
+
+void ThrowMethodNotSupportedForAttributes(TStringBuf method)
+{
+    THROW_ERROR_EXCEPTION(
+        NYTree::EErrorCode::NoSuchYPathMethod,
+        "%Qv method is not supported for attributes",
+        method);
 }
 
 void ThrowCannotHaveChildren(const IConstNodePtr& node)

@@ -9,14 +9,14 @@ namespace {
 template <typename T>
 bool GenericTryFloatFromString(TStringBuf buf, T& value) {
     value = 0;
-    if (!buf.size()) {
+    if (buf.empty()) {
         return false;
     }
 
     if (TryFromString(buf.data(), buf.size(), value)) {
         return true;
     }
-    
+
     const char* ptr = buf.data();
     ui32 size = buf.size();
     char sign = '+';
@@ -45,7 +45,7 @@ bool GenericTryFloatFromString(TStringBuf buf, T& value) {
 
     return true;
 }
-}
+} // namespace
 
 float FloatFromString(TStringBuf buf) {
     float result = 0;
@@ -73,4 +73,4 @@ bool TryDoubleFromString(TStringBuf buf, double& value) {
     return GenericTryFloatFromString(buf, value);
 }
 
-}
+} // namespace NYql

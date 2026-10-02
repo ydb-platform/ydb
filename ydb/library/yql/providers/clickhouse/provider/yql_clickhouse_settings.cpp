@@ -1,10 +1,13 @@
 #include "yql_clickhouse_settings.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 namespace NYql {
 
 using namespace NCommon;
 
-TClickHouseConfiguration::TClickHouseConfiguration()
+TClickHouseConfiguration::TClickHouseConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(ClickHouseProviderName, TQContext(), strictConfigValidation)
 {
 }
 
@@ -13,7 +16,7 @@ TClickHouseSettings::TConstPtr TClickHouseConfiguration::Snapshot() const {
 }
 
 bool TClickHouseConfiguration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 } // NYql

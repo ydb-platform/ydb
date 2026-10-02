@@ -9,6 +9,9 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_observer.h
+    configs_dispatcher_proxy.h
+    configs_dispatcher_proxy.cpp
     console.cpp
     console.h
     console_audit.cpp
@@ -20,6 +23,8 @@ SRCS(
     console_configs_provider.h
     console_configs_subscriber.cpp
     console_configs_subscriber.h
+    console_configuration_info_collector.cpp
+    console_configuration_info_collector.h
     console_impl.h
     console_tenants_manager.cpp
     console_tenants_manager.h
@@ -30,6 +35,7 @@ SRCS(
     console__configure.cpp
     console__create_tenant.cpp
     console__drop_yaml_config.cpp
+    console__decommit_groups.cpp
     console__init_scheme.cpp
     console__load_state.cpp
     console__get_log_tail.cpp
@@ -61,6 +67,8 @@ SRCS(
     http.h
     immediate_controls_configurator.cpp
     immediate_controls_configurator.h
+    interconnect_configurator.cpp
+    interconnect_configurator.h
     jaeger_tracing_configurator.cpp
     jaeger_tracing_configurator.h
     log_settings_configurator.cpp
@@ -79,6 +87,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/actors/interconnect
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage
@@ -86,7 +95,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
     ydb/core/config/init
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
@@ -95,6 +104,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/library/operation_id
@@ -111,5 +121,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    ut_configs_dispatcher
+    ut_console
 )

@@ -138,6 +138,8 @@ class PROTOBUF_EXPORT TextFormat {
     // Returns the current indentation size in characters.
     virtual size_t GetCurrentIndentationSize() const { return 0; }
 
+    virtual bool failed() const { return false; }
+
     // Print text to the output stream.
     virtual void Print(const char* text, size_t size) = 0;
 
@@ -390,6 +392,9 @@ class PROTOBUF_EXPORT TextFormat {
       truncate_string_field_longer_than_ = truncate_string_field_longer_than;
     }
 
+    // Sets whether strings will be redacted and thus unparsable.
+    void SetRedactDebugString(bool redact) { redact_debug_string_ = redact; }
+
     // Register a custom field-specific FastFieldValuePrinter for fields
     // with a particular FieldDescriptor.
     // Returns "true" if the registration succeeded, or "false", if there is
@@ -427,9 +432,6 @@ class PROTOBUF_EXPORT TextFormat {
 
     // Sets whether silent markers will be inserted.
     void SetInsertSilentMarker(bool v) { insert_silent_marker_ = v; }
-
-    // Sets whether strings will be redacted and thus unparsable.
-    void SetRedactDebugString(bool redact) { redact_debug_string_ = redact; }
 
     // Sets whether the output string should be made non-deterministic.
     // This discourages equality checks based on serialized string comparisons.
@@ -486,6 +488,13 @@ class PROTOBUF_EXPORT TextFormat {
                             int recursion_budget) const;
 
     bool PrintAny(const Message& message, BaseTextGenerator* generator) const;
+
+    // Try to redact a field value based on the annotations associated with
+    // the field. This function returns true if it redacts the field value.
+    bool TryRedactFieldValue(const Message& message,
+                             const FieldDescriptor* field,
+                             BaseTextGenerator* generator,
+                             bool insert_value_separator) const;
 
     const FastFieldValuePrinter* GetFieldPrinter(
         const FieldDescriptor* field) const {

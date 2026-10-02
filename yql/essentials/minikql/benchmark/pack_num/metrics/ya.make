@@ -1,3 +1,6 @@
+# Requires pack_num.
+NO_BUILD_IF(OS_WINDOWS)
+
 PY3TEST()
 
 SIZE(LARGE)
@@ -16,6 +19,5 @@ DEPENDS(
     yql/essentials/minikql/benchmark/pack_num
 )
 
-INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 
 END()

@@ -5,11 +5,13 @@
     "endpointPrefix":"emr-containers",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"Amazon EMR Containers",
     "serviceId":"EMR containers",
     "signatureVersion":"v4",
     "signingName":"emr-containers",
-    "uid":"emr-containers-2020-10-01"
+    "uid":"emr-containers-2020-10-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CancelJobRun":{
@@ -56,6 +58,20 @@
       ],
       "documentation":"<p>Creates a managed endpoint. A managed endpoint is a gateway that connects Amazon EMR Studio to Amazon EMR on EKS so that Amazon EMR Studio can communicate with your virtual cluster.</p>"
     },
+    "CreateSecurityConfiguration":{
+      "name":"CreateSecurityConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/securityconfigurations"
+      },
+      "input":{"shape":"CreateSecurityConfigurationRequest"},
+      "output":{"shape":"CreateSecurityConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Creates a security configuration. Security configurations in Amazon EMR on EKS are templates for different security setups. You can use security configurations to configure the Lake Formation integration setup. You can also create a security configuration to re-use a security setup each time you create a virtual cluster.</p>"
+    },
     "CreateVirtualCluster":{
       "name":"CreateVirtualCluster",
       "http":{
@@ -67,7 +83,8 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"EKSRequestThrottledException"}
       ],
       "documentation":"<p>Creates a virtual cluster. Virtual cluster is a managed entity on Amazon EMR on EKS. You can create, describe, list and delete virtual clusters. They do not consume any additional resource in your system. A single virtual cluster maps to a single Kubernetes namespace. Given this relationship, you can model virtual clusters the same way you model Kubernetes namespaces to meet your requirements.</p>"
     },
@@ -158,6 +175,21 @@
       ],
       "documentation":"<p>Displays detailed information about a managed endpoint. A managed endpoint is a gateway that connects Amazon EMR Studio to Amazon EMR on EKS so that Amazon EMR Studio can communicate with your virtual cluster.</p>"
     },
+    "DescribeSecurityConfiguration":{
+      "name":"DescribeSecurityConfiguration",
+      "http":{
+        "method":"GET",
+        "requestUri":"/securityconfigurations/{securityConfigurationId}"
+      },
+      "input":{"shape":"DescribeSecurityConfigurationRequest"},
+      "output":{"shape":"DescribeSecurityConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Displays detailed information about a specified security configuration. Security configurations in Amazon EMR on EKS are templates for different security setups. You can use security configurations to configure the Lake Formation integration setup. You can also create a security configuration to re-use a security setup each time you create a virtual cluster.</p>"
+    },
     "DescribeVirtualCluster":{
       "name":"DescribeVirtualCluster",
       "http":{
@@ -230,6 +262,20 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Lists managed endpoints based on a set of parameters. A managed endpoint is a gateway that connects Amazon EMR Studio to Amazon EMR on EKS so that Amazon EMR Studio can communicate with your virtual cluster.</p>"
+    },
+    "ListSecurityConfigurations":{
+      "name":"ListSecurityConfigurations",
+      "http":{
+        "method":"GET",
+        "requestUri":"/securityconfigurations"
+      },
+      "input":{"shape":"ListSecurityConfigurationsRequest"},
+      "output":{"shape":"ListSecurityConfigurationsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists security configurations based on a set of parameters. Security configurations in Amazon EMR on EKS are templates for different security setups. You can use security configurations to configure the Lake Formation integration setup. You can also create a security configuration to re-use a security setup each time you create a virtual cluster.</p>"
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -313,11 +359,33 @@
       "min":44,
       "pattern":"^arn:(aws[a-zA-Z0-9-]*):acm:.+:(\\d{12}):certificate/.+$"
     },
+    "AllowAWSToRetainLogs":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "AuthorizationConfiguration":{
+      "type":"structure",
+      "members":{
+        "lakeFormationConfiguration":{
+          "shape":"LakeFormationConfiguration",
+          "documentation":"<p>Lake Formation related configuration inputs for the security configuration.</p>"
+        },
+        "encryptionConfiguration":{
+          "shape":"EncryptionConfiguration",
+          "documentation":"<p>Encryption-related configuration input for the security configuration.</p>"
+        }
+      },
+      "documentation":"<p>Authorization-related configuration inputs for the security configuration.</p>"
+    },
     "Base64Encoded":{
       "type":"string",
       "max":5000,
       "pattern":"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$"
     },
+    "Boolean":{"type":"boolean"},
     "CancelJobRunRequest":{
       "type":"structure",
       "required":[
@@ -365,6 +433,10 @@
         }
       },
       "documentation":"<p>The entity representing certificate data generated for managed endpoint.</p>"
+    },
+    "CertificateProviderType":{
+      "type":"string",
+      "enum":["PEM"]
     },
     "ClientToken":{
       "type":"string",
@@ -613,6 +685,54 @@
         }
       }
     },
+    "CreateSecurityConfigurationRequest":{
+      "type":"structure",
+      "required":[
+        "clientToken",
+        "name",
+        "securityConfigurationData"
+      ],
+      "members":{
+        "clientToken":{
+          "shape":"ClientToken",
+          "documentation":"<p>The client idempotency token to use when creating the security configuration.</p>",
+          "idempotencyToken":true
+        },
+        "name":{
+          "shape":"ResourceNameString",
+          "documentation":"<p>The name of the security configuration.</p>"
+        },
+        "containerProvider":{
+          "shape":"ContainerProvider",
+          "documentation":"<p>The container provider associated with the security configuration.</p>"
+        },
+        "securityConfigurationData":{
+          "shape":"SecurityConfigurationData",
+          "documentation":"<p>Security configuration input for the request.</p>"
+        },
+        "tags":{
+          "shape":"TagMap",
+          "documentation":"<p>The tags to add to the security configuration.</p>"
+        }
+      }
+    },
+    "CreateSecurityConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"ResourceIdString",
+          "documentation":"<p>The ID of the security configuration.</p>"
+        },
+        "name":{
+          "shape":"ResourceNameString",
+          "documentation":"<p>The name of the security configuration.</p>"
+        },
+        "arn":{
+          "shape":"SecurityConfigurationArn",
+          "documentation":"<p>The ARN (Amazon Resource Name) of the security configuration.</p>"
+        }
+      }
+    },
     "CreateVirtualClusterRequest":{
       "type":"structure",
       "required":[
@@ -637,6 +757,10 @@
         "tags":{
           "shape":"TagMap",
           "documentation":"<p>The tags assigned to the virtual cluster.</p>"
+        },
+        "securityConfigurationId":{
+          "shape":"ResourceIdString",
+          "documentation":"<p>The ID of the security configuration.</p>"
         }
       }
     },
@@ -835,6 +959,27 @@
         }
       }
     },
+    "DescribeSecurityConfigurationRequest":{
+      "type":"structure",
+      "required":["id"],
+      "members":{
+        "id":{
+          "shape":"ResourceIdString",
+          "documentation":"<p>The ID of the security configuration.</p>",
+          "location":"uri",
+          "locationName":"securityConfigurationId"
+        }
+      }
+    },
+    "DescribeSecurityConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "securityConfiguration":{
+          "shape":"SecurityConfiguration",
+          "documentation":"<p>Details of the security configuration.</p>"
+        }
+      }
+    },
     "DescribeVirtualClusterRequest":{
       "type":"structure",
       "required":["id"],
@@ -856,15 +1001,38 @@
         }
       }
     },
+    "EKSRequestThrottledException":{
+      "type":"structure",
+      "members":{
+        "message":{"shape":"String1024"}
+      },
+      "documentation":"<p>The request exceeded the Amazon EKS API operation limits.</p>",
+      "error":{"httpStatusCode":429},
+      "exception":true
+    },
     "EksInfo":{
       "type":"structure",
       "members":{
         "namespace":{
           "shape":"KubernetesNamespace",
           "documentation":"<p>The namespaces of the Amazon EKS cluster.</p>"
+        },
+        "nodeLabel":{
+          "shape":"ResourceNameString",
+          "documentation":"<p>The nodeLabel of the nodes where the resources of this virtual cluster can get scheduled. It requires relevant scaling and policy engine addons.</p>"
         }
       },
       "documentation":"<p>The information about the Amazon EKS cluster.</p>"
+    },
+    "EncryptionConfiguration":{
+      "type":"structure",
+      "members":{
+        "inTransitEncryptionConfiguration":{
+          "shape":"InTransitEncryptionConfiguration",
+          "documentation":"<p>In-transit encryption-related input for the security configuration.</p>"
+        }
+      },
+      "documentation":"<p>Configurations related to encryption for the security configuration.</p>"
     },
     "Endpoint":{
       "type":"structure",
@@ -1075,6 +1243,16 @@
       "max":2048,
       "min":20,
       "pattern":"^arn:(aws[a-zA-Z0-9-]*):iam::(\\d{12})?:(role((\\u002F)|(\\u002F[\\u0021-\\u007F]+\\u002F))[\\w+=,.@-]+)$"
+    },
+    "InTransitEncryptionConfiguration":{
+      "type":"structure",
+      "members":{
+        "tlsCertificateConfiguration":{
+          "shape":"TLSCertificateConfiguration",
+          "documentation":"<p>TLS certificate-related configuration input for the security configuration.</p>"
+        }
+      },
+      "documentation":"<p>Configurations related to in-transit encryption for the security configuration.</p>"
     },
     "InternalServerException":{
       "type":"structure",
@@ -1302,6 +1480,24 @@
       "min":1,
       "pattern":"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
     },
+    "LakeFormationConfiguration":{
+      "type":"structure",
+      "members":{
+        "authorizedSessionTagValue":{
+          "shape":"SessionTagValue",
+          "documentation":"<p>The session tag to authorize Amazon EMR on EKS for API calls to Lake Formation.</p>"
+        },
+        "secureNamespaceInfo":{
+          "shape":"SecureNamespaceInfo",
+          "documentation":"<p>The namespace input of the system job.</p>"
+        },
+        "queryEngineRoleArn":{
+          "shape":"IAMRoleArn",
+          "documentation":"<p>The query engine IAM role ARN that is tied to the secure Spark job. The <code>QueryEngine</code> role assumes the <code>JobExecutionRole</code> to execute all the Lake Formation calls.</p>"
+        }
+      },
+      "documentation":"<p>Lake Formation related configuration inputs for the security configuration.</p>"
+    },
     "ListJobRunsRequest":{
       "type":"structure",
       "required":["virtualClusterId"],
@@ -1466,6 +1662,48 @@
         }
       }
     },
+    "ListSecurityConfigurationsRequest":{
+      "type":"structure",
+      "members":{
+        "createdAfter":{
+          "shape":"Date",
+          "documentation":"<p>The date and time after which the security configuration was created.</p>",
+          "location":"querystring",
+          "locationName":"createdAfter"
+        },
+        "createdBefore":{
+          "shape":"Date",
+          "documentation":"<p>The date and time before which the security configuration was created.</p>",
+          "location":"querystring",
+          "locationName":"createdBefore"
+        },
+        "maxResults":{
+          "shape":"JavaInteger",
+          "documentation":"<p>The maximum number of security configurations the operation can list.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next set of security configurations to return.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      }
+    },
+    "ListSecurityConfigurationsResponse":{
+      "type":"structure",
+      "members":{
+        "securityConfigurations":{
+          "shape":"SecurityConfigurations",
+          "documentation":"<p>The list of returned security configurations.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next set of security configurations to return.</p>"
+        }
+      }
+    },
     "ListTagsForResourceRequest":{
       "type":"structure",
       "required":["resourceArn"],
@@ -1531,6 +1769,12 @@
           "documentation":"<p>The token for the next set of virtual clusters to return. </p>",
           "location":"querystring",
           "locationName":"nextToken"
+        },
+        "eksAccessEntryIntegrated":{
+          "shape":"Boolean",
+          "documentation":"<p>Optional Boolean that specifies whether the operation should return the virtual clusters that have the access entry integration enabled or disabled. If not specified, the operation returns all applicable virtual clusters.</p>",
+          "location":"querystring",
+          "locationName":"eksAccessEntryIntegrated"
         }
       }
     },
@@ -1559,6 +1803,20 @@
       "min":1,
       "pattern":"[\\.\\-_/#A-Za-z0-9]+"
     },
+    "ManagedLogs":{
+      "type":"structure",
+      "members":{
+        "allowAWSToRetainLogs":{
+          "shape":"AllowAWSToRetainLogs",
+          "documentation":"<p>Determines whether Amazon Web Services can retain logs.</p>"
+        },
+        "encryptionKeyArn":{
+          "shape":"KmsKeyArn",
+          "documentation":"<p>The Amazon resource name (ARN) of the encryption key for logs.</p>"
+        }
+      },
+      "documentation":"<p>The entity that provides configuration control over managed logs.</p>"
+    },
     "MaxFilesToKeep":{
       "type":"integer",
       "max":50,
@@ -1567,6 +1825,10 @@
     "MonitoringConfiguration":{
       "type":"structure",
       "members":{
+        "managedLogs":{
+          "shape":"ManagedLogs",
+          "documentation":"<p>The entity that controls configuration for managed logs.</p>"
+        },
         "persistentAppUI":{
           "shape":"PersistentAppUI",
           "documentation":"<p>Monitoring configurations for the persistent application UI. </p>"
@@ -1754,12 +2016,92 @@
       },
       "documentation":"<p> Amazon S3 configuration for monitoring log publishing. You can configure your jobs to send log information to Amazon S3.</p>"
     },
+    "SecretsManagerArn":{
+      "type":"string",
+      "max":2048,
+      "min":3,
+      "pattern":"^arn:(aws[a-zA-Z0-9-]*):secretsmanager:.+:(\\d{12}):secret:[0-9a-zA-Z/_+=.@-]+$"
+    },
+    "SecureNamespaceInfo":{
+      "type":"structure",
+      "members":{
+        "clusterId":{
+          "shape":"ClusterId",
+          "documentation":"<p>The ID of the Amazon EKS cluster where Amazon EMR on EKS jobs run.</p>"
+        },
+        "namespace":{
+          "shape":"KubernetesNamespace",
+          "documentation":"<p>The namespace of the Amazon EKS cluster where the system jobs run.</p>"
+        }
+      },
+      "documentation":"<p>Namespace inputs for the system job.</p>"
+    },
+    "SecurityConfiguration":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"ResourceIdString",
+          "documentation":"<p>The ID of the security configuration.</p>"
+        },
+        "name":{
+          "shape":"ResourceNameString",
+          "documentation":"<p>The name of the security configuration.</p>"
+        },
+        "arn":{
+          "shape":"SecurityConfigurationArn",
+          "documentation":"<p>The ARN (Amazon Resource Name) of the security configuration.</p>"
+        },
+        "createdAt":{
+          "shape":"Date",
+          "documentation":"<p>The date and time that the job run was created.</p>"
+        },
+        "createdBy":{
+          "shape":"RequestIdentityUserArn",
+          "documentation":"<p>The user who created the job run.</p>"
+        },
+        "securityConfigurationData":{
+          "shape":"SecurityConfigurationData",
+          "documentation":"<p>Security configuration inputs for the request.</p>"
+        },
+        "tags":{
+          "shape":"TagMap",
+          "documentation":"<p>The tags to assign to the security configuration.</p>"
+        }
+      },
+      "documentation":"<p>Inputs related to the security configuration. Security configurations in Amazon EMR on EKS are templates for different security setups. You can use security configurations to configure the Lake Formation integration setup. You can also create a security configuration to re-use a security setup each time you create a virtual cluster.</p>"
+    },
+    "SecurityConfigurationArn":{
+      "type":"string",
+      "max":1024,
+      "min":60,
+      "pattern":"^arn:(aws[a-zA-Z0-9-]*):emr-containers:.+:(\\d{12}):\\/securityconfigurations\\/[0-9a-zA-Z]+$"
+    },
+    "SecurityConfigurationData":{
+      "type":"structure",
+      "members":{
+        "authorizationConfiguration":{
+          "shape":"AuthorizationConfiguration",
+          "documentation":"<p>Authorization-related configuration input for the security configuration.</p>"
+        }
+      },
+      "documentation":"<p>Configurations related to the security configuration for the request.</p>"
+    },
+    "SecurityConfigurations":{
+      "type":"list",
+      "member":{"shape":"SecurityConfiguration"}
+    },
     "SensitivePropertiesMap":{
       "type":"map",
       "key":{"shape":"String1024"},
       "value":{"shape":"String1024"},
       "max":100,
       "sensitive":true
+    },
+    "SessionTagValue":{
+      "type":"string",
+      "max":512,
+      "min":1,
+      "pattern":"[\\.\\-_/#A-Za-z0-9 ]+"
     },
     "SparkSqlJobDriver":{
       "type":"structure",
@@ -1919,6 +2261,24 @@
       "type":"list",
       "member":{"shape":"String256"}
     },
+    "TLSCertificateConfiguration":{
+      "type":"structure",
+      "members":{
+        "certificateProviderType":{
+          "shape":"CertificateProviderType",
+          "documentation":"<p>The TLS certificate type. Acceptable values: <code>PEM</code> or <code>Custom</code>.</p>"
+        },
+        "publicCertificateSecretArn":{
+          "shape":"SecretsManagerArn",
+          "documentation":"<p>Secrets Manager ARN that contains the public TLS certificate contents, used for communication between the user job and the system job.</p>"
+        },
+        "privateCertificateSecretArn":{
+          "shape":"SecretsManagerArn",
+          "documentation":"<p>Secrets Manager ARN that contains the private TLS certificate contents, used for communication between the user job and the system job.</p>"
+        }
+      },
+      "documentation":"<p>Configurations related to the TLS certificate for the security configuration.</p>"
+    },
     "TagKeyList":{
       "type":"list",
       "member":{"shape":"String128"},
@@ -1953,8 +2313,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TemplateParameter":{
       "type":"string",
@@ -1980,7 +2339,7 @@
       "type":"map",
       "key":{"shape":"TemplateParameterName"},
       "value":{"shape":"TemplateParameterConfiguration"},
-      "max":20
+      "max":100
     },
     "TemplateParameterDataType":{
       "type":"string",
@@ -1993,7 +2352,7 @@
       "type":"map",
       "key":{"shape":"TemplateParameterName"},
       "value":{"shape":"String1024"},
-      "max":20
+      "max":100
     },
     "TemplateParameterName":{
       "type":"string",
@@ -2030,8 +2389,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UriString":{
       "type":"string",
@@ -2078,6 +2436,10 @@
         "tags":{
           "shape":"TagMap",
           "documentation":"<p>The assigned tags of the virtual cluster.</p>"
+        },
+        "securityConfigurationId":{
+          "shape":"ResourceIdString",
+          "documentation":"<p>The ID of the security configuration.</p>"
         }
       },
       "documentation":"<p>This entity describes a virtual cluster. A virtual cluster is a Kubernetes namespace that Amazon EMR is registered with. Amazon EMR uses virtual clusters to run jobs and host endpoints. Multiple virtual clusters can be backed by the same physical cluster. However, each virtual cluster maps to one namespace on an Amazon EKS cluster. Virtual clusters do not create any active resources that contribute to your bill or that require lifecycle management outside the service.</p>"
@@ -2107,5 +2469,5 @@
       "member":{"shape":"VirtualCluster"}
     }
   },
-  "documentation":"<p>Amazon EMR on EKS provides a deployment option for Amazon EMR that allows you to run open-source big data frameworks on Amazon Elastic Kubernetes Service (Amazon EKS). With this deployment option, you can focus on running analytics workloads while Amazon EMR on EKS builds, configures, and manages containers for open-source applications. For more information about Amazon EMR on EKS concepts and tasks, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/emr-eks.html\">What is shared id=\"EMR-EKS\"/&gt;</a>.</p> <p> <i>Amazon EMR containers</i> is the API name for Amazon EMR on EKS. The <code>emr-containers</code> prefix is used in the following scenarios: </p> <ul> <li> <p>It is the prefix in the CLI commands for Amazon EMR on EKS. For example, <code>aws emr-containers start-job-run</code>.</p> </li> <li> <p>It is the prefix before IAM policy actions for Amazon EMR on EKS. For example, <code>\"Action\": [ \"emr-containers:StartJobRun\"]</code>. For more information, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/security_iam_service-with-iam.html#security_iam_service-with-iam-id-based-policies-actions\">Policy actions for Amazon EMR on EKS</a>.</p> </li> <li> <p>It is the prefix used in Amazon EMR on EKS service endpoints. For example, <code>emr-containers.us-east-2.amazonaws.com</code>. For more information, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/service-quotas.html#service-endpoints\">Amazon EMR on EKSService Endpoints</a>.</p> </li> </ul>"
+  "documentation":"<p>Amazon EMR on EKS provides a deployment option for Amazon EMR that allows you to run open-source big data frameworks on Amazon Elastic Kubernetes Service (Amazon EKS). With this deployment option, you can focus on running analytics workloads while Amazon EMR on EKS builds, configures, and manages containers for open-source applications. For more information about Amazon EMR on EKS concepts and tasks, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/emr-eks.html\">What is Amazon EMR on EKS</a>.</p> <p> <i>Amazon EMR containers</i> is the API name for Amazon EMR on EKS. The <code>emr-containers</code> prefix is used in the following scenarios: </p> <ul> <li> <p>It is the prefix in the CLI commands for Amazon EMR on EKS. For example, <code>aws emr-containers start-job-run</code>.</p> </li> <li> <p>It is the prefix before IAM policy actions for Amazon EMR on EKS. For example, <code>\"Action\": [ \"emr-containers:StartJobRun\"]</code>. For more information, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/security_iam_service-with-iam.html#security_iam_service-with-iam-id-based-policies-actions\">Policy actions for Amazon EMR on EKS</a>.</p> </li> <li> <p>It is the prefix used in Amazon EMR on EKS service endpoints. For example, <code>emr-containers.us-east-2.amazonaws.com</code>. For more information, see <a href=\"https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/service-quotas.html#service-endpoints\">Amazon EMR on EKSService Endpoints</a>.</p> </li> </ul>"
 }

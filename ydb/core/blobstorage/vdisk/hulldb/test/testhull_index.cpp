@@ -83,7 +83,7 @@ namespace NTest {
                 const TTabletCommand &cmd = AllMocks.Next();
                 if (cmd.LogoBlobsCmd) {
                     LogoBlobs.push_back(*cmd.LogoBlobsCmd);
-                    logoBlobsTotalBytes += LogoBlobRecSizeof + cmd.LogoBlobsCmd->Key.LogoBlobID().BlobSize();
+                    logoBlobsTotalBytes += LogoBlobRecSizeof + cmd.LogoBlobsCmd->GetKey().LogoBlobID().BlobSize();
                 }
                 if (cmd.BarriersCmd) {
                     Barriers.push_back(*cmd.BarriersCmd);
@@ -126,10 +126,18 @@ namespace NTest {
             TIntrusivePtr<TSst> sst(new TSst(TestCtx->GetVCtx()));
             sst->Info.CTime = TAppData::TimeProvider->Now();
 
+            TTrackableVector<typename TSst::TRec> linearIndex(TMemoryConsumer(TestCtx->GetVCtx()->SstIndex));
+
             while (it != end && totalBytes < requiredBytes) {
-                sst->LoadedIndex.emplace_back(it->Key, it->MemRec);
-                totalBytes += sizeof(TKey) + sizeof(TMemRec) + DataSize(it->Key);
+                linearIndex.emplace_back(it->GetKey(), it->GetMemRec());
+                totalBytes += sizeof(TKey) + sizeof(TMemRec) + DataSize(it->GetKey());
                 ++it;
+            }
+
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                sst->LoadLinearIndex(linearIndex);
+            } else {
+                sst->LoadedIndex.swap(linearIndex);
             }
 
             return sst;
@@ -303,4 +311,3 @@ namespace NTest {
 
 } // NTest
 } // NKikimr
-

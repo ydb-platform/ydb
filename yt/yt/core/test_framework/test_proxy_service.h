@@ -12,7 +12,7 @@
 
 #include <yt/yt/core/ytree/attributes.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/testing/common/network.h>
 
@@ -120,16 +120,16 @@ public:
 private:
     const TRealmIdServiceMap Services_;
     const TRealmIdServiceMap DefaultServices_;
-    const TString Address_;
+    const std::string Address_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    NThreading::TAtomicObject<TError> TerminationError_;
 
-    THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    THashMap<std::pair<std::string, TGuid>, TTestBusPtr> RequestToBus_;
 
     void HandleRequestResult(
         const std::string& address,

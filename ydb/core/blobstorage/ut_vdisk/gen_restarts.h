@@ -112,7 +112,7 @@ struct TChaoticWriteRestartWriteSettings : public TWriteRestartReadSettings {
 
 };
 
-
+TConfiguration CreateErasureNone();
 void WriteRestartRead(const TWriteRestartReadSettings &settings, TDuration testTimeout);
 void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings, TDuration testTimeout);
 void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings, TDuration testTimeout);

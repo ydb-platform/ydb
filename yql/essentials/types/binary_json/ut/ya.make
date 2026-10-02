@@ -6,6 +6,7 @@ SRCS(
     entry_ut.cpp
     test_base.cpp
     valid_ut.cpp
+    extract_ut.cpp
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
@@ -24,7 +25,7 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/sql/pg_dummy
 )
 

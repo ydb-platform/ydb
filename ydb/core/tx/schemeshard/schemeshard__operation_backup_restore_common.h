@@ -1,15 +1,17 @@
 #pragma once
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/mind/hive/hive.h>
 
 #include <util/generic/utility.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,11 +20,7 @@ class TConfigurePart: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TConfigurePart"
-                << ", opId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigurePart"; }
 
     static TVirtualTimestamp GetSnapshotTime(const TSchemeShard* ss, const TPathId& pathId) {
         Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
@@ -35,32 +33,42 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 DebugHint() << " HandleReply TEvProposeTransactionResult"
-                 << " at tabletId# " << ssId
-                 << " message# " << ev->Get()->Record.ShortDebugString());
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    TKind::Name() << " TConfigurePart ProgressState"
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TxType);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
+
+        // For column tables, backup propose is async (export actor must finish
+        // before columnshard replies). Handle cancel here to avoid waiting for
+        // that reply which may never come while export is blocked.
+        const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+        if (txState->Cancel && path->IsColumnTable()) {
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, OperationId, TTxState::Aborting);
+            return true;
+        }
 
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
@@ -76,25 +84,20 @@ public:
 
 template <typename TKind>
 class TProposedWaitParts: public TSubOperationState {
+    virtual const char* Name() const override { return "TProposedWaitParts"; }
+
 protected:
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
-
-private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TProposedWaitParts"
-                << ", opId: " << OperationId;
-    }
 
 public:
     TProposedWaitParts(TTxState::ETxType type, TOperationId id)
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
+        IgnoreMessages({ TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
@@ -105,15 +108,16 @@ public:
         const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
 
         auto unableToMakeABill = [&](const TStringBuf reason) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
-                << ": kind# " << TKind::Name()
-                << ", opId# " << operationId
-                << ", reason# " << reason
-                << ", domain# " << domainPath.PathString()
-                << ", domainPathId# " << pathIdForDomainId
-                << ", IsDomainSchemeShard: " << context.SS->IsDomainSchemeShard
-                << ", ParentDomainId: " << context.SS->ParentDomainId
-                << ", ResourcesDomainId: " << domainPath.DomainInfo()->GetResourcesDomainId());
+            YDB_LOG_INFO_CTX(context.Ctx, "Unable to make a bill",
+                {"kind", TKind::Name()},
+                {"opId", operationId},
+                {"reason", reason},
+                {"subdomainPath", domainPath.PathString()},
+                {"subdomainPathId", pathIdForDomainId},
+                {"isRootSchemeshard", context.SS->IsDomainSchemeShard},
+                {"rootSubdomainId", context.SS->ParentDomainId},
+                {"resourceSubdomainPathId", domainPath.DomainInfo()->GetResourcesDomainId()},
+            );
         };
 
         if (!context.SS->IsServerlessDomain(domainPath)) {
@@ -151,12 +155,13 @@ public:
             .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
             .ToString();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Make a bill"
-            << ": kind# " << TKind::Name()
-            << ", opId# " << operationId
-            << ", domain# " << domainPath.PathString()
-            << ", domainPathId# " << pathIdForDomainId
-            << ", record# " << billRecord);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "Make a bill",
+            {"kind", TKind::Name()},
+            {"opId", operationId},
+            {"subdomainPath", domainPath.PathString()},
+            {"subdomainPathId", pathIdForDomainId},
+            {"record", billRecord},
+        );
 
         context.OnComplete.Send(NMetering::MakeMeteringServiceID(),
             new NMetering::TEvMetering::TEvWriteMeteringJson(std::move(billRecord)));
@@ -223,14 +228,69 @@ public:
         }
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
+    static void CollectStats(TOperationId operationId, const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
+        const auto& evRecord = ev->Get()->Record;
+        if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
+            return;
+        }
+        Y_ABORT_UNLESS(context.SS->FindTx(operationId));
+        TTxState& txState = *context.SS->FindTx(operationId);
+
+        auto tabletId = TTabletId(evRecord.GetOrigin());
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
+
+        if (!txState.SchemeChangeNotificationReceived.contains(shardIdx)) {
+            return;
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        if (!txState.ShardStatuses.contains(shardIdx)) {
+            auto& shardStatus = txState.ShardStatuses[shardIdx];
+            const auto& opResult = evRecord.GetOpResult();
+            shardStatus.Success = opResult.GetSuccess();
+            shardStatus.Error = opResult.GetExplain();
+            shardStatus.BytesProcessed = opResult.GetBytesProcessed();
+            shardStatus.RowsProcessed = opResult.GetRowsProcessed();
+            context.SS->PersistTxShardStatus(db, operationId, shardIdx, shardStatus);
+
+            const ui64 ru = TKind::RequestUnits(shardStatus.BytesProcessed, shardStatus.RowsProcessed);
+            Bill(operationId, txState.TargetPathId, shardIdx, ru, context);
+        }
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " at tablet# " << ssId
-                     << " message# " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
+
+        bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
+        CollectStats(OperationId, ev, context);
+
+        if (!allnotificationsReceived) {
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            return false;
+        }
+
+        TKind::Finish(OperationId, txState, context);
+        return true;
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        const auto& evRecord = ev->Get()->Record;
+
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
 
         bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
         CollectStats(OperationId, ev, context);
@@ -251,11 +311,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -267,6 +323,13 @@ public:
                 shard.Operation = TTxState::ProposedWaitParts;
                 context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
             }
+
+            // Subscribe
+            if (shard.TabletType == TTabletTypes::ColumnShard) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            }
             context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
         }
         txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
@@ -277,9 +340,9 @@ public:
         }
 
         // Move all notifications that were already received
-        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // NOTE: SchemeChangeNotification is sent form DS or NotifyTxCompletionResult is sent from CS after it has got PlanStep from coordinator and the schema tx has completed
         // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
-        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
+        // So we are going to accumulate SchemeChangeNotification or NotifyTxCompletionResult that are received before this Tx switches to WaitParts state
         txState->AcceptPendingSchemeNotification();
 
         // Got notifications from all datashards?
@@ -299,29 +362,21 @@ class TAborting: public TProposedWaitParts<TKind> {
     using TProposedWaitParts<TKind>::OperationId;
     using TProposedWaitParts<TKind>::TxType;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TAborting"
-                << ", opId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TAborting"; }
 
 public:
     TAborting(TTxState::ETxType type, TOperationId id)
         : TProposedWaitParts<TKind>(type, id)
     {
-        this->IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
+        this->IgnoreMessages({ TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
 
     bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " ProgressState"
-                    << " at tablet" << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -344,11 +399,9 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        TKind::Name() << " Abort"
-                            << ", on datashard: " << datashardId
-                            << ", opId: " << OperationId
-                            << ", at schemeshard: " << context.SS->TabletID());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Abort",
+                {"datashard", datashardId},
+            );
 
             auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
@@ -375,27 +428,20 @@ class TPropose: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TPropose"
-                << ", opId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     TPropose(TTxState::ETxType type, TOperationId id)
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({ TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " triggers early, save it"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         TProposedWaitParts<TKind>::CollectStats(OperationId, ev, context);
@@ -404,12 +450,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
-        auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -430,11 +474,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -457,6 +497,8 @@ class TBackupRestoreOperationBase: public TSubOperation {
     const TTxState::ETxType TxType;
     const TPathElement::EPathState Lock;
 
+    virtual const char* Name() const override final { return TKind::Name(); }
+
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -470,8 +512,22 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
+        case TTxState::ConfigureParts: {
+            const TTxState* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            Y_ABORT_UNLESS(txState->TxType == TxType);
+
+            const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+            if (txState->Cancel && path->IsColumnTable()) {
+                if (txState->State == TTxState::Propose) {
+                    return TTxState::Propose;
+                }
+
+                Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
+                return TTxState::Aborting;
+            }
             return TTxState::Propose;
+        }
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {
@@ -546,8 +602,40 @@ public:
     }
 
     void PrepareChanges(TPathElement::TPtr path, TOperationContext& context) {
+        if (path->IsColumnTable()) {
+            PrepareColumnTableChanges(path, context);
+        } else {
+            PrepareTableChanges(path, context);
+        }
+    }
+
+    void PrepareColumnTableChanges(TPathElement::TPtr path, TOperationContext& context) {
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path->PathId));
+        auto table = context.SS->ColumnTables.at(path->PathId);
+
+        path->LastTxId = OperationId.GetTxId();
+        path->PathState = Lock;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
+
+        txState.Shards.reserve(table->GetOwnedColumnShardsVerified().size());
+        for (const auto& shard : table->GetOwnedColumnShardsVerified()) {
+            TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+            txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistTxState(db, OperationId);
+
+        TKind::PersistTask(path->PathId, Transaction, context);
+
+        txState.State = TTxState::CreateParts;
+        context.OnComplete.ActivateTx(OperationId);
+    }
+
+    void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
-        TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
+        const TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
 
         path->LastTxId = OperationId.GetTxId();
         path->PathState = Lock;
@@ -555,9 +643,8 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
 
         txState.Shards.reserve(table->GetPartitions().size());
-        for (const auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
-            txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+        for (const auto* shard : table->GetPartitions()) {
+            txState.Shards.emplace_back(shard->ShardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
         }
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -573,17 +660,16 @@ public:
         context.OnComplete.ActivateTx(OperationId);
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString name = TKind::GetTableName(Transaction);
+        const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     TKind::Name() << " Propose"
-                         << ", path: " << parentPath << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", JoinPath({parentPath, name})},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -615,16 +701,31 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
+                .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
-                .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderOperation()
-                .IsCommonSensePath() //forbid alter impl index tables
-                .CanBackupTable(); //forbid backup table with indexes
+                .NotUnderOperation();
+
+            if (!internal) {
+                checks
+                    .IsCommonSensePath() // forbid alter impl index tables
+                    .CanBackupTable(); // forbid backup table with indexes
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+        }
+
+        if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
+            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            for (const auto& [_, column] : table->Columns) {
+                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "Cannot backup table with generated column '" << column.Name << "'");
+                    return result;
+                }
             }
         }
 
@@ -645,19 +746,21 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TBackupRestoreOperationBase");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     TKind::Name() << " AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, TKind::Name() << " AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

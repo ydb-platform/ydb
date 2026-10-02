@@ -51,6 +51,20 @@ void TCrashOnDeserializationErrorGuard::OnError()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+void ThrowPrematureEndOfStream(size_t bytesLoaded, size_t bytesExpected)
+{
+    TCrashOnDeserializationErrorGuard::OnError();
+    THROW_ERROR_EXCEPTION("Premature end-of-stream")
+        .With("bytes_loaded", bytesLoaded)
+        .With("bytes_expected", bytesExpected);
+}
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSaveContextStream::TSaveContextStream(IOutputStream* output)
     : BufferedOutput_(output)
     , Output_(&*BufferedOutput_)
@@ -123,7 +137,7 @@ TLoadContextStream::TLoadContextStream(
     TStreamLoadContext* context,
     IZeroCopyInput* input)
     : Context_(context)
-    , Input_(input)
+    , ZeroCopyInput_(input)
 { }
 
 void TLoadContextStream::SkipToCheckpoint()
@@ -203,16 +217,31 @@ size_t TLoadContextStream::LoadSlow(void* buf_, size_t len)
     return bytesRead;
 }
 
+void TLoadContextStream::ConfigureScopeFilter(TSerializationDumpScopeFilter scopeFilter)
+{
+    ScopeFilter_ = std::move(scopeFilter);
+
+    if (!ScopeFilter_) {
+        Context_->Dumper().DisableScopeFiltering();
+    }
+}
+
 void TLoadContextStream::BeginScope(TStringBuf name)
 {
     UpdateScopesChecksum();
 
-    ScopeStack_.push_back({
-        .ScopeNameLength = name.size(),
-    });
-
     CurrentScopePath_ += "/";
     CurrentScopePath_ += name;
+
+    auto filterMatch = ScopeFilter_ && ScopeFilter_->contains(CurrentScopePath_);
+    if (filterMatch) {
+        Context_->Dumper().BeginScopeFilterMatchBlock(CurrentScopePath_);
+    }
+
+    ScopeStack_.push_back({
+        .NameLength = name.size(),
+        .FilterMatch = filterMatch,
+    });
 
     if (Context_->Dumper().IsChecksumDumpActive()) {
         ScopeStack_.back().CurrentChecksumPtr = BufferPtr_;
@@ -235,7 +264,12 @@ void TLoadContextStream::EndScope()
         Context_->Dumper().WriteChecksum(CurrentScopePath_, topmostScope.CurrentChecksum);
     }
 
-    CurrentScopePath_.resize(CurrentScopePath_.size() - topmostScope.ScopeNameLength - 1);
+    if (topmostScope.FilterMatch) {
+        Context_->Dumper().EndScopeFilterMatchBlock(CurrentScopePath_);
+    }
+
+    CurrentScopePath_.resize(CurrentScopePath_.size() - topmostScope.NameLength - 1);
+
     ScopeStack_.pop_back();
 }
 
@@ -248,6 +282,17 @@ TStreamLoadContext::TStreamLoadContext(IInputStream* input)
 TStreamLoadContext::TStreamLoadContext(IZeroCopyInput* input)
     : Input_(this, input)
 { }
+
+void TStreamLoadContext::ConfigureDump(
+    ESerializationDumpMode mode,
+    TSerializationDumpScopeFilter scopeFilter)
+{
+    // Dump may only be configured once.
+    YT_VERIFY(!std::exchange(DumpConfigured_, true));
+
+    Dumper_.ConfigureMode(mode);
+    Input_.ConfigureScopeFilter(std::move(scopeFilter));
+}
 
 void TStreamLoadContext::BeginScope(TStringBuf name)
 {
@@ -300,4 +345,3 @@ TEntityStreamLoadContext::TEntityStreamLoadContext(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

@@ -25,7 +25,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <limits>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "absl/base/config.h"
@@ -34,12 +36,9 @@
 #include "absl/numeric/int128.h"
 #include "absl/strings/internal/str_format/extension.h"
 #include "absl/strings/internal/str_format/float_conversion.h"
+#include "absl/strings/internal/utf8.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
-
-#if defined(ABSL_HAVE_STD_STRING_VIEW)
-#include <string_view>
-#endif
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -97,7 +96,7 @@ class IntDigits {
   // Supports all integral types.
   template <typename T>
   void PrintAsDec(T v) {
-    static_assert(std::is_integral<T>::value, "");
+    static_assert(std::is_integral_v<T>, "");
     start_ = storage_;
     size_ = static_cast<size_t>(numbers_internal::FastIntToBuffer(v, storage_) -
                                 storage_);
@@ -311,79 +310,46 @@ inline bool ConvertStringArg(string_view v, const FormatConversionSpecImpl conv,
                                conv.has_left_flag());
 }
 
-struct ShiftState {
-  bool saw_high_surrogate = false;
-  uint8_t bits = 0;
-};
-
-// Converts `v` from UTF-16 or UTF-32 to UTF-8 and writes to `buf`. `buf` is
-// assumed to have enough space for the output. `s` is used to carry state
-// between successive calls with a UTF-16 surrogate pair. Returns the number of
-// chars written, or `static_cast<size_t>(-1)` on failure.
-//
-// This is basically std::wcrtomb(), but always outputting UTF-8 instead of
-// respecting the current locale.
-inline size_t WideToUtf8(wchar_t wc, char *buf, ShiftState &s) {
-  const auto v = static_cast<uint32_t>(wc);
-  if (v < 0x80) {
-    *buf = static_cast<char>(v);
-    return 1;
-  } else if (v < 0x800) {
-    *buf++ = static_cast<char>(0xc0 | (v >> 6));
-    *buf = static_cast<char>(0x80 | (v & 0x3f));
-    return 2;
-  } else if (v < 0xd800 || (v - 0xe000) < 0x2000) {
-    *buf++ = static_cast<char>(0xe0 | (v >> 12));
-    *buf++ = static_cast<char>(0x80 | ((v >> 6) & 0x3f));
-    *buf = static_cast<char>(0x80 | (v & 0x3f));
-    return 3;
-  } else if ((v - 0x10000) < 0x100000) {
-    *buf++ = static_cast<char>(0xf0 | (v >> 18));
-    *buf++ = static_cast<char>(0x80 | ((v >> 12) & 0x3f));
-    *buf++ = static_cast<char>(0x80 | ((v >> 6) & 0x3f));
-    *buf = static_cast<char>(0x80 | (v & 0x3f));
-    return 4;
-  } else if (v < 0xdc00) {
-    s.saw_high_surrogate = true;
-    s.bits = static_cast<uint8_t>(v & 0x3);
-    const uint8_t high_bits = ((v >> 6) & 0xf) + 1;
-    *buf++ = static_cast<char>(0xf0 | (high_bits >> 2));
-    *buf =
-        static_cast<char>(0x80 | static_cast<uint8_t>((high_bits & 0x3) << 4) |
-                          static_cast<uint8_t>((v >> 2) & 0xf));
-    return 2;
-  } else if (v < 0xe000 && s.saw_high_surrogate) {
-    *buf++ = static_cast<char>(0x80 | static_cast<uint8_t>(s.bits << 4) |
-                               static_cast<uint8_t>((v >> 6) & 0xf));
-    *buf = static_cast<char>(0x80 | (v & 0x3f));
-    s.saw_high_surrogate = false;
-    s.bits = 0;
-    return 2;
-  } else {
-    return static_cast<size_t>(-1);
-  }
-}
+inline bool IsLowSurrogate(uint32_t c) { return c >= 0xDC00 && c <= 0xDFFF; }
 
 inline bool ConvertStringArg(const wchar_t *v,
                              size_t len,
                              const FormatConversionSpecImpl conv,
                              FormatSinkImpl *sink) {
-  FixedArray<char> mb(len * 4);
-  ShiftState s;
+  // Each wide character may result in up to 4 bytes (UTF-8 code units).
+  constexpr size_t kMaxUtf8CodeUnitsPerWideChar = 4;
+  if (len > (std::numeric_limits<decltype(len)>::max)() /
+                kMaxUtf8CodeUnitsPerWideChar) {
+    // Size too large; we can't handle this.
+    return false;
+  }
+  FixedArray<char> mb(len * kMaxUtf8CodeUnitsPerWideChar);
+  strings_internal::ShiftState s;
   size_t chars_written = 0;
   for (size_t i = 0; i < len; ++i) {
-    const size_t chars = WideToUtf8(v[i], &mb[chars_written], s);
+    // A high surrogate must be immediately followed by a low surrogate. If it
+    // isn't, the UTF-16 input is malformed and WideToUtf8() would otherwise
+    // leave a partial sequence in the buffer. The single wchar_t path already
+    // rejects an unpaired surrogate, so reject it here too.
+    if (s.saw_high_surrogate) {
+      const uint32_t cu = static_cast<uint32_t>(v[i]);
+      if (!IsLowSurrogate(cu)) return false;
+    }
+    const size_t chars =
+        strings_internal::WideToUtf8(v[i], &mb[chars_written], s);
     if (chars == static_cast<size_t>(-1)) { return false; }
     chars_written += chars;
   }
+  // A trailing high surrogate has no low surrogate to complete it.
+  if (s.saw_high_surrogate) return false;
   return ConvertStringArg(string_view(mb.data(), chars_written), conv, sink);
 }
 
 bool ConvertWCharTImpl(wchar_t v, const FormatConversionSpecImpl conv,
                        FormatSinkImpl *sink) {
   char mb[4];
-  ShiftState s;
-  const size_t chars_written = WideToUtf8(v, mb, s);
+  strings_internal::ShiftState s;
+  const size_t chars_written = strings_internal::WideToUtf8(v, mb, s);
   return chars_written != static_cast<size_t>(-1) && !s.saw_high_surrogate &&
          ConvertStringArg(string_view(mb, chars_written), conv, sink);
 }
@@ -410,8 +376,7 @@ bool ConvertIntArg(T v, FormatConversionSpecImpl conv, FormatSinkImpl *sink) {
   // FormatConversionChar is declared, but not defined.
   switch (static_cast<uint8_t>(conv.conversion_char())) {
     case static_cast<uint8_t>(FormatConversionCharInternal::c):
-      return (std::is_same<T, wchar_t>::value ||
-              (conv.length_mod() == LengthMod::l))
+      return (std::is_same_v<T, wchar_t> || (conv.length_mod() == LengthMod::l))
                  ? ConvertWCharTImpl(static_cast<wchar_t>(v), conv, sink)
                  : ConvertCharImpl(static_cast<char>(v), conv, sink);
 
@@ -510,13 +475,11 @@ StringConvertResult FormatConvertImpl(string_view v,
   return {ConvertStringArg(v, conv, sink)};
 }
 
-#if defined(ABSL_HAVE_STD_STRING_VIEW)
 StringConvertResult FormatConvertImpl(std::wstring_view v,
                                       const FormatConversionSpecImpl conv,
                                       FormatSinkImpl* sink) {
   return {ConvertStringArg(v.data(), v.size(), conv, sink)};
 }
-#endif
 
 StringPtrConvertResult FormatConvertImpl(const char* v,
                                          const FormatConversionSpecImpl conv,

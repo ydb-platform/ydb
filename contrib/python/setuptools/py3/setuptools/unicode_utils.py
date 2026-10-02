@@ -86,7 +86,7 @@ class _Utf8EncodingNeeded(SetuptoolsDeprecationWarning):
     """
 
     _DETAILS = """
-    Fallback behaviour for UTF-8 is considered **deprecated** and future versions of
+    Fallback behavior for UTF-8 is considered **deprecated** and future versions of
     `setuptools` may not implement it.
 
     Please encode {file!r} with "utf-8" to ensure future builds will succeed.

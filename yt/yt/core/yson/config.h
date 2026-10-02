@@ -13,10 +13,9 @@ namespace NYT::NYson {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(kmokrov): Drop Utf8Check after YTORM-843
-class TProtobufInteropConfig
+struct TProtobufInteropConfig
     : public NYTree::TYsonStruct
 {
-public:
     // Default enum storage type for protobuf to yson conversion.
     EEnumYsonStorageType DefaultEnumYsonStorageType;
     // Check if string field contains actual UTF-8 string.
@@ -24,6 +23,9 @@ public:
     // If `true` convert all field names in camel case to snake case.
     // Note: Applies to each protobuf message only on first seen, changes of flag after do not have effect.
     bool ForceSnakeCaseNames;
+
+    // If `true` convert all enum fields to string type.
+    bool ForceEnumStringType;
 
     TProtobufInteropConfigPtr ApplyDynamic(const TProtobufInteropDynamicConfigPtr& dynamicConfig) const;
 
@@ -37,10 +39,9 @@ DEFINE_REFCOUNTED_TYPE(TProtobufInteropConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(kmokrov): Drop Utf8Check after YTORM-843
-class TProtobufInteropDynamicConfig
+struct TProtobufInteropDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     // Check if string field contains actual UTF-8 string.
     std::optional<EUtf8Check> Utf8Check;
 

@@ -2,21 +2,27 @@
 
 #include "blob.h"
 
-#include <ydb/core/tx/ctor_logger.h>
-#include <ydb/core/base/logoblob.h>
-#include <ydb/core/base/events.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/events.h>
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
+#include <ydb/core/tx/ctor_logger.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/vector.h>
+
+namespace NKikimrConfig {
+class TBlobCacheConfig;
+}
 
 namespace NKikimr::NBlobCache {
 
-using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
+using NOlap::TUnifiedBlobId;
 
 using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>;
 
@@ -26,10 +32,23 @@ struct TReadBlobRangeOptions {
     bool WithDeadline = true;
 
     TString ToString() const {
-        return TStringBuilder() << "cache: " << (ui32)CacheAfterRead
-            << " background: " << (ui32)IsBackgroud
-            << " dedlined: " << (ui32)WithDeadline;
+        return TStringBuilder() << "cache: " << (ui32)CacheAfterRead << " background: " << (ui32)IsBackgroud
+                                << " dedlined: " << (ui32)WithDeadline;
     }
+};
+
+struct TBlobCacheSettings {
+    ui64 MaxCacheDataSize = 0;
+    ui64 MaxInFlightBytes = 0;
+    ui64 MaxRequestBytes = 0;
+    ui64 ReadDeadlineMs = 0;
+    ui64 WriteProtectDurationMs = 0;
+    // Set only when the proto field itself is present. An absent field still gets the proto default,
+    // but the memory controller may still resize the cache.
+    bool MaxCacheDataSizeFromConfig = false;
+
+    // Copies every knob with Get(), so an unset field still receives its proto default.
+    static TBlobCacheSettings FromProto(const NKikimrConfig::TBlobCacheConfig& cfg);
 };
 
 struct TEvBlobCache {
@@ -45,19 +64,20 @@ struct TEvBlobCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOB_CACHE), "Unexpected TEvBlobCache event range");
 
-    struct TEvReadBlobRange : public NActors::TEventLocal<TEvReadBlobRange, EvReadBlobRange> {
+    struct TEvReadBlobRange: public NActors::TEventLocal<TEvReadBlobRange, EvReadBlobRange> {
         TBlobRange BlobRange;
         TReadBlobRangeOptions ReadOptions;
 
         explicit TEvReadBlobRange(const TBlobRange& blobRange, TReadBlobRangeOptions&& opts)
             : BlobRange(blobRange)
             , ReadOptions(std::move(opts))
-        {}
+        {
+        }
     };
 
     // Read a batch of ranges from the same DS group
     // This is usefull to save IOPs when reading multiple columns from the same blob
-    struct TEvReadBlobRangeBatch : public NActors::TEventLocal<TEvReadBlobRangeBatch, EvReadBlobRangeBatch> {
+    struct TEvReadBlobRangeBatch: public NActors::TEventLocal<TEvReadBlobRangeBatch, EvReadBlobRangeBatch> {
         std::vector<TBlobRange> BlobRanges;
         TReadBlobRangeOptions ReadOptions;
 
@@ -68,58 +88,98 @@ struct TEvBlobCache {
         }
     };
 
-    struct TEvReadBlobRangeResult : public NActors::TEventLocal<TEvReadBlobRangeResult, EvReadBlobRangeResult> {
+    struct TEvReadBlobRangeResult: public NActors::TEventLocal<TEvReadBlobRangeResult, EvReadBlobRangeResult> {
         TBlobRange BlobRange;
         NKikimrProto::EReplyStatus Status;
         TString Data;
+        TString DetailedError;
         const bool FromCache = false;
+        const bool IsRetriable = false;
         const TInstant ConstructTime = Now();
         const TString DataSourceId;
 
-        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const bool fromCache = false, const TString& dataSourceId = Default<TString>())
+        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const TString& detailedError,
+            const bool fromCache = false, const TString& dataSourceId = Default<TString>(), const bool isRetriable = false)
             : BlobRange(blobRange)
             , Status(status)
             , Data(data)
+            , DetailedError(detailedError)
             , FromCache(fromCache)
+            , IsRetriable(isRetriable)
             , DataSourceId(dataSourceId)
-        {}
+        {
+        }
     };
 
     // Put a blob range data into cache. This helps to reduce number of reads from disks done by indexing, compactions
     // and queries that read recent data
-    struct TEvCacheBlobRange : public NActors::TEventLocal<TEvCacheBlobRange, EvCacheBlobRange> {
+    struct TEvCacheBlobRange: public NActors::TEventLocal<TEvCacheBlobRange, EvCacheBlobRange> {
         TBlobRange BlobRange;
         TString Data;
+        bool Sticky = false;
 
-        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data)
+        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data, const bool sticky)
             : BlobRange(blobRange)
             , Data(data)
-        {}
+            , Sticky(sticky)
+        {
+        }
     };
 
     // Notify the cache that this blob will not be requested any more
     // (e.g. when it was deleted after indexing or compaction)
-    struct TEvForgetBlob : public NActors::TEventLocal<TEvForgetBlob, EvForgetBlob> {
+    struct TEvForgetBlob: public NActors::TEventLocal<TEvForgetBlob, EvForgetBlob> {
         TUnifiedBlobId BlobId;
 
         explicit TEvForgetBlob(const TUnifiedBlobId& blobId)
             : BlobId(blobId)
-        {}
+        {
+        }
     };
 };
 
-inline
-NActors::TActorId MakeBlobCacheServiceId() {
+inline NActors::TActorId MakeBlobCacheServiceId() {
     static_assert(TActorId::MaxServiceIDLength == 12, "Unexpected actor id length");
     const char x[12] = "blob_cache";
     return TActorId(0, TStringBuf(x, 12));
 }
 
-NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
+NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
+
+// Write-fill gate: the table must opt in (CacheBlobsAfterWrite) AND the node-wide ICB switch
+// for the producing consumer must be on. Only WRITING_OPERATOR (user writes) and GENERAL_COMPACTION
+// produce write-fills; every other consumer (TTL, cleanup, export, ...) never fills the cache.
+inline bool ShouldCacheAfterWrite(
+    const bool schemaEnabled, const NOlap::NBlobOperations::EConsumer consumer, const bool icbIndexing, const bool icbCompaction) {
+    if (!schemaEnabled) {
+        return false;
+    }
+    switch (consumer) {
+        case NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR:
+            return icbIndexing;
+        case NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION:
+            return icbCompaction;
+        default:
+            return false;
+    }
+}
 
 // Explicitly add and remove data from cache. This is usefull for newly written data that is likely to be read by
 // indexing, compaction and user queries and for the data that has been compacted and will not be read again.
-void AddRangeToCache(const TBlobRange& blobRange, const TString& data);
-void ForgetBlob(const TUnifiedBlobId& blobId);
-
+inline void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
+    if (!NActors::TlsActivationContext) {
+        return;
+    }
+    NActors::TlsActivationContext->Send(
+        new NActors::IEventHandle(MakeBlobCacheServiceId(), NActors::TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data, true)));
 }
+
+inline void ForgetBlob(const TUnifiedBlobId& blobId) {
+    if (!NActors::TlsActivationContext) {
+        return;
+    }
+    NActors::TlsActivationContext->Send(
+        new NActors::IEventHandle(MakeBlobCacheServiceId(), NActors::TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+}
+
+}   // namespace NKikimr::NBlobCache

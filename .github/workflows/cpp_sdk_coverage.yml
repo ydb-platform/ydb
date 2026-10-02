@@ -1,0 +1,79 @@
+name: CPP SDK coverage
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - stable-*
+      - prestable-*
+      - stream-nb-*
+      - dev-*
+      - rc-*
+      - q-stable-*
+    types:
+      - labeled
+
+concurrency:
+  group: cpp-sdk-coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cpp_sdk_coverage:
+    if: github.event.label.name == 'sdk-coverage' && github.event.pull_request.state == 'open'
+    runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
+    name: CPP SDK coverage
+    timeout-minutes: 480
+    steps:
+      - name: Check label sender is collaborator
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const sender = context.payload.sender.login;
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: sender,
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) throw error;
+              core.setFailed(`Only repository collaborators can trigger CPP SDK coverage (sender: @${sender}).`);
+            }
+
+      - name: Verify PR is mergeable
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let pr = context.payload.pull_request;
+            if (pr.mergeable == null || !pr.merge_commit_sha) {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+              });
+              pr = data;
+            }
+            if (!pr.mergeable || !pr.merge_commit_sha) {
+              core.setFailed(
+                'Unable to merge PR into the base branch. Please rebase or resolve conflicts and re-add the sdk-coverage label.'
+              );
+            }
+
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Build, test, and check coverage
+        uses: ./.github/actions/test_cpp_sdk_with_coverage
+        with:
+          bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA }}
+          bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
+          bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}

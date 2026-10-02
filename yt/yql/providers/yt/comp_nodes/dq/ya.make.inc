@@ -15,6 +15,7 @@ PEERDIR(
     yql/essentials/public/udf
     contrib/libs/apache/arrow
     contrib/libs/flatbuffers
+    yql/essentials/parser/pg_wrapper/interface
 )
 
 ADDINCL(
@@ -26,7 +27,6 @@ SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yt/yql/providers/yt/comp_nodes/dq)
 IF(LINUX)
     PEERDIR(
         yt/yt/client
-        yt/yt/client/arrow
         yt/yql/providers/yt/lib/yt_rpc_helpers
     )
 

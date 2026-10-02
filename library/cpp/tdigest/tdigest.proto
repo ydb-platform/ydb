@@ -8,4 +8,5 @@ message TDigest {
         optional double Weight = 2;
     }
     repeated TCentroid Centroids = 3;
+    optional bool Nans = 4;
 }

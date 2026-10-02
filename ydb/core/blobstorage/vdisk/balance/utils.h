@@ -15,7 +15,7 @@ namespace NBalancing {
         const TBlobStorageGroupType GType;
 
         TIngress Ingress;
-        TVector<std::pair<NMatrix::TVectorType, std::variant<TDiskPart, TRope>>> Parts;
+        TVector<std::tuple<NMatrix::TVectorType, std::variant<TDiskPart, TRope>, bool>> Parts;
 
         TPartsCollectorMerger(const TBlobStorageGroupType gType);
 

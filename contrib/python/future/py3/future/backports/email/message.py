@@ -10,7 +10,6 @@ from future.builtins import list, range, str, zip
 __all__ = ['Message']
 
 import re
-import uu
 import base64
 import binascii
 from io import BytesIO, StringIO
@@ -104,6 +103,37 @@ def _unquotevalue(value):
         return value[0], value[1], utils.unquote(value[2])
     else:
         return utils.unquote(value)
+
+
+def _decode_uu(encoded):
+    """Decode uuencoded data."""
+    decoded_lines = []
+    encoded_lines_iter = iter(encoded.splitlines())
+    for line in encoded_lines_iter:
+        if line.startswith(b"begin "):
+            mode, _, path = line.removeprefix(b"begin ").partition(b" ")
+            try:
+                int(mode, base=8)
+            except ValueError:
+                continue
+            else:
+                break
+    else:
+        raise ValueError("`begin` line not found")
+    for line in encoded_lines_iter:
+        if not line:
+            raise ValueError("Truncated input")
+        elif line.strip(b' \t\r\n\f') == b'end':
+            break
+        try:
+            decoded_line = binascii.a2b_uu(line)
+        except binascii.Error:
+            # Workaround for broken uuencoders by /Fredrik Lundh
+            nbytes = (((line[0]-32) & 63) * 4 + 5) // 3
+            decoded_line = binascii.a2b_uu(line[:nbytes])
+        decoded_lines.append(decoded_line)
+
+    return b''.join(decoded_lines)
 
 
 class Message(object):
@@ -262,13 +292,10 @@ class Message(object):
                 self.policy.handle_defect(self, defect)
             return value
         elif cte in ('x-uuencode', 'uuencode', 'uue', 'x-uue'):
-            in_file = BytesIO(bpayload)
-            out_file = BytesIO()
             try:
-                uu.decode(in_file, out_file, quiet=True)
-                return out_file.getvalue()
-            except uu.Error:
-                # Some decoding problem
+                return _decode_uu(bpayload)
+            except ValueError:
+                # Some decoding problem.
                 return bpayload
         if isinstance(payload, str):
             return bpayload

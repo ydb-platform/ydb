@@ -1,6 +1,6 @@
 # Saving a consumer offset
 
-Each topic consumer has a [consumer offset](../../concepts/topic.md#consumer-offset).
+Each topic consumer has a [consumer offset](../../concepts/datamodel/topic.md#consumer-offset).
 
 You can use the `topic consumer offset commit` command to save the consumer offset for the consumer that you [added](topic-consumer-add.md).
 
@@ -22,11 +22,11 @@ Viewing the command description:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--consumer <value>` | Consumer name. |
-| `--partition <value>` | Partition number. |
-| `--offset <value>` | Offset value that you want to set. |
+| Name                  | Description                        |
+|-----------------------|------------------------------------|
+| `--consumer <value>`  | Consumer name.                     |
+| `--partition <value>` | Partition number.                  |
+| `--offset <value>`    | Offset value that you want to set. |
 
 ## Examples {#examples}
 

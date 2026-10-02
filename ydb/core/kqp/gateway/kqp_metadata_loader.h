@@ -1,20 +1,19 @@
 #pragma once
 
+#include <ydb/library/actors/wilson/wilson_trace.h>
+
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
 
 namespace NKikimr::NKqp {
-
-// only exposed to be unit-tested
-NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata);
-std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(const NYql::TKikimrTableMetadata& tableMetadata);
-bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSource::TMetadata& dynamicMetadata);
 
 class TKqpTableMetadataLoader : public NYql::IKikimrGateway::IKqpTableMetadataLoader {
 public:
@@ -23,12 +22,16 @@ public:
         TActorSystem* actorSystem,
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt,
+        NWilson::TTraceId traceId = {})
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
+        , FederatedQuerySetup(federatedQuerySetup)
+        , TraceId(std::move(traceId))
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -46,10 +49,14 @@ protected:
     }
 
 private:
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataImpl(
+        const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings,
+        const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
+
     template<typename TPath>
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataCache(
         const TString& cluster, const TPath& id, NYql::IKikimrGateway::TLoadTableMetadataSettings settings, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadataByPathId(
         const TString& cluster, const NKikimr::TIndexId& indexId, const TString& tableName, const TString& database,
@@ -61,6 +68,9 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadSysViewRewrittenMetadata(
+        const TString& cluster, const TString& table, const TString& sysViewName);
+
     const TString Cluster;
     TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
@@ -68,6 +78,8 @@ private:
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    NWilson::TTraceId TraceId;
 };
 
 } // namespace NKikimr::NKqp

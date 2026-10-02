@@ -21,6 +21,13 @@ message TStreamingParameters
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TDirectPlacementTransferParameters
+{
+    optional bool enabled = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TRequestHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
@@ -58,6 +65,10 @@ message TRequestHeader
 
     optional TStreamingParameters server_attachments_streaming_parameters = 33;
 
+    // Direct placement transfer (DPT) of attachments; see TDirectPlacementTransferParameters.
+    optional TDirectPlacementTransferParameters request_attachments_dpt_parameters = 39;
+    optional TDirectPlacementTransferParameters response_attachments_dpt_parameters = 40;
+
     optional bytes request_format_options = 34; // TYsonString
     optional bytes response_format_options = 35; // TYsonString
 
@@ -83,7 +94,17 @@ message TRequestHeader
      * suppress_expiration_timeout_renewal  113
      * workload_descriptor                  114
      * custom_metadata                      115
+     * allow_resolve_from_sequoia_object    118
+     * resolve_depth                        119
      * ssl_credentials_ext                  120
+     * request_peer_kind_ext                121
+     * target_node_effective_acl            123
+     * caused_by_node_expiration            124
+     * multiproxy_target_ext                125
+     * target_master_peer_ext               126
+     * target_node_has_row_level_ace        127
+     * resolved_sequoia_object              128
+     * suppress_access_logging              129
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */
@@ -122,6 +143,7 @@ message TCredentialsExt
     optional string ssl_session_id = 5;
     optional string user_ticket = 6;
     optional string service_ticket = 7;
+    optional string session_guard = 8;
 }
 
 message TCustomMetadataExt
@@ -134,13 +156,23 @@ message TCustomMetadataExt
     map<string, bytes> entries = 1;
 }
 
+message TMultiproxyTargetExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TMultiproxyTargetExt multiproxy_target_ext = 125;
+    }
+
+    optional string cluster = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
 
-    // May be blank.
+    // NB: In some cases we deliberately omit setting these fields.
     optional string service = 7;
     optional string method = 8;
 

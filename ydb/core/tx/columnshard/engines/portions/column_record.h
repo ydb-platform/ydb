@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
@@ -9,7 +11,6 @@
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -29,13 +30,15 @@ class TColumnRecord;
 struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
+    std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> AdditionalAccessorData;
     TChunkMeta() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto);
     friend class TColumnRecord;
 
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
-        : TBase(baseMeta) {
+        : TBase(baseMeta)
+    {
     }
 
     [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
@@ -48,6 +51,18 @@ public:
     }
 
     NKikimrTxColumnShard::TIndexColumnMeta SerializeToProto() const;
+
+    const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& GetAdditionalAccessorData() const {
+        return AdditionalAccessorData;
+    }
+
+    void SetAdditionalAccessorData(std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> value) {
+        AdditionalAccessorData = std::move(value);
+    }
+
+    bool HasAdditionalAccessorData() const {
+        return AdditionalAccessorData != nullptr;
+    }
 
     class TTestInstanceBuilder {
     public:
@@ -67,8 +82,10 @@ public:
 class TColumnRecord {
 private:
     TChunkMeta Meta;
+
     TColumnRecord(TChunkMeta&& meta)
-        : Meta(std::move(meta)) {
+        : Meta(std::move(meta))
+    {
     }
 
     TColumnRecord() = default;
@@ -78,6 +95,10 @@ public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
+
+    TChunkMeta& MutableMeta() {
+        return Meta;
+    }
 
     ui32 GetEntityId() const {
         return ColumnId;
@@ -96,7 +117,8 @@ public:
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
-        , BlobRange(range) {
+        , BlobRange(range)
+    {
     }
 
     class TTestInstanceBuilder {
@@ -114,9 +136,11 @@ public:
     ui32 GetColumnId() const {
         return ColumnId;
     }
+
     ui16 GetChunkIdx() const {
         return Chunk;
     }
+
     const TBlobRangeLink16& GetBlobRange() const {
         return BlobRange;
     }
@@ -129,7 +153,9 @@ public:
         *result.MutableBlobRangeLink() = BlobRange.SerializeToProto();
         return result;
     }
+
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
+
     static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
         TColumnRecord result;
         auto parse = result.DeserializeFromProto(proto);

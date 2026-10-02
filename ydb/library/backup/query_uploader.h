@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 
@@ -16,8 +17,7 @@ public:
         ui32 Rate = 20; // requests per Interval
         TDuration Interval = TDuration::Seconds(1);
         ui32 InFly = 10;
-        ui32 RetryOperaionMaxRetries = 30;
-        ui32 TransportErrorsMaxRetries = 9;
+        ui32 RetryOperationMaxRetries = 10;
         TDuration ReactionTime = TDuration::MilliSeconds(50);
 
         ui32 GetRps() const;
@@ -28,16 +28,22 @@ private:
     const TString Query;
 
     TAtomic ShouldStop;
-    TSimpleSharedPtr<IThreadPool> TasksQueue;
-    // Total wait is 1 * (2 ** TransportErrorsMaxRetries - 1), for TransportErrorsMaxRetries == 9 it gives ~8.5 minutes
-    TDuration BulkUpsertRetryDuration = TDuration::Seconds(1);
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
-    NYdb::NTable::TTableClient& Client;
+    NYdb::NTable::TTableClient* TableClient = nullptr;
+    NYdb::NQuery::TQueryClient* QueryClient = nullptr;
+
+    TSimpleSharedPtr<IThreadPool> TasksQueue;
+
+    bool WaitForRequestSlot();
+    void ReportWriteTxResult(const NYdb::TStatus& status);
+
+    TUploader(const TOptions& opts, const TString& query, NYdb::NTable::TTableClient* tableClient, NYdb::NQuery::TQueryClient* queryClient);
 
 public:
-    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& client, const TString& query);
+    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& tableClient, const TString& query);
+    TUploader(const TOptions& opts, NYdb::NQuery::TQueryClient& queryClient, const TString& query);
 
     bool Push(TParams params);
     bool Push(const TString& path, TValue&& value);

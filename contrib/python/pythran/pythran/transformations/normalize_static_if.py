@@ -47,7 +47,7 @@ def outline(name, formal_parameters, out_parameters, stmts,
         )
         if has_return:
             pr = PatchReturn(stmts[-1], has_break or has_cont)
-            pr.visit(fdef)
+            pr.generic_visit(fdef)
 
         if has_break or has_cont:
             if not has_return:
@@ -55,7 +55,7 @@ def outline(name, formal_parameters, out_parameters, stmts,
                                              stmts[-1].value],
                                             ast.Load())
             pbc = PatchBreakContinue(stmts[-1])
-            pbc.visit(fdef)
+            pbc.generic_visit(fdef)
 
     return fdef
 
@@ -65,6 +65,9 @@ class PatchReturn(ast.NodeTransformer):
     def __init__(self, guard, has_break_or_cont):
         self.guard = guard
         self.has_break_or_cont = has_break_or_cont
+
+    def visit_FunctionDef(self, node):
+        return node
 
     def visit_Return(self, node):
         if node is self.guard:
@@ -92,11 +95,14 @@ class PatchBreakContinue(ast.NodeTransformer):
     def __init__(self, guard):
         self.guard = guard
 
-    def visit_For(self, _):
-        pass
+    def visit_FunctionDef(self, node):
+        return node
 
-    def visit_While(self, _):
-        pass
+    def visit_For(self, node):
+        return node
+
+    def visit_While(self, node):
+        return node
 
     def patch_Control(self, node, flag):
         new_node = deepcopy(self.guard)
@@ -117,11 +123,7 @@ class PatchBreakContinue(ast.NodeTransformer):
         return self.patch_Control(node, LOOP_CONT)
 
 
-class NormalizeStaticIf(Transformation):
-
-    def __init__(self):
-        super(NormalizeStaticIf, self).__init__(StaticExpressions, Ancestors,
-                                                DefUseChains)
+class NormalizeStaticIf(Transformation[StaticExpressions, Ancestors, DefUseChains]):
 
     def visit_Module(self, node):
         self.new_functions = []
@@ -329,10 +331,7 @@ class NormalizeStaticIf(Transformation):
             return ast.Expr(actual_call)
 
 
-class SplitStaticExpression(Transformation):
-
-    def __init__(self):
-        super(SplitStaticExpression, self).__init__(StaticExpressions)
+class SplitStaticExpression(Transformation[StaticExpressions]):
 
     def visit_Cond(self, node):
         '''

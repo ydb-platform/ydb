@@ -15,21 +15,38 @@ namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
     using TPageId = NTable::NPage::TPageId;
 
+    enum class EWakeupTag {
+        DoGCScheduled = 1,
+        DoGCManual = 2,
+        DoLimitDecrease = 3,
+        ContinueBTreeWalk = 4,
+    };
+
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
         EvTouch = EvBegin + 512,
         EvUnregister,
-        EvInvalidate,
+        EvDetach,
         EvAttach,
         EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
+        EvStickyCollectionPages,
 
         EvEnd
 
         /* +1024 range is reserved for scan events */
+    };
+
+    enum class ERequestTypeCookie : ui64 {
+        Undefined = 0,
+        Transaction = 1,
+        StickyPages,
+        PendingInit,
+        BootLogic,
+        TryKeepInMemPages,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
@@ -37,31 +54,54 @@ namespace NKikimr::NSharedCache {
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
-    struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> {
+    struct TEvDetach : public TEventLocal<TEvDetach, EvDetach> {
         const TLogoBlobID PageCollectionId;
 
-        TEvInvalidate(const TLogoBlobID &pageCollectionId)
+        TEvDetach(const TLogoBlobID &pageCollectionId)
             : PageCollectionId(pageCollectionId)
         {}
     };
 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
+    // notifies Shared Cache about Private Cache owned shared bodies
+    // so it can send back dropped pages
+    struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
+        THashMap<TLogoBlobID, THashSet<TPageOffset>> Pages;
 
-        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
-            : Touched(std::move(touched))
+        TEvSync(THashMap<TLogoBlobID, THashSet<TPageOffset>> &&pages)
+            : Pages(std::move(pages))
         {}
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TActorId Owner;
+        // One B-tree per group: index nodes always live in the main group's collection
+        // (IndexCollectionId), while the data pages they point at live in that group's
+        // collection (DataCollectionId) — the same collection for group 0.
+        struct TBtreeSeed {
+            TLogoBlobID IndexCollectionId;
+            TLogoBlobID DataCollectionId;
+            NTable::NPage::TPageLocation Root;
+            ui32 LevelCount = 0;
+            bool QueueDataPages = true;
+            bool Sticky = false;
+            bool IndexCollectionSticky = false;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
+            bool operator==(const TBtreeSeed&) const = default;
+        };
+
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        ECacheMode CacheMode;
+        // Authoritative for the sender: an empty vector withdraws that owner's walks.
+        TVector<TBtreeSeed> BtreeSeeds;
+        // Revisit unchanged sticky seeds after the owner's private cache is recreated.
+        bool ReplayStickyWalk = false;
+
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode,
+            TVector<TBtreeSeed> btreeSeeds = {}, bool replayStickyWalk = false)
             : PageCollection(std::move(pageCollection))
-            , Owner(owner)
+            , CacheMode(cacheMode)
+            , BtreeSeeds(std::move(btreeSeeds))
+            , ReplayStickyWalk(replayStickyWalk)
         {
-            Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
         }
     };
 
@@ -79,33 +119,35 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
-        const EPriority Priority;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
-        TActorId Owner;
-
-        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
+        TEvRequest(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageLocation> pages, ui64 cookie = 0)
             : Priority(priority)
-            , Fetch(fetch)
-            , Owner(owner)
-        {
-            Y_ABORT_UNLESS(Owner, "Cannot sent request with empty owner");
-        }
+            , PageCollection(std::move(pageCollection))
+            , Pages(std::move(pages))
+            , Cookie(cookie)
+        { }
+
+        const EPriority Priority;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageLocation> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
+        NWilson::TTraceId TraceId;
+        const ui64 Cookie;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
+        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, EStatus status, ui64 cookie)
             : Status(status)
+            , PageCollection(std::move(pageCollection))
             , Cookie(cookie)
-            , Origin(origin)
         { }
 
         void Describe(IOutputStream &out) const
         {
             out
-                << "TEvResult{" << Loaded.size() << " pages"
-                << " " << Origin->Label()
+                << "TEvResult{" << Pages.size() << " pages"
+                << " " << PageCollection->Label()
                 << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
@@ -113,34 +155,72 @@ namespace NKikimr::NSharedCache {
         ui64 Bytes() const
         {
             return
-                std::accumulate(Loaded.begin(), Loaded.end(), ui64(0),
+                std::accumulate(Pages.begin(), Pages.end(), ui64(0),
                     [](ui64 bytes, const TLoaded& loaded)
-                        { return bytes + TPinnedPageRef(loaded.Page)->size(); });
+                        { return bytes + loaded.Size; });
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
-                : PageId(pageId)
+            TLoaded(NTable::NPage::TPageOffset offset, size_t size, TSharedPageRef page)
+                : Offset(offset)
+                , Size(size)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            NTable::NPage::TPageOffset Offset;
+            size_t Size;
             TSharedPageRef Page;
         };
 
         const EStatus Status;
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TLoaded> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
         const ui64 Cookie;
-        const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
-        TVector<TLoaded> Loaded;
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
-        struct TActions {
-            THashSet<ui32> Dropped;
-        };
-
-        THashMap<TLogoBlobID, TActions> Actions;
+        THashMap<TLogoBlobID, THashSet<TPageOffset>> DroppedPages;
     };
+
+    // The pages of a sticky collection, for the owner to fetch and keep.
+    struct TEvStickyCollectionPages : public TEventLocal<TEvStickyCollectionPages, EvStickyCollectionPages> {
+        static constexpr size_t MaxBatchLocations = 1024;
+
+        TEvStickyCollectionPages(TLogoBlobID collectionId, TVector<TPageLocation> locations)
+            : CollectionId(std::move(collectionId))
+            , Locations(std::move(locations))
+        {}
+
+        const TLogoBlobID CollectionId;
+        TVector<TPageLocation> Locations;
+    };
+}
+
+template<> inline
+void Out<NKikimr::NTable::NPage::TPageLocation>(IOutputStream& o, const NKikimr::NTable::NPage::TPageLocation& val) {
+    val.Describe(o);
+}
+
+template<> inline
+void Out<NKikimr::NTable::NPage::TPageOffset>(IOutputStream& o, const NKikimr::NTable::NPage::TPageOffset& val) {
+    val.Describe(o);
+}
+
+template<> inline
+void Out<TVector<NKikimr::NTable::NPage::TPageLocation>>(IOutputStream& o, const TVector<NKikimr::NTable::NPage::TPageLocation>& vec) {
+    o << "[ ";
+    for (const auto& x : vec)
+        o << x << ' ';
+    o << "]";
+}
+
+template<> inline
+void Out<THashSet<NKikimr::NTable::NPage::TPageOffset>>(IOutputStream& o, const THashSet<NKikimr::NTable::NPage::TPageOffset>& set) {
+    o << "[ ";
+    for (const auto& x : set)
+        o << x << ' ';
+    o << "]";
 }
 
 template<> inline

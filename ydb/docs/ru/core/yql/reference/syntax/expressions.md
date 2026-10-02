@@ -37,6 +37,17 @@ SELECT "fo" || "o";
 
 Наиболее популярный способ использования ключевых слов `LIKE` и `REGEXP` — фильтрация таблицы в выражениях с `WHERE`. Однако ограничения на использование шаблонов именно в этом контексте нет, и их можно использовать в большинстве контекстов при работе со строками, наравне, например, с конкатенацией с помощью `||`.
 
+### LIKE / ILIKE с полнотекстовым индексом {#like-ilike-with-fulltext-index}
+
+Для [полнотекстовых индексов](../../../dev/fulltext-indexes.md) с N-граммами (параметры `use_filter_ngram` / `use_filter_edge_ngram`) поддерживается `LIKE`/`ILIKE` по индексируемой текстовой колонке.
+
+```yql
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body ILIKE "%обуч%ние%"
+LIMIT 20;
+```
+
 ### Примеры
 
 ```yql
@@ -86,7 +97,7 @@ SELECT 0.0 / 0.0;
 
 ### Операторы сравнения {#comparison-operators}
 
-Операторы `=`, `==`, `!=`, `<>`, `>`, `<` определены для:
+Операторы `=`, `==`, `!=`, `<>`, `>`, `<`, `>=`, `<=` определены для:
 
 * Примитивных типов данных за исключением Yson и Json.
 * Кортежей и структур с одинаковым набором полей. Для структур не определен порядок, но можно проверять на (не-)равенство, а кортежи сравниваются поэлементно слева направо.
@@ -400,7 +411,6 @@ select $second;
 ```yql
 $_ = 1;
 select $_; --- ошибка: Unable to reference anonymous name $_
-export $_; --- ошибка: Can not export anonymous name $_
 ```
 
 {% if feature_mapreduce %}
@@ -474,7 +484,7 @@ $x, $y = AsTuple($y, $x); -- swap значений выражений
 
     Здесь табличные выражения работают как ожидается – например `$input = SELECT a, b, c FROM T; SELECT * FROM $input` вернет таблицу с тремя колонками.
 
-    Табличный контекст также возникает после [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
+    Табличный контекст также возникает после [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](select/join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
 
 * векторный контекст - после [IN](#in). В этом контексте табличное выражение обязано содержать ровно одну колонку (имя этой колонки никак не влияет на результат выражения).
 

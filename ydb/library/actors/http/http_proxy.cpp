@@ -1,6 +1,10 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <util/generic/algorithm.h>
+#include <cctype>
 #include "http_proxy.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
 
 namespace NHttp {
 
@@ -16,10 +20,11 @@ public:
         return listeningSocket;
     }
 
-    IActor* AddOutgoingConnection(bool secure) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure);
+    IActor* AddOutgoingConnection(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), event);
         TActorId connectionId = Register(connectionSocket);
-        ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
+        YDB_LOG_DEBUG("Connection created",
+            {"connectionId", connectionId});
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -63,37 +68,28 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
-        TStringBuf url = event->Get()->Request->URL.Before('?');
-        THashMap<TString, TActorId>::iterator it;
-        while (!url.empty()) {
-            it = Handlers.find(url);
-            if (it != Handlers.end()) {
-                Send(event->Forward(it->second));
-                return;
-            } else {
-                if (url.EndsWith('/')) {
-                    url.Chop(1);
-                } else {
-                    size_t pos = url.rfind('/');
-                    if (pos == TStringBuf::npos) {
-                        break;
-                    } else {
-                        url = url.substr(0, pos + 1);
-                    }
-                }
-            }
+        TActorId handler = Handlers.GetHandler(event->Get()->Request->GetURI());
+        if (handler) {
+            Send(event->Forward(handler));
+        } else {
+            Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
         }
-        Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
+        YDB_LOG_ERROR("Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
+        YDB_LOG_ERROR("Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
+    }
+
+    template<typename TEventType>
+    TAutoPtr<NActors::IEventHandle> Forward(const TActorId& dest, TAutoPtr<NActors::TEventHandle<TEventType>>&& event) {
+        auto self(SelfId());
+        return new IEventHandle(dest, event->Sender, event->Release().Release(), event->Flags, event->Cookie, &self, std::move(event->TraceId));
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
@@ -102,17 +98,18 @@ protected:
             auto itAvailableConnection = AvailableConnections.find(destination);
             if (itAvailableConnection != AvailableConnections.end()) {
                 TActorId availableConnection = itAvailableConnection->second;
-                ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
+                YDB_LOG_DEBUG("Reusing connection for destination",
+                    {"availableConnection", availableConnection},
+                    {"destination", destination});
                 AvailableConnections.erase(itAvailableConnection);
-                Send(event->Forward(availableConnection));
+                Send(Forward(availableConnection, std::move(event)));
                 return;
             } else {
-                ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
+                YDB_LOG_DEBUG("Creating a new connection for destination",
+                    {"destination", destination});
             }
         }
-        bool secure(event->Get()->Request->Secure);
-        NActors::IActor* actor = AddOutgoingConnection(secure);
-        Send(event->Forward(actor->SelfId()));
+        AddOutgoingConnection(event);
     }
 
     void Handle(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
@@ -129,12 +126,21 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
-        AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        if (AvailableConnections.size() < MAX_REUSABLE_CONNECTIONS) {
+            YDB_LOG_DEBUG("Connection available for destination",
+                {"connectionID", event->Get()->ConnectionID},
+                {"destination", event->Get()->Destination});
+            AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        } else {
+            YDB_LOG_DEBUG("Connection not added to available connections, limit reached",
+                {"connectionID", event->Get()->ConnectionID});
+            Send(event->Get()->ConnectionID, new NActors::TEvents::TEvPoisonPill());
+        }
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
+        YDB_LOG_DEBUG("Connection closed",
+            {"connectionID", event->Get()->ConnectionID});
         Connections.erase(event->Get()->ConnectionID);
         auto range = AvailableConnections.equal_range(event->Get()->Destination);
         for (auto it = range.first; it != range.second; ++it) {
@@ -146,8 +152,10 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
-        ALOG_TRACE(HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
-        Handlers[event->Get()->Path] = event->Get()->Handler;
+        YDB_LOG_TRACE("Register handler",
+            {"path", event->Get()->Path},
+            {"handler", event->Get()->Handler});
+        Handlers.RegisterHandler(event->Get()->Path, event->Get()->Handler);
     }
 
     void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr& event) {
@@ -192,7 +200,9 @@ protected:
                     }
                     if (address) {
                         memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                        ALOG_DEBUG(HttpLog, "Host " << host << " resolved to " << address->ToString());
+                        YDB_LOG_DEBUG("Host resolved",
+                            {"host", host},
+                            {"address", address->ToString()});
                         if (it == Hosts.end()) {
                             it = Hosts.emplace(host, THostEntry()).first;
                         }
@@ -281,7 +291,7 @@ protected:
     static constexpr TDuration HostsTimeToLive = TDuration::Seconds(60);
 
     THashMap<TString, THostEntry> Hosts;
-    THashMap<TString, TActorId> Handlers;
+    TUrlHandler Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
     std::weak_ptr<NMonitoring::IMetricFactory> Registry;
@@ -313,6 +323,33 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
+}
+
+void TUrlHandler::RegisterHandler(const TString& url, const TActorId& handler) {
+    Handlers[url] = handler;
+}
+
+TActorId TUrlHandler::GetHandler(const TString& url) const {
+    THashMap<TString, TActorId>::const_iterator it;
+    TStringBuf currentUrl = url;
+    while (!currentUrl.empty()) {
+        it = Handlers.find(currentUrl);
+        if (it != Handlers.end()) {
+            return it->second;
+        } else {
+            if (currentUrl.EndsWith('/')) {
+                currentUrl.Chop(1);
+            } else {
+                size_t pos = currentUrl.rfind('/');
+                if (pos == TStringBuf::npos) {
+                    break;
+                } else {
+                    currentUrl = currentUrl.substr(0, pos + 1);
+                }
+            }
+        }
+    }
+    return {};
 }
 
 bool IsIPv6(const TString& host) {
@@ -400,43 +437,65 @@ void TrimEnd(TString& target, char delim) {
     }
 }
 
-TString GetObfuscatedData(TString data, const THeaders& headers) {
-    TStringBuf authorization(headers["Authorization"]);
-    TStringBuf cookie(headers["Cookie"]);
-    TStringBuf set_cookie(headers["Set-Cookie"]);
-    TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-    TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-    if (!authorization.empty()) {
-        auto pos = data.find(authorization);
-        if (pos != TString::npos) {
-            data.replace(pos, authorization.size(), TString("<obfuscated>"));
+TString GetObfuscatedData(TStringBuf data) {
+    static constexpr TStringBuf SensitiveHeaders[] = {
+        "Authorization",
+        "Cookie",
+        "Set-Cookie",
+        "X-Ydb-Auth-Ticket",
+        "X-Ydb-Iam-Token",
+        "X-YaCloud-SubjectToken",
+    };
+
+    TString result;
+    result.reserve(data.size());
+    while (!data.empty()) {
+        const size_t lineEnd = data.find('\n');
+        TStringBuf line = data.substr(0, lineEnd);
+        if (lineEnd != TStringBuf::npos) {
+            // Match the parser's handling of LF and CRLF line endings.
+            line = TrimEnd(line, '\r');
         }
-    }
-    if (!cookie.empty()) {
-        auto pos = data.find(cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, cookie.size(), TString("<obfuscated>"));
+        if (line.empty()) {
+            // The rest is the body and must not be interpreted as headers.
+            result += data;
+            break;
         }
-    }
-    if (!set_cookie.empty()) {
-        auto pos = data.find(set_cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+
+        const size_t colon = line.find(':');
+        const TStringBuf headerName = line.substr(0, colon);
+        const auto isSensitiveHeader = [headerName](TStringBuf sensitiveHeader) {
+            return TEqNoCase()(headerName, sensitiveHeader);
+        };
+
+        if (colon != TStringBuf::npos && AnyOf(SensitiveHeaders, isSensitiveHeader)) {
+            size_t valueBegin = colon + 1;
+            while (valueBegin < line.size() && (line[valueBegin] == ' ' || line[valueBegin] == '\t')) {
+                ++valueBegin;
+            }
+
+            result += line.substr(0, valueBegin);
+
+            if (valueBegin < line.size()) {
+                result += "<obfuscated>";
+            }
+        } else {
+            result += line;
         }
-    }
-    if (!x_ydb_auth_ticket.empty()) {
-        auto pos = data.find(x_ydb_auth_ticket);
-        if (pos != TString::npos) {
-            data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+
+        if (lineEnd == TStringBuf::npos) {
+            break;
         }
+
+        result += data.substr(line.size(), lineEnd + 1 - line.size());
+        data.Skip(lineEnd + 1);
     }
-    if (!x_yacloud_subjecttoken.empty()) {
-        auto pos = data.find(x_yacloud_subjecttoken);
-        if (pos != TString::npos) {
-            data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-        }
+
+    if (result.size() > 2000) {
+        return result.substr(0, 1000) + " --- <truncated> --- " + result.substr(result.size() - 1000);
     }
-    return data;
+
+    return result;
 }
 
 TString ToHex(size_t value) {
@@ -445,4 +504,76 @@ TString ToHex(size_t value) {
     return hex.str();
 }
 
+bool IsReadableContent(TStringBuf contentType) {
+    auto type = contentType.Before(';');
+    if (type.StartsWith("text/") || type == "application/json" || type == "application/x-www-form-urlencoded") {
+        return true;
+    }
+    return false;
 }
+
+bool IsValidMethod(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 0x21 || c > 0x7E) {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidURL(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 0x21 || c > 0x7E) {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidProtocol(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 'A' || c > 'Z') {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidVersion(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (!std::isdigit(c) && c != '.') {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidStatus(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidMessage(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c != '\t' && (c < 0x20 || c > 0x7E)) {
+            return false;
+        }
+    }
+    return true; // empty message is OK
+}
+
+bool IsValidHeaderData(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c != '\t' && (c < 0x20 || c > 0x7E)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+

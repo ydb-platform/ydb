@@ -8,13 +8,33 @@
 #include "flat_page_blobs.h"
 #include "flat_page_frames.h"
 #include "flat_page_bloom.h"
+#include "flat_bloom_hash.h"
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 
+#include <type_traits>
+#include <variant>
+
 namespace NKikimr {
 namespace NTable {
     struct IPages;
+
+    /// Resolves the root TPageLocation from btree meta through page collections.
+    /// For v2 roots (byte-offset), returns the inline location directly.
+    /// For v1 roots (page-index), resolves through the appropriate page collection.
+    /// When LevelCount==0 the root IS a data page (use groupPages);
+    /// when LevelCount>0 the root is a btree index page (use indexPages).
+    inline NPage::TPageLocation GetBTreeRootLocation(
+        const NPage::TBtreeIndexMeta& meta,
+        const NPageCollection::IPageCollection* indexPages,
+        const NPageCollection::IPageCollection* groupPages)
+    {
+        if (meta.HasRootV2()) return meta.RootV2;
+        return (meta.LevelCount() == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
+    }
+
+    using TPageRef = NPage::TPageRef;
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
@@ -30,7 +50,7 @@ namespace NTable {
 
         virtual ~TColdPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out << "ColdPart{" << Label << " eph " << Epoch << "}";
         }
@@ -63,24 +83,36 @@ namespace NTable {
                 return !FlatGroups.empty();
             }
 
-            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    Y_ENSURE(groupId.Index < BTreeHistoric.size());
                     return BTreeHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    Y_ENSURE(groupId.Index < BTreeGroups.size());
                     return BTreeGroups[groupId.Index];
                 }
             }
 
-            TPageId GetFlat(TGroupId groupId) const noexcept {
+            TPageId GetFlat(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    Y_ENSURE(groupId.Index < FlatHistoric.size());
                     return FlatHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    Y_ENSURE(groupId.Index < FlatGroups.size());
                     return FlatGroups[groupId.Index];
                 }
+            }
+
+            /// Resolves the root TPageLocation from the btree meta through the part's page collection.
+            /// When LevelCount==0 the root IS a data page (resolved via groupId),
+            /// when LevelCount>0 the root is a btree index page (resolved via index collection 0).
+            using TMetaRef = NPage::TBtreeIndexMeta;
+            using TPages = NPageCollection::IPageCollection;
+            NPage::TPageLocation GetRootLocation(const TPart* part, TGroupId groupId) const {
+                const auto& meta = GetBTree(groupId);
+                return ::NKikimr::NTable::GetBTreeRootLocation(meta,
+                    part->GetPageCollection(0),
+                    part->GetPageCollection(groupId.Index));
             }
         };
 
@@ -89,7 +121,7 @@ namespace NTable {
             TIntrusiveConstPtr<TPartScheme> Scheme;
             TIndexPages IndexPages;
             TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
-            TIntrusiveConstPtr<NPage::TBloom> ByKey;
+            TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> ByKeyPrefixes;
             TIntrusiveConstPtr<NPage::TFrames> Large;
             TIntrusiveConstPtr<NPage::TFrames> Small;
             size_t IndexesRawSize;
@@ -116,7 +148,7 @@ namespace NTable {
             , Large(std::move(params.Large))
             , Small(std::move(params.Small))
             , IndexPages(std::move(params.IndexPages))
-            , ByKey(std::move(params.ByKey))
+            , ByKeyPrefixes(std::move(params.ByKeyPrefixes))
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
@@ -126,26 +158,36 @@ namespace NTable {
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_ABORT_UNLESS(Scheme->Groups.size() == GroupsCount,
-                "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
-                Scheme->Groups.size(), GroupsCount);
-            Y_ABORT_UNLESS(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
-                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                GroupsCount, HistoricGroupsCount);
+            Y_ENSURE(Scheme->Groups.size() == GroupsCount,
+                "Part has scheme with " << Scheme->Groups.size() << " groups, but " << GroupsCount << " indexes");
+            Y_ENSURE(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+                "Part has " << GroupsCount << " indexes, but " << HistoricGroupsCount << " historic indexes");
+            Y_ENSURE(std::is_sorted(ByKeyPrefixes.begin(), ByKeyPrefixes.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; }),
+                "ByKeyPrefixes must be sorted by prefix length");
         }
 
         virtual ~TPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Part{" << Label << " eph " << Epoch << ", "
                 << Stat.Coded << "b " << Stat.Rows << "r}";
         }
 
-        bool MightHaveKey(TStringBuf serializedKey) const
+        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
         {
-            return ByKey ? ByKey->MightHave(serializedKey) : true;
+            // Check from the longest (most selective) prefix first
+            for (auto it = ByKeyPrefixes.rbegin(); it != ByKeyPrefixes.rend(); ++it) {
+                const auto& [prefixLen, bloom] = *it;
+                if (bloom && prefixLen > 0) {
+                    if (!bloom->MightHave(prefix.Get(prefixLen))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         /**
@@ -153,11 +195,13 @@ namespace NTable {
          */
         virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
 
-        virtual ui64 DataSize() const = 0;
-        virtual ui64 BackingSize() const = 0;
+        virtual ui64 DataSize() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
         virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
         virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
         virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const = 0;
         virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
@@ -171,7 +215,7 @@ namespace NTable {
             , Large(src.Large)
             , Small(src.Small)
             , IndexPages(src.IndexPages)
-            , ByKey(src.ByKey)
+            , ByKeyPrefixes(src.ByKeyPrefixes)
             , GarbageStats(src.GarbageStats)
             , Stat(src.Stat)
             , GroupsCount(src.GroupsCount)
@@ -189,7 +233,7 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TFrames> Large;
         const TIntrusiveConstPtr<NPage::TFrames> Small;
         const TIndexPages IndexPages;
-        const TIntrusiveConstPtr<NPage::TBloom> ByKey;
+        const TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> ByKeyPrefixes;
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
         const TStat Stat;
@@ -213,7 +257,7 @@ namespace NTable {
 
         virtual ~TTxStatusPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TxStatus{" << Label << " epoch " << Epoch << ", "
@@ -226,6 +270,18 @@ namespace NTable {
         const TEpoch Epoch;
         const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage;
     };
+
+    /// Resolve a TPageRef to a concrete TPageLocation through the part's page collections.
+    inline NPage::TPageLocation ResolvePageLocation(const TPart* part, const TPageRef& ref, NPage::TGroupId groupId) {
+        return std::visit([&](const auto& val) -> NPage::TPageLocation {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, NPage::TPageId>) {
+                return part->GetPageLocation(val, groupId);
+            } else {
+                return val;
+            }
+        }, ref);
+    }
 
 }
 }

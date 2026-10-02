@@ -29,7 +29,7 @@ public:
     using TValue = T;
 
     constexpr TEnumIndexedArray() = default;
-    TEnumIndexedArray(std::initializer_list<std::pair<E, T>> elements);
+    constexpr TEnumIndexedArray(std::initializer_list<std::pair<E, T>> elements);
 
     constexpr TEnumIndexedArray(const TEnumIndexedArray&) = default;
     constexpr TEnumIndexedArray(TEnumIndexedArray&&) = default;
@@ -37,18 +37,20 @@ public:
     constexpr TEnumIndexedArray& operator=(const TEnumIndexedArray&) = default;
     constexpr TEnumIndexedArray& operator=(TEnumIndexedArray&&) = default;
 
-    T& operator[] (E index);
-    const T& operator[] (E index) const;
+    constexpr bool operator==(const TEnumIndexedArray&) const = default;
+
+    constexpr T& operator[] (E index);
+    constexpr const T& operator[] (E index) const;
 
     // STL interop.
-    T* begin();
-    const T* begin() const;
-    T* end();
-    const T* end() const;
+    constexpr T* begin();
+    constexpr const T* begin() const;
+    constexpr T* end();
+    constexpr const T* end() const;
 
     constexpr size_t size() const;
 
-    static bool IsValidIndex(E index);
+    static constexpr bool IsValidIndex(E index);
 
 private:
     static constexpr size_t Size = static_cast<size_t>(Max) - static_cast<size_t>(Min) + 1;

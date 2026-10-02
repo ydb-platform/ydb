@@ -10,7 +10,24 @@ from collections import defaultdict
 import gast as ast
 
 
-class Scope(FunctionAnalysis):
+def all_users(d):
+    """
+    Gather users of a definition, including users of an augmented assign.
+    """
+    visited = set()
+    dname = d.name()
+    def all_users_impl(d):
+        if d in visited:
+            return
+        visited.add(d)
+        for u in d.users():
+            if u.name() == dname:
+                yield u
+                yield from all_users_impl(u)
+    return all_users_impl(d)
+
+
+class Scope(FunctionAnalysis[AncestorsWithBody, DefUseChains]):
     '''
     Associate each variable declaration with the node that defines it
 
@@ -20,12 +37,12 @@ class Scope(FunctionAnalysis):
     The result is a dictionary with nodes as key and set of names as values
     '''
 
+    ResultType = lambda: defaultdict(set)
     def __init__(self):
-        self.result = defaultdict(set)
+        super().__init__()
         self.decl_holders = (ast.FunctionDef, ast.For,
                              ast.excepthandler,
                              ast.While, ast.If, tuple)
-        super(Scope, self).__init__(AncestorsWithBody, DefUseChains)
 
     def visit_OMPDirective(self, node):
         for dep in node.deps:
@@ -50,7 +67,7 @@ class Scope(FunctionAnalysis):
         for name, defs in name_to_defs.items():
             # get all refs to that name
             refs = [d.node for d in defs] + [u.node
-                                             for d in defs for u in d.users()]
+                                             for d in defs for u in all_users(d)]
             # add OpenMP refs (well, the parent of the holding stmt)
             refs.extend(self.ancestors[d][-3]   # -3 to get the right parent
                         for d in self.openmp_deps.get(name, []))

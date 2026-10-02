@@ -30,13 +30,13 @@ namespace {
     using TCheckIter = TChecker<TWrapIter, TSubset>;
     using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
-    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
+    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex)
     {
         NPage::TConf conf;
 
         conf.Groups.resize(groups);
         
-        conf.WriteBTreeIndex = writeBTreeIndex;
+        conf.WriteBTreeIndexV1 = writeBTreeIndex;
 
         return conf;
     }
@@ -65,7 +65,7 @@ namespace {
                 dataPages += IndexTools::CountMainPages(*part);
                 indexBytes += part->IndexesRawSize;
                 if (useBTree) {
-                    bTreeLevels = Max(bTreeLevels, part->IndexPages.BTreeGroups[0].LevelCount);
+                    bTreeLevels = Max(bTreeLevels, part->IndexPages.BTreeGroups[0].LevelCount());
                 }
             }
             state.counters["DataBytes"] = dataBytes;

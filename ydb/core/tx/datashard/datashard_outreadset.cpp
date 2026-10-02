@@ -3,6 +3,8 @@
 #include "datashard_outreadset.h"
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -47,8 +49,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
         // Cache it regardless of size, since we're going to send it soon
         rsInfo.Body = std::move(body);
 
-        Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-        Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsInfo));
+        Y_ENSURE(!CurrentReadSets.contains(seqNo));
+        Y_ENSURE(!CurrentReadSetKeys.contains(rsInfo));
 
         CurrentReadSetKeys[rsInfo] = seqNo;
         CurrentReadSets[seqNo] = std::move(rsInfo);
@@ -64,8 +66,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body) {
     using Schema = TDataShard::Schema;
 
-    Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-    Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsKey));
+    Y_ENSURE(!CurrentReadSets.contains(seqNo));
+    Y_ENSURE(!CurrentReadSetKeys.contains(rsKey));
 
     TReadSetInfo rsInfo(rsKey);
     rsInfo.Step = step;
@@ -121,9 +123,10 @@ void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TAc
     const TReadSetKey* rsInfo = CurrentReadSets.FindPtr(seqNo);
 
     if (!rsInfo) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-            "Unknown seqNo %" PRIu64 " for readset to tablet %" PRIu64 " at tablet %" PRIu64,
-            seqNo, tabletId, Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Unknown seqNo for readset to dstTablet at current tablet",
+            {"seqNo", seqNo},
+            {"dstTablet", tabletId},
+            {"tabletId", Self->TabletID()});
         return;
     }
 
@@ -145,15 +148,18 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
     ui64 consumer = ev->Record.GetTabletConsumer();
     ui64 txId = ev->Record.GetTxId();
 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-        "Receive RS Ack at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " txId %" PRIu64,
-        Self->TabletID(), sender, dest, consumer, txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Receive RS Ack",
+        {"tabletId", Self->TabletID()},
+        {"source", sender},
+        {"dest", dest},
+        {"consumer", consumer},
+        {"txId", txId});
 
     ReadSetAcks.emplace_back(ev.Release());
 
     if (CurrentReadSets.contains(seqno)) {
         TReadSetKey rsKey(txId, Self->TabletID(), sender, dest);
-        Y_ABORT_UNLESS(CurrentReadSetKeys[rsKey] == seqno);
+        Y_ENSURE(CurrentReadSetKeys[rsKey] == seqno);
 
         CurrentReadSetKeys.erase(rsKey);
         CurrentReadSets.erase(seqno);
@@ -175,9 +181,13 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         ui64 consumer = ev.Record.GetTabletConsumer();
         ui64 txId = ev.Record.GetTxId();
 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-            "Deleted RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " seqno %" PRIu64" txId %" PRIu64,
-            Self->TabletID(), sender, dest, consumer, seqno, txId);
+        YDB_LOG_DEBUG_CTX(ctx, "Deleted RS",
+            {"tabletId", Self->TabletID()},
+            {"source", sender},
+            {"dest", dest},
+            {"consumer", consumer},
+            {"seqno", seqno},
+            {"txId", txId});
 
         RemoveReadSet(db, seqno);
     }
@@ -310,3 +320,7 @@ THashMap<ui64, ui64> TOutReadSets::RemoveExpectations(ui64 target) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

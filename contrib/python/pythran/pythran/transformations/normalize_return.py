@@ -6,7 +6,7 @@ from pythran.passmanager import Transformation
 import gast as ast
 
 
-class NormalizeReturn(Transformation):
+class NormalizeReturn(Transformation[CFG]):
     '''
     Adds Return statement when they are implicit,
     and adds the None return value when not set
@@ -19,11 +19,8 @@ class NormalizeReturn(Transformation):
     >>> print(pm.dump(backend.Python, node))
     def foo(y):
         print(y)
-        return builtins.None
+        return None
     '''
-
-    def __init__(self):
-        super(NormalizeReturn, self).__init__(CFG)
 
     def visit_FunctionDef(self, node):
         self.yield_points = self.gather(YieldPoints, node)
@@ -38,19 +35,13 @@ class NormalizeReturn(Transformation):
                 if self.yield_points:
                     node.body.append(ast.Return(None))
                 else:
-                    none = ast.Attribute(
-                        ast.Name("builtins", ast.Load(), None, None),
-                        'None',
-                        ast.Load())
-                    node.body.append(ast.Return(none))
+                    node.body.append(ast.Return(ast.Constant(None, None)))
                 break
 
         return node
 
     def visit_Return(self, node):
         if not node.value and not self.yield_points:
-            none = ast.Attribute(ast.Name("builtins", ast.Load(), None, None),
-                                 'None', ast.Load())
-            node.value = none
+            node.value = ast.Constant(None, None)
             self.update = True
         return node

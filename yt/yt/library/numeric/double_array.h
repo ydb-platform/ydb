@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include <util/system/yassert.h>
 

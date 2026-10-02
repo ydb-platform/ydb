@@ -9,8 +9,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-  tile(E const &expr, long reps);
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> tile(E const &expr,
+                                                                             long reps);
 
   template <class E, size_t N>
   types::ndarray<typename E::dtype, types::array_tuple<long, N>>

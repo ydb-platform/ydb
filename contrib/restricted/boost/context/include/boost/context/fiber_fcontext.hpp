@@ -23,6 +23,7 @@
 #include <boost/assert.hpp>
 #include <boost/config.hpp>
 #include <boost/intrusive_ptr.hpp>
+#include <boost/core/ignore_unused.hpp>
 
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
 #include <boost/context/detail/exchange.hpp>
@@ -47,9 +48,12 @@
 #if defined(__CET__) && defined(__unix__)
 #  include <cet.h>
 #  include <sys/mman.h>
+#  include <unistd.h>
 #  define SHSTK_ENABLED (__CET__ & 0x2)
 #  define BOOST_CONTEXT_SHADOW_STACK (SHSTK_ENABLED && SHADOW_STACK_SYSCALL)
-#  define __NR_map_shadow_stack 451
+#  if !defined(__NR_map_shadow_stack)
+#    define __NR_map_shadow_stack 453
+#  endif
 #ifndef SHADOW_STACK_SET_TOKEN
 #  define SHADOW_STACK_SET_TOKEN 0x1
 #endif
@@ -59,6 +63,58 @@
 # pragma warning(push)
 # pragma warning(disable: 4702)
 #endif
+
+#if ! (defined(__GLIBCPP__) || defined(__GLIBCXX__))
+namespace boost {
+namespace context {
+namespace detail {
+
+// manage_exception_state is a dummy struct unless we have specific support
+struct manage_exception_state {
+    void from_forced_unwind() noexcept {}
+};
+
+} // namespace detail
+} // namespace context
+} // namespace boost
+
+#else // libstdc++
+#include <cxxabi.h>
+
+namespace __cxxabiv1 {
+struct __cxa_eh_globals {
+    void *       caughtExceptions;
+    unsigned int uncaughtExceptions;
+};
+
+class manage_exception_state {
+public:
+    BOOST_NOINLINE manage_exception_state() {
+        exception_state_ = *__cxa_get_globals();
+    }
+    // Hack to account for the forced_unwind exception thrown in fiber_unwind
+    // that's run ontop before the destructor.
+    void from_forced_unwind() noexcept {
+        exception_state_.uncaughtExceptions += 1;
+    }
+    BOOST_NOINLINE ~manage_exception_state() {
+        *__cxa_get_globals() = exception_state_;
+    }
+private:
+    __cxa_eh_globals exception_state_;
+};
+} // namespace __cxxabiv1
+
+namespace boost {
+namespace context {
+namespace detail {
+
+using __cxxabiv1::manage_exception_state;
+
+} // namespace detail
+} // namespace context
+} // namespace boost
+#endif // __GLIBCPP__ or __GLIBCXX__
 
 namespace boost {
 namespace context {
@@ -74,7 +130,7 @@ template< typename Rec >
 transfer_t fiber_exit( transfer_t t) noexcept {
     Rec * rec = static_cast< Rec * >( t.data);
 #if BOOST_CONTEXT_SHADOW_STACK
-    // destory shadow stack
+    // destroy shadow stack
     std::size_t ss_size = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 16));
     long unsigned int ss_base = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 8));
     munmap((void *)ss_base, ss_size);
@@ -168,10 +224,10 @@ template< typename Record, typename StackAlloc, typename Fn >
 fcontext_t create_fiber1( StackAlloc && salloc, Fn && fn) {
     auto sctx = salloc.allocate();
     // reserve space for control structure
-	void * storage = reinterpret_cast< void * >(
-			( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
+    void * storage = reinterpret_cast< void * >(
+            ( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     Record * record = new ( storage) Record{
             sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top
@@ -186,7 +242,7 @@ fcontext_t create_fiber1( StackAlloc && salloc, Fn && fn) {
 #if BOOST_CONTEXT_SHADOW_STACK
     std::size_t ss_size = size >> 5;
     // align shadow stack to 8 bytes.
-	ss_size = (ss_size + 7) & ~7;
+    ss_size = (ss_size + 7) & ~7;
     // Todo: shadow stack occupies at least 4KB
     ss_size = (ss_size > 4096) ? size : 4096;
     // create shadow stack
@@ -194,8 +250,8 @@ fcontext_t create_fiber1( StackAlloc && salloc, Fn && fn) {
     BOOST_ASSERT(ss_base != -1);
     unsigned long ss_sp = (unsigned long)ss_base + ss_size;
     /* pass the shadow stack pointer to make_fcontext
-	 i.e., link the new shadow stack with the new fcontext
-	 TODO should be a better way? */
+       i.e., link the new shadow stack with the new fcontext
+       TODO should be a better way? */
     *((unsigned long*)(reinterpret_cast< uintptr_t >( stack_top)- 8)) = ss_sp;
     /* Todo: place shadow stack info in 64byte gap */
     *((unsigned long*)(reinterpret_cast< uintptr_t >( storage)- 8)) = (unsigned long) ss_base;
@@ -213,7 +269,7 @@ fcontext_t create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( palloc.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context-stack
+    // placwment new for control structure on context-stack
     Record * record = new ( storage) Record{
             palloc.sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top
@@ -227,7 +283,7 @@ fcontext_t create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
 #if BOOST_CONTEXT_SHADOW_STACK
     std::size_t ss_size = size >> 5;
     // align shadow stack to 8 bytes.
-	ss_size = (ss_size + 7) & ~7;
+    ss_size = (ss_size + 7) & ~7;
     // Todo: shadow stack occupies at least 4KB
     ss_size = (ss_size > 4096) ? size : 4096;
     // create shadow stack
@@ -235,8 +291,8 @@ fcontext_t create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
     BOOST_ASSERT(ss_base != -1);
     unsigned long ss_sp = (unsigned long)ss_base + ss_size;
     /* pass the shadow stack pointer to make_fcontext
-	 i.e., link the new shadow stack with the new fcontext
-	 TODO should be a better way? */
+       i.e., link the new shadow stack with the new fcontext
+       TODO should be a better way? */
     *((unsigned long*)(reinterpret_cast< uintptr_t >( stack_top)- 8)) = ss_sp;
     /* Todo: place shadow stack info in 64byte gap */
     *((unsigned long*)(reinterpret_cast< uintptr_t >( storage)- 8)) = (unsigned long) ss_base;
@@ -248,7 +304,7 @@ fcontext_t create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
     return jump_fcontext( fctx, record).fctx;
 }
 
-}
+} // namespace detail
 
 class fiber {
 private:
@@ -295,6 +351,8 @@ public:
 
     ~fiber() {
         if ( BOOST_UNLIKELY( nullptr != fctx_) ) {
+            detail::manage_exception_state exstate;
+            boost::ignore_unused(exstate);
             detail::ontop_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
                     detail::exchange( fctx_, nullptr),
@@ -323,27 +381,41 @@ public:
 
     fiber resume() && {
         BOOST_ASSERT( nullptr != fctx_);
-        return { detail::jump_fcontext(
+        detail::manage_exception_state exstate;
+        boost::ignore_unused(exstate);
+        try {
+            return { detail::jump_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
-                    detail::exchange( fctx_, nullptr),
+                        detail::exchange( fctx_, nullptr),
 #else
-                    std::exchange( fctx_, nullptr),
+                        std::exchange( fctx_, nullptr),
 #endif
-                    nullptr).fctx };
+                        nullptr).fctx };
+        } catch ( detail::forced_unwind const& ) {
+            exstate.from_forced_unwind();
+            throw;
+        }
     }
 
     template< typename Fn >
     fiber resume_with( Fn && fn) && {
         BOOST_ASSERT( nullptr != fctx_);
+        detail::manage_exception_state exstate;
+        boost::ignore_unused(exstate);
         auto p = std::forward< Fn >( fn);
-        return { detail::ontop_fcontext(
+        try {
+            return { detail::ontop_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
-                    detail::exchange( fctx_, nullptr),
+                        detail::exchange( fctx_, nullptr),
 #else
-                    std::exchange( fctx_, nullptr),
+                        std::exchange( fctx_, nullptr),
 #endif
-                    & p,
-                    detail::fiber_ontop< fiber, decltype(p) >).fctx };
+                        & p,
+                        detail::fiber_ontop< fiber, decltype(p) >).fctx };
+        } catch ( detail::forced_unwind const& ) {
+            exstate.from_forced_unwind();
+            throw;
+        }
     }
 
     explicit operator bool() const noexcept {
@@ -359,7 +431,7 @@ public:
     }
 
     #if !defined(BOOST_EMBTC)
-    
+
     template< typename charT, class traitsT >
     friend std::basic_ostream< charT, traitsT > &
     operator<<( std::basic_ostream< charT, traitsT > & os, fiber const& other) {
@@ -371,7 +443,7 @@ public:
     }
 
     #else
-    
+
     template< typename charT, class traitsT >
     friend std::basic_ostream< charT, traitsT > &
     operator<<( std::basic_ostream< charT, traitsT > & os, fiber const& other);
@@ -396,7 +468,7 @@ public:
     }
 
 #endif
-    
+
 inline
 void swap( fiber & l, fiber & r) noexcept {
     l.swap( r);

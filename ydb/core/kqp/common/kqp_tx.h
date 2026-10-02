@@ -3,8 +3,11 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -14,73 +17,20 @@
 
 namespace NKikimr::NKqp {
 
-class TKqpTxLock {
-public:
-    using TKey = std::tuple<ui64, ui64, ui64, ui64>;
+namespace {
+    // Avoid too many compute actors starting at the same time.
+    constexpr size_t kMaxDeferredEffects = 100;
+}
 
-    TKqpTxLock(const NKikimrMiniKQL::TValue& lockValue)
-        : LockValue(lockValue) {}
-
-    ui64 GetLockId() const { return LockValue.GetStruct(3).GetUint64(); }
-    ui64 GetDataShard() const { return LockValue.GetStruct(1).GetUint64(); }
-    ui64 GetSchemeShard() const { return LockValue.GetStruct(5).GetUint64(); }
-    ui64 GetPathId() const { return LockValue.GetStruct(4).GetUint64(); }
-    ui32 GetGeneration() const { return LockValue.GetStruct(2).GetUint32(); }
-    ui64 GetCounter() const { return LockValue.GetStruct(0).GetUint64(); }
-    bool HasWrites() const { return LockValue.GetStruct(6).GetBool(); }
-    void SetHasWrites() {
-        LockValue.MutableStruct(6)->SetBool(true);
-    }
-
-    TKey GetKey() const { return std::make_tuple(GetLockId(), GetDataShard(), GetSchemeShard(), GetPathId()); }
-    NKikimrMiniKQL::TValue GetValue() const { return LockValue; }
-    NYql::NDq::TMkqlValueRef GetValueRef(const NKikimrMiniKQL::TType& type) const { return NYql::NDq::TMkqlValueRef(type, LockValue); }
-
-    bool Invalidated(const TKqpTxLock& newLock) const {
-        YQL_ENSURE(GetKey() == newLock.GetKey());
-        return GetGeneration() != newLock.GetGeneration() || GetCounter() != newLock.GetCounter();
-    }
-
-private:
-    NKikimrMiniKQL::TValue LockValue;
-};
-
-struct TKqpTxLocks {
-    NKikimrMiniKQL::TType LockType;
-    NKikimrMiniKQL::TListType LocksListType;
-    THashMap<TKqpTxLock::TKey, TKqpTxLock> LocksMap;
-    NLongTxService::TLockHandle LockHandle;
-
-    TMaybe<NYql::TIssue> LockIssue;
-
-    bool HasLocks() const { return !LocksMap.empty(); }
-    bool Broken() const { return LockIssue.Defined(); }
-    void MarkBroken(NYql::TIssue lockIssue) { LockIssue.ConstructInPlace(std::move(lockIssue)); }
-    ui64 GetLockTxId() const { return LockHandle ? LockHandle.GetLockId() : HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
-    size_t Size() const { return LocksMap.size(); }
-
-    NYql::TIssue GetIssue() {
-        Y_ENSURE(LockIssue);
-        return *LockIssue;
-    }
-
-    void ReportIssues(NYql::TExprContext& ctx) {
-        if (LockIssue)
-            ctx.AddError(*LockIssue);
-    }
-
-    void Clear() {
-        LocksMap.clear();
-        LockIssue.Clear();
-    }
-};
 
 struct TDeferredEffect {
     TKqpPhyTxHolder::TConstPtr PhysicalTx;
     TQueryData::TPtr Params;
+    ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx)
-        : PhysicalTx(physicalTx) {}
+    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, ui64 querySpanId = 0)
+        : PhysicalTx(physicalTx)
+        , QuerySpanId(querySpanId) {}
 };
 
 
@@ -106,8 +56,8 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        DeferredEffects.emplace_back(physicalTx);
+    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        DeferredEffects.emplace_back(physicalTx, querySpanId);
         DeferredEffects.back().Params = params;
         return true;
     }
@@ -160,7 +110,7 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -169,6 +119,7 @@ public:
         : NYql::TKikimrTransactionContextBase()
         , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
+        , TxManager(CreateKqpTransactionManager())
     {
         CreationTime = TInstant::Now();
         TxAlloc = std::make_shared<TTxAllocatorState>(funcRegistry, timeProvider, randomProvider);
@@ -184,12 +135,12 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        return DeferredEffects.Add(physicalTx, params);
+    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 querySpanId = 0) {
+        return DeferredEffects.Add(physicalTx, params, querySpanId);
     }
 
     bool TxHasEffects() const {
-        return HasImmediateEffects || !DeferredEffects.Empty();
+        return HasImmediateEffects || HasUnflushedEffectsInBuffer || !DeferredEffects.Empty();
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -198,11 +149,13 @@ public:
 
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
-        YQL_ENSURE(!Locks.HasLocks());
-        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!HasUnflushedEffectsInBuffer);
         YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
+
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
 
         if (Implicit) {
             Reset();
@@ -211,13 +164,20 @@ public:
         }
     }
 
+    void Invalidate() override {
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        TKikimrTransactionContextBase::Invalidate();
+    }
+
     void Touch() {
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery() {
+    void OnBeginQuery(ui64 querySpanId, const TString& queryText) {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
+        QueryTextCollector.AddQueryText(querySpanId, queryText);
     }
 
     void OnEndQuery() {
@@ -230,13 +190,17 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
+        HasUnflushedEffectsInBuffer = false;
 
         HasOlapTable = false;
         HasOltpTable = false;
         HasTableWrite = false;
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
+        QueryTextCollector.Clear();
+        SchemaObjects.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -244,29 +208,44 @@ public:
     void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
         switch (settings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
                 Readonly = false;
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    IsSnapshotROConvertedFromOnlineRO = true;
+                } else {
+                    EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kStaleReadOnly:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_READ_STALE;
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kReadCommittedReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
                 Readonly = false;
                 break;
 
@@ -276,12 +255,9 @@ public:
         };
     }
 
-    bool ShouldExecuteDeferredEffects(const TKqpPhyTxHolder::TConstPtr& tx) const {
+    bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
-        }
-        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
-            return !DeferredEffects.Empty();
+            return !DeferredEffects.Empty() || HasUnflushedEffectsInBuffer;
         }
 
         return false;
@@ -316,10 +292,13 @@ public:
         return true;
     }
 
-    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
-        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
+        NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
+            || phyQuery.GetForceImmediateEffectsExecution()
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit)
+            || EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
         if (NeedUncommittedChangesFlush) {
-            ModifiedTablesSinceLastFlush.clear();   
+            ModifiedTablesSinceLastFlush.clear();
         }
     }
 
@@ -339,7 +318,7 @@ public:
     ui32 QueriesCount = 0;
     ui32 ExecutorId = 0;
 
-    TKqpTxLocks Locks;
+    NLongTxService::TLockHandle LockHandle;
 
     TDeferredEffects DeferredEffects;
     bool HasImmediateEffects = false;
@@ -353,14 +332,35 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasTableRead = false;
+    bool IsSnapshotROConvertedFromOnlineRO = false;
+
+    std::optional<bool> EnableOlapSink;
+    std::optional<bool> EnableHtapTx;
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+    bool HasUnflushedEffectsInBuffer = false;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    struct TSchemaIdentity {
+        NYql::TKikimrPathId PathId;
+        ui64 SchemaVersion = 0;
+
+        bool operator==(const TSchemaIdentity& other) const = default;
+    };
+
+    // A statement is compiled against one schema version of each object it uses, and every
+    // later statement of the transaction has to see that same version. This is what the
+    // earlier statements were compiled against.
+    // Keyed by path, not by path id: an object dropped and created anew under the same name is
+    // a different object, and the transaction must not read it as if nothing had changed.
+    THashMap<TString, TSchemaIdentity> SchemaObjects;
+
+    NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };
 
 struct TTxId {
@@ -508,13 +508,11 @@ public:
     }
 };
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
-std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
-
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
+// Whether the mode promises that all reads of a transaction observe the same state.
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
@@ -523,3 +521,4 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
+

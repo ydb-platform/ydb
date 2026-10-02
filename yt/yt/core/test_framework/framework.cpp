@@ -11,10 +11,11 @@
 
 #include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
-#include <yt/yt/core/misc/signal_registry.h>
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <yt/yt/library/profiling/solomon/registry.h>
+
+#include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -31,6 +32,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(babenko): migrate to std::string
 TString GenerateRandomFileName(const char* prefix)
 {
     return Format("%s-%016" PRIx64 "-%016" PRIx64,
@@ -60,12 +62,12 @@ void WaitForPredicate(
         }
     }
     THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message)
-        << TErrorAttribute("location", NYT::ToString(options.SourceLocation));
+        .With("location", NYT::ToString(options.SourceLocation));
 }
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message,
+    const std::string& message,
     TSourceLocation location)
 {
     WaitForPredicate(
@@ -129,7 +131,7 @@ void RunAndTrackFiber(TClosure closure)
 
     // Do not silence errors thrown in tests.
     if (result.IsSet()) {
-        result.Get().ThrowOnError();
+        result.GetOrCrash().ThrowOnError();
     }
 
     SUCCEED();
@@ -152,9 +154,11 @@ Y_TEST_HOOK_BEFORE_RUN(GTEST_YT_SETUP)
 #endif
     NYT::EnableShutdownLoggingToFile((GetOutputPath() / "shutdown.log").GetPath());
 #ifdef _unix_
-    NYT::TSignalRegistry::Get()->PushCallback(NYT::AllCrashSignals, NYT::CrashSignalHandler);
-    NYT::TSignalRegistry::Get()->PushDefaultSignalHandler(NYT::AllCrashSignals);
+    NYT::NSignals::TSignalRegistry::Get()->PushCallback(NYT::NSignals::AllCrashSignals, NYT::CrashSignalHandler);
+    NYT::NSignals::TSignalRegistry::Get()->PushDefaultSignalHandler(NYT::NSignals::AllCrashSignals);
 #endif
+
+    NYT::TErrorCodicils::Initialize();
 
     auto config = NYT::NLogging::TLogManagerConfig::CreateYTServer("unittester", GetOutputPath().GetPath());
     NYT::NLogging::TLogManager::Get()->Configure(config);

@@ -10,6 +10,8 @@
 
 #include <aws/mqtt/v5/mqtt5_client.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /*
  * Callback signature for when an mqtt5 listener has completely destroyed itself.
  */
@@ -81,5 +83,6 @@ AWS_MQTT_API struct aws_mqtt5_listener *aws_mqtt5_listener_acquire(struct aws_mq
 AWS_MQTT_API struct aws_mqtt5_listener *aws_mqtt5_listener_release(struct aws_mqtt5_listener *listener);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT5_LISTENER_H */

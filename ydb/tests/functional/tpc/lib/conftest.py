@@ -9,12 +9,46 @@ class FunctionalTestBase:
     cluster = None
 
     @classmethod
-    def setup_cluster(cls) -> None:
-        cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(
+    def setup_cluster(cls, table_service_config: dict = {}, memory_controller_config: dict = {}) -> None:
+        cls.setup_cluster_ext(
+            table_service_config=table_service_config,
+            memory_controller_config=memory_controller_config,
+        )
+
+    @classmethod
+    def setup_cluster_ext(cls,
+                          table_service_config: dict = {},
+                          memory_controller_config: dict = {},
+                          extra_feature_flags: list[str] | None = None,
+                          query_service_config: dict | None = None,
+                          actor_system_config: dict | None = None) -> None:
+        flags = [
+            "enable_resource_pools",
+            "enable_resource_pools_counters",
+            "enable_table_pg_types",
+            "enable_forced_compactions",
+        ]
+        if extra_feature_flags:
+            flags.extend(extra_feature_flags)
+        config_generator = KikimrConfigGenerator(
             domain_name='local',
-            extra_feature_flags=["enable_resource_pools"],
+            extra_feature_flags=flags,
             use_in_memory_pdisks=True,
-        ))
+            column_shard_config={
+                "alter_object_enabled": True,
+            },
+            overrided_actor_system_config=actor_system_config,
+        )
+        if table_service_config:
+            config_generator.yaml_config["table_service_config"] = table_service_config
+
+        if memory_controller_config:
+            config_generator.yaml_config["memory_controller_config"] = memory_controller_config
+
+        if query_service_config:
+            config_generator.yaml_config["query_service_config"] = query_service_config
+
+        cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
         YdbCluster.reset(
@@ -33,6 +67,25 @@ class FunctionalTestBase:
         cls.cluster.register_and_start_slots(db, count=YdbCluster.get_dyn_nodes_count())
         cls.cluster.wait_tenant_up(db)
 
+    def setup_method(self, method):
+        for node in self.cluster.nodes.values():
+            node.start()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        self.cluster.wait_tenant_up(f'/{YdbCluster.ydb_database}')
+
+    def teardown_method(self, method):
+        for node in self.cluster.nodes.values():
+            if not node.is_alive():
+                node.stop()
+        for slot in self.cluster.slots.values():
+            if not slot.is_alive():
+                slot.stop()
+
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
         return yatest.common.execute(YdbCliHelper.get_cli_command() + argv)
+
+    @classmethod
+    def do_teardown_class(cls):
+        cls.cluster.stop()

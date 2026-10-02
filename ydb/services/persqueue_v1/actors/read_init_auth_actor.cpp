@@ -4,7 +4,7 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -16,7 +16,8 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
-    : ParentId(parentId)
+    : TBase(NKikimrServices::PQ_READ_PROXY)
+    , ParentId(parentId)
     , Cookie(cookie)
     , Session(session)
     , MetaCacheId(metaCache)
@@ -38,7 +39,8 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 
 
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
+    LOG_D("Auth",
+        {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
     DescribeTopics(ctx, true);
@@ -48,10 +50,9 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
     TVector<NPersQueue::TDiscoveryConverterPtr> topics;
     for (const auto& topic : Topics) {
         topics.push_back(topic.second.DiscoveryConverter);
-        Y_ABORT_UNLESS(topic.second.DiscoveryConverter->IsValid());
+        AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
     }
 
-    //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
     ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
 }
 
@@ -65,9 +66,21 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
             holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");
+    LOG_D("Auth is DEAD");
 
-    TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
+    TBase::Die(ctx);
+}
+
+bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    LOG_C("Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+
+    CloseSession("Internal error", PersQueue::ErrorCode::ErrorCode::ERROR, ctx.AsActorContext());
+
+    return true;
 }
 
 void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code,
@@ -84,7 +97,8 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.SyncVersion = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
+    schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
+    LOG_D("Send client acl request");
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
@@ -94,7 +108,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
@@ -103,6 +117,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+    topicsIter->second.SetPartitionGraph(entry.PQGroupInfo->PartitionGraph);
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -120,13 +135,13 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    Y_ABORT_UNLESS(topicsIter->second.FullConverter->IsValid());
+    AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
+    LOG_D("Handle describe topics response");
 
     bool reDescribe = false;
     auto i = 0u;
@@ -134,10 +149,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     for (const auto& entry : ev->Get()->Result->ResultSet) {
         const auto& path = topicsRequested[i++]->GetOriginalPath();
         auto it = Topics.find(path);
-        Y_ABORT_UNLESS(it != Topics.end());
+        AFL_ENSURE(it != Topics.end());
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe
@@ -200,7 +215,8 @@ bool TReadInitAndAuthActor::CheckTopicACL(
     }
     if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
         //TODO : add here checking of client-service-type password. Provide it via API-call.
-        if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
+        const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+        if (!consumer || consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
                     PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx
@@ -224,7 +240,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+    AFL_ENSURE(navigate->ResultSet.size() == 1);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {
@@ -271,7 +287,16 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.Partitions
+            holder.FullConverter,
+            holder.TabletID,
+            holder.CloudId,
+            holder.DbId,
+            holder.DbPath,
+            holder.IsServerless,
+            holder.FolderId,
+            holder.MeteringMode,
+            holder.Partitions,
+            holder.GetPartitionGraph()
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

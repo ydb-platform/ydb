@@ -28,7 +28,14 @@ protected:
         Y_DEBUG_ABORT_UNLESS(DoIsEnabled(p));
 
         const auto priority = static_cast<::NActors::NLog::EPriority>(p);
-        ::NActors::MemLogAdapter(ActorSystem_, priority, Component_, format, args);
+        ::NActors::MemLogAdapter(
+            ActorSystem_,
+            priority,
+            Component_,
+            __FILE_NAME__,
+            __LINE__,
+            format,
+            args);
     }
 
 private:

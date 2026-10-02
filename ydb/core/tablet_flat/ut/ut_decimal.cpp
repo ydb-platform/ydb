@@ -30,12 +30,12 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
         db.Begin();
         db->Alter()
             .AddTable("TestTable", tableId)
-            .AddColumnWithTypeInfo(tableId, "KeyDecimal229", IdKeyDecimal229, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(22,9), false)
-            .AddColumnWithTypeInfo(tableId, "KeyDecimal356", IdKeyDecimal356, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(35,6), false)
-            .AddColumn(tableId, "KeyInt", IdKeyInt, NScheme::NTypeIds::Int32, false)
-            .AddColumnWithTypeInfo(tableId, "ValueDecimal229", IdValueDecimal229, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(22,9), false)
-            .AddColumnWithTypeInfo(tableId, "ValueDecimal356", IdValueDecimal356, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(35,6), false)
-            .AddColumn(tableId, "ValueInt", IdValueInt, NScheme::NTypeIds::Int32, false)
+            .AddColumnWithTypeInfo(tableId, "KeyDecimal229", IdKeyDecimal229, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(22,9), false, false)
+            .AddColumnWithTypeInfo(tableId, "KeyDecimal356", IdKeyDecimal356, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(35,6), false, false)
+            .AddColumn(tableId, "KeyInt", IdKeyInt, NScheme::NTypeIds::Int32, false, false)
+            .AddColumnWithTypeInfo(tableId, "ValueDecimal229", IdValueDecimal229, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(22,9), false, false)
+            .AddColumnWithTypeInfo(tableId, "ValueDecimal356", IdValueDecimal356, NScheme::NTypeIds::Decimal, makeDecimalTypeInfoProto(35,6), false, false)
+            .AddColumn(tableId, "ValueInt", IdValueInt, NScheme::NTypeIds::Int32, false, false)
             .AddColumnToKey(tableId, IdKeyDecimal229)
             .AddColumnToKey(tableId, IdKeyDecimal356)
             .AddColumnToKey(tableId, IdKeyInt);

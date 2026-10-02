@@ -31,10 +31,11 @@
 
 namespace NActors {
 
-    TPoolManager::TPoolManager(const TVector<TPoolShortInfo> &poolInfos)
+    TPoolManager::TPoolManager(const std::vector<TPoolShortInfo> &poolInfos)
         : PoolInfos(poolInfos)
     {
         PoolThreadRanges.resize(poolInfos.size());
+        AdjacentOwnerByPool.resize(poolInfos.size(), -1);
         ui64 totalThreads = 0;
         for (const auto& poolInfo : poolInfos) {
             PoolThreadRanges[poolInfo.PoolId].Begin = totalThreads;
@@ -43,23 +44,79 @@ namespace NActors {
             if (poolInfo.InPriorityOrder) {
                 PriorityOrder.push_back(poolInfo.PoolId);
             }
+            Y_ABORT_UNLESS(poolInfo.AdjacentPools.empty() || poolInfo.SharedThreadCount > 0,
+                "pool %d has adjacent pools but owns no shared threads", poolInfo.PoolId);
+            for (i16 adjacentPoolId : poolInfo.AdjacentPools) {
+                Y_ABORT_UNLESS(adjacentPoolId >= 0 && static_cast<size_t>(adjacentPoolId) < poolInfos.size(),
+                    "invalid adjacent pool %d for owner pool %d", adjacentPoolId, poolInfo.PoolId);
+                Y_ABORT_UNLESS(poolInfo.PoolId != adjacentPoolId,
+                    "pool %d cannot be adjacent to itself", poolInfo.PoolId);
+                i16& adjacentOwner = AdjacentOwnerByPool[adjacentPoolId];
+                Y_ABORT_UNLESS(adjacentOwner == -1,
+                    "adjacent pool %d has multiple owner pools: %d and %d",
+                    adjacentPoolId, adjacentOwner, poolInfo.PoolId);
+                adjacentOwner = poolInfo.PoolId;
+            }
         }
         Sort(PoolInfos.begin(), PoolInfos.end(), [](const TPoolShortInfo& a, const TPoolShortInfo& b) {
             return a.PoolId < b.PoolId;
         });
     }
 
+    namespace {
+        bool CheckPoolAdjacency(const TPoolManager& poolManager, i16 poolId, i16 adjacentPoolId) {
+            if (poolId == adjacentPoolId) {
+                return true;
+            }
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            return std::find(poolInfo.AdjacentPools.begin(), poolInfo.AdjacentPools.end(), adjacentPoolId) != poolInfo.AdjacentPools.end();
+        }
+
+        bool HasAdjacentPools(const TPoolManager& poolManager, i16 poolId) {
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            return !poolInfo.AdjacentPools.empty();
+        }
+
+        i16 NextAdjacentPool(const TPoolManager& poolManager, i16 poolId, i16 currentPoolId) {
+            if (poolId == currentPoolId) {
+                if (poolManager.PoolInfos[poolId].AdjacentPools.empty()) {
+                    return poolId;
+                }
+                return poolManager.PoolInfos[poolId].AdjacentPools[0];
+            }
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            auto it = std::find(poolInfo.AdjacentPools.begin(), poolInfo.AdjacentPools.end(), currentPoolId);
+            if (it == poolInfo.AdjacentPools.end() || it + 1 == poolInfo.AdjacentPools.end()) {
+                return poolId;
+            }
+            return *(it + 1);
+        }
+
+        std::optional<i16> GetForcedForeignSlots(const TPoolManager& poolManager, i16 poolId) {
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            if (poolInfo.ForcedForeignSlots) {
+                return poolInfo.ForcedForeignSlots;
+            }
+            return std::nullopt;
+        }
+
+    }
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TSharedExecutorPool::TSharedExecutorPool(
         const TSharedExecutorPoolConfig& cfg,
-        const TVector<TPoolShortInfo> &poolInfos
+        const std::vector<TPoolShortInfo> &poolInfos
     )   : TExecutorPoolBaseMailboxed(0)
         , PoolThreads(SumThreads(poolInfos))
         , PoolManager(poolInfos)
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , PoolName("Shared")
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
+        , United(cfg.United)
         , Threads(new NThreading::TPadded<TSharedExecutorThreadCtx>[PoolThreads])
         , ForeignThreadsAllowedByPool(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
         , ForeignThreadSlots(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
@@ -80,21 +137,23 @@ namespace NActors {
             }
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
-            ForeignThreadsAllowedByPool[i].store(0, std::memory_order_release);
-            ForeignThreadSlots[i].store(0, std::memory_order_release);
-            LocalThreads[i].store(PoolManager.PoolInfos[i].SharedThreadCount, std::memory_order_release);
+            auto &poolInfo = PoolManager.PoolInfos[i];
+            ForeignThreadsAllowedByPool[i].store(poolInfo.ForeignSlots, std::memory_order_release);
+            ForeignThreadSlots[i].store(poolInfo.ForeignSlots, std::memory_order_release);
+            LocalThreads[i].store(poolInfo.SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
         Y_ABORT_UNLESS(passedThreads == static_cast<ui64>(PoolThreads), "Passed threads %" PRIu64 " != PoolThreads %" PRIu64, passedThreads, static_cast<ui64>(PoolThreads));
 
         Pools.resize(PoolManager.PoolThreadRanges.size());
+        SleepingWorkers.resize(PoolThreads, false);
     }
 
     TSharedExecutorPool::~TSharedExecutorPool() {
         Threads.Destroy();
     }
 
-    i16 TSharedExecutorPool::SumThreads(const TVector<TPoolShortInfo> &poolInfos) {
+    i16 TSharedExecutorPool::SumThreads(const std::vector<TPoolShortInfo> &poolInfos) {
         i16 threadCount = 0;
         for (const auto &poolInfo : poolInfos) {
             threadCount += poolInfo.SharedThreadCount;
@@ -108,7 +167,14 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Trace, "pool[", i, "] is nullptr; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
-            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0) {
+
+            bool adj = false;
+            if (CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, i)) {
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
+                adj = true;
+            }
+
+            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0 && !adj) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
@@ -118,8 +184,7 @@ namespace NActors {
                 continue;
             }
 
-            if (thread.OwnerPoolId == i) {
-                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
+            if (adj) {
                 return i;
             }
 
@@ -142,7 +207,7 @@ namespace NActors {
     void TSharedExecutorPool::SwitchToPool(i16 poolId, NHPTimer::STime) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
-        if (Threads[workerId].CurrentPoolId != poolId && Threads[workerId].CurrentPoolId != Threads[workerId].OwnerPoolId) {
+        if (Threads[workerId].CurrentPoolId != poolId && !CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, Threads[workerId].CurrentPoolId)) {
             ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Lease, "return lease; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
         }
@@ -153,6 +218,9 @@ namespace NActors {
     }
 
     TMailbox* TSharedExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+        if (HasWakerPools) {
+            return GetReadyActivationWaker(revolvingCounter);
+        }
         Y_UNUSED(SoftProcessingDurationTs);
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
@@ -162,8 +230,10 @@ namespace NActors {
         auto &thread = Threads[workerId];
         thread.UnsetWork();
         TMailbox *mailbox = nullptr;
+        bool hasAdjacentPools = HasAdjacentPools(PoolManager, thread.OwnerPoolId);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (hpnow < thread.SoftDeadlineForPool || thread.CurrentPoolId == thread.OwnerPoolId) {
+            bool adjacentPool = CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId);
+            if (hpnow < thread.SoftDeadlineForPool || !hasAdjacentPools && adjacentPool) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 if (thread.SoftDeadlineForPool == Max<NHPTimer::STime>()) {
                     thread.SoftDeadlineForPool = GetCycleCountFast() + thread.SoftProcessingDurationTs;
@@ -180,8 +250,9 @@ namespace NActors {
                 } else {
                     EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "no mailbox and need to find new pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool);
                     TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
-                    if (thread.CurrentPoolId != thread.OwnerPoolId) {
-                        SwitchToPool(thread.OwnerPoolId, hpnow);
+                    if (!adjacentPool) {
+                        thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
+                        SwitchToPool(thread.AdjacentPoolId, hpnow);
                         continue;
                     }
                 }
@@ -190,10 +261,11 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 return nullptr;
             } else {
-                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "comeback to owner pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "change adjacent pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
                 TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
-                SwitchToPool(thread.OwnerPoolId, hpnow);
-                // after soft deadline we check owner pool again
+                thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
+                SwitchToPool(thread.AdjacentPoolId, hpnow);
+                // after soft deadline we check adjacent pool
                 continue;
             }
             bool goToSleep = true;
@@ -262,6 +334,110 @@ namespace NActors {
         return nullptr;
     }
 
+    TMailbox* TSharedExecutorPool::GetReadyActivationWaker(ui64 revolvingCounter) {
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard;
+        const TWorkerId workerId = TlsThreadContext->WorkerId();
+        auto& thread = Threads[workerId];
+        thread.UnsetWorkForWaker();
+        if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
+            // The executor already owns a captured mailbox. Finish it before
+            // honoring Blocking, without switching away from its pool.
+            thread.SetWorkForWaker();
+            return nullptr;
+        }
+        ui32 searchIterations = 0;
+        bool announcedSpin = false;
+
+        while (!StopFlag.load(std::memory_order_acquire)) {
+            EThreadState state = thread.GetState<EThreadState>();
+            if (IsNeedToBeWaker(state)) {
+                RunWaker(workerId);
+                continue;
+            }
+            if (state == EThreadState::Blocking) {
+                // Return a foreign lease before parking. Reconsider demand now
+                // that another worker can acquire that slot.
+                const bool foreign = !CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId);
+                SwitchToPool(thread.OwnerPoolId, GetCycleCountFast());
+                if (foreign) {
+                    RequestWaker(workerId);
+                }
+                if (thread.ParkForWaker(StopFlag)) {
+                    return nullptr;
+                }
+                searchIterations = 0;
+                announcedSpin = false;
+                continue;
+            }
+            Y_DEBUG_ABORT_UNLESS(state == EThreadState::None || state == EThreadState::Spin);
+            if (announcedSpin && state == EThreadState::None) {
+                searchIterations = 0;
+                announcedSpin = false;
+            }
+
+            const auto tryPool = [&](i16 poolId) -> TMailbox* {
+                EThreadState currentState = thread.GetState<EThreadState>();
+                if (currentState != EThreadState::None && currentState != EThreadState::Spin) {
+                    return nullptr;
+                }
+                if (poolId != thread.CurrentPoolId) {
+                    const bool adjacent = CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, poolId);
+                    if (!adjacent) {
+                        if (ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire) == 0) {
+                            return nullptr;
+                        }
+                        ui64 slots = ForeignThreadSlots[poolId].load(std::memory_order_acquire);
+                        while (slots != 0 && !ForeignThreadSlots[poolId].compare_exchange_weak(
+                                slots, slots - 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
+                        }
+                        if (slots == 0) {
+                            return nullptr;
+                        }
+                    }
+                    TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
+                    SwitchToPool(poolId, GetCycleCountFast());
+                }
+                if (thread.SoftDeadlineForPool == Max<NHPTimer::STime>()) {
+                    thread.SoftDeadlineForPool = GetCycleCountFast() + thread.SoftProcessingDurationTs;
+                }
+                return Pools[poolId]->GetReadyActivationShared(revolvingCounter++);
+            };
+
+            // Preserve the current pool's time slice, then inspect the other
+            // pools. A failed dequeue cannot monopolize a search iteration.
+            const NHPTimer::STime hpnow = GetCycleCountFast();
+            i16 preferredPoolId = thread.CurrentPoolId;
+            if (hpnow >= thread.SoftDeadlineForPool &&
+                    (HasAdjacentPools(PoolManager, thread.OwnerPoolId) ||
+                     !CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId))) {
+                thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
+                preferredPoolId = thread.AdjacentPoolId;
+            }
+            if (auto* mailbox = tryPool(preferredPoolId)) {
+                ++TlsThreadContext->ProcessedActivationsByCurrentPool;
+                return mailbox;
+            }
+            for (i16 poolId : PoolManager.PriorityOrder) {
+                if (!Pools[poolId] || Pools[poolId]->GetSemaphore().OldSemaphore == 0) {
+                    continue;
+                }
+                if (auto* mailbox = tryPool(poolId)) {
+                    ++TlsThreadContext->ProcessedActivationsByCurrentPool;
+                    return mailbox;
+                }
+            }
+            if (!announcedSpin && ++searchIterations >= 2) {
+                state = EThreadState::None;
+                if (thread.ReplaceState(state, EThreadState::Spin)) {
+                    announcedSpin = true;
+                    RequestWaker(workerId);
+                }
+            }
+            SpinLockPause();
+        }
+        return nullptr;
+    }
+
     void TSharedExecutorPool::ScheduleActivationEx(TMailbox*, ui64) {
         // unreachable call
         Y_ABORT("ScheduleActivationEx is not allowed for united pool");
@@ -283,6 +459,14 @@ namespace NActors {
         // Per-thread stats
         for (i16 i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
+        }
+    }
+
+    void TSharedExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
+        for (i16 i = 0; i < PoolThreads; ++i) {
+            if (Threads[i].Thread) {
+                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
+            }
         }
     }
 
@@ -308,7 +492,7 @@ namespace NActors {
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId < static_cast<i16>(Pools.size()), "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId >= 0, "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "create thread ", i, " OwnerPoolId == ", Threads[i].OwnerPoolId);
-            Threads[i].Thread.reset(    
+            Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
                     actorSystem,
@@ -403,6 +587,14 @@ namespace NActors {
         return PoolThreads;
     }
 
+    i16 TSharedExecutorPool::GetMaxFullThreadCount() const {
+        return PoolThreads;
+    }
+
+    i16 TSharedExecutorPool::GetMinFullThreadCount() const {
+        return PoolThreads;
+    }
+
     ui32 TSharedExecutorPool::GetThreads() const {
         return PoolThreads;
     }
@@ -415,6 +607,11 @@ namespace NActors {
     }
 
     bool TSharedExecutorPool::WakeUpLocalThreads(i16 ownerPoolId) {
+        if (HasWakerPools) {
+            RequestWaker();
+            return LocalThreads[ownerPoolId].load(std::memory_order_acquire) <
+                static_cast<ui64>(PoolManager.PoolInfos[ownerPoolId].SharedThreadCount);
+        }
         ui64 notifications = LocalNotifications[ownerPoolId].load(std::memory_order_acquire);
         if (notifications == 0) {
             LocalNotifications[ownerPoolId].fetch_add(1, std::memory_order_relaxed);
@@ -434,7 +631,26 @@ namespace NActors {
         return true;
     }
 
+    bool TSharedExecutorPool::WakeUpAdjacentOwner(i16 poolId) {
+        Y_ABORT_UNLESS(poolId >= 0 && static_cast<size_t>(poolId) < PoolManager.AdjacentOwnerByPool.size());
+        const i16 adjacentOwnerPoolId = PoolManager.AdjacentOwnerByPool[poolId];
+        if (adjacentOwnerPoolId == -1) {
+            return false;
+        }
+        if (WakeUpLocalThreads(adjacentOwnerPoolId)) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from adjacent pool owner; poolId == ", poolId, " adjacentOwnerPoolId == ", adjacentOwnerPoolId);
+            return true;
+        }
+        return false;
+    }
+
     bool TSharedExecutorPool::WakeUpGlobalThreads(i16 ownerPoolId) {
+        if (HasWakerPools) {
+            RequestWaker();
+            return ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire) != 0 &&
+                ForeignThreadSlots[ownerPoolId].load(std::memory_order_acquire) != 0 &&
+                SharedSleepingCount.load(std::memory_order_acquire) > 0;
+        }
         if (ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire) == 0) {
             return false;
         }
@@ -479,11 +695,10 @@ namespace NActors {
                 }
             }
         }
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no threads");
         return false;
     }
 
-
-    
     void TSharedExecutorPool::FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const {
         foreignThreadsAllowed.resize(PoolManager.PoolInfos.size());
         for (ui64 i = 0; i < foreignThreadsAllowed.size(); ++i) {
@@ -513,6 +728,9 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SetForeignThreadSlots(i16 poolId, i16 slots) {
+        if (auto forcedSlots = GetForcedForeignSlots(PoolManager, poolId)) {
+            return;
+        }
         i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;
@@ -523,6 +741,234 @@ namespace NActors {
 
     void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {
         Pools[pool->PoolId] = pool;
+        HasWakerPools |= pool->EnableWaker;
+    }
+
+    void TSharedExecutorPool::RequestWaker(i16 workerId) {
+        if (PoolThreads == 0) {
+            return;
+        }
+        const bool wasPending = WakerPending.exchange(true, std::memory_order_acq_rel);
+        if (wasPending && workerId == InvalidWakerWorkerId) {
+            return;
+        }
+        // Pair with owner release: either that CAS acquires this request or
+        // we observe the released role and nominate a worker ourselves.
+        if (WakerWorkerId.fetch_add(0, std::memory_order_acq_rel) != InvalidWakerWorkerId) {
+            return;
+        }
+        if (workerId != InvalidWakerWorkerId && Threads[workerId].TrySetNeedToBeWaker()) {
+            return;
+        }
+        for (i16 i = 0; i < PoolThreads; ++i) {
+            EThreadState state = Threads[i].GetState<EThreadState>();
+            while (true) {
+                if (IsNeedToBeWaker(state) || state == EThreadState::Waker) {
+                    return;
+                }
+                if (state != EThreadState::Spin && state != EThreadState::Blocking) {
+                    break;
+                }
+                const EThreadState previousState = state;
+                if (Threads[i].TrySetNeedToBeWaker(&state)) {
+                    if (previousState == EThreadState::Blocking) {
+                        Threads[i].WaitingPad.Unpark();
+                    }
+                    return;
+                }
+            }
+        }
+        // If every worker is busy, the next worker announcing Spin will claim
+        // the pending request before it can be put to sleep.
+    }
+
+    void TSharedExecutorPool::RunWaker(TWorkerId workerId) {
+        EThreadState resumeState = EThreadState::None;
+        bool hasResumeState = false;
+
+        while (!StopFlag.load(std::memory_order_acquire)) {
+            const EThreadState state = Threads[workerId].GetState<EThreadState>();
+            if (IsNeedToBeWaker(state)) {
+                const i16 owner = WakerWorkerId.load(std::memory_order_acquire);
+                if (owner == InvalidWakerWorkerId) {
+                    i16 expected = InvalidWakerWorkerId;
+                    if (!WakerWorkerId.compare_exchange_weak(expected, workerId,
+                            std::memory_order_acq_rel, std::memory_order_acquire)) {
+                        continue;
+                    }
+                    Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
+                    hasResumeState = true;
+                    continue;
+                }
+                if (owner == workerId) {
+                    Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
+                    hasResumeState = true;
+                    continue;
+                }
+                Threads[workerId].CancelWakerRequest();
+                return;
+            }
+
+            if (state != EThreadState::Waker) {
+                return;
+            }
+
+            Y_ABORT_UNLESS(hasResumeState);
+            Y_ABORT_UNLESS(WakerWorkerId.load(std::memory_order_acquire) == workerId);
+            WakerLoop(workerId, &resumeState);
+
+            if (WakerPending.load(std::memory_order_acquire)) {
+                continue;
+            }
+
+            EThreadState finalState = resumeState;
+            EThreadState expectedState = EThreadState::Waker;
+            Y_ABORT_UNLESS(Threads[workerId].ReplaceState(expectedState, finalState));
+
+            if (WakerPending.load(std::memory_order_acquire)) {
+                // A delayed requester may already have nominated this worker
+                // after Waker -> finalState. Both states resume the same owner.
+                Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
+                continue;
+            }
+
+            i16 expectedOwner = workerId;
+            Y_ABORT_UNLESS(WakerWorkerId.compare_exchange_strong(expectedOwner, InvalidWakerWorkerId,
+                std::memory_order_acq_rel, std::memory_order_acquire));
+
+            if (WakerPending.load(std::memory_order_acquire)) {
+                EThreadState currentState = Threads[workerId].GetState<EThreadState>();
+                if (IsNeedToBeWaker(currentState) || currentState == EThreadState::Waker) {
+                    continue;
+                }
+                if (currentState != EThreadState::Work &&
+                        Threads[workerId].TrySetNeedToBeWaker(&currentState)) {
+                    continue;
+                }
+            }
+            return;
+        }
+    }
+
+    void TSharedExecutorPool::SetSleeping(TWorkerId workerId, bool sleeping) {
+        if (SleepingWorkers[workerId] == sleeping) {
+            return;
+        }
+        SleepingWorkers[workerId] = sleeping;
+        const i16 ownerPoolId = Threads[workerId].OwnerPoolId;
+        if (sleeping) {
+            LocalThreads[ownerPoolId].fetch_sub(1, std::memory_order_acq_rel);
+            ThreadsState.fetch_sub(1, std::memory_order_acq_rel);
+            SharedSleepingCount.fetch_add(1, std::memory_order_acq_rel);
+        } else {
+            LocalThreads[ownerPoolId].fetch_add(1, std::memory_order_acq_rel);
+            ThreadsState.fetch_add(1, std::memory_order_acq_rel);
+            SharedSleepingCount.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
+
+    void TSharedExecutorPool::WakerLoop(TWorkerId wakerWorkerId, EThreadState* resumeState) {
+        const auto logicalState = [](EThreadState state) {
+            switch (state) {
+                case EThreadState::NeedToBeWaker:
+                    return EThreadState::None;
+                case EThreadState::NeedToBeWakerFromSpin:
+                    return EThreadState::Spin;
+                case EThreadState::NeedToBeWakerFromBlocking:
+                    return EThreadState::Blocking;
+                default:
+                    return state;
+            }
+        };
+        WakerPending.exchange(false, std::memory_order_acq_rel);
+        TStackVec<i64, 8> creditsByPool(Pools.size(), 0);
+        TStackVec<bool, 64> selected(PoolThreads, false);
+        for (i16 poolId : PoolManager.PriorityOrder) {
+            auto* pool = Pools[poolId];
+            if (!pool) {
+                continue;
+            }
+            const i64 credits = pool->GetSemaphore().OldSemaphore;
+            creditsByPool[poolId] = credits;
+            i64 budget = pool->EnableWaker && pool->GetFullThreadCount() != 0
+                ? Min<i64>(credits, pool->DesiredSharedThreads.load(std::memory_order_acquire))
+                : Min<i64>(credits, PoolThreads);
+            ui64 foreignSlots = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire) != 0
+                ? ForeignThreadSlots[poolId].load(std::memory_order_acquire) : 0;
+            // Prefer workers already searching, then workers assigned to sleep.
+            // Assign each worker to at most one pool in this pass.
+            for (ui32 sleeping = 0; sleeping < 2 && budget > 0; ++sleeping) {
+                for (i16 workerId = 0; workerId < PoolThreads && budget > 0; ++workerId) {
+                    if (selected[workerId] || SleepingWorkers[workerId] != bool(sleeping)) {
+                        continue;
+                    }
+                    const bool adjacent = CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, poolId);
+                    if (!adjacent && foreignSlots == 0) {
+                        continue;
+                    }
+                    EThreadState state = workerId == wakerWorkerId
+                        ? *resumeState : Threads[workerId].GetState<EThreadState>();
+                    const EThreadState currentState = logicalState(state);
+                    if (currentState != EThreadState::None && currentState != EThreadState::Spin && currentState != EThreadState::Blocking) {
+                        continue;
+                    }
+                    if (workerId == wakerWorkerId) {
+                        *resumeState = EThreadState::None;
+                    } else {
+                        bool changed = false;
+                        while (logicalState(state) == EThreadState::None ||
+                                logicalState(state) == EThreadState::Spin ||
+                                logicalState(state) == EThreadState::Blocking) {
+                            if (Threads[workerId].ReplaceState(state, EThreadState::None)) {
+                                changed = true;
+                                break;
+                            }
+                        }
+                        if (!changed) {
+                            continue;
+                        }
+                    }
+                    const bool wasSleeping = SleepingWorkers[workerId];
+                    SetSleeping(workerId, false);
+                    if (wasSleeping && workerId != wakerWorkerId) {
+                        Threads[workerId].WaitingPad.Unpark();
+                    }
+                    selected[workerId] = true;
+                    --budget;
+                    if (!adjacent) {
+                        --foreignSlots;
+                    }
+                }
+            }
+        }
+        for (i16 workerId = 0; workerId < PoolThreads; ++workerId) {
+            if (selected[workerId]) {
+                continue;
+            }
+            if (workerId == wakerWorkerId) {
+                if (*resumeState == EThreadState::Spin) {
+                    *resumeState = EThreadState::Blocking;
+                    SetSleeping(workerId, true);
+                }
+            } else {
+                EThreadState state = Threads[workerId].GetState<EThreadState>();
+                while (logicalState(state) == EThreadState::Spin) {
+                    if (Threads[workerId].ReplaceState(state, EThreadState::Blocking)) {
+                        SetSleeping(workerId, true);
+                        break;
+                    }
+                }
+            }
+        }
+        // Publish sleep decisions before rechecking credits. This RMW pairs
+        // with producers: either we see their new demand or they see sleepers.
+        for (i16 poolId : PoolManager.PriorityOrder) {
+            auto* pool = Pools[poolId];
+            if (pool && pool->EnableWaker &&
+                    pool->ActivationCredits.fetch_add(0, std::memory_order_acq_rel) > creditsByPool[poolId]) {
+                WakerPending.store(true, std::memory_order_release);
+            }
+        }
     }
 
     void TSharedExecutorPool::FillThreadOwners(std::vector<i16>& threadOwners) const {

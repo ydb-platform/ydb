@@ -1,5 +1,7 @@
 #include "tenant_slot_broker_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -14,7 +16,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdateNodeLocation Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateNodeLocation Execute");
 
         auto nodeId = Event->Get()->NodeId;
         auto &nodeInfo = Event->Get()->Node;
@@ -47,7 +49,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdateNodeLocation Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateNodeLocation Complete");
 
         if (Modified && Self->HasUnhappyTenant())
             Self->ScheduleTxAssignFreeSlots(ctx);

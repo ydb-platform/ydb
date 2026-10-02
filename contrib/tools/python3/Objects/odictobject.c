@@ -465,10 +465,14 @@ later:
 */
 
 #include "Python.h"
-#include "pycore_call.h"          // _PyObject_CallNoArgs()
-#include "pycore_object.h"        // _PyObject_GC_UNTRACK()
-#include "pycore_dict.h"          // _Py_dict_lookup()
-#include <stddef.h>               // offsetof()
+#include "pycore_call.h"             // _PyObject_CallNoArgs()
+#include "pycore_ceval.h"            // _PyEval_GetBuiltin()
+#include "pycore_critical_section.h" //_Py_BEGIN_CRITICAL_SECTION
+#include "pycore_dict.h"             // _Py_dict_lookup()
+#include "pycore_object.h"           // _PyObject_GC_UNTRACK()
+#include "pycore_pyerrors.h"         // _PyErr_ChainExceptions1()
+#include <stddef.h>                  // offsetof()
+#include "pycore_weakref.h"          // FT_CLEAR_WEAKREFS()
 
 #include "clinic/odictobject.c.h"
 
@@ -532,8 +536,12 @@ _odict_get_index_raw(PyODictObject *od, PyObject *key, Py_hash_t hash)
     PyObject *value = NULL;
     PyDictKeysObject *keys = ((PyDictObject *)od)->ma_keys;
     Py_ssize_t ix;
-
+#ifdef Py_GIL_DISABLED
+    ix = _Py_dict_lookup_threadsafe((PyDictObject *)od, key, hash, &value);
+    Py_XDECREF(value);
+#else
     ix = _Py_dict_lookup((PyDictObject *)od, key, hash, &value);
+#endif
     if (ix == DKIX_EMPTY) {
         return keys->dk_nentries;  /* index of new entry */
     }
@@ -1054,6 +1062,8 @@ _odict_popkey_hash(PyObject *od, PyObject *key, PyObject *failobj,
 {
     PyObject *value = NULL;
 
+    Py_BEGIN_CRITICAL_SECTION(od);
+
     _ODictNode *node = _odict_find_node_hash((PyODictObject *)od, key, hash);
     if (node != NULL) {
         /* Pop the node first to avoid a possible dict resize (due to
@@ -1061,10 +1071,13 @@ _odict_popkey_hash(PyObject *od, PyObject *key, PyObject *failobj,
            resolution. */
         int res = _odict_clear_node((PyODictObject *)od, node, key, hash);
         if (res < 0) {
-            return NULL;
+            goto done;
         }
         /* Now delete the value from the dict. */
-        value = _PyDict_Pop_KnownHash(od, key, hash, failobj);
+        if (_PyDict_Pop_KnownHash((PyDictObject *)od, key, hash,
+                                  &value) == 0) {
+            value = Py_NewRef(failobj);
+        }
     }
     else if (value == NULL && !PyErr_Occurred()) {
         /* Apply the fallback value, if necessary. */
@@ -1075,6 +1088,8 @@ _odict_popkey_hash(PyObject *od, PyObject *key, PyObject *failobj,
             PyErr_SetObject(PyExc_KeyError, key);
         }
     }
+    Py_END_CRITICAL_SECTION();
+done:
 
     return value;
 }
@@ -1113,12 +1128,13 @@ OrderedDict.popitem
 
 Remove and return a (key, value) pair from the dictionary.
 
-Pairs are returned in LIFO order if last is true or FIFO order if false.
+Pairs are returned in LIFO order if last is true or FIFO order if
+false.
 [clinic start generated code]*/
 
 static PyObject *
 OrderedDict_popitem_impl(PyODictObject *self, int last)
-/*[clinic end generated code: output=98e7d986690d49eb input=d992ac5ee8305e1a]*/
+/*[clinic end generated code: output=98e7d986690d49eb input=9cc253963e351588]*/
 {
     PyObject *key, *value, *item = NULL;
     _ODictNode *node;
@@ -1133,8 +1149,10 @@ OrderedDict_popitem_impl(PyODictObject *self, int last)
     node = last ? _odict_LAST(self) : _odict_FIRST(self);
     key = Py_NewRef(_odictnode_KEY(node));
     value = _odict_popkey_hash((PyObject *)self, key, NULL, _odictnode_HASH(node));
-    if (value == NULL)
+    if (value == NULL) {
+        Py_DECREF(key);
         return NULL;
+    }
     item = PyTuple_Pack(2, key, value);
     Py_DECREF(key);
     Py_DECREF(value);
@@ -1206,36 +1224,52 @@ odict_copy(register PyODictObject *od, PyObject *Py_UNUSED(ignored))
     if (od_copy == NULL)
         return NULL;
 
+    /* The loop body may run arbitrary Python code which could mutate od and
+       free its nodes (gh-148660); detect that the same way __eq__ does. */
+    size_t state = od->od_state;
+
     if (PyODict_CheckExact(od)) {
         _odict_FOREACH(od, node) {
-            PyObject *key = _odictnode_KEY(node);
-            PyObject *value = _odictnode_VALUE(node, od);
+            PyObject *key = Py_NewRef(_odictnode_KEY(node));
+            Py_hash_t hash = _odictnode_HASH(node);
+            PyObject *value = PyODict_GetItemWithError((PyObject *)od, key);
             if (value == NULL) {
                 if (!PyErr_Occurred())
                     PyErr_SetObject(PyExc_KeyError, key);
+                Py_DECREF(key);
                 goto fail;
             }
-            if (_PyODict_SetItem_KnownHash((PyObject *)od_copy, key, value,
-                                           _odictnode_HASH(node)) != 0)
+            int res = _PyODict_SetItem_KnownHash((PyObject *)od_copy,
+                                                 key, value, hash);
+            Py_DECREF(key);
+            if (res != 0)
                 goto fail;
+            if (od->od_state != state)
+                goto mutated;
         }
     }
     else {
         _odict_FOREACH(od, node) {
-            int res;
-            PyObject *value = PyObject_GetItem((PyObject *)od,
-                                               _odictnode_KEY(node));
-            if (value == NULL)
+            PyObject *key = Py_NewRef(_odictnode_KEY(node));
+            PyObject *value = PyObject_GetItem((PyObject *)od, key);
+            if (value == NULL) {
+                Py_DECREF(key);
                 goto fail;
-            res = PyObject_SetItem((PyObject *)od_copy,
-                                   _odictnode_KEY(node), value);
+            }
+            int res = PyObject_SetItem((PyObject *)od_copy, key, value);
             Py_DECREF(value);
+            Py_DECREF(key);
             if (res != 0)
                 goto fail;
+            if (od->od_state != state)
+                goto mutated;
         }
     }
     return od_copy;
 
+mutated:
+    PyErr_SetString(PyExc_RuntimeError,
+                    "OrderedDict mutated during iteration");
 fail:
     Py_DECREF(od_copy);
     return NULL;
@@ -1369,8 +1403,7 @@ odict_dealloc(PyODictObject *self)
     Py_TRASHCAN_BEGIN(self, odict_dealloc)
 
     Py_XDECREF(self->od_inst_dict);
-    if (self->od_weakreflist != NULL)
-        PyObject_ClearWeakRefs((PyObject *)self);
+    FT_CLEAR_WEAKREFS((PyObject*)self, self->od_weakreflist);
 
     _odict_clear_nodes(self);
     PyDict_Type.tp_dealloc((PyObject *)self);
@@ -1494,7 +1527,7 @@ odict_init(PyObject *self, PyObject *args, PyObject *kwds)
     if (len == -1)
         return -1;
     if (len > 1) {
-        const char *msg = "expected at most 1 arguments, got %zd";
+        const char *msg = "expected at most 1 argument, got %zd";
         PyErr_Format(PyExc_TypeError, msg, len);
         return -1;
     }
@@ -2171,7 +2204,7 @@ mutablemapping_update_arg(PyObject *self, PyObject *arg)
         return res;
     }
     PyObject *func;
-    if (_PyObject_LookupAttr(arg, &_Py_ID(keys), &func) < 0) {
+    if (PyObject_GetOptionalAttr(arg, &_Py_ID(keys), &func) < 0) {
         return -1;
     }
     if (func != NULL) {
@@ -2203,7 +2236,7 @@ mutablemapping_update_arg(PyObject *self, PyObject *arg)
         }
         return 0;
     }
-    if (_PyObject_LookupAttr(arg, &_Py_ID(items), &func) < 0) {
+    if (PyObject_GetOptionalAttr(arg, &_Py_ID(items), &func) < 0) {
         return -1;
     }
     if (func != NULL) {

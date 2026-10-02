@@ -4,3 +4,13 @@ items:
   include:
     mode: link
     path: performance/toc_p.yaml
+- name: Spilling issues
+  href: spilling/index.md
+  include:
+    mode: link
+    path: spilling/toc_p.yaml
+- name: Diagnostic examples
+  items:
+    - name: Overloaded shard
+      href: examples/schemas/overloaded-shard-simple-case.md
+

@@ -1,6 +1,10 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -12,10 +16,13 @@ bool CheckSidExistsOrIsNonYdb(const std::unordered_map<TString, NLogin::TLoginPr
 }
 
 class TModifyACL: public TSubOperationBase {
+    virtual const char* Name() const override final { return "TModifyACL"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString databaseName = CanonizePath(context.SS->RootPathElements);
 
@@ -25,10 +32,9 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TModifyACL Propose"
-            << ", path: " << parentPathStr << "/" << name
-            << ", operationId: " << OperationId
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -52,25 +58,38 @@ public:
         }
 
         TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        if (!context.SS->CheckApplyIf(Transaction, errStr, path->PathType)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+
+        bool isAdmin = (context.UserToken && IsAdministrator(AppData(), context.UserToken.Get()));
 
         if (acl && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
             NACLib::TDiffACL diffACL(acl);
             for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
-                    if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, diffACE.GetACE().GetSID())) {
+                    // add diff type is allowed if:
+                    // - subject is a cluster administrator
+                    // - or target sid is an external one (not a ydb-local)
+                    // - or target sid is a local one and exist in this database
+                    const auto& targetSid = diffACE.GetACE().GetSID();
+                    bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, targetSid));
+                    if (!allowed) {
                         result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                            TStringBuilder() << "SID " << diffACE.GetACE().GetSID() << " not found in database `" << databaseName << "`");
+                            TStringBuilder() << "SID " << targetSid << " not found in database `" << databaseName << "`");
                         return result;
                     }
                 } // remove diff type is allowed in any case
             }
         }
         if (owner && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
-            if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner)) {
+            // ownership transfer is allowed if:
+            // - subject is a cluster administrator
+            // - or target sid is an external one (not a ydb-local)
+            // - or target sid is a local one and exist in this database
+            bool allowed = (isAdmin || CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner));
+            if (!allowed) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "Owner SID " << owner << " not found in database `" << databaseName << "`");
                 return result;
@@ -138,7 +157,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TModifyACL");
     }
 
@@ -165,3 +184,5 @@ ISubOperation::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

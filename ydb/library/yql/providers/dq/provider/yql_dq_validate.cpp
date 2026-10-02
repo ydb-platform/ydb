@@ -58,6 +58,16 @@ std::shared_ptr<TIssue> TDqExecutionValidator::ValidateDqStage(const TExprNode& 
                     stageInfo.Issue = MakeErrorPtr(ctx, *n, TStringBuilder() << "Cannot execute system python udf " << n->Content() << " in DQ");
                     hasErrors = true;
                 }
+                if ((TCoScriptUdf::Match(n.Get()) && n->ChildrenSize() > 4) || (TCoUdf::Match(n.Get()) && n->ChildrenSize() == 8)) {
+                    for (const auto& setting: n->Child(TCoScriptUdf::Match(n.Get()) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            stageInfo.Issue = MakeErrorPtr(ctx, *n, TStringBuilder() << "Cannot execute udf " << n->Head().Content() << " with layers in DQ");
+                            hasErrors = true;
+                        }
+                    }
+                }
+
                 if (!typeCtx->ForceDq && TDqReadWrapBase::Match(n.Get())) {
                     auto readNode = n->Child(0);
                     auto dataSourceName = readNode->Child(1)->Child(0)->Content();

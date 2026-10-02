@@ -12,7 +12,7 @@
 
 using namespace NKikimr::NBinaryJson;
 
-class TBinaryJsonValidnessTest : public TBinaryJsonTestBase {
+class TBinaryJsonValidnessTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonValidnessTest()
         : TBinaryJsonTestBase()
@@ -20,9 +20,9 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonValidnessTest);
-        UNIT_TEST(TestValidness);
-        UNIT_TEST(TestRandom);
-        UNIT_TEST(TestVersionCheck);
+    UNIT_TEST(TestValidness);
+    UNIT_TEST(TestRandom);
+    UNIT_TEST(TestVersionCheck);
     UNIT_TEST_SUITE_END();
 
     void TestValidness() {

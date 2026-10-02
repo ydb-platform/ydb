@@ -1,0 +1,23 @@
+UNITTEST_FOR(ydb/core/kqp)
+
+FORK_SUBTESTS()
+SPLIT_FACTOR(50)
+
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
+
+SRCS(
+    kqp_batch_update_ut.cpp
+    kqp_batch_delete_ut.cpp
+    kqp_batch_pea_ut.cpp
+)
+
+PEERDIR(
+    ydb/core/kqp
+    ydb/core/kqp/ut/common
+    yql/essentials/sql/pg_dummy
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

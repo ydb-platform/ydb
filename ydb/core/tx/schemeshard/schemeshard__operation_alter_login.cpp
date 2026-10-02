@@ -1,12 +1,15 @@
-#include "schemeshard_audit_log.h"
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/library/security/util.h>
 #include <ydb/core/base/auth.h>
-
+#include <ydb/core/base/local_user_token.h>
 #include <ydb/core/protos/auth.pb.h>
+
+#include <ydb/library/security/util.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -14,10 +17,15 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterLogin: public TSubOperationBase {
+    virtual const char* Name() const override final { return "TAlterLogin"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
         const auto txId = OperationId.GetTxId();
@@ -38,9 +46,8 @@ public:
 
                     NLogin::TLoginProvider::TCreateUserRequest request;
                     request.User = createUser.GetUser();
-                    request.Password = createUser.GetPassword();
+                    request.HashedPassword = createUser.GetHashedPassword();
                     request.CanLogin = createUser.GetCanLogin();
-                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -49,9 +56,10 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::CreatedAt,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(
+                                                                            sid.Type, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt), sid.IsEnabled);
 
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
@@ -74,10 +82,8 @@ public:
                     NLogin::TLoginProvider::TModifyUserRequest request;
 
                     request.User = modifyUser.GetUser();
-
-                    if (modifyUser.HasPassword()) {
-                        request.Password = modifyUser.GetPassword();
-                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
+                    if (modifyUser.HasHashedPassword()) {
+                        request.HashedPassword = modifyUser.GetHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {
@@ -90,9 +96,11 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::SidHash,  // explicitly erase deprecated field
+                                                                           Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::IsEnabled,
-                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
+                                                                           Schema::LoginSids::FailedAttemptCount>(
+                                                                            sid.Type, "", sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
@@ -127,7 +135,7 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[group];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -225,7 +233,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterLogin");
     }
 
@@ -293,7 +301,7 @@ public:
 
     NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
         if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
-            return {}; 
+            return {};
         }
 
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
@@ -316,9 +324,7 @@ public:
     }
 
     void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
-        const auto providerGroups = loginProvider.GetGroupsMembership(user);
-        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-        const auto userToken = NACLib::TUserToken(user, groups);
+        const auto userToken = NKikimr::BuildLocalUserToken(loginProvider, user);
 
         if (IsAdministrator(AppData(), &userToken)) {
             additionalParts.emplace_back("login_user_level", "admin");
@@ -348,3 +354,5 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) 
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

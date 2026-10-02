@@ -93,7 +93,7 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
 
     if (Explain) {
@@ -116,7 +116,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
 
         if (!Parameters.empty() || InputParamStream) {
             THolder<TParamsBuilder> paramBuilder;
-            while (GetNextParams(driver, Script, paramBuilder)) {
+            while (GetNextParams(driver, Script, paramBuilder, config.IsVerbose())) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,
                         paramBuilder->Build(),

@@ -1,0 +1,24 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+message TYtTvmToolConfig {
+    required uint32 Port = 1;
+    required string SelfAlias = 2;
+}
+
+message TYtTvmAuthConfig {
+    message TDestination {
+        required string Alias = 1;
+        required uint32 TvmId = 2;
+    }
+
+    required string TvmSecretPath = 1;
+    required uint32 SelfTvmId = 2;
+    required string DiskCacheDir = 3;
+    repeated TDestination Destinations = 4;
+}
+
+message TYtTvmConfig {
+    optional TYtTvmToolConfig TvmTool = 1;
+    optional TYtTvmAuthConfig TvmAuth = 2;
+}

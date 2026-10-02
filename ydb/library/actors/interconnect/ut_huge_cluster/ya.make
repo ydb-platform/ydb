@@ -1,13 +1,13 @@
 UNITTEST()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(
-        ram:32
-    )
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(ram:32)
 ENDIF()
 
 IF (BUILD_TYPE == "RELEASE" OR BUILD_TYPE == "RELWITHDEBINFO")
@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/actors/interconnect/ut/lib
+    ydb/library/actors/interconnect/ut/lib/port_manager
     ydb/library/actors/interconnect/ut/protos
     library/cpp/testing/unittest
     ydb/library/actors/testlib

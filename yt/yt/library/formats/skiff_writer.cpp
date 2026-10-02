@@ -73,14 +73,14 @@ public:
         for (size_t tableIndex = 0; tableIndex < tableSchemas.size(); ++tableIndex) {
             const auto& columns = tableSchemas[tableIndex]->Columns();
             for (const auto& column : columns) {
-                Columns_[std::pair<int, TString>(tableIndex, column.Name())] = column;
+                Columns_[std::pair<int, std::string>(tableIndex, column.Name())] = column;
             }
         }
     }
 
     const TColumnSchema* GetColumnSchema(int tableIndex, TStringBuf columnName) const
     {
-        auto it = Columns_.find(std::pair<int, TString>(tableIndex, columnName));
+        auto it = Columns_.find(std::pair<int, std::string>(tableIndex, columnName));
         if (it == Columns_.end()) {
             return nullptr;
         } else {
@@ -90,7 +90,7 @@ public:
 
 private:
     // (TableIndex, ColumnName) -> ColumnSchema
-    THashMap<std::pair<int, TString>, TColumnSchema> Columns_;
+    THashMap<std::pair<int, std::string>, TColumnSchema> Columns_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,7 +134,7 @@ constexpr EValueType WireTypeToValueType()
     }
 }
 
-template<EWireType wireType, bool isOptional>
+template <EWireType wireType, bool isOptional>
 void ConvertSimpleValueImpl(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
 {
     if constexpr (isOptional) {
@@ -326,8 +326,8 @@ private:
     i64 RowIndex_ = Undefined;
 };
 
-TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(TString name) {
-    return [name=std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
+TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(std::string name) {
+    return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
         if (value.Type != EValueType::Null) {
             THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
                     name);
@@ -377,11 +377,55 @@ TUnversionedValueToSkiffConverter CreatePrimitiveValueConverter(EWireType wireTy
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<TSkiffSchema>& skiffSchema, bool required)
+{
+    // A valid skiff schema is expected.
+    auto wireType = skiffSchema->GetWireType();
+    switch (wireType) {
+        case EWireType::String32:
+            return required
+                ? ConvertSimpleValueImpl<EWireType::String32, false>
+                : ConvertSimpleValueImpl<EWireType::String32, true>;
+
+        case EWireType::Tuple: {
+            const auto& children = skiffSchema->GetChildren();
+            YT_VERIFY(children.size() == 2);
+            const auto innerWireType = children[0]->GetWireType();
+            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+            switch (innerWireType) {
+        #define CASE(x) \
+                case ((x)): \
+                    return CreatePrimitiveValueConverter<EValueType::String>(required, TTzSkiffWriter<(x)>());
+                CASE(EWireType::Int32);
+                CASE(EWireType::Int64);
+                CASE(EWireType::Uint16);
+                CASE(EWireType::Uint32);
+                CASE(EWireType::Uint64);
+        #undef CASE
+                default:
+                    break;
+            }
+            YT_ABORT();
+        }
+        case EWireType::Yson32:
+            return CreatePrimitiveValueConverter(wireType, required);
+        default:
+            YT_ABORT();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
-    EWireType wireType,
+    const TFieldDescription& skiffField,
     bool required,
     ESimpleLogicalValueType logicalType)
 {
+    const auto& skiffSchema = DeoptionalizeSchema(skiffField.Schema()).first;
+    auto wireType = skiffField.ValidatedGetDeoptionalizeType(/*simplify*/ false);
+
     switch (logicalType) {
         case ESimpleLogicalValueType::Int8:
         case ESimpleLogicalValueType::Int16:
@@ -407,6 +451,15 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
         case ESimpleLogicalValueType::Timestamp:
             CheckWireType(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
             return CreatePrimitiveValueConverter(wireType, required);
+
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+            CheckTzType(skiffSchema, logicalType);
+            return CreateTzValueConverter(skiffSchema, required);
 
         case ESimpleLogicalValueType::Float:
         case ESimpleLogicalValueType::Double:
@@ -439,7 +492,7 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
                 EWireType::Boolean,
                 EWireType::Double,
                 EWireType::Nothing,
-                EWireType::Yson32
+                EWireType::Yson32,
             });
             return CreatePrimitiveValueConverter(wireType, required);
 
@@ -466,7 +519,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
     TYsonToSkiffConverterConfig config;
     config.AllowOmitTopLevelOptional = isSparse;
     auto ysonToSkiff = CreateYsonToSkiffConverter(descriptor, skiffSchema, config);
-    return [ysonToSkiff=ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
+    return [ysonToSkiff = ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
         TMemoryInput input;
         if (value.Type == EValueType::Any || value.Type == EValueType::Composite) {
             // NB. value.Type might be EValueType::Any if user has used override_intermediate_table_schema
@@ -492,7 +545,7 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
 {
     bool isRequired = field.IsRequired();
     int precision = logicalType.GetPrecision();
-    auto wireType = field.ValidatedSimplify();
+    auto wireType = field.ValidatedGetDeoptionalizeType(/*simplify*/ true);
     switch (wireType) {
         case EWireType::Int32:
             return CreatePrimitiveValueConverter<EValueType::String>(
@@ -610,6 +663,7 @@ struct TSkiffWriterTableDescription
     int KeySwitchFieldIndex = -1;
     int RangeIndexFieldIndex = -1;
     int RowIndexFieldIndex = -1;
+    int RemainingRowBytesFieldIndex = -1;
     ERowRangeIndexMode RangeIndexMode = ERowRangeIndexMode::Incremental;
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;
     bool HasSparseColumns = false;
@@ -669,6 +723,8 @@ public:
             writerTableDescription.RangeIndexFieldIndex = MissingSystemColumn;
             writerTableDescription.RangeIndexMode = commonTableDescription.RangeIndexMode;
 
+            writerTableDescription.RemainingRowBytesFieldIndex = commonTableDescription.RemainingRowBytesFieldIndex.value_or(MissingSystemColumn);
+
             auto& knownFields = writerTableDescription.KnownFields;
 
             const auto& denseFieldDescriptionList = commonTableDescription.DenseFieldDescriptionList;
@@ -686,7 +742,7 @@ public:
                 //      e.g we allow column to be optional in table schema and be required in Skiff schema
                 //      (runtime check is used in such cases).
                 if (!columnSchema) {
-                    if (!skiffField.Simplify() && !skiffField.IsRequired()) {
+                    if (!skiffField.GetDeoptionalizeType(/*simplify*/ true) && !skiffField.IsRequired()) {
                         // NB. Special case, column is described in Skiff schema as non required complex field
                         // but is missing in schema.
                         // We expect it to be missing in whole table and return corresponding converter.
@@ -703,7 +759,7 @@ public:
                     switch (denullifiedLogicalType->GetMetatype()) {
                         case ELogicalMetatype::Simple:
                             return CreateSimpleValueConverter(
-                                skiffField.ValidatedSimplify(),
+                                skiffField,
                                 skiffField.IsRequired(),
                                 denullifiedLogicalType->AsSimpleTypeRef().GetElement());
                         case ELogicalMetatype::Decimal:
@@ -720,15 +776,16 @@ public:
                             return CreateComplexValueConverter(std::move(descriptor), skiffField.Schema(), isSparse);
                         }
                         case ELogicalMetatype::Tagged:
-                            // Don't expect tagged type in denullified logical type
+                        case ELogicalMetatype::AggregateState:
+                            // Don't expect tagged types in denullified logical type.
                             break;
                     }
                     YT_ABORT();
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for column %Qv",
                         skiffField.Name())
-                        << TErrorAttribute("logical_type", logicalType)
-                        << ex;
+                        .With("logical_type", logicalType)
+                        .With(ex);
                 }
             };
 
@@ -755,12 +812,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else if (denseField.Name() == RangeIndexColumnName) {
                         writerTableDescription.RangeIndexFieldIndex = nextDenseIndex;
                         knownFields[id] = TSkiffEncodingInfo::RangeIndex(nextDenseIndex);
@@ -770,12 +824,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else {
                         if (denseField.Name() == KeySwitchColumnName) {
                             writerTableDescription.KeySwitchFieldIndex = nextDenseIndex;
@@ -786,7 +837,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
                 denseFieldWriterInfos.emplace_back(converter, id);
                 ++nextDenseIndex;
@@ -805,7 +856,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff writer for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
             }
 
@@ -878,9 +929,13 @@ private:
             if (tableIndex >= TableDescriptionList_.size()) {
                 THROW_ERROR_EXCEPTION("Table #%v is not described by Skiff schema",
                     tableIndex)
-                    << GetRowPositionErrorAttributes();
+                    .With(GetRowPositionErrorAttributes());
             }
-            YT_VERIFY(tableIndex < UnversionedValueToYsonConverter_.size());
+            if (tableIndex >= UnversionedValueToYsonConverter_.size()) {
+                THROW_ERROR_EXCEPTION("Table #%v is not described by any table schema",
+                    tableIndex)
+                    .With(GetRowPositionErrorAttributes());
+            }
             writeContext.UnversionedValueYsonConverter = &UnversionedValueToYsonConverter_[tableIndex];
 
             const auto& knownFields = TableDescriptionList_[tableIndex].KnownFields;
@@ -890,17 +945,22 @@ private:
             const auto keySwitchFieldIndex = TableDescriptionList_[tableIndex].KeySwitchFieldIndex;
             const auto rowIndexFieldIndex = TableDescriptionList_[tableIndex].RowIndexFieldIndex;
             const auto rangeIndexFieldIndex = TableDescriptionList_[tableIndex].RangeIndexFieldIndex;
+            const auto remainingRowBytesFieldIndex = TableDescriptionList_[tableIndex].RemainingRowBytesFieldIndex;
 
             const bool isLastRowInBatch = rowIndexInBatch + 1 == rowCount;
 
             constexpr ui16 missingColumnPlaceholder = -1;
             constexpr ui16 keySwitchColumnPlaceholder = -2;
+            constexpr ui16 remainigRowBytesColumnPlaceholder = -3;
             DenseIndexes_.assign(denseFields.size(), missingColumnPlaceholder);
             SparseFields_.clear();
             OtherValueIndexes_.clear();
 
             if (keySwitchFieldIndex != MissingSystemColumn) {
                 DenseIndexes_[keySwitchFieldIndex] = keySwitchColumnPlaceholder;
+            }
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                DenseIndexes_[remainingRowBytesFieldIndex] = remainigRowBytesColumnPlaceholder;
             }
 
             ui16 rowIndexValueId = missingColumnPlaceholder;
@@ -935,7 +995,7 @@ private:
                             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow, "Column %Qv is not described by Skiff schema and there is no %Qv column",
                                 NameTable_->GetName(columnId),
                                 OtherColumnsName)
-                                << GetRowPositionErrorAttributes();
+                                .With(GetRowPositionErrorAttributes());
                         }
                         OtherValueIndexes_.emplace_back(valueIndex);
                         break;
@@ -965,7 +1025,8 @@ private:
             }
 
             SkiffWriter_->WriteVariant16Tag(tableIndex);
-            for (size_t idx = 0; idx < denseFields.size(); ++idx) {
+
+            for (int idx = 0; idx < std::ssize(denseFields); ++idx) {
                 const auto& fieldInfo = denseFields[idx];
                 const auto valueIndex = DenseIndexes_[idx];
 
@@ -978,6 +1039,9 @@ private:
                         break;
                     case keySwitchColumnPlaceholder:
                         SkiffWriter_->WriteBoolean(CheckKeySwitch(row, isLastRowInBatch));
+                        break;
+                    case remainigRowBytesColumnPlaceholder:
+                        SkiffWriter_->StartBlob();
                         break;
                     default: {
                         const auto& value = row[valueIndex];
@@ -1017,8 +1081,13 @@ private:
                 writer.OnEndMap();
                 SkiffWriter_->WriteYson32(TStringBuf(YsonBuffer_.Data(), YsonBuffer_.Size()));
             }
+
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                SkiffWriter_->FinishBlob();
+            }
+
             SkiffWriter_->Flush();
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
         YT_UNUSED_FUTURE(Flush());
     }
@@ -1082,7 +1151,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             YT_VERIFY(!schemas.empty());
             if (!IsTrivialIntermediateSchema(*schemas[0])) {
                 THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since input table #0 has nontrivial schema")
-                    << TErrorAttribute("schema", *schemas[0]);
+                    .With("schema", *schemas[0]);
             }
             copySchemas[0] = New<TTableSchema>(*config->OverrideIntermediateTableSchema);
         }
@@ -1096,7 +1165,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format").With(ex);
     }
 }
 

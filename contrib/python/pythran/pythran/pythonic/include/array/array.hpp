@@ -66,12 +66,11 @@ namespace array
     };
 
     template <char c>
-    types::array<typename details::typecodes<c>::type>
-        array(std::integral_constant<char, c>);
+    types::array<typename details::typecodes<c>::type> array(std::integral_constant<char, c>);
 
     template <char c, class E>
-    types::array<typename details::typecodes<c>::type>
-    array(std::integral_constant<char, c>, E &&elts);
+    types::array<typename details::typecodes<c>::type> array(std::integral_constant<char, c>,
+                                                             E &&elts);
   } // namespace details
 
   DEFINE_FUNCTOR(pythonic::array::details, array);

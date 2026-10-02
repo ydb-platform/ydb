@@ -2028,6 +2028,23 @@ formrdesc(const char *relationName, Oid relationReltype,
 	relation->rd_isvalid = true;
 }
 
+#ifdef USE_ASSERT_CHECKING
+/*
+ *		AssertCouldGetRelation
+ *
+ *		Check safety of calling RelationIdGetRelation().
+ *
+ *		In code that reads catalogs in the event of a cache miss, call this
+ *		before checking the cache.
+ */
+void
+AssertCouldGetRelation(void)
+{
+	Assert(IsTransactionState());
+	AssertBufferLocksPermitCatalogRead();
+}
+#endif
+
 
 /* ----------------------------------------------------------------
  *				 Relation Descriptor Lookup Interface
@@ -2055,8 +2072,7 @@ RelationIdGetRelation(Oid relationId)
 {
 	Relation	rd;
 
-	/* Make sure we're in an xact, even if this ends up being a cache hit */
-	Assert(IsTransactionState());
+	AssertCouldGetRelation();
 
 	/*
 	 * first try to find reldesc in the cache
@@ -3711,6 +3727,7 @@ RelationSetNewRelfilenumber(Relation relation, char persistence)
 {
 	RelFileNumber newrelfilenumber;
 	Relation	pg_class;
+	ItemPointerData otid;
 	HeapTuple	tuple;
 	Form_pg_class classform;
 	MultiXactId minmulti = InvalidMultiXactId;
@@ -3753,11 +3770,12 @@ RelationSetNewRelfilenumber(Relation relation, char persistence)
 	 */
 	pg_class = table_open(RelationRelationId, RowExclusiveLock);
 
-	tuple = SearchSysCacheCopy1(RELOID,
-								ObjectIdGetDatum(RelationGetRelid(relation)));
+	tuple = SearchSysCacheLockedCopy1(RELOID,
+									  ObjectIdGetDatum(RelationGetRelid(relation)));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "could not find tuple for relation %u",
 			 RelationGetRelid(relation));
+	otid = tuple->t_self;
 	classform = (Form_pg_class) GETSTRUCT(tuple);
 
 	/*
@@ -3877,9 +3895,10 @@ RelationSetNewRelfilenumber(Relation relation, char persistence)
 		classform->relminmxid = minmulti;
 		classform->relpersistence = persistence;
 
-		CatalogTupleUpdate(pg_class, &tuple->t_self, tuple);
+		CatalogTupleUpdate(pg_class, &otid, tuple);
 	}
 
+	UnlockTuple(pg_class, &otid, InplaceUpdateTupleLock);
 	heap_freetuple(tuple);
 
 	table_close(pg_class, RowExclusiveLock);

@@ -1,15 +1,14 @@
 #pragma once
 #include <ydb/core/formats/arrow/process_columns.h>
-#include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/predicate/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
-
-namespace NKikimr::NOlap {
-class TPredicateContainer;
-}
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -26,6 +25,7 @@ public:
             IncNotInclude();
         }
     }
+
     bool Dec(const bool include) {
         if (include) {
             return DecInclude();
@@ -33,23 +33,29 @@ public:
             return DecNotInclude();
         }
     }
+
     void IncInclude() {
         ++CountIncludes;
     }
+
     [[nodiscard]] bool DecInclude() {
         AFL_VERIFY(CountIncludes);
         return --CountIncludes == 0;
     }
+
     void IncNotInclude() {
         ++CountNotIncludes;
     }
+
     [[nodiscard]] bool DecNotInclude() {
         AFL_VERIFY(CountNotIncludes);
         return --CountNotIncludes == 0;
     }
+
     bool IsEmpty() const {
         return !CountIncludes && !CountNotIncludes;
     }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         if (CountIncludes) {
@@ -60,6 +66,7 @@ public:
         }
         return result;
     }
+
     ui32 GetCountSum() const {
         return CountIncludes + CountNotIncludes;
     }
@@ -73,14 +80,17 @@ public:
     void Inc(const ui32 count = 1) {
         Count += count;
     }
+
     [[nodiscard]] bool Dec(const ui32 count = 1) {
         AFL_VERIFY(Count);
         Count -= count;
         return Count == 0;
     }
+
     bool IsEmpty() const {
         return !Count;
     }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("count", Count);
@@ -143,27 +153,33 @@ public:
     void AddStart(const ui64 txId, const bool include) {
         StartTxIds[txId].Inc(include);
     }
+
     void RemoveStart(const ui64 txId, const bool include) {
         if (StartTxIds[txId].Dec(include)) {
             StartTxIds.erase(txId);
         }
     }
+
     void AddFinish(const ui64 txId, const bool include) {
         FinishTxIds[txId].Inc(include);
     }
+
     void RemoveFinish(const ui64 txId, const bool include) {
         if (FinishTxIds[txId].Dec(include)) {
             FinishTxIds.erase(txId);
         }
     }
+
     void AddIntervalTx(const ui64 txId) {
         IntervalTxIds[txId].Inc();
     }
+
     void RemoveIntervalTx(const ui64 txId) {
         if (IntervalTxIds[txId].Dec()) {
             IntervalTxIds.erase(txId);
         }
     }
+
     bool TryRemoveTx(const ui64 txId, const bool include) {
         bool result = false;
         if (StartTxIds[txId].Dec(include)) {
@@ -210,24 +226,32 @@ public:
 class TIntervalPoint {
 private:
     i32 IncludeState = 0;
-    std::optional<NArrow::TReplaceKey> PrimaryKey;
+    std::optional<NArrow::TSimpleRow> PrimaryKey;
 
-    TIntervalPoint(const NArrow::TReplaceKey& primaryKey, const int includeState)
+    TIntervalPoint(const NArrow::TSimpleRow& primaryKey, const int includeState)
         : IncludeState(includeState)
-        , PrimaryKey(primaryKey) {
+        , PrimaryKey(primaryKey)
+    {
     }
 
-    TIntervalPoint(const std::shared_ptr<NArrow::TReplaceKey>& primaryKey, const int includeState)
-        : IncludeState(includeState) {
-        if (primaryKey) {
-            PrimaryKey = *primaryKey;
+    TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
+        : IncludeState(includeState)
+    {
+        if (!point.IsAll()) {
+            auto fields = schema->fields();
+            fields.resize(point.NumColumns());
+            auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
+            auto builders = NArrow::MakeBuilders(schemaTrimmed);
+            point.AppendPointTo(builders);
+            PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
         }
     }
 
 public:
-    static TIntervalPoint Equal(const NArrow::TReplaceKey& replaceKey) {
+    static TIntervalPoint Equal(const NArrow::TSimpleRow& replaceKey) {
         return TIntervalPoint(replaceKey, 0);
     }
+
     static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
     static TIntervalPoint To(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
 
@@ -252,10 +276,10 @@ public:
         } else if (PrimaryKey && !item.PrimaryKey) {
             return false;
         } else if (IncludeState == item.IncludeState) {
-            if (PrimaryKey->Size() != item.PrimaryKey->Size()) {
+            if (PrimaryKey->GetColumnsCount() != item.PrimaryKey->GetColumnsCount()) {
                 return false;
             }
-            return *PrimaryKey == *item.PrimaryKey;
+            return PrimaryKey->CompareNotNull(*item.PrimaryKey) == std::partial_ordering::equivalent;
         } else {
             return false;
         }
@@ -273,7 +297,7 @@ public:
         } else if (PrimaryKey && !point.PrimaryKey) {
             return 0 < point.IncludeState;
         } else {
-            const ui32 sizeMin = std::min<ui32>(PrimaryKey->Size(), point.PrimaryKey->Size());
+            const ui32 sizeMin = std::min<ui32>(PrimaryKey->GetColumnsCount(), point.PrimaryKey->GetColumnsCount());
             const std::partial_ordering compareResult = PrimaryKey->ComparePartNotNull(*point.PrimaryKey, sizeMin);
             if (compareResult == std::partial_ordering::less) {
                 return true;
@@ -281,9 +305,9 @@ public:
                 return false;
             } else {
                 AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
-                if (PrimaryKey->Size() == point.PrimaryKey->Size()) {
+                if (PrimaryKey->GetColumnsCount() == point.PrimaryKey->GetColumnsCount()) {
                     return IncludeState < point.IncludeState;
-                } else if (PrimaryKey->Size() < point.PrimaryKey->Size()) {
+                } else if (PrimaryKey->GetColumnsCount() < point.PrimaryKey->GetColumnsCount()) {
                     if (IncludeState <= 1) {
                         return true;
                     } else {
@@ -350,12 +374,14 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"batch", writtenPrimaryKeys->ToString()},
+            {"info", DebugJson().GetStringRobust()});
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
             }
-            auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+            NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
             auto pkIntervalPoint = TIntervalPoint::Equal(rKey);
             while (it != IntervalsInfo.end() && it->first < pkIntervalPoint) {
                 ++it;
@@ -383,7 +409,7 @@ public:
                 return affectedTxIds;
             }
             while (i < writtenPrimaryKeys->num_rows()) {
-                auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+                NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
                 if (TIntervalPoint::Equal(rKey) < it->first) {
                     ++i;
                 } else {
@@ -397,10 +423,10 @@ public:
 
 class TInteractionsContext {
 private:
-    THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
+    THashMap<TInternalPathId, TReadIntervals> ReadIntervalsByPathId;
 
 public:
-    bool HasReadIntervals(const ui64 pathId) const {
+    bool HasReadIntervals(const TInternalPathId pathId) const {
         return ReadIntervalsByPathId.contains(pathId);
     }
 
@@ -412,7 +438,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedTxIds(const ui64 pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
@@ -420,29 +446,31 @@ public:
         return it->second.GetAffectedTxIds(batch);
     }
 
-    void AddInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void AddInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto& intervals = ReadIntervalsByPathId[pathId];
         auto itFrom = intervals.InsertPoint(from);
         auto itTo = intervals.InsertPoint(to);
-        itFrom->second.AddStart(txId, from.IsIncluded());
+        itFrom->second.AddStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.AddIntervalTx(txId);
+            it->second.AddIntervalTx(lockId);
         }
-        itTo->second.AddFinish(txId, to.IsIncluded());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
+        itTo->second.AddFinish(lockId, to.IsIncluded());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "add_interval"},
+            {"interactionsInfo", DebugJson().GetStringRobust()});
     }
 
-    void RemoveInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
         AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
         auto& intervals = itIntervals->second;
         auto itFrom = intervals.GetPointIterator(from);
         auto itTo = intervals.GetPointIterator(to);
-        itFrom->second.RemoveStart(txId, from.IsIncluded());
+        itFrom->second.RemoveStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.RemoveIntervalTx(txId);
+            it->second.RemoveIntervalTx(lockId);
         }
-        itTo->second.RemoveFinish(txId, to.IsIncluded());
+        itTo->second.RemoveFinish(lockId, to.IsIncluded());
         for (auto&& it = itFrom; it != itTo;) {
             if (it->second.IsEmpty()) {
                 it = intervals.Erase(it);
@@ -456,7 +484,9 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "remove_interval"},
+            {"interactionsInfo", DebugJson().GetStringRobust()});
     }
 };
 

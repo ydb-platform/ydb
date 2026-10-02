@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     library/cpp/testing/unittest
     contrib/libs/protobuf
 )

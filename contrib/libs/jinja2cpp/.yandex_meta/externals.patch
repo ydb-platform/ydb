@@ -1,0 +1,13 @@
+diff --git a/thirdparty/thirdparty-external.cmake b/thirdparty/thirdparty-external.cmake
+index 524dabe..b2bb08b 100644
+--- a/thirdparty/thirdparty-external.cmake
++++ b/thirdparty/thirdparty-external.cmake
+@@ -27,7 +27,7 @@ macro (find_hdr_package PKG_NAME HDR_PATH)
+ 
+     if(${PKG_NAME}_FOUND)
+         if (NOT TARGET ${PKG_NAME})
+-            imported_target_alias(${PKG_NAME} ALIAS "${PKG_NAME}::${PKG_NAME}")
++            imported_target_alias(${PKG_NAME} ALIAS "nonstd::${PKG_NAME}")
+         endif ()
+     else()
+         message(FATAL_ERROR "${PKG_NAME} not found!")

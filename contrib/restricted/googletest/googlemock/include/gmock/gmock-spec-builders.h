@@ -868,7 +868,7 @@ class GTEST_API_ ExpectationBase {
   Clause last_clause_;
   mutable bool action_count_checked_;  // Under mutex_.
   mutable Mutex mutex_;                // Protects action_count_checked_.
-};                                     // class ExpectationBase
+};  // class ExpectationBase
 
 template <typename F>
 class TypedExpectation;
@@ -1292,10 +1292,10 @@ class MockSpec {
       : function_mocker_(function_mocker), matchers_(matchers) {}
 
   // Adds a new default action spec to the function mocker and returns
-  // the newly created spec.
-  internal::OnCallSpec<F>& InternalDefaultActionSetAt(const char* file,
-                                                      int line, const char* obj,
-                                                      const char* call) {
+  // the newly created spec. .WillByDefault() must be called on the returned
+  // object.
+  [[nodiscard]] internal::OnCallSpec<F>& InternalDefaultActionSetAt(
+      const char* file, int line, const char* obj, const char* call) {
     LogWithLocation(internal::kInfo, file, line,
                     std::string("ON_CALL(") + obj + ", " + call + ") invoked");
     return function_mocker_->AddNewOnCallSpec(file, line, matchers_);
@@ -1467,7 +1467,7 @@ class FunctionMocker<R(Args...)> final : public UntypedFunctionMockerBase {
   // function have been satisfied.  If not, it will report Google Test
   // non-fatal failures for the violations.
   ~FunctionMocker() override GTEST_LOCK_EXCLUDED_(g_gmock_mutex) {
-    MutexLock l(&g_gmock_mutex);
+    MutexLock l(g_gmock_mutex);
     VerifyAndClearExpectationsLocked();
     Mock::UnregisterLocked(this);
     ClearDefaultActionsLocked();
@@ -1530,7 +1530,7 @@ class FunctionMocker<R(Args...)> final : public UntypedFunctionMockerBase {
     UntypedOnCallSpecs specs_to_delete;
     untyped_on_call_specs_.swap(specs_to_delete);
 
-    g_gmock_mutex.Unlock();
+    g_gmock_mutex.unlock();
     for (UntypedOnCallSpecs::const_iterator it = specs_to_delete.begin();
          it != specs_to_delete.end(); ++it) {
       delete static_cast<const OnCallSpec<F>*>(*it);
@@ -1538,7 +1538,7 @@ class FunctionMocker<R(Args...)> final : public UntypedFunctionMockerBase {
 
     // Lock the mutex again, since the caller expects it to be locked when we
     // return.
-    g_gmock_mutex.Lock();
+    g_gmock_mutex.lock();
   }
 
   // Returns the result of invoking this mock function with the given
@@ -1646,7 +1646,7 @@ class FunctionMocker<R(Args...)> final : public UntypedFunctionMockerBase {
       GTEST_LOCK_EXCLUDED_(g_gmock_mutex) {
     const ArgumentTuple& args =
         *static_cast<const ArgumentTuple*>(untyped_args);
-    MutexLock l(&g_gmock_mutex);
+    MutexLock l(g_gmock_mutex);
     TypedExpectation<F>* exp = this->FindMatchingExpectationLocked(args);
     if (exp == nullptr) {  // A match wasn't found.
       this->FormatUnexpectedCallMessageLocked(args, what, why);
@@ -1838,9 +1838,8 @@ R FunctionMocker<R(Args...)>::InvokeWith(ArgumentTuple&& args)
     // Doing so slows down compilation dramatically because the *constructor* of
     // std::function<T> is re-instantiated with different template
     // parameters each time.
-    const UninterestingCallCleanupHandler report_uninteresting_call = {
-        reaction, ss
-    };
+    const UninterestingCallCleanupHandler report_uninteresting_call = {reaction,
+                                                                       ss};
 
     return PerformActionAndPrintResult(nullptr, std::move(args), ss.str(), ss);
   }
@@ -1890,8 +1889,7 @@ R FunctionMocker<R(Args...)>::InvokeWith(ArgumentTuple&& args)
   // std::function<T> is re-instantiated with different template
   // parameters each time.
   const FailureCleanupHandler handle_failures = {
-      ss, why, loc, untyped_expectation, found, is_excessive
-  };
+      ss, why, loc, untyped_expectation, found, is_excessive};
 
   return PerformActionAndPrintResult(untyped_action, std::move(args), ss.str(),
                                      ss);
@@ -1956,6 +1954,11 @@ struct SignatureOf;
 
 template <typename R, typename... Args>
 struct SignatureOf<R(Args...)> {
+  using type = R(Args...);
+};
+
+template <typename R, typename... Args>
+struct SignatureOf<R(Args...) const> {
   using type = R(Args...);
 };
 
@@ -2134,9 +2137,9 @@ GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251
 // second argument is an internal type derived from the method signature. The
 // failure to disambiguate two overloads of this method in the ON_CALL statement
 // is how we block callers from setting expectations on overloaded methods.
-#define GMOCK_ON_CALL_IMPL_(mock_expr, Setter, call)                    \
-  ((mock_expr).gmock_##call)(::testing::internal::GetWithoutMatchers(), \
-                             nullptr)                                   \
+#define GMOCK_ON_CALL_IMPL_(mock_expr, Setter, call)                      \
+  ((mock_expr).gmock_##call)(::testing::internal::WithoutMatchers::Get(), \
+                             nullptr)                                     \
       .Setter(__FILE__, __LINE__, #mock_expr, #call)
 
 #define ON_CALL(obj, call) \

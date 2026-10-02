@@ -9,6 +9,8 @@ from .__svn_version import (
     patch_number,
     vcs,
     svn_timestamp,
+    custom_version,
+    release_version,
 )
 
 __all__ = (
@@ -22,4 +24,6 @@ __all__ = (
     'patch_number',
     'vcs',
     'svn_timestamp',
+    'custom_version',
+    'release_version',
 )

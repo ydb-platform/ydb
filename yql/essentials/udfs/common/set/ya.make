@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(set_udf)
         28
         0
     )
-    
+
     SRCS(
         set_udf.cpp
     )

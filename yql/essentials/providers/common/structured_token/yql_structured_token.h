@@ -11,6 +11,8 @@ public:
     explicit TStructuredToken(TMap<TString, TString>&& data = {});
     TStructuredToken(TStructuredToken&&) = default;
     TStructuredToken(const TStructuredToken&) = default;
+    TStructuredToken& operator=(TStructuredToken&&) = default;
+    TStructuredToken& operator=(const TStructuredToken&) = default;
 
     TString GetField(const TString& name) const;
     TString GetFieldOrDefault(const TString& name, const TString& defaultValue) const;
@@ -21,7 +23,7 @@ public:
     TString ToJson() const;
 
 private:
-    TMap<TString, TString> Data;
+    TMap<TString, TString> Data_;
 };
 
 // is used for backward compatibility when content contains just token

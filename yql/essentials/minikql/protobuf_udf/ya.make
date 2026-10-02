@@ -16,7 +16,6 @@ PEERDIR(
     yql/essentials/minikql
     yt/cpp/mapreduce/interface
     yt/yt_proto/yt/formats
-    yt/yt_proto/yt/formats
 )
 
 END()

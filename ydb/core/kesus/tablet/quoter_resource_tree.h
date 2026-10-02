@@ -10,7 +10,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
-#include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -157,6 +156,11 @@ public:
     // Close session when resource is deleted.
     virtual void CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason);
 
+    // Deactivate session without notifying the client. Used when the client
+    // itself requested the session to be closed (session garbage collection).
+    // Must be called only when IsActive() is true. Default: nothing to do.
+    virtual void Deactivate() {}
+
     // Properties for viewer
     virtual bool IsActive() const {
         return Active;
@@ -263,6 +267,10 @@ public:
         return Children;
     }
 
+    virtual bool IsEffectivePropsChanged() const {
+        return true; // default: assume changed for safety
+    }
+
     virtual void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) = 0;
 
     // Static children manipulation.
@@ -298,7 +306,9 @@ public:
     }
 
     void OnSessionDisconnected(const NActors::TActorId& clientId) {
-        Sessions.erase(clientId);
+        if (Sessions.erase(clientId) && Counters.Sessions) {
+            Counters.Sessions->Dec();
+        }
     }
 
     // TTickProcessor interface implementation.
@@ -316,6 +326,8 @@ public:
         ::NMonitoring::TDynamicCounters::TCounterPtr Sessions;
         ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
         ::NMonitoring::TDynamicCounters::TCounterPtr Limit; // Current limit according to settings. If resource has no explicit limit, the counter is nullptr.
+        ::NMonitoring::TDynamicCounters::TCounterPtr LimitTotal; // resources.request_units.limit_total
+        ::NMonitoring::TDynamicCounters::TCounterPtr ConsumedTotal; // resources.request_units.consumed_total
         ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecWhenResourceActive;
 
         void AddAllocated(double allocated);
@@ -408,6 +420,9 @@ public:
     TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource);
     TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId);
     const TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId) const;
+    // Destroy a single session at the client's request. Idempotent: does nothing
+    // if the session does not exist. Does not notify the client.
+    void CloseSession(const NActors::TActorId& clientId, ui64 resourceId);
     void DisconnectSession(const NActors::TActorId& pipeServerId);
     void SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id);
 
@@ -434,7 +449,7 @@ private:
     THashMap<ui64, THolder<TQuoterResourceTree>> ResourcesById;
     THashMap<TString, TQuoterResourceTree*> ResourcesByPath;
     THashMap<TQuoterSessionId, THolder<TQuoterSession>> Sessions;
-    THashMultiMap<NActors::TActorId, TQuoterSessionId> PipeServerIdToSession;
+    THashMap<NActors::TActorId, THashSet<TQuoterSessionId>> PipeServerIdToSession;
 
     TCounters Counters;
 };

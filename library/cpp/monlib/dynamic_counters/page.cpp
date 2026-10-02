@@ -1,9 +1,11 @@
 #include "page.h"
 #include "encode.h"
 
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <util/string/builder.h>
 #include <util/string/split.h>
 #include <util/system/tls.h>
 
@@ -26,6 +28,19 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
     }
 }
 
+namespace {
+
+TStringBuf GetParams(NMonitoring::IMonHttpRequest& request) {
+    TStringBuf uri = request.GetUri();
+    TStringBuf params = uri.After('?');
+    if (params.Size() == uri.Size()) {
+        params.Clear();
+    }
+    return params;
+}
+
+}
+
 void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     if (OutputCallback) {
         OutputCallback();
@@ -37,28 +52,55 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     };
 
     TVector<TStringBuf> parts;
-    StringSplitter(request.GetPathInfo())
-        .Split('/')
-        .SkipEmpty()
-        .Collect(&parts);
+    TMaybe<EFormat> format;
+    TString set;
+    TStringBuf params = GetParams(request);
 
-    TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
-    if (format) {
-        parts.pop_back();
+    if (!params.empty()) {
+        StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
+            TStringBuf name;
+            TStringBuf value;
+            part.Split('=', name, value);
+            if (name.StartsWith("@")) {
+                if (name == "@format") {
+                    format = ParseFormat(value);
+                } else if (name == "@name_label") {
+                    nameLabel = value;
+                } else if (name == "@private") {
+                    visibility = TCountableBase::EVisibility::Private;
+                } else if (name == "@set") {
+                    set = value;
+                }
+            } else if (name == "labels") {
+                StringSplitter(value).Split(',').SkipEmpty().AddTo(&parts);
+            }
+            return true;
+        });
     }
+    if (!request.GetPathInfo().empty()) {
+        StringSplitter(request.GetPathInfo())
+            .Split('/')
+            .SkipEmpty()
+            .Collect(&parts);
 
-    if (!parts.empty() && parts.back().StartsWith(TStringBuf("name_label="))) {
-        TVector<TString> labels;
-        StringSplitter(parts.back()).Split('=').SkipEmpty().Collect(&labels);
-        if (labels.size() == 2U) {
-            nameLabel = labels.back();
+        format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
+        if (format) {
+            parts.pop_back();
         }
-        parts.pop_back();
-   }
 
-    if (!parts.empty() && parts.back() == TStringBuf("private")) {
-        visibility = TCountableBase::EVisibility::Private;
-        parts.pop_back();
+        if (!parts.empty() && parts.back().StartsWith(TStringBuf("name_label="))) {
+            TVector<TString> labels;
+            StringSplitter(parts.back()).Split('=').SkipEmpty().Collect(&labels);
+            if (labels.size() == 2U) {
+                nameLabel = labels.back();
+            }
+            parts.pop_back();
+        }
+
+        if (!parts.empty() && parts.back() == TStringBuf("private")) {
+            visibility = TCountableBase::EVisibility::Private;
+            parts.pop_back();
+        }
     }
 
     auto counters = Counters;
@@ -101,6 +143,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 
     auto encoder = CreateEncoder(&out, *format, nameLabel, visibility);
+    if (FilterCallback) {
+        encoder = FilterCallback(set, std::move(encoder));
+    }
+
     counters->Accept(TString(), TString(), *encoder);
     out.Flush();
 }
@@ -121,9 +167,53 @@ void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
 
 void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
+    TStringBuf params = GetParams(request);
+    TStringBuilder base;
+    TString labels;
+    bool wasParam = false;
+    base << Path;
+    StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
+        TStringBuf name;
+        TStringBuf value;
+        part.Split('=', name, value);
+        if (name == "labels") {
+            if (!labels.empty()) {
+                labels += ',';
+            }
+            labels += value;
+        }
+        if (name != "labels") {
+            if (!wasParam) {
+                base << '?';
+                wasParam = true;
+            } else {
+                base << '&';
+            }
+            base << part;
+        }
+    });
+
+    if (!labels.empty()) {
+        if (!wasParam) {
+            base << '?';
+            wasParam = true;
+        } else {
+            base << '&';
+        }
+        base << "labels=" << labels;
+    }
+
+    const TString escapedBase = NHtml::EscapeAttributeValue(base);
+
     HTML(out) {
         DIV() {
-            out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
+            out << "<a href=\"" << escapedBase;
+            if (!wasParam) {
+                out << '?';
+            } else {
+                out << "&amp;";
+            }
+            out << "@format=json\">Counters as JSON</a>";
             out << " for Solomon";
         }
 
@@ -133,9 +223,22 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         UL() {
             currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
                 LI() {
-                    TString pathPart = name + "=" + value;
-                    Quote(pathPart, "");
-                    out << "\n<a href='" << request.GetPath() << "/" << pathPart << "'>" << name << " " << value << "</a>";
+                    auto escName = name;
+                    auto escValue = value;
+                    Quote(escName);
+                    Quote(escValue);
+                    out << "\n<a href=\"" << escapedBase;
+                    if (labels.empty()) {
+                        if (!wasParam) {
+                            out << '?';
+                        } else {
+                            out << "&amp;";
+                        }
+                        out << "labels=";
+                    } else {
+                        out << ',';
+                    }
+                    out << escName << '=' << escValue << "\">" << NHtml::EscapeText(name) << " " << NHtml::EscapeText(value) << "</a>";
                 }
             });
         }

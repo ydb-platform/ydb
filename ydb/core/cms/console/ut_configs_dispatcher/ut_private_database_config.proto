@@ -1,0 +1,14 @@
+// End-node-only configuration schema.
+//
+// This proto is compiled ONLY into the configs_dispatcher unit test, which
+// plays the role of a custom end node. It is deliberately NOT a dependency of
+// ydb/core/cms/console, so the console / configs_dispatcher code cannot parse
+// payloads of this type. The cluster only ever sees the opaque
+// TAppConfig.PrivateDatabaseConfig string captured from config.private_database_config;
+// this schema interprets it on the node side.
+
+package NKikimrOpaqueConfigUt;
+
+message TUtPrivateDatabaseConfig {
+    optional uint32 SecretPort = 1;
+}

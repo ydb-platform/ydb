@@ -51,6 +51,9 @@ namespace NKikimr {
             EvRequestTabletDistribution,
             EvRequestScaleRecommendation,
             EvConfigureScaleRecommender,
+            EvRequestDrainInfo,
+            EvSetDown,
+            EvShrinkStoragePool,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -88,6 +91,11 @@ namespace NKikimr {
             EvResponseTabletDistribution,
             EvResponseScaleRecommendation,
             EvConfigureScaleRecommenderReply,
+            EvDrainNodeAck,
+            EvResponseDrainInfo,
+            EvSetDownReply,
+            EvShrinkStoragePoolReply,
+            EvShrinkStoragePoolDone,
 
             EvEnd
         };
@@ -527,7 +535,8 @@ namespace NKikimr {
 
             TEvReassignTablet(ui64 tabletId,
                               const TVector<ui32>& channels = {},
-                              const TVector<ui32>& forcedGroupIds = {})
+                              const TVector<ui32>& forcedGroupIds = {},
+                              bool async = false)
             {
                 Record.SetTabletID(tabletId);
                 for (ui32 channel : channels) {
@@ -535,6 +544,9 @@ namespace NKikimr {
                 }
                 for (ui32 forcedGroupId : forcedGroupIds) {
                     Record.AddForcedGroupIDs(forcedGroupId);
+                }
+                if (async) {
+                    Record.SetAsync(async);
                 }
             }
         };
@@ -626,6 +638,14 @@ namespace NKikimr {
             }
         };
 
+        struct TEvDrainNodeAck : TEventPB<TEvDrainNodeAck, NKikimrHive::TEvDrainNodeAck, EvDrainNodeAck> {
+            TEvDrainNodeAck() = default;
+
+            TEvDrainNodeAck(ui64 seqNo) {
+                Record.SetSeqNo(seqNo);
+            }
+        };
+
         struct TEvFillNode : TEventPB<TEvFillNode, NKikimrHive::TEvFillNode, EvFillNode> {
             TEvFillNode() = default;
 
@@ -704,6 +724,15 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
                 Record.SetStatus(status);
                 Record.SetStatusMessage(statusMessage);
+            }
+
+            TString ToString() const override {
+                TStringStream str;
+                str << ToStringHeader() << "{Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << " TabletID: " << Record.GetTabletID();
+                str << " Message: " << Record.GetStatusMessage();
+                str << "}";
+                return str.Str();
             }
         };
 
@@ -904,6 +933,32 @@ namespace NKikimr {
         
         struct TEvConfigureScaleRecommenderReply : TEventPB<TEvConfigureScaleRecommenderReply,
             NKikimrHive::TEvConfigureScaleRecommenderReply, EvConfigureScaleRecommenderReply> {};
+
+        struct TEvRequestDrainInfo : TEventPB<TEvRequestDrainInfo, NKikimrHive::TEvRequestDrainInfo, EvRequestDrainInfo> {
+            TEvRequestDrainInfo() = default;
+
+            TEvRequestDrainInfo(ui32 nodeId) {
+                Record.SetNodeId(nodeId);
+            }
+        };
+
+        struct TEvResponseDrainInfo : TEventPB<TEvResponseDrainInfo, NKikimrHive::TEvResponseDrainInfo, EvResponseDrainInfo> {};
+
+        struct TEvSetDown : TEventPB<TEvSetDown, NKikimrHive::TEvSetDown, EvSetDown> {
+            TEvSetDown() = default;
+
+            TEvSetDown(ui32 nodeId, bool down = true) {
+                Record.SetNodeId(nodeId);
+                Record.SetDown(down);
+            }
+        };
+        struct TEvSetDownReply : TEventPB<TEvSetDownReply, NKikimrHive::TEvSetDownReply, EvSetDownReply> {};
+
+        struct TEvShrinkStoragePool : TEventPB<TEvShrinkStoragePool, NKikimrHive::TEvShrinkStoragePool, EvShrinkStoragePool> {};
+
+        struct TEvShrinkStoragePoolReply : TEventPB<TEvShrinkStoragePoolReply, NKikimrHive::TEvShrinkStoragePoolReply, EvShrinkStoragePoolReply> {};
+
+        struct TEvShrinkStoragePoolDone : TEventPB<TEvShrinkStoragePoolDone, NKikimrHive::TEvShrinkStoragePoolDone, EvShrinkStoragePoolDone> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

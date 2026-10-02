@@ -50,6 +50,7 @@ public:
     };
 
 protected:
+    using TGRpcRequestProxyHandleMethods::Handle;
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;

@@ -1,19 +1,42 @@
 #include "native.h"
-#include "stream.h"
 #include "parsing.h"
-#include <ydb/core/formats/arrow/dictionary/conversion.h>
+#include "stream.h"
 
-#include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
 namespace NKikimr::NArrow::NSerialization {
+
+arrow::ipc::IpcOptions TNativeSerializer::BuildDefaultOptions() {
+    arrow::ipc::IpcWriteOptions options;
+    options.use_threads = false;
+    if (HasAppData()) {
+        if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
+            arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+            if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
+                options.codec = NArrow::TStatusValidator::GetValid(
+                    arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
+            } else {
+                options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+            }
+        } else {
+            options.codec = GetDefaultCodec();
+        }
+    } else {
+        options.codec = GetDefaultCodec();
+    }
+    return options;
+}
 
 arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
     arrow::ipc::DictionaryMemo dictMemo;
@@ -58,7 +81,8 @@ TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBa
     return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(
+    const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
@@ -86,6 +110,9 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     arrow::ipc::IpcPayload payload;
     // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
+#ifndef NDEBUG
+    TStatusValidator::Validate(batch->ValidateFull());
+#endif
 
     int32_t metadata_length = 0;
     arrow::io::MockOutputStream mock;
@@ -99,12 +126,15 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_ABORT_UNLESS(out.GetPosition() == str.size());
-    AFL_VERIFY_DEBUG(Deserialize(str, batch->schema()).ok());
+#ifndef NDEBUG
+    TStatusValidator::GetValid(Deserialize(str, batch->schema()));
+#endif
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
     return str;
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const {
+NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(
+    const arrow::Compression::type& cType, const std::optional<ui32> level) const {
     auto codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType));
     if (!codec) {
         return std::shared_ptr<arrow::util::Codec>();
@@ -189,4 +219,4 @@ void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerial
     }
 }
 
-}
+}   // namespace NKikimr::NArrow::NSerialization

@@ -21,12 +21,22 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 
         * `FORCE` — forced failover.
 
+* Authentication settings for the source database (one of the following):
+
+  {% include [x](_includes/async_replication_authentification.md) %}
+
 ## Examples {#examples}
 
 The following statement forces the asynchronous replication process to complete:
 
 ```yql
 ALTER ASYNC REPLICATION my_replication SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
+```
+
+The following query changes the secret:
+
+```yql
+ALTER ASYNC REPLICATION my_replication SET (TOKEN_SECRET_PATH = "my_token");
 ```
 
 ## See also

@@ -31,8 +31,9 @@ struct TDqState: public TThrRefBase {
     const TFileStoragePtr FileStorage;
     const TString VanillaJobPath;
     const TString VanillaJobMd5;
-    TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
+    TDqConfiguration::TPtr Settings;
     bool ExternalUser;
+    bool IsFullCaptureReady = true;
 
     TMutex Mutex;
     THashMap<ui32, TOperationStatistics> Statistics;
@@ -73,6 +74,7 @@ struct TDqState: public TThrRefBase {
         , FileStorage(fileStorage)
         , VanillaJobPath(vanillaJobPath)
         , VanillaJobMd5(vanillaJobMd5)
+        , Settings(MakeIntrusive<TDqConfiguration>(typeCtx ? typeCtx->StrictConfigValidation : false))
         , ExternalUser(externalUser)
         , AbortHidden(std::move(hiddenAborter))
     { }
@@ -89,9 +91,10 @@ struct TDqState: public TThrRefBase {
                 OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
             }
         }
-        return OperationSemaphore->AcquireAsync().Apply([this_=TIntrusivePtr<TDqState>(this), sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
+        return OperationSemaphore->AcquireAsync().Apply([gateway = DqGateway, sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
             auto lock = f.GetValue()->MakeAutoRelease();
-            return this_->DqGateway->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {
+            const auto gw = std::move(gateway);
+            return gw->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {
                 unlock(NThreading::MakeFuture());
                 return f;
             });

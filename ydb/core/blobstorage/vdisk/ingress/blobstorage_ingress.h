@@ -80,7 +80,11 @@ namespace NKikimr {
 
         bool KeepUnconditionally(EMode ingressMode) const;
         void SetKeep(EMode ingressMode, ECollectMode mode);
+
         int GetCollectMode(EMode ingressMode) const;
+        bool IsDoNotKeep(const TBlobStorageGroupType& gtype) const;
+        bool IsKeep(const TBlobStorageGroupType& gtype) const;
+
         // Returns vector of parts we have heard about, i.e. main_vec | handoff1 | ... | handoffN
         NMatrix::TVectorType PartsWeKnowAbout(TBlobStorageGroupType gtype) const;
         // Returns vector of parts we MUST have locally according to Ingress, i.e. parts we have
@@ -139,7 +143,8 @@ namespace NKikimr {
         static TMaybe<TIngress> CreateIngressWithLocal(
                                     const TBlobStorageGroupInfo::TTopology *top,
                                     const TVDiskIdShort &vdisk,
-                                    const TLogoBlobID &id);
+                                    const TLogoBlobID &id,
+                                    bool issueKeepFlag = false);
         // create ingress from LogoBlobID id with main or handoff ingress bits
         // AND WITHOT local bits (i.e. 'we know about id, but have no data')
         static TMaybe<TIngress> CreateIngressWOLocal(
@@ -162,9 +167,10 @@ namespace NKikimr {
         // and local bits optionally)
         static TMaybe<TIngress> CreateIngressInternal(
                                     TBlobStorageGroupType gtype,
-                                    const ui8 nodeId,           // Ingress for _this_ node
-                                    const TLogoBlobID &id,      // LogoBlobID
-                                    const bool setUpLocalBits); // Setup data also
+                                    const ui8 nodeId,      // Ingress for _this_ node
+                                    const TLogoBlobID &id, // LogoBlobID
+                                    bool setUpLocalBits,   // Setup data also
+                                    bool issueKeepFlag);   // Set the Keep flag in ingress
     };
 #pragma pack(pop)
 

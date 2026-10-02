@@ -5,9 +5,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
 
@@ -32,12 +34,12 @@ namespace NKafka {
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = OK)
-     *           <---------------- 
+     *           <----------------
      *
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
-     *           <---------------- 
+     *           <----------------
      *
      *           JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
      *           ---------------->
@@ -49,10 +51,11 @@ namespace NKafka {
      *           LEAVE_GROUP request()
      *           ---------------->
      *           LEAVE_GROUP response()
-     *           <----------------   
+     *           <----------------
      */
 
-class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
+class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor>
+                            , public TKafkaExceptionHandler<TKafkaReadSessionActor> {
 
 enum EReadSessionSteps {
     WAIT_JOIN_GROUP,
@@ -87,10 +90,14 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_READ_SESSION_ACTOR; }
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     using TActorContext = NActors::TActorContext;
 
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
 
     void Die(const TActorContext& ctx) override;
 
@@ -111,11 +118,11 @@ private:
             HFunc(TEvPersQueue::TEvLockPartition, HandleLockPartition);
             HFunc(TEvPersQueue::TEvReleasePartition, HandleReleasePartition);
             HFunc(TEvPersQueue::TEvError, HandleBalancerError);
-            
+
             // from Pipe
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeDestroyed);
-            
+
             // others
             HFunc(TEvKafka::TEvWakeup, HandleWakeup);
             SFunc(TEvents::TEvPoison, Die);
@@ -154,7 +161,6 @@ private:
     bool CheckHeartbeatIsExpired();
     bool CheckTopicsListAreChanged(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData);
     bool TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics);
-    void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
 
 private:
     const TContext::TPtr Context;
@@ -163,7 +169,7 @@ private:
     TString Session;
     TString AssignProtocolName;
     i64 GenerationId = 0;
-    ui64 JoinGroupCorellationId = 0;
+    ui64 CorellationId = 0;
     ui64 Cookie;
     bool NeedRebalance = false;
     TInstant LastHeartbeatTime = TInstant::Now();
@@ -171,7 +177,7 @@ private:
     EReadSessionSteps ReadStep = EReadSessionSteps::WAIT_JOIN_GROUP;
     TNextRequestError NextRequestError;
 
-    THashMap<TString, NGRpcProxy::TTopicHolder> TopicsInfo; // topic -> info
+    THashMap<TString, NGRpcProxy::TTopicHolderBase> TopicsInfo; // topic -> info
     NPersQueue::TTopicsToConverter TopicsToConverter;
     THashSet<TString> TopicsToReadNames;
     THashMap<TString, TString> OriginalTopicNames;

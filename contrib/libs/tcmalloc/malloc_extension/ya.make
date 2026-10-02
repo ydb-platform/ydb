@@ -8,8 +8,9 @@ NO_UTIL()
 
 NO_COMPILER_WARNINGS()
 
-# https://github.com/google/tcmalloc
-VERSION(2020-11-23-a643d89610317be1eff9f7298104eef4c987d8d5)
+VERSION(2025-02-22)
+
+ORIGINAL_SOURCE(https://github.com/google/tcmalloc/archive/7dd049e3367acff457a20cc4fb4c8b366cb2892d.tar.gz)
 
 SRCDIR(contrib/libs/tcmalloc)
 

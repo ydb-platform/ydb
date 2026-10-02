@@ -26,7 +26,7 @@ bool TPerUserRequestQueueProvider::IsReconfigurationPermitted(const std::string&
 TPerUserRequestQueueProvider::TKeyFromRequestHeaderCallback TPerUserRequestQueueProvider::CreateKeyFromRequestHeaderCallback()
 {
     return BIND([] (const NProto::TRequestHeader& header) {
-        return header.has_user() ? ::NYT::FromProto<TString>(header.user()) : RootUserName;
+        return header.has_user() ? ::NYT::FromProto<std::string>(header.user()) : RootUserName;
     });
 }
 

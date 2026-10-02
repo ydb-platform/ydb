@@ -1,0 +1,11 @@
+--- contrib/libs/fmt/include/fmt/ostream.h	(index)
++++ contrib/libs/fmt/include/fmt/ostream.h	(working tree)
+@@ -46,7 +46,7 @@ struct is_streamable<
+         std::is_arithmetic<T>::value || std::is_array<T>::value ||
+         std::is_pointer<T>::value || std::is_same<T, char8_type>::value ||
+         std::is_same<T, std::basic_string<Char>>::value ||
+-        std::is_same<T, std_string_view<Char>>::value ||
++        std::is_convertible<T, std_string_view<Char>>::value ||
+         (std::is_convertible<T, int>::value && !std::is_enum<T>::value)>>
+     : std::false_type {};
+ 

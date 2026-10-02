@@ -1,0 +1,279 @@
+#include "alter_topic_operation.h"
+#include "schema_operation.h"
+#include "check_dlq_topics.h"
+
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/ydb_convert/tx_proxy_status.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
+namespace NKikimr::NPQ::NSchema {
+
+namespace {
+
+class TAlterTopicOperationActor: public TBaseActor<TAlterTopicOperationActor>
+                               , public TConstantLogPrefix {
+public:
+    TAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings)
+        : TBaseActor<TAlterTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
+        , ParentId(parentId)
+        , Settings(std::move(settings))
+        , Database(CanonizePath(Settings.Database))
+    {
+    }
+
+    ~TAlterTopicOperationActor() = default;
+
+    void Bootstrap() {
+        DoDescribe();
+    }
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"topic", Settings.Strategy->GetTopicName()});
+    }
+
+    void OnException(const std::exception& exc) override {
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
+    }
+
+private:
+    void DoDescribe() {
+        LOG_D("DoDescribe");
+        Become(&TAlterTopicOperationActor::DescribeState);
+
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
+            SelfId(),
+            Database,
+            { Settings.Strategy->GetTopicName() },
+            {
+                .UserToken = Settings.UserToken,
+                .AccessRights = NACLib::EAccessRights::AlterSchema,
+                .ForceSyncVersion = true
+            }));
+    }
+
+    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+
+        auto& topics = ev->Get()->Topics;
+        AFL_ENSURE(topics.size() == 1)("s", topics.size());
+
+        TopicInfo = std::move(topics.begin()->second);
+        switch(TopicInfo.Status) {
+            case NDescriber::EStatus::Success: {
+                if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                    return DoAlter();
+                } else {
+                    return DoGetClustersList();
+                }
+            }
+            case NDescriber::EStatus::NotFound: {
+                if (Settings.IfExists) {
+                    return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+                }
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NotFound));
+            }
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess: {
+                return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
+            case NDescriber::EStatus::BadRequest: {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
+            default: {
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
+        }
+    }
+
+    STFUNC(DescribeState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoGetClustersList() {
+        LOG_D("DoGetClustersList");
+        Become(&TAlterTopicOperationActor::GetClustersListState);
+        Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
+    }
+
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
+        LOG_D(
+            "Handle",
+            {"getClustersListResponse", (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error")}
+        );
+
+        auto& response = *ev->Get();
+        if (response.Success) {
+            ClustersList = std::move(response.ClustersList);
+        }
+
+        return DoAlter();
+    }
+
+    STFUNC(GetClustersListState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoAlter() {
+        LOG_D("DoAlter");
+
+        Become(&TAlterTopicOperationActor::AlterState);
+
+        auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+
+        proposal->Record.SetDatabaseName(Database);
+        proposal->Record.SetPeerName(Settings.PeerName);
+        if (Settings.UserToken) {
+            proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
+        }
+
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
+
+        auto [workingDir, _] = GetWorkingDirAndName(TopicInfo.RealPath);
+        if (workingDir.empty()) {
+            return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
+        }
+
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetAllowAccessToPrivatePaths(true);
+        modifyScheme.SetSuccessOnNotExist(Settings.IfExists);
+
+        auto* config = modifyScheme.MutableAlterPersQueueGroup();
+
+        {
+            auto applyIf = modifyScheme.AddApplyIf();
+            applyIf->SetPathId(TopicInfo.Self->Info.GetPathId());
+            applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
+        }
+
+        auto result = Settings.Strategy->ApplyChanges(
+            GetLocalClusterName(ClustersList),
+            TopicInfo,
+            modifyScheme,
+            *config,
+            TopicInfo.Info->Description
+        );
+        if (result) {
+            result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
+        }
+
+        if (!result) {
+            return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
+        }
+
+        ModifyScheme = modifyScheme;
+        Proposal = std::move(proposal);
+        return DoCheckDlqOrPropose();
+    }
+
+    void Handle(TEvSchemaOperationResponse::TPtr& ev) {
+        LOG_D("Handle TEvSchemaOperationResponse");
+        auto& response = *ev->Get();
+        return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
+    }
+
+    STFUNC(AlterState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvSchemaOperationResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoCheckDlqOrPropose() {
+        const NKikimrPQ::TPQTabletConfig emptyOldConfig;
+        const auto& oldConfig = TopicInfo.Info
+            ? TopicInfo.Info->Description.GetPQTabletConfig()
+            : emptyOldConfig;
+        if (auto* actor = CreateCheckDlqTopicsActorIfNeeded(
+                SelfId(),
+                Database,
+                ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
+                oldConfig,
+                TCheckDlqTopicsSettings{
+                    .UserToken = Settings.UserToken
+                }))
+        {
+            Become(&TAlterTopicOperationActor::CheckDlqState);
+            RegisterWithSameMailbox(actor);
+            return;
+        }
+        return DoProposeOrReply();
+    }
+
+    void Handle(TEvCheckDlqTopicsResponse::TPtr& ev) {
+        LOG_D(
+            "Handle TEvCheckDlqTopicsResponse",
+            {"status", ev->Get()->Status},
+                    {"errorMessage", ev->Get()->ErrorMessage}
+        );
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyAndDie(ev->Get()->Status, std::move(ev->Get()->ErrorMessage));
+        }
+        return DoProposeOrReply();
+    }
+
+    STFUNC(CheckDlqState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvCheckDlqTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void DoProposeOrReply() {
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        }
+        RegisterWithSameMailbox(CreateSchemaOperation(
+            SelfId(),
+            TopicInfo.RealPath,
+            std::move(Proposal),
+            Settings.Cookie
+        ));
+        Become(&TAlterTopicOperationActor::AlterState);
+    }
+
+private:
+    void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+        LOG_D(
+            "ReplyAndDie",
+            {"errorCode", errorCode},
+            {"errorMessage", errorMessage}
+        );
+        if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
+            ModifyScheme = {};
+        }
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+        PassAway();
+    }
+
+private:
+    const TActorId ParentId;
+    const TAlterTopicOperationSettings Settings;
+    const TString Database;
+
+    NDescriber::TTopicInfo TopicInfo;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
+};
+
+}
+
+IActor* CreateAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings) {
+    return new TAlterTopicOperationActor(parentId, std::move(settings));
+}
+
+} // namespace NKikimr::NPQ::NSchema

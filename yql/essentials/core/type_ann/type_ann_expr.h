@@ -5,6 +5,9 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_data_provider.h>
+
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 namespace NYql {
 

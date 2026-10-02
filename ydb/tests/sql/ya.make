@@ -1,5 +1,6 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 TEST_SRCS(
     test_kv.py
@@ -9,9 +10,14 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
     ydb/tests/sql/lib
 )
 

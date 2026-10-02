@@ -1,0 +1,9 @@
+PRAGMA config.flags('OptimizerFlags', 'PullJustFromLogicalOps');
+
+$opt = Opaque(Just(True));
+$true = Opaque(True);
+$just = Just(Opaque(True));
+
+select $opt and $just;
+select $opt or $just;
+select $true and $just;

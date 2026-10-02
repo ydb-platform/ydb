@@ -184,9 +184,12 @@ static void aws_array_list_mem_swap(void *AWS_RESTRICT item1, void *AWS_RESTRICT
     }
 
     size_t remainder = item_size & (SLICE - 1); /* item_size % SLICE */
-    memcpy((void *)temp, (void *)item1, remainder);
-    memcpy((void *)item1, (void *)item2, remainder);
-    memcpy((void *)item2, (void *)temp, remainder);
+
+    if (remainder) {
+        memcpy((void *)temp, (void *)item1, remainder);
+        memcpy((void *)item1, (void *)item2, remainder);
+        memcpy((void *)item2, (void *)temp, remainder);
+    }
 }
 
 void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, size_t b) {

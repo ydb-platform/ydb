@@ -32,6 +32,7 @@ public:
     void BeginTree() override
     {
         YT_VERIFY(NodeStack_.size() == 0);
+        TreeSize_ = 0;
     }
 
     INodePtr EndTree() override
@@ -51,7 +52,7 @@ public:
     void OnMyStringScalar(TStringBuf value) override
     {
         auto node = Factory_->CreateString();
-        node->SetValue(TString(value));
+        node->SetValue(std::string(value));
         AddNode(node, false);
     }
 
@@ -88,7 +89,6 @@ public:
         AddNode(Factory_->CreateEntity(), false);
     }
 
-
     void OnMyBeginList() override
     {
         AddNode(Factory_->CreateList(), true);
@@ -104,7 +104,6 @@ public:
         NodeStack_.pop();
     }
 
-
     void OnMyBeginMap() override
     {
         AddNode(Factory_->CreateMap(), true);
@@ -112,7 +111,7 @@ public:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
-        Key_ = TString(key);
+        Key_ = std::string(key);
     }
 
     void OnMyEndMap() override
@@ -139,7 +138,7 @@ private:
 
     //! Contains nodes forming the current path in the tree.
     std::stack<INodePtr> NodeStack_;
-    std::optional<TString> Key_;
+    std::optional<std::string> Key_;
     INodePtr ResultNode_;
     std::unique_ptr<TAttributeConsumer> AttributeConsumer_;
     IAttributeDictionaryPtr Attributes_;
@@ -156,7 +155,7 @@ private:
 
         if (++TreeSize_ > TreeSizeLimit_) {
             THROW_ERROR_EXCEPTION("Tree size limit exceeded")
-                << TErrorAttribute("tree_size_limit", TreeSizeLimit_);
+                .With("tree_size_limit", TreeSizeLimit_);
         }
 
         if (NodeStack_.empty()) {

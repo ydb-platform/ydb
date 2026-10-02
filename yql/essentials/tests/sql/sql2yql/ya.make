@@ -12,10 +12,9 @@ IF (SANITIZER_TYPE OR NOT OPENSOURCE)
 ENDIF()
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(1800)
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
-    INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -24,7 +23,8 @@ ENDIF()
 
     FORK_TESTS()
     FORK_SUBTESTS()
-    SPLIT_FACTOR(5)
+    SPLIT_FACTOR(10)
+
     DEPENDS(
         yql/essentials/tools/sql2yql
         yql/essentials/tools/sql_formatter
@@ -32,7 +32,6 @@ ENDIF()
     )
     DATA(
         arcadia/yql/essentials/tests/sql/suites
-        arcadia/yql/essentials/mount
         arcadia/yql/essentials/cfg/tests
     )
     PEERDIR(

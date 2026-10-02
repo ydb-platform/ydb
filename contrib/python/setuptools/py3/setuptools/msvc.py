@@ -13,9 +13,12 @@ import json
 import os
 import os.path
 import platform
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, overload
 
 from more_itertools import unique_everseen
+
+from ._path import StrPath
+from .compat import py310
 
 import distutils.errors
 
@@ -50,11 +53,11 @@ class PlatformInfo:
 
     current_cpu = environ.get('processor_architecture', '').lower()
 
-    def __init__(self, arch) -> None:
+    def __init__(self, arch: str) -> None:
         self.arch = arch.lower().replace('x64', 'amd64')
 
     @property
-    def target_cpu(self):
+    def target_cpu(self) -> str:
         """
         Return Target CPU architecture.
 
@@ -65,7 +68,7 @@ class PlatformInfo:
         """
         return self.arch[self.arch.find('_') + 1 :]
 
-    def target_is_x86(self):
+    def target_is_x86(self) -> bool:
         """
         Return True if target CPU is x86 32 bits..
 
@@ -76,7 +79,7 @@ class PlatformInfo:
         """
         return self.target_cpu == 'x86'
 
-    def current_is_x86(self):
+    def current_is_x86(self) -> bool:
         """
         Return True if current CPU is x86 32 bits..
 
@@ -135,7 +138,7 @@ class PlatformInfo:
             else rf'\{self.target_cpu}'
         )
 
-    def cross_dir(self, forcex86=False):
+    def cross_dir(self, forcex86=False) -> str:
         r"""
         Cross platform specific subfolder.
 
@@ -176,11 +179,11 @@ class RegistryInfo:
         winreg.HKEY_CLASSES_ROOT,
     )
 
-    def __init__(self, platform_info) -> None:
+    def __init__(self, platform_info: PlatformInfo) -> None:
         self.pi = platform_info
 
     @property
-    def visualstudio(self) -> str:
+    def visualstudio(self) -> LiteralString:
         """
         Microsoft Visual Studio root registry key.
 
@@ -192,7 +195,7 @@ class RegistryInfo:
         return 'VisualStudio'
 
     @property
-    def sxs(self):
+    def sxs(self) -> LiteralString:
         """
         Microsoft Visual Studio SxS registry key.
 
@@ -204,7 +207,7 @@ class RegistryInfo:
         return os.path.join(self.visualstudio, 'SxS')
 
     @property
-    def vc(self):
+    def vc(self) -> LiteralString:
         """
         Microsoft Visual C++ VC7 registry key.
 
@@ -216,7 +219,7 @@ class RegistryInfo:
         return os.path.join(self.sxs, 'VC7')
 
     @property
-    def vs(self):
+    def vs(self) -> LiteralString:
         """
         Microsoft Visual Studio VS7 registry key.
 
@@ -228,7 +231,7 @@ class RegistryInfo:
         return os.path.join(self.sxs, 'VS7')
 
     @property
-    def vc_for_python(self) -> str:
+    def vc_for_python(self) -> LiteralString:
         """
         Microsoft Visual C++ for Python registry key.
 
@@ -240,7 +243,7 @@ class RegistryInfo:
         return r'DevDiv\VCForPython'
 
     @property
-    def microsoft_sdk(self) -> str:
+    def microsoft_sdk(self) -> LiteralString:
         """
         Microsoft SDK registry key.
 
@@ -252,7 +255,7 @@ class RegistryInfo:
         return 'Microsoft SDKs'
 
     @property
-    def windows_sdk(self):
+    def windows_sdk(self) -> LiteralString:
         """
         Microsoft Windows/Platform SDK registry key.
 
@@ -264,7 +267,7 @@ class RegistryInfo:
         return os.path.join(self.microsoft_sdk, 'Windows')
 
     @property
-    def netfx_sdk(self):
+    def netfx_sdk(self) -> LiteralString:
         """
         Microsoft .NET Framework SDK registry key.
 
@@ -276,7 +279,7 @@ class RegistryInfo:
         return os.path.join(self.microsoft_sdk, 'NETFXSDK')
 
     @property
-    def windows_kits_roots(self) -> str:
+    def windows_kits_roots(self) -> LiteralString:
         """
         Microsoft Windows Kits Roots registry key.
 
@@ -287,7 +290,11 @@ class RegistryInfo:
         """
         return r'Windows Kits\Installed Roots'
 
-    def microsoft(self, key, x86=False):
+    @overload
+    def microsoft(self, key: LiteralString, x86: bool = False) -> LiteralString: ...
+    @overload
+    def microsoft(self, key: str, x86: bool = False) -> str: ...  # type: ignore[misc]
+    def microsoft(self, key: str, x86: bool = False) -> str:
         """
         Return key in Microsoft software registry.
 
@@ -295,7 +302,7 @@ class RegistryInfo:
         ----------
         key: str
             Registry key path where look.
-        x86: str
+        x86: bool
             Force x86 software registry.
 
         Return
@@ -306,7 +313,7 @@ class RegistryInfo:
         node64 = '' if self.pi.current_is_x86() or x86 else 'Wow6432Node'
         return os.path.join('Software', node64, 'Microsoft', key)
 
-    def lookup(self, key, name):
+    def lookup(self, key: str, name: str) -> str | None:
         """
         Look for values in registry in Microsoft software registry.
 
@@ -319,7 +326,7 @@ class RegistryInfo:
 
         Return
         ------
-        str
+        str | None
             value
         """
         key_read = winreg.KEY_READ
@@ -366,7 +373,9 @@ class SystemInfo:
     ProgramFiles = environ.get('ProgramFiles', '')
     ProgramFilesx86 = environ.get('ProgramFiles(x86)', ProgramFiles)
 
-    def __init__(self, registry_info, vc_ver=None) -> None:
+    def __init__(
+        self, registry_info: RegistryInfo, vc_ver: float | None = None
+    ) -> None:
         self.ri = registry_info
         self.pi = self.ri.pi
 
@@ -393,9 +402,9 @@ class SystemInfo:
 
         vc_vers = set(reg_vc_vers)
         vc_vers.update(self.known_vs_paths)
-        return sorted(vc_vers)[-1]
+        return max(vc_vers)
 
-    def find_reg_vs_vers(self):
+    def find_reg_vs_vers(self) -> list[float]:
         """
         Find Microsoft Visual Studio versions available in registry.
 
@@ -486,7 +495,7 @@ class SystemInfo:
         return float('.'.join(version.split('.')[:2]))
 
     @property
-    def VSInstallDir(self):
+    def VSInstallDir(self) -> str:
         """
         Microsoft Visual Studio directory.
 
@@ -504,7 +513,7 @@ class SystemInfo:
         return self.ri.lookup(self.ri.vs, f'{self.vs_ver:0.1f}') or default
 
     @property
-    def VCInstallDir(self):
+    def VCInstallDir(self) -> str:
         """
         Microsoft Visual C++ directory.
 
@@ -596,7 +605,7 @@ class SystemInfo:
         return ()
 
     @property
-    def WindowsSdkLastVersion(self):
+    def WindowsSdkLastVersion(self) -> str:
         """
         Microsoft Windows SDK last version.
 
@@ -608,7 +617,7 @@ class SystemInfo:
         return self._use_last_dir_name(os.path.join(self.WindowsSdkDir, 'lib'))
 
     @property
-    def WindowsSdkDir(self) -> str | None:  # noqa: C901  # is too complex (12)  # FIXME
+    def WindowsSdkDir(self) -> str:  # noqa: C901  # is too complex (12)  # FIXME
         """
         Microsoft Windows SDK directory.
 
@@ -651,13 +660,13 @@ class SystemInfo:
         return sdkdir
 
     @property
-    def WindowsSDKExecutablePath(self):
+    def WindowsSDKExecutablePath(self) -> str | None:
         """
         Microsoft Windows SDK executable directory.
 
         Return
         ------
-        str
+        str | None
             path
         """
         # Find WinSDK NetFx Tools registry dir name
@@ -688,7 +697,7 @@ class SystemInfo:
         return None
 
     @property
-    def FSharpInstallDir(self):
+    def FSharpInstallDir(self) -> str:
         """
         Microsoft Visual F# directory.
 
@@ -701,13 +710,13 @@ class SystemInfo:
         return self.ri.lookup(path, 'productdir') or ''
 
     @property
-    def UniversalCRTSdkDir(self):
+    def UniversalCRTSdkDir(self) -> str | None:
         """
         Microsoft Universal CRT SDK directory.
 
         Return
         ------
-        str
+        str | None
             path
         """
         # Set Kit Roots versions for specified MSVC++ version
@@ -717,12 +726,12 @@ class SystemInfo:
         for ver in vers:
             sdkdir = self.ri.lookup(self.ri.windows_kits_roots, f'kitsroot{ver}')
             if sdkdir:
-                return sdkdir or ''
+                return sdkdir
 
         return None
 
     @property
-    def UniversalCRTSdkLastVersion(self):
+    def UniversalCRTSdkLastVersion(self) -> str:
         """
         Microsoft Universal C Runtime SDK last version.
 
@@ -731,10 +740,14 @@ class SystemInfo:
         str
             version
         """
-        return self._use_last_dir_name(os.path.join(self.UniversalCRTSdkDir, 'lib'))
+        try:
+            return self._use_last_dir_name(os.path.join(self.UniversalCRTSdkDir, 'lib'))  # type: ignore[arg-type] # Expected TypeError
+        except TypeError as ex:
+            py310.add_note(ex, "Cannot find UniversalCRTSdkDir")
+            raise
 
     @property
-    def NetFxSdkVersion(self):
+    def NetFxSdkVersion(self) -> tuple[LiteralString, ...]:
         """
         Microsoft .NET Framework SDK versions.
 
@@ -751,16 +764,16 @@ class SystemInfo:
         )
 
     @property
-    def NetFxSdkDir(self):
+    def NetFxSdkDir(self) -> str | None:
         """
         Microsoft .NET Framework SDK directory.
 
         Return
         ------
-        str
+        str | None
             path
         """
-        sdkdir = ''
+        sdkdir: str | None = ''
         for ver in self.NetFxSdkVersion:
             loc = os.path.join(self.ri.netfx_sdk, ver)
             sdkdir = self.ri.lookup(loc, 'kitsinstallationfolder')
@@ -769,7 +782,7 @@ class SystemInfo:
         return sdkdir
 
     @property
-    def FrameworkDir32(self):
+    def FrameworkDir32(self) -> str:
         """
         Microsoft .NET Framework 32bit directory.
 
@@ -785,7 +798,7 @@ class SystemInfo:
         return self.ri.lookup(self.ri.vc, 'frameworkdir32') or guess_fw
 
     @property
-    def FrameworkDir64(self):
+    def FrameworkDir64(self) -> str:
         """
         Microsoft .NET Framework 64bit directory.
 
@@ -855,13 +868,13 @@ class SystemInfo:
         return ()
 
     @staticmethod
-    def _use_last_dir_name(path, prefix=''):
+    def _use_last_dir_name(path: StrPath, prefix: str = '') -> str:
         """
         Return name of the last dir in path or '' if no dir found.
 
         Parameters
         ----------
-        path: str
+        path: StrPath
             Use dirs in this path
         prefix: str
             Use only dirs starting by this prefix
@@ -877,7 +890,7 @@ class SystemInfo:
             if os.path.isdir(os.path.join(path, dir_name))
             and dir_name.startswith(prefix)
         )
-        return next(matching_dirs, None) or ''
+        return next(matching_dirs, '')
 
 
 class _EnvironmentDict(TypedDict):
@@ -1024,6 +1037,16 @@ class EnvironmentInfo:
         ------
         list of str
             paths
+
+        When host CPU is ARM, the tools should be found for ARM.
+
+        >>> getfixture('windows_only')
+        >>> mp = getfixture('monkeypatch')
+        >>> mp.setattr(PlatformInfo, 'current_cpu', 'arm64')
+        >>> ei = EnvironmentInfo(arch='irrelevant')
+        >>> paths = ei.VCTools
+        >>> any('HostARM64' in path for path in paths)
+        True
         """
         si = self.si
         tools = [os.path.join(si.VCInstallDir, 'VCPackages')]
@@ -1038,9 +1061,8 @@ class EnvironmentInfo:
             tools += [os.path.join(si.VCInstallDir, path)]
 
         elif self.vs_ver >= 15.0:
-            host_dir = (
-                r'bin\HostX86%s' if self.pi.current_is_x86() else r'bin\HostX64%s'
-            )
+            host_id = self.pi.current_cpu.replace('amd64', 'x64').upper()
+            host_dir = os.path.join('bin', f'Host{host_id}%s')
             tools += [
                 os.path.join(si.VCInstallDir, host_dir % self.pi.target_dir(x64=True))
             ]
@@ -1191,7 +1213,7 @@ class EnvironmentInfo:
             yield self.si.WindowsSDKExecutablePath
 
     @property
-    def _sdk_subdir(self):
+    def _sdk_subdir(self) -> str:
         """
         Microsoft Windows SDK version subdir.
 
@@ -1336,7 +1358,7 @@ class EnvironmentInfo:
         return [os.path.join(self.si.ProgramFilesx86, 'HTML Help Workshop')]
 
     @property
-    def UCRTLibraries(self):
+    def UCRTLibraries(self) -> list[str]:
         """
         Microsoft Universal C Runtime SDK Libraries.
 
@@ -1349,12 +1371,16 @@ class EnvironmentInfo:
             return []
 
         arch_subdir = self.pi.target_dir(x64=True)
-        lib = os.path.join(self.si.UniversalCRTSdkDir, 'lib')
+        try:
+            lib = os.path.join(self.si.UniversalCRTSdkDir, 'lib')  # type: ignore[arg-type] # Expected TypeError
+        except TypeError as ex:
+            py310.add_note(ex, "Cannot find UniversalCRTSdkDir")
+            raise
         ucrtver = self._ucrt_subdir
         return [os.path.join(lib, f'{ucrtver}ucrt{arch_subdir}')]
 
     @property
-    def UCRTIncludes(self):
+    def UCRTIncludes(self) -> list[str]:
         """
         Microsoft Universal C Runtime SDK Include.
 
@@ -1366,11 +1392,15 @@ class EnvironmentInfo:
         if self.vs_ver < 14.0:
             return []
 
-        include = os.path.join(self.si.UniversalCRTSdkDir, 'include')
+        try:
+            include = os.path.join(self.si.UniversalCRTSdkDir, 'include')  # type: ignore[arg-type] # Expected TypeError
+        except TypeError as ex:
+            py310.add_note(ex, "Cannot find UniversalCRTSdkDir")
+            raise
         return [os.path.join(include, f'{self._ucrt_subdir}ucrt')]
 
     @property
-    def _ucrt_subdir(self):
+    def _ucrt_subdir(self) -> str:
         """
         Microsoft Universal C Runtime SDK version subdir.
 

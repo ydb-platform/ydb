@@ -10,6 +10,22 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define READ_KAFKA_FIELD(field, method)                                                    \
+    YT_TLOG_TRACE("Parsing kafka data")                                                    \
+        .With("Field", #field);                                                            \
+    field = reader->method();                                                              \
+    YT_TLOG_TRACE("Parsing kafka data, value read")                                        \
+        .With("Field", #field)                                                             \
+        .With("Value", field);
+
+#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                      \
+    YT_TLOG_TRACE("Writing kafka data")                                                    \
+        .With("Field", #field)                                                             \
+        .With("Value", field);                                                             \
+    kafkaWriter->method(field);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IKafkaProtocolReader
 {
     virtual ~IKafkaProtocolReader() = default;
@@ -27,14 +43,14 @@ struct IKafkaProtocolReader
 
     virtual TGuid ReadUuid() = 0;
 
-    virtual TString ReadString() = 0;
-    virtual TString ReadCompactString() = 0;
-    virtual std::optional<TString> ReadNullableString() = 0;
-    virtual std::optional<TString> ReadCompactNullableString() = 0;
-    virtual void ReadString(TString* result, int length) = 0;
+    virtual std::string ReadString() = 0;
+    virtual std::string ReadCompactString() = 0;
+    virtual std::optional<std::string> ReadNullableString() = 0;
+    virtual std::optional<std::string> ReadCompactNullableString() = 0;
+    virtual void ReadString(std::string* result, int length) = 0;
 
-    virtual TString ReadBytes() = 0;
-    virtual TString ReadCompactBytes() = 0;
+    virtual std::string ReadBytes() = 0;
+    virtual std::string ReadCompactBytes() = 0;
 
     virtual i32 StartReadBytes(bool needReadSize = true) = 0;
     virtual i32 StartReadCompactBytes(bool needReadCount = true) = 0;
@@ -74,16 +90,22 @@ struct IKafkaProtocolWriter
 
     virtual void WriteErrorCode(NKafka::EErrorCode value) = 0;
 
-    virtual void WriteString(const TString& value) = 0;
-    virtual void WriteNullableString(const std::optional<TString>& value) = 0;
-    virtual void WriteCompactString(const TString& value) = 0;
-    virtual void WriteCompactNullableString(const std::optional<TString>& value) = 0;
-    virtual void WriteBytes(const TString& value) = 0;
-    virtual void WriteCompactBytes(const TString& value) = 0;
-    virtual void WriteData(const TString& value) = 0;
+    virtual void WriteString(TStringBuf value) = 0;
+    virtual void WriteNullableString(std::optional<TStringBuf> value) = 0;
+    virtual void WriteCompactString(TStringBuf value) = 0;
+    virtual void WriteCompactNullableString(std::optional<TStringBuf> value) = 0;
+    virtual void WriteBytes(TStringBuf value) = 0;
+    virtual void WriteCompactBytes(TStringBuf value) = 0;
+    virtual void WriteData(TStringBuf value) = 0;
+    virtual void WriteData(TRef value) = 0;
 
     virtual void StartBytes() = 0;
     virtual void FinishBytes() = 0;
+
+    virtual void StartCalculateChecksum() = 0;
+    virtual void FinishCalculateChecksum() = 0;
+
+    virtual i64 GetSize() const = 0;
 
     virtual TSharedRef Finish() = 0;
 };

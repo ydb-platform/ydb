@@ -1,5 +1,8 @@
 #include "domain_info.h"
+#include "hive_impl.h"
 #include "hive_log.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -62,16 +65,18 @@ TString TTargetTrackingPolicy::GetLogPrefix() const {
     return TStringBuilder() << TScaleRecommenderPolicy::GetLogPrefix() << "[TargetTracking] ";
 }
 
-ui32 TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const {
-    ui32 recommendedNodes = readyNodesCount;
+std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const {
+    std::optional<ui32> recommendedNodes;
 
     if (UsageHistory.size() >= config.GetScaleInWindowSize()) {
         auto scaleInWindowBegin = UsageHistory.end() - config.GetScaleInWindowSize();
         auto scaleInWindowEnd = UsageHistory.end();
         double usageBottomThreshold = TargetUsage - config.GetTargetTrackingCPUMargin();
 
-        BLOG_TRACE("[MSR] Scale in window: [" << JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)
-                   << "], bottom threshold: " << usageBottomThreshold);
+        YDB_LOG_TRACE("[MSR] Scale-in window below threshold",
+            {"logPrefix", GetLogPrefix()},
+            {"scaleInWindow", JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)},
+            {"threshold", usageBottomThreshold});
         bool needScaleIn = std::all_of(
             scaleInWindowBegin,
             scaleInWindowEnd,
@@ -85,18 +90,23 @@ ui32 TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const 
                 readyNodesCount,
                 TargetUsage
             );
-            BLOG_TRACE("[MSR] Need scale in, rounded recommended nodes: " << recommendedNodes);
+            YDB_LOG_TRACE("[MSR] Scale-in recommended",
+                {"logPrefix", GetLogPrefix()},
+                {"recommendedNodes", recommendedNodes});
         }
     } else {
-        BLOG_TRACE("[MSR] Not enough history for scale in");
+        YDB_LOG_TRACE("[MSR] Not enough history for scale-in",
+            {"logPrefix", GetLogPrefix()});
     }
 
     if (UsageHistory.size() >= config.GetScaleOutWindowSize()) {
         auto scaleOutWindowBegin = UsageHistory.end() - config.GetScaleOutWindowSize();
         auto scaleOutWindowEnd = UsageHistory.end();
 
-        BLOG_TRACE("[MSR] Scale out window: [" << JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)
-                   << "], target: " << TargetUsage);
+        YDB_LOG_TRACE("[MSR] Scale-out window above target",
+            {"logPrefix", GetLogPrefix()},
+            {"scaleOutWindow", JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)},
+            {"target", TargetUsage});
         bool needScaleOut = std::all_of(
             scaleOutWindowBegin,
             scaleOutWindowEnd,
@@ -110,13 +120,16 @@ ui32 TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const 
                 readyNodesCount,
                 TargetUsage
             );
-            BLOG_TRACE("[MSR] Need scale out, rounded recommended nodes: " << recommendedNodes);
+            YDB_LOG_TRACE("[MSR] Scale-out recommended",
+                {"logPrefix", GetLogPrefix()},
+                {"recommendedNodes", recommendedNodes});
         }
     } else {
-        BLOG_TRACE("[MSR] Not enough history for scale out");
+        YDB_LOG_TRACE("[MSR] Not enough history for scale-out",
+            {"logPrefix", GetLogPrefix()});
     }
 
-    return std::max(recommendedNodes, 1u);
+    return recommendedNodes ? std::max(*recommendedNodes, 1u) : recommendedNodes;
 }
 
 void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommenderPolicies& policies) {
@@ -144,6 +157,37 @@ void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommend
                 break;
         }
     }
+}
+
+TActorId TDomainInfo::GetPipeToHive(THive* self) {
+    if (!HivePipeClient) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
+        HivePipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), HiveId, pipeConfig));
+    }
+    return HivePipeClient;
+}
+
+void TDomainInfo::ClosePipeToHive(const TActorId& actorId) {
+    NTabletPipe::CloseAndForgetClient(TActorIdentity(actorId), HivePipeClient);
+}
+
+bool TDomainInfo::AddShrinkingPool(const TString& pool) {
+    auto it = std::find(ShrinkingStoragePools.begin(), ShrinkingStoragePools.end(), pool);
+    if (it == ShrinkingStoragePools.end()) {
+        ShrinkingStoragePools.push_back(pool);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+TString TDomainInfo::ShrinkingPoolsString() const {
+    return JoinStrings(ShrinkingStoragePools, ";");
+}
+
+void TDomainInfo::ParseShrinkingPools(const TString& str) {
+    ShrinkingStoragePools = SplitString(str, ";");
 }
 
 } // NHive

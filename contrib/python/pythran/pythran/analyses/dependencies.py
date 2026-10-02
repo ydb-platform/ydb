@@ -59,9 +59,7 @@ class Dependencies(ModuleAnalysis):
         ast.FloorDiv: ('operator', 'ifloordiv'),
     }
 
-    def __init__(self):
-        self.result = set()
-        super(Dependencies, self).__init__()
+    ResultType = set
 
     def visit_List(self, node):
         self.result.add(('builtins', 'list'))
@@ -129,6 +127,8 @@ class Dependencies(ModuleAnalysis):
     def visit_Constant(self, node):
         if node.value is None:
             self.result.add(('builtins', 'None'))
+        elif isinstance(node.value, bytes):
+            self.result.add(('types', 'str'))  # FIXME: using str as backend
         elif isinstance(node.value, str):
             self.result.add(('types', 'str'))
         elif isinstance(node.value, complex):

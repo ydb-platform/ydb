@@ -2,16 +2,17 @@
 
 class TMul {
 public:
-   TMul(int x, int y)
-      : X(x)
-      , Y(y)
-   {}
+    TMul(int x, int y)
+        : X(x)
+        , Y(y)
+    {
+    }
 
-   int GetValue() const {
-      return X * Y;
-   }
+    int GetValue() const {
+        return X * Y;
+    }
 
 private:
-   const int X;
-   const int Y;
+    const int X;
+    const int Y;
 };

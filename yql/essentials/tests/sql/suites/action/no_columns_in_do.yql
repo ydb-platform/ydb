@@ -1,0 +1,7 @@
+$a = `aaa`;
+
+define action $action($s) as
+  select $s;
+end define;
+
+do $action($a);

@@ -2,21 +2,18 @@
 
 #include "public.h"
 
-#include <yt/yt/core/http/config.h>
-
 #include <yt/yt/core/crypto/config.h>
+
+#include <yt/yt/core/http/config.h>
 
 namespace NYT::NHttps {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerCredentialsConfig
-    : public NYTree::TYsonStruct
+struct TServerCredentialsConfig
+    : public NCrypto::TServerSslContextConfig
 {
-public:
-    NCrypto::TPemBlobConfigPtr PrivateKey;
-    NCrypto::TPemBlobConfigPtr CertChain;
-    TDuration UpdatePeriod;
+    TDuration CertSensorsUpdatePeriod;
 
     REGISTER_YSON_STRUCT(TServerCredentialsConfig);
 
@@ -27,10 +24,9 @@ DEFINE_REFCOUNTED_TYPE(TServerCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public NHttp::TServerConfig
 {
-public:
     TServerCredentialsConfigPtr Credentials;
 
     REGISTER_YSON_STRUCT(TServerConfig);
@@ -42,13 +38,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientCredentialsConfig
-    : public NYTree::TYsonStruct
+struct TClientCredentialsConfig
+    : public NCrypto::TSslContextConfig
 {
-public:
-    NCrypto::TPemBlobConfigPtr PrivateKey;
-    NCrypto::TPemBlobConfigPtr CertChain;
-
     REGISTER_YSON_STRUCT(TClientCredentialsConfig);
 
     static void Register(TRegistrar registrar);
@@ -58,12 +50,14 @@ DEFINE_REFCOUNTED_TYPE(TClientCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientConfig
+struct TClientConfig
     : public NHttp::TClientConfig
 {
-public:
     // If missing then builtin certificate store is used.
     TClientCredentialsConfigPtr Credentials;
+
+    // Allow bypass TLS for http://... URLs.
+    bool AllowHttp;
 
     REGISTER_YSON_STRUCT(TClientConfig);
 

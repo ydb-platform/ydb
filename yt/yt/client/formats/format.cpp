@@ -52,6 +52,11 @@ const IAttributeDictionary& TFormat::Attributes() const
     return *Attributes_;
 }
 
+bool TFormat::operator==(const TFormat& other) const
+{
+    return GetType() == other.GetType() && Attributes() == other.Attributes();
+}
+
 void Serialize(const TFormat& value, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -67,7 +72,7 @@ void Deserialize(TFormat& value, INodePtr node)
         THROW_ERROR_EXCEPTION("Format name must be a string");
     }
 
-    auto typeStr = node->GetValue<TString>();
+    auto typeStr = node->GetValue<std::string>();
     EFormatType type;
     try {
         type = ParseEnum<EFormatType>(typeStr);

@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -16,9 +18,22 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_DC_FOLLOWERS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxProcessUpdateFollowers::Execute()");
+        YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute processing pending follower updates",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
+        // precharge before popping updates: the processing loop below can't be restarted
+        bool ready = true;
+        const auto& pendingUpdates = Self->PendingFollowerUpdates.Updates;
+        for (size_t i = 0; i < pendingUpdates.size() && i < MAX_UPDATES_PROCESSED; ++i) {
+            const auto& op = pendingUpdates[i];
+            if (op.Action == TFollowerUpdates::EAction::Update) {
+                ready &= db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select().IsReady();
+            }
+        }
+        if (!ready) {
+            return false;
+        }
         for (size_t i = 0; !Self->PendingFollowerUpdates.Empty() && i < MAX_UPDATES_PROCESSED; ++i) {
             auto op = Self->PendingFollowerUpdates.Pop();
             TTabletInfo* tablet = Self->FindTablet(op.TabletId);
@@ -38,7 +53,8 @@ public:
                         continue;
                     }
                     TFollowerTabletInfo& follower = tablet->AsLeader().AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {op.DataCenter};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(op.DataCenter);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId.first, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
@@ -49,14 +65,17 @@ public:
                     follower.BecomeStopped();
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
-                    BLOG_D("THive::TTxProcessUpdateFollowers::Execute(): created follower " << follower.GetFullTabletId());
+                    YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute created follower",
+                        {"logPrefix", GetLogPrefix()},
+                        {"followerTabletId", follower.GetFullTabletId()});
                     break;
                 }
                 case TFollowerUpdates::EAction::Update:
                 {
                     // This is updated in memory in LoadEverything
-                    bool exists = db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select().IsValid();
-                    Y_ABORT_UNLESS(exists, "%s", (TStringBuilder() << "trying to update tablet " << op.TabletId).data());
+                    auto rowset = db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select();
+                    Y_ABORT_UNLESS(rowset.IsReady(), "%s", (TStringBuilder() << "follower " << op.TabletId << " was not precharged").data());
+                    Y_ABORT_UNLESS(rowset.IsValid(), "%s", (TStringBuilder() << "trying to update tablet " << op.TabletId).data());
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Update<Schema::TabletFollowerTablet::DataCenter>(op.DataCenter);
                     break;
                 }
@@ -90,7 +109,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

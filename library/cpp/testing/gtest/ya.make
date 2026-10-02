@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/testing/common
     library/cpp/testing/gtest_extensions
     library/cpp/testing/hook
+    library/cpp/json
 )
 
 END()

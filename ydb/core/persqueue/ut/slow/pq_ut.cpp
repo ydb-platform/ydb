@@ -6,7 +6,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -145,6 +145,83 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         }
         Cout << TInstant::Now() << "All Ok" << Endl;
     });
+}
+
+Y_UNIT_TEST(MediumMsgCompactificationWithRebootsTest) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
+
+        tc.Runtime->SetScheduledLimit(3000);
+        TString s{5_MB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        activeZone = PlainOrSoSlow(true, false);
+        writeData(3);
+        Cerr << "Write 1 done\n";
+
+        writeData(3);
+        Cerr << "Write 2 done\n";
+
+        writeData(1);
+        Cerr << "Write 3 done\n";
+
+        i64 expectedOffset = 4;
+        i64 consumerOffset = -1;
+        while(consumerOffset < expectedOffset) {
+            Cerr << "Got compacter offset = " << consumerOffset << Endl;
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+        }
+        UNIT_ASSERT(consumerOffset >= expectedOffset);
+        PQGetPartInfo([](ui64 offset) { return offset >= 1; }, currentOffset, tc); });
+}
+
+Y_UNIT_TEST(LargeMsgCompactificationWithRebootsTest) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+
+        tc.Runtime->SetScheduledLimit(3000);
+        TString s{20_MB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        activeZone = PlainOrSoSlow(true, false);
+
+        writeData(2);
+        writeData(1);
+        writeData(1);
+
+        i64 expectedOffset = 2;
+        i64 consumerOffset = -1;
+        while(consumerOffset < expectedOffset) {
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+        }
+        PQGetPartInfo([](ui64 offset) { return offset > 1; }, currentOffset, tc); });
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTestSlow)

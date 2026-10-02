@@ -8,13 +8,14 @@
 
 - [{{ ydb-short-name }} метрики](../../reference/observability/metrics/index.md).
 
-    Диагностика большинства проблем с производительностью включает анализ [дашбордов в Grafana](../../reference/observability/metrics/grafana-dashboards.md), которые используют метрики {{ ydb-short-name }}, собираемые с помощью Prometheus. Описание установки Grafana и Prometheus см. в разделе [{#T}](../../devops/manual/monitoring.md);
+    Диагностика большинства проблем с производительностью включает анализ [дашбордов в Grafana](../../reference/observability/metrics/grafana-dashboards.md), которые используют метрики {{ ydb-short-name }}, собираемые с помощью Prometheus. Описание установки Grafana и Prometheus см. в разделе [{#T}](../../devops/observability/monitoring.md);
 
-- [Логи {{ ydb-short-name }}](../../devops/manual/logging.md);
+- [Логи {{ ydb-short-name }}](../../devops/observability/logging.md);
 - [Трассировка](../../reference/observability/tracing/setup.md);
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md);
-- [Встроенный UI](../../reference/embedded-ui/index.md);
-- [Планы запросов](../../dev/query-plans-optimization.md);
+- [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md);
+- [План выполнения запроса](../../dev/optimization/index.md);
+- [Параметризованные запросы и повторная компиляция](../../dev/optimization/parameterized-queries.md);
 - Сторонние инструменты мониторинга.
 
 ## Классификация проблем с производительностью {{ ydb-short-name }}

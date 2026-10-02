@@ -17,6 +17,7 @@ namespace NActors {
     struct TExecutionStats;
 
     class IExecutorPool;
+    class TAsyncFrameCache;
 
     template <typename T>
     struct TWaitingStats;
@@ -26,11 +27,6 @@ namespace NActors {
     struct TCapturedActivation {
         TMailbox* Mailbox = nullptr;
         ESendingType SendingType = ESendingType::Common;
-    };
-
-    struct TLocalQueueContext {
-        ui32 WriteTurn = 0;
-        ui16 LocalQueueSize = 0;
     };
 
     struct TThreadActivityContext {
@@ -57,7 +53,6 @@ namespace NActors {
         TString PoolName() const;
         ui32 OwnerPoolId() const;
         bool IsShared() const;
-
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = -1);
         void FreeMailbox(TMailbox* mailbox);
     };
@@ -67,7 +62,6 @@ namespace NActors {
         ui32 ExecutedEvents = 0;
         ui32 OverwrittenEventsPerMailbox = 0;
         ui64 OverwrittenTimePerMailboxTs = 0;
-        TStackVec<TActorId, 1> PreemptionSubscribed;
         bool IsNeededToWaitNextActivation = true;
         ESendingType SendingType = ESendingType::Common;
         NHPTimer::STime HPStart = 0;
@@ -77,12 +71,21 @@ namespace NActors {
         bool CheckCapturedSendingType(ESendingType type) const;
     };
 
+    struct TMailboxContext {
+        NHPTimer::STime ScheduledTimestamp = 0;
+        NHPTimer::STime EventEnqueuedTimestamp = 0;
+        ui64 ActivationTimeUs = 0;
+        ui64 EventDeliveryTimeUs = 0;
+    };
+
     struct TThreadContext {
         TWorkerContext WorkerContext;
-        TLocalQueueContext LocalQueueContext;
         TThreadActivityContext ActivityContext;
         TExecutionContext ExecutionContext;
+        TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
+        // Cache owned by the executor thread. Null when this context is not a worker.
+        TAsyncFrameCache* AsyncFrameCache = nullptr;
 
 
         bool IsEnoughCpu = true;
@@ -118,7 +121,6 @@ namespace NActors {
         ui32 EventsPerMailbox() const;
         ui64 SoftDeadlineTs() const;
         void FreeMailbox(TMailbox* mailbox);
-
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = Max<ui64>());
 
         bool CheckSendingType(ESendingType type) const;
@@ -135,6 +137,16 @@ namespace NActors {
         ui64 OverwrittenTimePerMailboxTs() const;
         void SetOverwrittenTimePerMailboxTs(ui64 value);
         void ResetOverwrittenTimePerMailboxTs();
+
+        NHPTimer::STime MailboxScheduledTimestampTs() const;
+        void SetMailboxScheduledTimestampTs(NHPTimer::STime value);
+        NHPTimer::STime EventEnqueuedTimestampTs() const;
+        void SetEventEnqueuedTimestampTs(NHPTimer::STime value);
+        ui64 ActivationTimeUs() const;
+        void SetActivationTimeUs(ui64 value);
+        ui64 EventDeliveryTimeUs() const;
+        void SetEventDeliveryTimeUs(ui64 value);
+        void ResetMailboxContext();
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

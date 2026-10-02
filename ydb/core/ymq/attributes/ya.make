@@ -1,0 +1,20 @@
+LIBRARY()
+
+SRCS(
+    attributes_md5.cpp
+    attributes.cpp
+    attribute_name.cpp
+)
+
+PEERDIR(
+    library/cpp/digest/md5
+    ydb/core/persqueue/public
+    ydb/core/protos
+    ydb/public/api/protos
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

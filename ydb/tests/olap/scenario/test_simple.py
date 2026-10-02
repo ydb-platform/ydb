@@ -79,9 +79,15 @@ class TestSimple(BaseTestSet):
             AlterTable(table_name).add_column(sth.Column('not_level', PrimitiveType.Uint32)).drop_column('level')
         )
         assert sth.get_table_rows_count(table_name) == 10
+        altered_schema = (
+            ScenarioTestHelper.Schema()
+            .with_column(name='id', type=PrimitiveType.Int32, not_null=True)
+            .with_column(name='not_level', type=PrimitiveType.Uint32)
+            .with_key_columns('id')
+        )
         sth.bulk_upsert(
             table_name,
-            dg.DataGeneratorPerColumn(self.schema2, 10, dg.ColumnValueGeneratorDefault(init_value=10)).with_column(
+            dg.DataGeneratorPerColumn(altered_schema, 10, dg.ColumnValueGeneratorDefault(init_value=10)).with_column(
                 'not_level', dg.ColumnValueGeneratorRandom()
             ),
             comment="new schema",
@@ -106,9 +112,16 @@ class TestSimple(BaseTestSet):
         #            AlterTableStore('testStoreAlter').drop_column('level')
         #        )
         assert sth.get_table_rows_count(table_name) == 10
+        altered_schema = (
+            ScenarioTestHelper.Schema()
+            .with_column(name='id', type=PrimitiveType.Int32, not_null=True)
+            .with_column(name='level', type=PrimitiveType.Uint32)
+            .with_column(name='not_level', type=PrimitiveType.Uint32)
+            .with_key_columns('id')
+        )
         sth.bulk_upsert(
             table_name,
-            dg.DataGeneratorPerColumn(self.schema2, 10, dg.ColumnValueGeneratorDefault(init_value=10)).with_column(
+            dg.DataGeneratorPerColumn(altered_schema, 10, dg.ColumnValueGeneratorDefault(init_value=10)).with_column(
                 'not_level', dg.ColumnValueGeneratorRandom()
             ),
             comment="new schema",

@@ -34,6 +34,8 @@ __all__ = [
     'all_unique',
     'always_iterable',
     'always_reversible',
+    'argmax',
+    'argmin',
     'bucket',
     'callback_iter',
     'chunked',
@@ -47,6 +49,7 @@ __all__ = [
     'consumer',
     'count_cycle',
     'countable',
+    'derangements',
     'dft',
     'difference',
     'distinct_combinations',
@@ -58,6 +61,7 @@ __all__ = [
     'duplicates_justseen',
     'classify_unique',
     'exactly_n',
+    'extract',
     'filter_except',
     'filter_map',
     'first',
@@ -70,6 +74,7 @@ __all__ = [
     'interleave',
     'interleave_evenly',
     'interleave_longest',
+    'interleave_randomly',
     'intersperse',
     'is_sorted',
     'islice_extended',
@@ -222,6 +227,9 @@ def strictly_n(
 def distinct_permutations(
     iterable: Iterable[_T], r: int | None = ...
 ) -> Iterator[tuple[_T, ...]]: ...
+def derangements(
+    iterable: Iterable[_T], r: int | None = None
+) -> Iterator[tuple[_T, ...]]: ...
 def intersperse(
     e: _U, iterable: Iterable[_T], n: int = ...
 ) -> Iterator[_T | _U]: ...
@@ -258,6 +266,7 @@ def interleave_longest(*iterables: Iterable[_T]) -> Iterator[_T]: ...
 def interleave_evenly(
     iterables: list[Iterable[_T]], lengths: list[int] | None = ...
 ) -> Iterator[_T]: ...
+def interleave_randomly(*iterables: Iterable[_T]) -> Iterable[_T]: ...
 def collapse(
     iterable: Iterable[Any],
     base_type: _ClassInfo | None = ...,
@@ -468,42 +477,42 @@ def groupby_transform(
     keyfunc: None,
     valuefunc: Callable[[_T], _V],
     reducefunc: None,
-) -> Iterable[tuple[_T, Iterable[_V]]]: ...
+) -> Iterator[tuple[_T, Iterator[_V]]]: ...
 @overload
 def groupby_transform(
     iterable: Iterable[_T],
     keyfunc: Callable[[_T], _U],
     valuefunc: Callable[[_T], _V],
     reducefunc: None,
-) -> Iterable[tuple[_U, Iterator[_V]]]: ...
+) -> Iterator[tuple[_U, Iterator[_V]]]: ...
 @overload
 def groupby_transform(
     iterable: Iterable[_T],
     keyfunc: None,
     valuefunc: None,
     reducefunc: Callable[[Iterator[_T]], _W],
-) -> Iterable[tuple[_T, _W]]: ...
+) -> Iterator[tuple[_T, _W]]: ...
 @overload
 def groupby_transform(
     iterable: Iterable[_T],
     keyfunc: Callable[[_T], _U],
     valuefunc: None,
     reducefunc: Callable[[Iterator[_T]], _W],
-) -> Iterable[tuple[_U, _W]]: ...
+) -> Iterator[tuple[_U, _W]]: ...
 @overload
 def groupby_transform(
     iterable: Iterable[_T],
     keyfunc: None,
     valuefunc: Callable[[_T], _V],
-    reducefunc: Callable[[Iterable[_V]], _W],
-) -> Iterable[tuple[_T, _W]]: ...
+    reducefunc: Callable[[Iterator[_V]], _W],
+) -> Iterator[tuple[_T, _W]]: ...
 @overload
 def groupby_transform(
     iterable: Iterable[_T],
     keyfunc: Callable[[_T], _U],
     valuefunc: Callable[[_T], _V],
-    reducefunc: Callable[[Iterable[_V]], _W],
-) -> Iterable[tuple[_U, _W]]: ...
+    reducefunc: Callable[[Iterator[_V]], _W],
+) -> Iterator[tuple[_U, _W]]: ...
 
 class numeric_range(Generic[_T, _U], Sequence[_T], Hashable, Reversible[_T]):
     @overload
@@ -559,7 +568,7 @@ class islice_extended(Generic[_T], Iterator[_T]):
 
 def always_reversible(iterable: Iterable[_T]) -> Iterator[_T]: ...
 def consecutive_groups(
-    iterable: Iterable[_T], ordering: Callable[[_T], int] = ...
+    iterable: Iterable[_T], ordering: None | Callable[[_T], int] = ...
 ) -> Iterator[Iterator[_T]]: ...
 @overload
 def difference(
@@ -919,7 +928,7 @@ def filter_map(
 ) -> Iterator[_V]: ...
 def powerset_of_sets(iterable: Iterable[_T]) -> Iterator[set[_T]]: ...
 def join_mappings(
-    **field_to_map: Mapping[_T, _V]
+    **field_to_map: Mapping[_T, _V],
 ) -> dict[_T, dict[str, _V]]: ...
 def doublestarmap(
     func: Callable[..., _T],
@@ -928,4 +937,13 @@ def doublestarmap(
 def dft(xarr: Sequence[complex]) -> Iterator[complex]: ...
 def idft(Xarr: Sequence[complex]) -> Iterator[complex]: ...
 def _nth_prime_ub(n: int) -> float: ...
-def nth_prime(n: int) -> int: ...
+def nth_prime(n: int, *, approximate: bool = ...) -> int: ...
+def argmin(
+    iterable: Iterable[_T], *, key: Callable[[_T], _U] | None = ...
+) -> int: ...
+def argmax(
+    iterable: Iterable[_T], *, key: Callable[[_T], _U] | None = ...
+) -> int: ...
+def extract(
+    iterable: Iterable[_T], indices: Iterable[int]
+) -> Iterator[_T]: ...

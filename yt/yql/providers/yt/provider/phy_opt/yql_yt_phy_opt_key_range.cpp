@@ -351,4 +351,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractKeyRange(TExprBa
     return newOp;
 }
 
-}  // namespace NYql
+} // namespace NYql

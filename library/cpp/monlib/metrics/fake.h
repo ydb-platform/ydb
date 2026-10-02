@@ -82,6 +82,8 @@ namespace NMonitoring {
         i64 Get() const noexcept override {
             return 0;
         }
+
+        void Reset() noexcept override {}
     };
 
     struct TFakeRate final: public TFakeAcceptor<IRate> {
@@ -94,6 +96,10 @@ namespace NMonitoring {
             return 0;
         }
 
+        ui32 StartTimeSeconds() const noexcept override {
+            return 0;
+        }
+
         void Reset() noexcept override {
         }
     };
@@ -102,6 +108,12 @@ namespace NMonitoring {
         ui64 Get() const noexcept override {
             return 0;
         }
+
+        ui32 StartTimeSeconds() const noexcept override {
+            return 0;
+        }
+
+        void Reset() noexcept override {}
     };
 
     struct TFakeGauge final: public TFakeAcceptor<IGauge> {
@@ -117,12 +129,16 @@ namespace NMonitoring {
         double Get() const noexcept override {
             return 0;
         }
+
+        void Reset() noexcept override {}
     };
 
     struct TFakeLazyGauge final: public TFakeAcceptor<ILazyGauge> {
         double Get() const noexcept override {
             return 0;
         }
+
+        void Reset() noexcept override {}
     };
 
     struct TFakeHistogram final: public IHistogram {
@@ -169,5 +185,7 @@ namespace NMonitoring {
         ui64 Get() const noexcept override {
             return 0;
         }
+
+        void Reset() noexcept override {}
     };
 } // namespace NMonitoring

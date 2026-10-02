@@ -3,7 +3,7 @@
 #include "events.h"
 
 #include <ydb/core/grpc_services/rpc_deferrable.h>
-
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 
 
@@ -11,7 +11,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TReadInfoActor : public TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest> {
+class TReadInfoActor : public TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>
+                     , public NActors::IActorExceptionHandler
+                     , public NPQ::TLogPrefix {
 using TBase = TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>;
 public:
      TReadInfoActor(
@@ -22,10 +24,13 @@ public:
     ~TReadInfoActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
-
-
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR; }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"consumer", ClientId});
+    }
 
     bool HasCancelOperation() {
         return false;
@@ -52,7 +57,6 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
-    void ProcessAnswers(const TActorContext& ctx);
 
 private:
     TActorId SchemeCache;

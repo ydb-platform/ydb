@@ -7,6 +7,7 @@
 #include <aws/cal/cal.h>
 #include <aws/cal/private/der.h>
 
+#define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>

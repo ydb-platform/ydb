@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "logical_type.h"
 #endif
-#undef LOGICAL_TYPE_INL_H_
 
 namespace NYT::NTableClient {
 
@@ -64,6 +63,11 @@ const TTaggedLogicalType& TLogicalType::UncheckedAsTaggedTypeRef() const
     return static_cast<const TTaggedLogicalType&>(*this);
 }
 
+const TAggregateStateLogicalType& TLogicalType::UncheckedAsAggregateStateTypeRef() const
+{
+    return static_cast<const TAggregateStateLogicalType&>(*this);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int TDecimalLogicalType::GetPrecision() const
@@ -118,6 +122,13 @@ const std::vector<TLogicalTypePtr>& TTupleLogicalTypeBase::GetElements() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const std::vector<std::string>& TStructLogicalType::GetRemovedFieldStableNames() const
+{
+    return RemovedFieldStableNames_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TLogicalTypePtr& TDictLogicalType::GetKey() const
 {
     return Key_;
@@ -130,7 +141,7 @@ const TLogicalTypePtr& TDictLogicalType::GetValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTaggedLogicalType::GetTag() const
+const std::string& TTaggedLogicalType::GetTag() const
 {
     return Tag_;
 }
@@ -138,6 +149,53 @@ const TString& TTaggedLogicalType::GetTag() const
 const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
 {
     return Element_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+EAggregateFunction TAggregateStateLogicalType::GetFunction() const
+{
+    return Function_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetArgumentType() const
+{
+    return ArgumentType_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetElement() const
+{
+    return Element_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define XX(cppType, ytType)                                                                 \
+    template <>                                                                             \
+    struct TUnderlyingTimestampIntegerTypeImpl<ESimpleLogicalValueType::ytType>             \
+    {                                                                                       \
+        using TValue = cppType;                                                             \
+    };                                                                                      \
+                                                                                            \
+    template <>                                                                             \
+    struct TUnderlyingTzTypeImpl<ESimpleLogicalValueType::Tz##ytType>                       \
+    {                                                                                       \
+        static constexpr ESimpleLogicalValueType TValue = ESimpleLogicalValueType::ytType;  \
+    };
+
+    XX(ui16, Date)
+    XX(ui32, Datetime)
+    XX(ui64, Timestamp)
+    XX(i32, Date32)
+    XX(i64, Datetime64)
+    XX(i64, Timestamp64)
+
+#undef XX
+
+template <ESimpleLogicalValueType type>
+constexpr ESimpleLogicalValueType GetUnderlyingDateType()
+{
+    return TUnderlyingTzTypeImpl<type>::TValue;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

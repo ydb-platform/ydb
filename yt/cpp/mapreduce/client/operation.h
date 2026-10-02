@@ -46,6 +46,7 @@ public:
     virtual TMaybe<TYtError> GetError() override;
     virtual TJobStatistics GetJobStatistics() override;
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() override;
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() override;
     virtual void AbortOperation() override;
     virtual void CompleteOperation() override;
     virtual void SuspendOperation(const TSuspendOperationOptions& options) override;

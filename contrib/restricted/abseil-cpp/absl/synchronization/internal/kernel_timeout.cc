@@ -21,24 +21,17 @@
 #include <algorithm>
 #include <chrono>  // NOLINT(build/c++11)
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <ctime>
 #include <limits>
 
-#include "absl/base/attributes.h"
-#include "absl/base/call_once.h"
 #include "absl/base/config.h"
+#include "absl/base/internal/raw_logging.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
-
-#ifdef ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
-constexpr uint64_t KernelTimeout::kNoTimeout;
-constexpr int64_t KernelTimeout::kMaxNanos;
-#endif
 
 int64_t KernelTimeout::SteadyClockNow() {
   if (!SupportsSteadyClock()) {

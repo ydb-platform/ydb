@@ -74,8 +74,6 @@ namespace NYql::NDqs {
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, bool enableSpilling);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
-        void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks);
-        bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
 
     private:
         const TDqSettings::TPtr Settings;
@@ -104,7 +102,9 @@ namespace NYql::NDqs {
             const TString& program,
             NActors::TActorId executerID,
             NActors::TActorId resultID,
-            const TTypeAnnotationNode* typeAnn);
+            const TTypeAnnotationNode* typeAnn,
+            TLangVersion langver,
+            TRuntimeSettings::TConstPtr runtimeSettings);
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
@@ -119,6 +119,8 @@ namespace NYql::NDqs {
         TMaybe<NActors::TActorId> SourceID = {};
         TVector<NDqProto::TDqTask> Tasks;
         const TTypeAnnotationNode* TypeAnn;
+        const TLangVersion LangVer;
+        const TRuntimeSettings::TConstPtr RuntimeSettings;
     };
 
     // Execution planner for Graph

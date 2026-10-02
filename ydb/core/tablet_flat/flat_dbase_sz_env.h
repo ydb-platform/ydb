@@ -9,43 +9,44 @@ namespace NKikimr {
 namespace NTable {
 
     struct TSizeEnv : public IPages {
-        using TInfo = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
         TSizeEnv(IPages* env)
             : Env(env)
         {
         }
 
-        TResult Locate(const TMemTable*, ui64, ui32) noexcept override
+        TResult Locate(const TMemTable*, ui64, ui32) override
         {
-            Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+            Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            AddPageSize(partStore->Locate(lob, ref), ref);
+            auto *info = partStore->Locate(lob, ref);
+            AddPageSize(info, info->GetLocation(ref));
 
             return { true, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
+            auto *collection = partStore->PageCollections.at(groupId.Index).Get();
 
-            auto info = partStore->PageCollections.at(groupId.Index).Get();
-            auto type = info->GetPageType(pageId);
-            
-            switch (type) {
+            // index pages must be loaded for traversal; data pages counted from metadata
+            switch (location.Type) {
                 case EPage::FlatIndex:
                 case EPage::BTreeIndex:
+                case EPage::BTreeIndexV2:
                     // need index pages to continue counting
                     // do not count index
                     // if these pages are not in memory, data won't be counted in precharge
-                    return Env->TryGetPage(part, pageId, groupId);
+                    return Env->TryGetPage(part, location, groupId);
                 default:
-                    AddPageSize(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+                    AddPageSize(collection, location);
                     return nullptr;
             }
         }
@@ -55,17 +56,17 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(TInfo *info, TPageId pageId) noexcept
+        void AddPageSize(const TPageCollection *collection, const TPageLocation& location)
         {
-            if (Touched[info].insert(pageId).second) {
+            if (Touched[collection].insert(location.Offset).second) {
                 Pages++;
-                Bytes += info->GetPageSize(pageId);
+                Bytes += location.Size;
             }
         }
 
     private:
         IPages* Env;
-        THashMap<const void*, THashSet<TPageId>> Touched;
+        THashMap<const TPageCollection*, THashSet<TPageOffset>> Touched;
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

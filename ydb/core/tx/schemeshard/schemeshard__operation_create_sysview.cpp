@@ -1,0 +1,279 @@
+#include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
+
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
+
+class TPropose : public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
+    const TOperationId OperationId;
+
+public:
+    TPropose(TOperationId id)
+        : OperationId(id)
+    {}
+
+    bool ProgressState(TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSysView);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        const TStepId step = TStepId(ev->Get()->StepId);
+
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSysView);
+
+        context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_COUNT].Add(1);
+
+        const auto pathId = txState->TargetPathId;
+        auto path = TPath::Init(pathId, context.SS);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        path.Base()->StepCreated = step;
+        context.SS->PersistCreateStep(db, pathId, step);
+
+        IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+};
+
+TSysViewInfo::TPtr CreateSysView(NKikimrSysView::ESysViewType type) {
+    TSysViewInfo::TPtr sysViewInfo = new TSysViewInfo;
+    sysViewInfo->AlterVersion = 1;
+    sysViewInfo->Type = type;
+    return sysViewInfo;
+}
+
+class TCreateSysView : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateSysView"; }
+
+    static TTxState::ETxState NextState() {
+        return TTxState::Propose;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
+        }
+    }
+
+public:
+    using TSubOperation::TSubOperation;
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+        const TTabletId ssId = context.SS->SelfTabletId();
+
+        const auto acceptExisting = !Transaction.GetFailOnExist();
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const auto& sysViewDescription = Transaction.GetCreateSysView();
+
+        const TString& name = sysViewDescription.GetName();
+
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
+
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+            {"sysViewDescription", sysViewDescription.ShortDebugString()},
+        );
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+
+        const auto parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        {
+            const auto checks = parentPath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsSystemDirectory();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        {
+            const auto checks = dstPath.Check();
+            checks.IsAtLocalSchemeShard();
+            if (dstPath.IsResolved()) {
+                checks
+                    .NotUnderDeleting()
+                    .FailOnExist(TPathElement::EPathType::EPathTypeSysView, acceptExisting);
+            } else {
+                checks
+                    .NotEmpty();
+            }
+
+            if (checks) {
+                checks
+                    .IsValidLeafName(context.UserToken.Get())
+                    .DepthLimit()
+                    .DirChildrenLimit()
+                    .IsValidACL(acl);
+            }
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                if (dstPath.IsResolved()) {
+                    result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
+                    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+                }
+                return result;
+            }
+        }
+
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
+        const auto sysViewType = sysViewDescription.GetType();
+        if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
+            errStr = TStringBuilder()
+                << "error: unsupported system view type "
+                << sysViewDescription.GetType();
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
+        }
+
+        auto guard = context.DbGuard();
+        const auto sysViewPathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, sysViewPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath->PathId);
+        context.MemChanges.GrabNewSysView(context.SS, sysViewPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(sysViewPathId);
+        context.DbChanges.PersistPath(parentPath->PathId);
+        context.DbChanges.PersistSysView(sysViewPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, sysViewPathId);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, EPathCategory::System);
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+
+        result->SetPathId(sysViewPathId.LocalPathId);
+
+        TPathElement::TPtr sysViewPath = dstPath.Base();
+        sysViewPath->PathState = TPathElement::EPathState::EPathStateCreate;
+        sysViewPath->PathType = TPathElement::EPathType::EPathTypeSysView;
+        sysViewPath->CreateTxId = OperationId.GetTxId();
+        sysViewPath->LastTxId = OperationId.GetTxId();
+        if (!acl.empty()) {
+            sysViewPath->ApplyACL(acl);
+        }
+
+        TSysViewInfo::TPtr sysViewInfo = CreateSysView(static_cast<NKikimrSysView::ESysViewType>(sysViewType));
+        context.SS->SysViews.Set(sysViewPathId, sysViewInfo);
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        if (parentPath.Base()->HasActiveChanges()) {
+            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
+        }
+
+        SetState(NextState());
+        return result;
+    }
+
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSysView AbortUnsafe",
+            {"schemeshard", context.SS->SelfTabletId()},
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+        );
+
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
+}
+
+namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+    return tx.GetCreateSysView().GetName();
+}
+
+template <>
+bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableCreateSysView()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
+
+ISubOperation::TPtr CreateNewSysView(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateSysView>(id, tx);
+}
+
+ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state) {
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
+    return MakeSubOperation<TCreateSysView>(id, state);
+}
+
+}
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

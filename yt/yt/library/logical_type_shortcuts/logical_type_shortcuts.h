@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yt/yt/client/table_client/logical_type.h>
 
 /**
@@ -51,6 +53,13 @@ CREATE_SIMPLE_TYPE_FUNCTION(Datetime64)
 CREATE_SIMPLE_TYPE_FUNCTION(Timestamp64)
 CREATE_SIMPLE_TYPE_FUNCTION(Interval64)
 
+CREATE_SIMPLE_TYPE_FUNCTION(TzDate)
+CREATE_SIMPLE_TYPE_FUNCTION(TzDatetime)
+CREATE_SIMPLE_TYPE_FUNCTION(TzTimestamp)
+CREATE_SIMPLE_TYPE_FUNCTION(TzDate32)
+CREATE_SIMPLE_TYPE_FUNCTION(TzDatetime64)
+CREATE_SIMPLE_TYPE_FUNCTION(TzTimestamp64)
+
 #undef CREATE_SIMPLE_TYPE_FUNCTION
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,19 +96,28 @@ inline TLogicalTypePtr Tuple(const T&... args)
 }
 
 namespace NPrivate {
+
+////////////////////////////////////////////////////////////////////////////////
+
 inline void StructFieldList(std::vector<TStructField>* /*fields*/)
 { }
 
 template <typename... T>
 inline void StructFieldList(
     std::vector<TStructField>* fields,
-    const TString& name,
+    const std::string& name,
     const TLogicalTypePtr& type,
     const T&... args)
 {
-    fields->push_back({name, type});
+    fields->push_back({
+        .Name = name,
+        .StableName = name,
+        .Type = type,
+    });
     StructFieldList(fields, args...);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NPrivate
 
@@ -108,7 +126,7 @@ inline TLogicalTypePtr Struct(const T&... args)
 {
     std::vector<TStructField> fields;
     NPrivate::StructFieldList(&fields, args...);
-    return StructLogicalType(fields);
+    return StructLogicalType(std::move(fields), /*removedFieldStableNames*/ {});
 }
 
 template <typename... T>
@@ -122,7 +140,7 @@ inline TLogicalTypePtr VariantStruct(const T&... args)
 {
     std::vector<TStructField> fields;
     NPrivate::StructFieldList(&fields, args...);
-    return VariantStructLogicalType(fields);
+    return VariantStructLogicalType(std::move(fields));
 }
 
 inline TLogicalTypePtr Dict(const TLogicalTypePtr& key, const TLogicalTypePtr& value)
@@ -130,9 +148,14 @@ inline TLogicalTypePtr Dict(const TLogicalTypePtr& key, const TLogicalTypePtr& v
     return DictLogicalType(key, value);
 }
 
-inline TLogicalTypePtr Tagged(TString tag, const TLogicalTypePtr& element)
+inline TLogicalTypePtr Tagged(std::string tag, const TLogicalTypePtr& element)
 {
     return TaggedLogicalType(std::move(tag), element);
+}
+
+inline TLogicalTypePtr AggregateState(EAggregateFunction function, const TLogicalTypePtr& argumentType)
+{
+    return AggregateStateLogicalType(function, argumentType);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

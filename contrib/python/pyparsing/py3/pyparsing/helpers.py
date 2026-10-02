@@ -16,14 +16,18 @@ from .util import (
 )
 
 
+def _suppression(expr: Union[ParserElement, str]) -> ParserElement:
+    # internal helper to avoid wrapping Suppress inside another Suppress
+    if isinstance(expr, Suppress):
+        return expr
+    return Suppress(expr)
+
+
 #
 # global helpers
 #
 def counted_array(
-    expr: ParserElement,
-    int_expr: typing.Optional[ParserElement] = None,
-    *,
-    intExpr: typing.Optional[ParserElement] = None,
+    expr: ParserElement, int_expr: typing.Optional[ParserElement] = None, **kwargs
 ) -> ParserElement:
     """Helper to define a counted list of expressions.
 
@@ -38,28 +42,43 @@ def counted_array(
     If ``int_expr`` is specified, it should be a pyparsing expression
     that produces an integer value.
 
-    Example::
+    Examples:
 
-        counted_array(Word(alphas)).parse_string('2 ab cd ef')  # -> ['ab', 'cd']
+    .. doctest::
 
-        # in this parser, the leading integer value is given in binary,
-        # '10' indicating that 2 values are in the array
-        binary_constant = Word('01').set_parse_action(lambda t: int(t[0], 2))
-        counted_array(Word(alphas), int_expr=binary_constant).parse_string('10 ab cd ef')  # -> ['ab', 'cd']
+        >>> counted_array(Word(alphas)).parse_string('2 ab cd ef')
+        ParseResults(['ab', 'cd'], {})
 
-        # if other fields must be parsed after the count but before the
-        # list items, give the fields results names and they will
-        # be preserved in the returned ParseResults:
-        count_with_metadata = integer + Word(alphas)("type")
-        typed_array = counted_array(Word(alphanums), int_expr=count_with_metadata)("items")
-        result = typed_array.parse_string("3 bool True True False")
-        print(result.dump())
+    - In this parser, the leading integer value is given in binary,
+      '10' indicating that 2 values are in the array:
 
-        # prints
-        # ['True', 'True', 'False']
-        # - items: ['True', 'True', 'False']
-        # - type: 'bool'
+      .. doctest::
+
+        >>> binary_constant = Word('01').set_parse_action(lambda t: int(t[0], 2))
+        >>> counted_array(Word(alphas), int_expr=binary_constant
+        ...     ).parse_string('10 ab cd ef')
+        ParseResults(['ab', 'cd'], {})
+
+    - If other fields must be parsed after the count but before the
+      list items, give the fields results names and they will
+      be preserved in the returned ParseResults:
+
+      .. doctest::
+
+         >>> ppc = pyparsing.common
+         >>> count_with_metadata = ppc.integer + Word(alphas)("type")
+         >>> typed_array = counted_array(Word(alphanums),
+         ...     int_expr=count_with_metadata)("items")
+         >>> result = typed_array.parse_string("3 bool True True False")
+         >>> print(result.dump())
+         ['True', 'True', 'False']
+         - items: ['True', 'True', 'False']
+         - type: 'bool'
     """
+    intExpr: typing.Optional[ParserElement] = deprecate_argument(
+        kwargs, "intExpr", None
+    )
+
     intExpr = intExpr or int_expr
     array_expr = Forward()
 
@@ -84,9 +103,11 @@ def match_previous_literal(expr: ParserElement) -> ParserElement:
     the tokens matched in a previous expression, that is, it looks for
     a 'repeat' of a previous expression.  For example::
 
-        first = Word(nums)
-        second = match_previous_literal(first)
-        match_expr = first + ":" + second
+    .. testcode::
+
+       first = Word(nums)
+       second = match_previous_literal(first)
+       match_expr = first + ":" + second
 
     will match ``"1:1"``, but not ``"1:2"``.  Because this
     matches a previous literal, will also match the leading
@@ -109,19 +130,21 @@ def match_previous_literal(expr: ParserElement) -> ParserElement:
         tflat = _flatten(t.as_list())
         rep << And(Literal(tt) for tt in tflat)
 
-    expr.add_parse_action(copy_token_to_repeater, callDuringTry=True)
-    rep.set_name("(prev) " + str(expr))
+    expr.add_parse_action(copy_token_to_repeater, call_during_try=True)
+    rep.set_name(f"(prev) {expr}")
     return rep
 
 
 def match_previous_expr(expr: ParserElement) -> ParserElement:
     """Helper to define an expression that is indirectly defined from
     the tokens matched in a previous expression, that is, it looks for
-    a 'repeat' of a previous expression.  For example::
+    a 'repeat' of a previous expression.  For example:
 
-        first = Word(nums)
-        second = match_previous_expr(first)
-        match_expr = first + ":" + second
+    .. testcode::
+
+       first = Word(nums)
+       second = match_previous_expr(first)
+       match_expr = first + ":" + second
 
     will match ``"1:1"``, but not ``"1:2"``.  Because this
     matches by expressions, will *not* match the leading ``"1:1"``
@@ -143,10 +166,10 @@ def match_previous_expr(expr: ParserElement) -> ParserElement:
                     s, l, f"Expected {matchTokens}, found{theseTokens}"
                 )
 
-        rep.set_parse_action(must_match_these_tokens, callDuringTry=True)
+        rep.set_parse_action(must_match_these_tokens, call_during_try=True)
 
-    expr.add_parse_action(copy_token_to_repeater, callDuringTry=True)
-    rep.set_name("(prev) " + str(expr))
+    expr.add_parse_action(copy_token_to_repeater, call_during_try=True)
+    rep.set_name(f"(prev) {expr}")
     return rep
 
 
@@ -155,42 +178,46 @@ def one_of(
     caseless: bool = False,
     use_regex: bool = True,
     as_keyword: bool = False,
-    *,
-    useRegex: bool = True,
-    asKeyword: bool = False,
+    **kwargs,
 ) -> ParserElement:
     """Helper to quickly define a set of alternative :class:`Literal` s,
     and makes sure to do longest-first testing when there is a conflict,
     regardless of the input order, but returns
     a :class:`MatchFirst` for best performance.
 
-    Parameters:
+    :param strs: a string of space-delimited literals, or a collection of
+       string literals
+    :param caseless: treat all literals as caseless
+    :param use_regex: bool - as an optimization, will
+       generate a :class:`Regex` object; otherwise, will generate
+       a :class:`MatchFirst` object (if ``caseless=True`` or
+       ``as_keyword=True``, or if creating a :class:`Regex` raises an exception)
+    :param as_keyword: bool - enforce :class:`Keyword`-style matching on the
+       generated expressions
 
-    - ``strs`` - a string of space-delimited literals, or a collection of
-      string literals
-    - ``caseless`` - treat all literals as caseless - (default= ``False``)
-    - ``use_regex`` - as an optimization, will
-      generate a :class:`Regex` object; otherwise, will generate
-      a :class:`MatchFirst` object (if ``caseless=True`` or ``as_keyword=True``, or if
-      creating a :class:`Regex` raises an exception) - (default= ``True``)
-    - ``as_keyword`` - enforce :class:`Keyword`-style matching on the
-      generated expressions - (default= ``False``)
-    - ``asKeyword`` and ``useRegex`` are retained for pre-PEP8 compatibility,
-      but will be removed in a future release
+    Parameters ``asKeyword`` and ``useRegex`` are retained for pre-PEP8
+    compatibility, but will be removed in a future release.
 
-    Example::
+    Example:
 
-        comp_oper = one_of("< = > <= >= !=")
-        var = Word(alphas)
-        number = Word(nums)
-        term = var | number
-        comparison_expr = term + comp_oper + term
-        print(comparison_expr.search_string("B = 12  AA=23 B<=AA AA>12"))
+    .. testcode::
 
-    prints::
+       comp_oper = one_of("< = > <= >= !=")
+       var = Word(alphas)
+       number = Word(nums)
+       term = var | number
+       comparison_expr = term + comp_oper + term
+       print(comparison_expr.search_string("B = 12  AA=23 B<=AA AA>12"))
 
-        [['B', '=', '12'], ['AA', '=', '23'], ['B', '<=', 'AA'], ['AA', '>', '12']]
+    prints:
+
+    .. testoutput::
+
+       [['B', '=', '12'], ['AA', '=', '23'], ['B', '<=', 'AA'], ['AA', '>', '12']]
     """
+    useRegex: bool = deprecate_argument(kwargs, "useRegex", True)
+    asKeyword: bool = deprecate_argument(kwargs, "asKeyword", False)
+
     asKeyword = asKeyword or as_keyword
     useRegex = useRegex and use_regex
 
@@ -202,17 +229,16 @@ def one_of(
             "warn_on_multiple_string_args_to_oneof:"
             " More than one string argument passed to one_of, pass"
             " choices as a list or space-delimited string",
+            PyparsingDiagnosticWarning,
             stacklevel=2,
         )
 
     if caseless:
         is_equal = lambda a, b: a.upper() == b.upper()
         masks = lambda a, b: b.upper().startswith(a.upper())
-        parse_element_class = CaselessKeyword if asKeyword else CaselessLiteral
     else:
         is_equal = operator.eq
         masks = lambda a, b: b.startswith(a)
-        parse_element_class = Keyword if asKeyword else Literal
 
     symbols: list[str]
     if isinstance(strs, str_type):
@@ -255,7 +281,8 @@ def one_of(
             if asKeyword:
                 patt = rf"\b(?:{patt})\b"
 
-            ret = Regex(patt, flags=re_flags).set_name(" | ".join(symbols))
+            ret = Regex(patt, flags=re_flags)
+            ret.set_name(" | ".join(repr(s) for s in symbols))
 
             if caseless:
                 # add parse action to return symbols as specified, not in random
@@ -267,16 +294,26 @@ def one_of(
 
         except re.error:
             warnings.warn(
-                "Exception creating Regex for one_of, building MatchFirst", stacklevel=2
+                "Exception creating Regex for one_of, building MatchFirst",
+                PyparsingDiagnosticWarning,
+                stacklevel=2,
             )
 
-    # last resort, just use MatchFirst
+    # last resort, just use MatchFirst of Token class corresponding to caseless
+    # and asKeyword settings
+    CASELESS = KEYWORD = True
+    parse_element_class = {
+        (CASELESS, KEYWORD): CaselessKeyword,
+        (CASELESS, not KEYWORD): CaselessLiteral,
+        (not CASELESS, KEYWORD): Keyword,
+        (not CASELESS, not KEYWORD): Literal,
+    }[(caseless, asKeyword)]
     return MatchFirst(parse_element_class(sym) for sym in symbols).set_name(
         " | ".join(symbols)
     )
 
 
-def dict_of(key: ParserElement, value: ParserElement) -> ParserElement:
+def dict_of(key: ParserElement, value: ParserElement) -> Dict:
     """Helper to easily and clearly define a dictionary by specifying
     the respective patterns for the key and value.  Takes care of
     defining the :class:`Dict`, :class:`ZeroOrMore`, and
@@ -286,38 +323,55 @@ def dict_of(key: ParserElement, value: ParserElement) -> ParserElement:
     pattern can include named results, so that the :class:`Dict` results
     can include named token fields.
 
-    Example::
+    Example:
 
-        text = "shape: SQUARE posn: upper left color: light blue texture: burlap"
-        attr_expr = (label + Suppress(':') + OneOrMore(data_word, stop_on=label).set_parse_action(' '.join))
-        print(attr_expr[1, ...].parse_string(text).dump())
+    .. doctest::
 
-        attr_label = label
-        attr_value = Suppress(':') + OneOrMore(data_word, stop_on=label).set_parse_action(' '.join)
+       >>> text = "shape: SQUARE posn: upper left color: light blue texture: burlap"
 
-        # similar to Dict, but simpler call format
-        result = dict_of(attr_label, attr_value).parse_string(text)
-        print(result.dump())
-        print(result['shape'])
-        print(result.shape)  # object attribute access works too
-        print(result.as_dict())
+       >>> data_word = Word(alphas)
+       >>> label = data_word + FollowedBy(':')
+       >>> attr_expr = (
+       ...    label
+       ...    + Suppress(':')
+       ...    + OneOrMore(data_word, stop_on=label)
+       ...    .set_parse_action(' '.join))
+       >>> print(attr_expr[1, ...].parse_string(text).dump())
+       ['shape', 'SQUARE', 'posn', 'upper left', 'color', 'light blue', 'texture', 'burlap']
 
-    prints::
+       >>> attr_label = label
+       >>> attr_value = Suppress(':') + OneOrMore(data_word, stop_on=label
+       ...   ).set_parse_action(' '.join)
 
-        [['shape', 'SQUARE'], ['posn', 'upper left'], ['color', 'light blue'], ['texture', 'burlap']]
-        - color: 'light blue'
-        - posn: 'upper left'
-        - shape: 'SQUARE'
-        - texture: 'burlap'
-        SQUARE
-        SQUARE
-        {'color': 'light blue', 'shape': 'SQUARE', 'posn': 'upper left', 'texture': 'burlap'}
+       # similar to Dict, but simpler call format
+       >>> result = dict_of(attr_label, attr_value).parse_string(text)
+       >>> print(result.dump())
+       [['shape', 'SQUARE'], ['posn', 'upper left'], ['color', 'light blue'], ['texture', 'burlap']]
+       - color: 'light blue'
+       - posn: 'upper left'
+       - shape: 'SQUARE'
+       - texture: 'burlap'
+       [0]:
+         ['shape', 'SQUARE']
+       [1]:
+         ['posn', 'upper left']
+       [2]:
+         ['color', 'light blue']
+       [3]:
+         ['texture', 'burlap']
+
+       >>> print(result['shape'])
+       SQUARE
+       >>> print(result.shape)  # object attribute access works too
+       SQUARE
+       >>> print(result.as_dict())
+       {'shape': 'SQUARE', 'posn': 'upper left', 'color': 'light blue', 'texture': 'burlap'}
     """
     return Dict(OneOrMore(Group(key + value)))
 
 
 def original_text_for(
-    expr: ParserElement, as_string: bool = True, *, asString: bool = True
+    expr: ParserElement, as_string: bool = True, **kwargs
 ) -> ParserElement:
     """Helper to return the original, untokenized text for a given
     expression.  Useful to restore the parsed fields of an HTML start
@@ -337,19 +391,25 @@ def original_text_for(
     The ``asString`` pre-PEP8 argument is retained for compatibility,
     but will be removed in a future release.
 
-    Example::
+    Example:
 
-        src = "this is test <b> bold <i>text</i> </b> normal text "
-        for tag in ("b", "i"):
-            opener, closer = make_html_tags(tag)
-            patt = original_text_for(opener + ... + closer)
-            print(patt.search_string(src)[0])
+    .. testcode::
 
-    prints::
+       src = "this is test <b> bold <i>text</i> </b> normal text "
+       for tag in ("b", "i"):
+           opener, closer = make_html_tags(tag)
+           patt = original_text_for(opener + ... + closer)
+           print(patt.search_string(src)[0])
 
-        ['<b> bold <i>text</i> </b>']
-        ['<i>text</i>']
+    prints:
+
+    .. testoutput::
+
+       ['<b> bold <i>text</i> </b>']
+       ['<i>text</i>']
     """
+    asString: bool = deprecate_argument(kwargs, "asString", True)
+
     asString = asString and as_string
 
     locMarker = Empty().set_parse_action(lambda s, loc, t: loc)
@@ -378,7 +438,10 @@ def ungroup(expr: ParserElement) -> ParserElement:
 
 def locatedExpr(expr: ParserElement) -> ParserElement:
     """
-    (DEPRECATED - future code should use the :class:`Located` class)
+    .. deprecated:: 3.0.0
+       Use the :class:`Located` class instead. Note that `Located`
+       returns results with one less grouping level.
+
     Helper to decorate a returned token with its starting and ending
     locations in the input string.
 
@@ -389,51 +452,50 @@ def locatedExpr(expr: ParserElement) -> ParserElement:
     - ``value`` - the actual parsed results
 
     Be careful if the input text contains ``<TAB>`` characters, you
-    may want to call :class:`ParserElement.parse_with_tabs`
-
-    Example::
-
-        wd = Word(alphas)
-        for match in locatedExpr(wd).search_string("ljsdf123lksdjjf123lkkjj1222"):
-            print(match)
-
-    prints::
-
-        [[0, 'ljsdf', 5]]
-        [[8, 'lksdjjf', 15]]
-        [[18, 'lkkjj', 23]]
+    may want to call :meth:`ParserElement.parse_with_tabs`
     """
+    warnings.warn(
+        f"{'locatedExpr'!r} deprecated - use {'Located'!r}",
+        PyparsingDeprecationWarning,
+        stacklevel=2,
+    )
+
     locator = Empty().set_parse_action(lambda ss, ll, tt: ll)
     return Group(
         locator("locn_start")
         + expr("value")
-        + locator.copy().leaveWhitespace()("locn_end")
+        + locator.copy().leave_whitespace()("locn_end")
     )
+
+
+# define special default value to permit None as a significant value for
+# ignore_expr
+_NO_IGNORE_EXPR_GIVEN = NoMatch()
 
 
 def nested_expr(
     opener: Union[str, ParserElement] = "(",
     closer: Union[str, ParserElement] = ")",
     content: typing.Optional[ParserElement] = None,
-    ignore_expr: ParserElement = quoted_string(),
-    *,
-    ignoreExpr: ParserElement = quoted_string(),
+    ignore_expr: typing.Optional[ParserElement] = _NO_IGNORE_EXPR_GIVEN,
+    **kwargs,
 ) -> ParserElement:
     """Helper method for defining nested lists enclosed in opening and
     closing delimiters (``"("`` and ``")"`` are the default).
 
-    Parameters:
+    :param opener: str - opening character for a nested list
+       (default= ``"("``); can also be a pyparsing expression
 
-    - ``opener`` - opening character for a nested list
-      (default= ``"("``); can also be a pyparsing expression
-    - ``closer`` - closing character for a nested list
-      (default= ``")"``); can also be a pyparsing expression
-    - ``content`` - expression for items within the nested lists
-      (default= ``None``)
-    - ``ignore_expr`` - expression for ignoring opening and closing delimiters
-      (default= :class:`quoted_string`)
-    - ``ignoreExpr`` - this pre-PEP8 argument is retained for compatibility
-      but will be removed in a future release
+    :param closer: str - closing character for a nested list
+       (default= ``")"``); can also be a pyparsing expression
+
+    :param content: expression for items within the nested lists
+
+    :param ignore_expr: expression for ignoring opening and closing delimiters
+       (default = :class:`quoted_string`)
+
+    Parameter ``ignoreExpr`` is retained for compatibility
+    but will be removed in a future release.
 
     If an expression is not provided for the content argument, the
     nested expression will capture all whitespace-delimited content
@@ -447,49 +509,62 @@ def nested_expr(
     :class:`quoted_string`, but if no expressions are to be ignored, then
     pass ``None`` for this argument.
 
-    Example::
+    Example:
 
-        data_type = one_of("void int short long char float double")
-        decl_data_type = Combine(data_type + Opt(Word('*')))
-        ident = Word(alphas+'_', alphanums+'_')
-        number = pyparsing_common.number
-        arg = Group(decl_data_type + ident)
-        LPAR, RPAR = map(Suppress, "()")
+    .. testcode::
 
-        code_body = nested_expr('{', '}', ignore_expr=(quoted_string | c_style_comment))
+       data_type = one_of("void int short long char float double")
+       decl_data_type = Combine(data_type + Opt(Word('*')))
+       ident = Word(alphas+'_', alphanums+'_')
+       number = pyparsing_common.number
+       arg = Group(decl_data_type + ident)
+       LPAR, RPAR = map(Suppress, "()")
 
-        c_function = (decl_data_type("type")
-                      + ident("name")
-                      + LPAR + Opt(DelimitedList(arg), [])("args") + RPAR
-                      + code_body("body"))
-        c_function.ignore(c_style_comment)
+       code_body = nested_expr('{', '}', ignore_expr=(quoted_string | c_style_comment))
 
-        source_code = '''
-            int is_odd(int x) {
-                return (x%2);
-            }
+       c_function = (decl_data_type("type")
+                     + ident("name")
+                     + LPAR + Opt(DelimitedList(arg), [])("args") + RPAR
+                     + code_body("body"))
+       c_function.ignore(c_style_comment)
 
-            int dec_to_hex(char hchar) {
-                if (hchar >= '0' && hchar <= '9') {
-                    return (ord(hchar)-ord('0'));
-                } else {
-                    return (10+ord(hchar)-ord('A'));
-                }
-            }
-        '''
-        for func in c_function.search_string(source_code):
-            print("%(name)s (%(type)s) args: %(args)s" % func)
+       source_code = '''
+           int is_odd(int x) {
+               return (x%2);
+           }
+
+           int dec_to_hex(char hchar) {
+               if (hchar >= '0' && hchar <= '9') {
+                   return (ord(hchar)-ord('0'));
+               } else {
+                   return (10+ord(hchar)-ord('A'));
+               }
+           }
+       '''
+       for func in c_function.search_string(source_code):
+           print(f"{func.name} ({func.type}) args: {func.args}")
 
 
-    prints::
+    prints:
 
-        is_odd (int) args: [['int', 'x']]
-        dec_to_hex (int) args: [['char', 'hchar']]
+    .. testoutput::
+
+       is_odd (int) args: [['int', 'x']]
+       dec_to_hex (int) args: [['char', 'hchar']]
     """
+    ignoreExpr: ParserElement = deprecate_argument(
+        kwargs, "ignoreExpr", _NO_IGNORE_EXPR_GIVEN
+    )
+
     if ignoreExpr != ignore_expr:
-        ignoreExpr = ignore_expr if ignoreExpr == quoted_string() else ignoreExpr
+        ignoreExpr = ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr  # type: ignore [assignment]
+
+    if ignoreExpr is _NO_IGNORE_EXPR_GIVEN:
+        ignoreExpr = quoted_string()
+
     if opener == closer:
         raise ValueError("opening and closing strings cannot be the same")
+
     if content is None:
         if isinstance(opener, str_type) and isinstance(closer, str_type):
             opener = typing.cast(str, opener)
@@ -504,11 +579,14 @@ def nested_expr(
                                 exact=1,
                             )
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
                 else:
-                    content = empty.copy() + CharsNotIn(
-                        opener + closer + ParserElement.DEFAULT_WHITE_CHARS
-                    ).set_parse_action(lambda t: t[0].strip())
+                    content = Combine(
+                        Empty()
+                        + CharsNotIn(
+                            opener + closer + ParserElement.DEFAULT_WHITE_CHARS
+                        )
+                    )
             else:
                 if ignoreExpr is not None:
                     content = Combine(
@@ -518,7 +596,7 @@ def nested_expr(
                             + ~Literal(closer)
                             + CharsNotIn(ParserElement.DEFAULT_WHITE_CHARS, exact=1)
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
                 else:
                     content = Combine(
                         OneOrMore(
@@ -526,26 +604,40 @@ def nested_expr(
                             + ~Literal(closer)
                             + CharsNotIn(ParserElement.DEFAULT_WHITE_CHARS, exact=1)
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
         else:
             raise ValueError(
                 "opening and closing arguments must be strings if no content expression is given"
             )
+
+        # for these internally-created context expressions, simulate whitespace-skipping
+        if ParserElement.DEFAULT_WHITE_CHARS:
+            content.set_parse_action(
+                lambda t: t[0].strip(ParserElement.DEFAULT_WHITE_CHARS)
+            )
+
     ret = Forward()
     if ignoreExpr is not None:
         ret <<= Group(
-            Suppress(opener) + ZeroOrMore(ignoreExpr | ret | content) + Suppress(closer)
+            _suppression(opener)
+            + ZeroOrMore(ignoreExpr | ret | content)
+            + _suppression(closer)
         )
     else:
-        ret <<= Group(Suppress(opener) + ZeroOrMore(ret | content) + Suppress(closer))
+        ret <<= Group(
+            _suppression(opener) + ZeroOrMore(ret | content) + _suppression(closer)
+        )
+
     ret.set_name(f"nested {opener}{closer} expression")
+
     # don't override error message from content expressions
     ret.errmsg = None
     return ret
 
 
 def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">")):
-    """Internal helper to construct opening and closing tag expressions, given a tag name"""
+    """Internal helper to construct opening and closing tag expressions,
+    given a tag name"""
     if isinstance(tagStr, str_type):
         resname = tagStr
         tagStr = Keyword(tagStr, caseless=not xml)
@@ -603,34 +695,38 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
 
 
 def make_html_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for HTML,
     given a tag name. Matches tags in either upper or lower case,
     attributes with namespaces and with quoted or unquoted values.
 
-    Example::
+    Example:
 
-        text = '<td>More info at the <a href="https://github.com/pyparsing/pyparsing/wiki">pyparsing</a> wiki page</td>'
-        # make_html_tags returns pyparsing expressions for the opening and
-        # closing tags as a 2-tuple
-        a, a_end = make_html_tags("A")
-        link_expr = a + SkipTo(a_end)("link_text") + a_end
+    .. testcode::
 
-        for link in link_expr.search_string(text):
-            # attributes in the <A> tag (like "href" shown here) are
-            # also accessible as named results
-            print(link.link_text, '->', link.href)
+       text = '<td>More info at the <a href="https://github.com/pyparsing/pyparsing/wiki">pyparsing</a> wiki page</td>'
+       # make_html_tags returns pyparsing expressions for the opening and
+       # closing tags as a 2-tuple
+       a, a_end = make_html_tags("A")
+       link_expr = a + SkipTo(a_end)("link_text") + a_end
 
-    prints::
+       for link in link_expr.search_string(text):
+           # attributes in the <A> tag (like "href" shown here) are
+           # also accessible as named results
+           print(link.link_text, '->', link.href)
 
-        pyparsing -> https://github.com/pyparsing/pyparsing/wiki
+    prints:
+
+    .. testoutput::
+
+       pyparsing -> https://github.com/pyparsing/pyparsing/wiki
     """
     return _makeTags(tag_str, False)
 
 
 def make_xml_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for XML,
     given a tag name. Matches tags only in the given upper/lower case.
@@ -691,7 +787,7 @@ def infix_notation(
     op_list: list[InfixNotationOperatorSpec],
     lpar: Union[str, ParserElement] = Suppress("("),
     rpar: Union[str, ParserElement] = Suppress(")"),
-) -> ParserElement:
+) -> Forward:
     """Helper method for constructing grammars of expressions made up of
     operators working in a precedence hierarchy.  Operators may be unary
     or binary, left- or right-associative.  Parse actions can also be
@@ -706,69 +802,77 @@ def infix_notation(
 
     Parameters:
 
-    - ``base_expr`` - expression representing the most basic operand to
-      be used in the expression
-    - ``op_list`` - list of tuples, one for each operator precedence level
-      in the expression grammar; each tuple is of the form ``(op_expr,
-      num_operands, right_left_assoc, (optional)parse_action)``, where:
+    :param base_expr: expression representing the most basic operand to
+       be used in the expression
+    :param op_list: list of tuples, one for each operator precedence level
+       in the expression grammar; each tuple is of the form ``(op_expr,
+       num_operands, right_left_assoc, (optional)parse_action)``, where:
 
-      - ``op_expr`` is the pyparsing expression for the operator; may also
-        be a string, which will be converted to a Literal; if ``num_operands``
-        is 3, ``op_expr`` is a tuple of two expressions, for the two
-        operators separating the 3 terms
-      - ``num_operands`` is the number of terms for this operator (must be 1,
-        2, or 3)
-      - ``right_left_assoc`` is the indicator whether the operator is right
-        or left associative, using the pyparsing-defined constants
-        ``OpAssoc.RIGHT`` and ``OpAssoc.LEFT``.
-      - ``parse_action`` is the parse action to be associated with
-        expressions matching this operator expression (the parse action
-        tuple member may be omitted); if the parse action is passed
-        a tuple or list of functions, this is equivalent to calling
-        ``set_parse_action(*fn)``
-        (:class:`ParserElement.set_parse_action`)
-    - ``lpar`` - expression for matching left-parentheses; if passed as a
-      str, then will be parsed as ``Suppress(lpar)``. If lpar is passed as
-      an expression (such as ``Literal('(')``), then it will be kept in
-      the parsed results, and grouped with them. (default= ``Suppress('(')``)
-    - ``rpar`` - expression for matching right-parentheses; if passed as a
-      str, then will be parsed as ``Suppress(rpar)``. If rpar is passed as
-      an expression (such as ``Literal(')')``), then it will be kept in
-      the parsed results, and grouped with them. (default= ``Suppress(')')``)
+       - ``op_expr`` is the pyparsing expression for the operator; may also
+         be a string, which will be converted to a Literal; if ``num_operands``
+         is 3, ``op_expr`` is a tuple of two expressions, for the two
+         operators separating the 3 terms
+       - ``num_operands`` is the number of terms for this operator (must be 1,
+         2, or 3)
+       - ``right_left_assoc`` is the indicator whether the operator is right
+         or left associative, using the pyparsing-defined constants
+         ``OpAssoc.RIGHT`` and ``OpAssoc.LEFT``.
+       - ``parse_action`` is the parse action to be associated with
+         expressions matching this operator expression (the parse action
+         tuple member may be omitted); if the parse action is passed
+         a tuple or list of functions, this is equivalent to calling
+         ``set_parse_action(*fn)``
+         (:class:`ParserElement.set_parse_action`)
 
-    Example::
+    :param lpar: expression for matching left-parentheses; if passed as a
+       str, then will be parsed as ``Suppress(lpar)``. If lpar is passed as
+       an expression (such as ``Literal('(')``), then it will be kept in
+       the parsed results, and grouped with them. (default= ``Suppress('(')``)
+    :param rpar: expression for matching right-parentheses; if passed as a
+       str, then will be parsed as ``Suppress(rpar)``. If rpar is passed as
+       an expression (such as ``Literal(')')``), then it will be kept in
+       the parsed results, and grouped with them. (default= ``Suppress(')')``)
 
-        # simple example of four-function arithmetic with ints and
-        # variable names
-        integer = pyparsing_common.signed_integer
-        varname = pyparsing_common.identifier
+    Example:
 
-        arith_expr = infix_notation(integer | varname,
-            [
-            ('-', 1, OpAssoc.RIGHT),
-            (one_of('* /'), 2, OpAssoc.LEFT),
-            (one_of('+ -'), 2, OpAssoc.LEFT),
-            ])
+    .. testcode::
 
-        arith_expr.run_tests('''
-            5+3*6
-            (5+3)*6
-            -2--11
-            ''', full_dump=False)
+       # simple example of four-function arithmetic with ints and
+       # variable names
+       integer = pyparsing_common.signed_integer
+       varname = pyparsing_common.identifier
 
-    prints::
+       arith_expr = infix_notation(integer | varname,
+           [
+           ('-', 1, OpAssoc.RIGHT),
+           (one_of('* /'), 2, OpAssoc.LEFT),
+           (one_of('+ -'), 2, OpAssoc.LEFT),
+           ])
 
-        5+3*6
-        [[5, '+', [3, '*', 6]]]
+       arith_expr.run_tests('''
+           5+3*6
+           (5+3)*6
+           (5+x)*y
+           -2--11
+           ''', full_dump=False)
 
-        (5+3)*6
-        [[[5, '+', 3], '*', 6]]
+    prints:
 
-        (5+x)*y
-        [[[5, '+', 'x'], '*', 'y']]
+    .. testoutput::
+       :options: +NORMALIZE_WHITESPACE
 
-        -2--11
-        [[['-', 2], '-', ['-', 11]]]
+
+       5+3*6
+       [[5, '+', [3, '*', 6]]]
+
+       (5+3)*6
+       [[[5, '+', 3], '*', 6]]
+
+       (5+x)*y
+       [[[5, '+', 'x'], '*', 'y']]
+
+       -2--11
+       [[['-', 2], '-', ['-', 11]]]
     """
 
     # captive version of FollowedBy that does not do parse actions or capture results names
@@ -786,7 +890,7 @@ def infix_notation(
     if isinstance(rpar, str):
         rpar = Suppress(rpar)
 
-    nested_expr = (lpar + ret + rpar).set_name(f"nested_{base_expr.name}")
+    nested_expr = (lpar + ret + rpar).set_name(f"nested_{base_expr.name}_expression")
 
     # if lpar and rpar are not suppressed, wrap in group
     if not (isinstance(lpar, Suppress) and isinstance(rpar, Suppress)):
@@ -876,7 +980,7 @@ def infix_notation(
             else:
                 matchExpr.set_parse_action(pa)
 
-        thisExpr <<= (matchExpr | lastExpr).setName(term_name)
+        thisExpr <<= (matchExpr | lastExpr).set_name(term_name)
         lastExpr = thisExpr
 
     ret <<= lastExpr
@@ -885,90 +989,101 @@ def infix_notation(
 
 def indentedBlock(blockStatementExpr, indentStack, indent=True, backup_stacks=[]):
     """
-    (DEPRECATED - use :class:`IndentedBlock` class instead)
+    .. deprecated:: 3.0.0
+       Use the :class:`IndentedBlock` class instead. Note that `IndentedBlock`
+       has a difference method signature.
+
     Helper method for defining space-delimited indentation blocks,
     such as those used to define block statements in Python source code.
 
-    Parameters:
-
-    - ``blockStatementExpr`` - expression defining syntax of statement that
+    :param blockStatementExpr: expression defining syntax of statement that
       is repeated within the indented block
-    - ``indentStack`` - list created by caller to manage indentation stack
+
+    :param indentStack: list created by caller to manage indentation stack
       (multiple ``statementWithIndentedBlock`` expressions within a single
       grammar should share a common ``indentStack``)
-    - ``indent`` - boolean indicating whether block must be indented beyond
+
+    :param indent: boolean indicating whether block must be indented beyond
       the current level; set to ``False`` for block of left-most statements
-      (default= ``True``)
 
     A valid block must contain at least one ``blockStatement``.
 
     (Note that indentedBlock uses internal parse actions which make it
     incompatible with packrat parsing.)
 
-    Example::
+    Example:
 
-        data = '''
-        def A(z):
-          A1
-          B = 100
-          G = A2
-          A2
-          A3
-        B
-        def BB(a,b,c):
-          BB1
-          def BBA():
-            bba1
-            bba2
-            bba3
-        C
-        D
-        def spam(x,y):
-             def eggs(z):
-                 pass
-        '''
+    .. testcode::
 
+       data = '''
+       def A(z):
+         A1
+         B = 100
+         G = A2
+         A2
+         A3
+       B
+       def BB(a,b,c):
+         BB1
+         def BBA():
+           bba1
+           bba2
+           bba3
+       C
+       D
+       def spam(x,y):
+            def eggs(z):
+                pass
+       '''
 
-        indentStack = [1]
-        stmt = Forward()
+       indentStack = [1]
+       stmt = Forward()
 
-        identifier = Word(alphas, alphanums)
-        funcDecl = ("def" + identifier + Group("(" + Opt(delimitedList(identifier)) + ")") + ":")
-        func_body = indentedBlock(stmt, indentStack)
-        funcDef = Group(funcDecl + func_body)
+       identifier = Word(alphas, alphanums)
+       funcDecl = ("def" + identifier + Group("(" + Opt(delimitedList(identifier)) + ")") + ":")
+       func_body = indentedBlock(stmt, indentStack)
+       funcDef = Group(funcDecl + func_body)
 
-        rvalue = Forward()
-        funcCall = Group(identifier + "(" + Opt(delimitedList(rvalue)) + ")")
-        rvalue << (funcCall | identifier | Word(nums))
-        assignment = Group(identifier + "=" + rvalue)
-        stmt << (funcDef | assignment | identifier)
+       rvalue = Forward()
+       funcCall = Group(identifier + "(" + Opt(delimitedList(rvalue)) + ")")
+       rvalue << (funcCall | identifier | Word(nums))
+       assignment = Group(identifier + "=" + rvalue)
+       stmt << (funcDef | assignment | identifier)
 
-        module_body = stmt[1, ...]
+       module_body = stmt[1, ...]
 
-        parseTree = module_body.parseString(data)
-        parseTree.pprint()
+       parseTree = module_body.parseString(data)
+       parseTree.pprint()
 
-    prints::
+    prints:
 
-        [['def',
-          'A',
-          ['(', 'z', ')'],
-          ':',
-          [['A1'], [['B', '=', '100']], [['G', '=', 'A2']], ['A2'], ['A3']]],
-         'B',
-         ['def',
-          'BB',
-          ['(', 'a', 'b', 'c', ')'],
-          ':',
-          [['BB1'], [['def', 'BBA', ['(', ')'], ':', [['bba1'], ['bba2'], ['bba3']]]]]],
-         'C',
-         'D',
-         ['def',
-          'spam',
-          ['(', 'x', 'y', ')'],
-          ':',
-          [[['def', 'eggs', ['(', 'z', ')'], ':', [['pass']]]]]]]
+    .. testoutput::
+
+       [['def',
+         'A',
+         ['(', 'z', ')'],
+         ':',
+         [['A1'], [['B', '=', '100']], [['G', '=', 'A2']], ['A2'], ['A3']]],
+        'B',
+        ['def',
+         'BB',
+         ['(', 'a', 'b', 'c', ')'],
+         ':',
+         [['BB1'], [['def', 'BBA', ['(', ')'], ':', [['bba1'], ['bba2'], ['bba3']]]]]],
+        'C',
+        'D',
+        ['def',
+         'spam',
+         ['(', 'x', 'y', ')'],
+         ':',
+         [[['def', 'eggs', ['(', 'z', ')'], ':', [['pass']]]]]]]
     """
+    warnings.warn(
+        f"{'indentedBlock'!r} deprecated - use {'IndentedBlock'!r}",
+        PyparsingDeprecationWarning,
+        stacklevel=2,
+    )
+
     backup_stacks.append(indentStack[:])
 
     def reset_stack():
@@ -1067,7 +1182,10 @@ def delimited_list(
     *,
     allow_trailing_delim: bool = False,
 ) -> ParserElement:
-    """(DEPRECATED - use :class:`DelimitedList` class)"""
+    """
+    .. deprecated:: 3.1.0
+       Use the :class:`DelimitedList` class instead.
+    """
     return DelimitedList(
         expr, delim, combine, min, max, allow_trailing_delim=allow_trailing_delim
     )

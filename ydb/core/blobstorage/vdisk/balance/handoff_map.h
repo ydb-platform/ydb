@@ -62,7 +62,13 @@ namespace NKikimr {
         void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
-            Y_DEBUG_ABORT_UNLESS(dataMerger.Empty());
+            Y_VERIFY_DEBUG_S(dataMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
+        }
+
+        // Transform() walks the map record by record; a second pass over the same records (a compaction that was
+        // planned first) starts it over.
+        void RestartTransform() {
+            Counter = 0;
         }
 
     private:
@@ -85,7 +91,7 @@ namespace NKikimr {
             return;
         }
 
-        Y_VERIFY(Counter < DelMap.size());
+        Y_VERIFY_S(Counter < DelMap.size(), HullCtx->VCtx->VDiskLogPrefix);
         TIngress ingress = memRec.GetIngress(); // ingress we are going to change
         ui8 vecSize = Top->GType.TotalPartCount();
 
@@ -110,7 +116,8 @@ namespace NKikimr {
         memRec.SetDiskBlob(TDiskPart(0, 0, dataMerger.GetInplacedBlobSize(key.LogoBlobID())));
         memRec.SetType(dataMerger.GetType());
 
-        Y_ABORT_UNLESS(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts());
+        Y_VERIFY_S(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts(),
+            HullCtx->VCtx->VDiskLogPrefix);
     }
 
     template<>
@@ -155,9 +162,7 @@ namespace NKikimr {
                                                                               newItem, doMerge, crash);
         }
 
-        LOG_INFO(*TlsActivationContext, NKikimrServices::BS_HANDOFF,
-                 VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                    "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
+        YDB_LOG_INFO_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_HANDOFF, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
     }
 
     ////////////////////////////////////////////////////////////////////////////

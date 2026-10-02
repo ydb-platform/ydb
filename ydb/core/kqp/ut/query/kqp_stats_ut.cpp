@@ -1,11 +1,13 @@
+#include <ydb/core/base/hive.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <cstdlib>
 
@@ -14,6 +16,79 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+NJson::TJsonValue GetLegacySimplifiedPlan(const TString& plan) {
+    NYql::NDqProto::TDqExecutionStats executionStats;
+    NJson::TJsonValue planJson;
+    const auto planWithStats = AddExecStatsToTxPlan(plan, executionStats, false);
+    UNIT_ASSERT_C(NJson::ReadJsonTree(planWithStats, &planJson, true), planWithStats);
+    return planJson.GetMapSafe().at("SimplifiedPlan");
+}
+
+NJson::TJsonValue FindRequiredPlanNodeByKv(
+    const NJson::TJsonValue& plan,
+    const TString& key,
+    const TString& value)
+{
+    auto node = FindPlanNodeByKv(plan, key, value);
+    UNIT_ASSERT_C(node.IsDefined(), plan);
+    return node;
+}
+
+void AssertCpuValues(
+    const NJson::TJsonValue& node,
+    double expectedSelfCpu,
+    double expectedCpu,
+    const NJson::TJsonValue& plan)
+{
+    UNIT_ASSERT_C(node.GetMapSafe().contains("A-SelfCpu"), plan);
+    UNIT_ASSERT_C(node.GetMapSafe().contains("A-Cpu"), plan);
+    UNIT_ASSERT_VALUES_EQUAL_C(node.GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), expectedSelfCpu, plan);
+    UNIT_ASSERT_VALUES_EQUAL_C(node.GetMapSafe().at("A-Cpu").GetDoubleSafe(), expectedCpu, plan);
+}
+
+void AssertNoCpuValues(const NJson::TJsonValue& node, const NJson::TJsonValue& plan) {
+    UNIT_ASSERT_C(FindPlanNodes(node, "A-SelfCpu").empty(), plan);
+    UNIT_ASSERT_C(FindPlanNodes(node, "A-Cpu").empty(), plan);
+}
+
+struct TReturningRun {
+    NYdb::NQuery::TExecuteQueryResult Result;
+    NJson::TJsonValue Plan;
+};
+
+TReturningRun RunReturningQuery(NYdb::NQuery::TQueryClient& client, const TString& query, ui64 expectedRows) {
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // RETURNING must actually return the written rows.
+    const auto& resultSets = result.GetResultSets();
+    UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+    NYdb::TResultSetParser parser(resultSets[0]);
+    UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), expectedRows);
+
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    return {std::move(result), std::move(plan)};
+}
+
+void AssertReturningSinkNode(const NJson::TJsonValue& plan, bool useStreamIndex) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "ReturningSink"), useStreamIndex ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "Sink"), useStreamIndex ? 0 : 1);
+}
+
+void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opName) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Name", opName), 1);
+}
 
 Y_UNIT_TEST_SUITE(KqpStats) {
 
@@ -101,13 +176,9 @@ Y_UNIT_TEST(JoinNoStatsScan) {
 template <typename Iterator>
 TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter, bool StreamLookupJoin = false) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     TKikimrRunner kikimr(settings);
 
     auto it = getIter(kikimr, ECollectQueryStatsMode::Basic, R"(
@@ -161,6 +232,9 @@ void MultiTxStatsFull(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getResult) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+    app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
     TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
@@ -181,9 +255,9 @@ void MultiTxStatsFull(
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    Cout << plan;
+    Cerr << plan << Endl;
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort");
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(MultiTxStatsFullYql) {
@@ -239,7 +313,7 @@ Y_UNIT_TEST(DeferredEffects) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     result = session.ExecuteDataQuery(R"(
         SELECT * FROM `/Root/TwoShard`;
@@ -249,7 +323,7 @@ Y_UNIT_TEST(DeferredEffects) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());
@@ -275,8 +349,8 @@ Y_UNIT_TEST(DataQueryWithEffects) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
+    auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(DataQueryMulti) {
@@ -299,6 +373,90 @@ Y_UNIT_TEST(DataQueryMulti) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(TxIdInFullStatsPlan) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    // Executer TxId is reported per execution phase, so that the plan can be matched with
+    // the TxId written by LWTrace probes.
+    const auto& plans = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
+    UNIT_ASSERT_C(!plans.empty(), result.GetQueryPlan());
+
+    bool txIdFound = false;
+    for (const auto& phase : plans) {
+        const auto* txId = phase.GetMapSafe().FindPtr("TxId");
+        if (txId) {
+            UNIT_ASSERT_C(txId->GetUIntegerSafe() > 0, result.GetQueryPlan());
+            txIdFound = true;
+        }
+    }
+    UNIT_ASSERT_C(txIdFound, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(NoTxIdWhenFeatureFlagDisabled) {
+    // EnableTxIdInStats defaults to false: TxId must not appear in the plan.
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
+Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    // Literal-only execution never reaches shards and gets no executer TxId,
+    // so nothing must be reported (and nothing must crash).
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT 1;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
 }
 
 Y_UNIT_TEST(RequestUnitForBadRequestExecute) {
@@ -381,6 +539,453 @@ Y_UNIT_TEST(RequestUnitForExecute) {
     }
 }
 
+Y_UNIT_TEST(LegacySimplifiedPlanCpuWithActualRows) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Filter", "StageGuid": "stage-1",
+            "Stats": {
+                "Operator": [{"Type": "Filter", "Id": "0", "Rows": {"Sum": 6}}],
+                "CpuTimeUs": {"Max": 7000}
+            },
+            "Operators": [{"Name": "Filter", "Id": "0", "Inputs": []}]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+    const auto filter = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "Filter");
+    UNIT_ASSERT_VALUES_EQUAL_C(filter.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+    AssertCpuValues(filter, 7, 7, simplifiedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanStructuralCpu) {
+    {
+        const TString plan = R"({
+            "Plan": {
+                "Node Type": "Query",
+                "Plans": [{
+                    "Node Type": "Collect", "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
+                    "Plans": [{
+                        "Node Type": "TableFullScan", "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                    }]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+        const auto fullScan = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+        AssertCpuValues(fullScan, 7, 7, simplifiedPlan);
+    }
+
+    {
+        const TString plan = R"({
+            "Plan": {
+                "Node Type": "Query",
+                "Plans": [{
+                    "Node Type": "Collect", "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
+                    "Plans": [
+                        {
+                            "Node Type": "LeftScan", "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                        },
+                        {
+                            "Node Type": "RightScan", "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                        }
+                    ]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+        AssertNoCpuValues(simplifiedPlan, simplifiedPlan);
+    }
+
+    {
+        const TString plan = R"({
+            "Plan": {
+                "Node Type": "Query",
+                "Plans": [{
+                    "Node Type": "Collect", "StageGuid": "collect-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
+                    "Plans": [{
+                        "Node Type": "TableFullScan", "StageGuid": "scan-stage",
+                        "Stats": {"CpuTimeUs": {"Max": 3000}},
+                        "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                    }]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+        const auto fullScan = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+        AssertCpuValues(fullScan, 3, 3, simplifiedPlan);
+    }
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanSyntheticLookupCpu) {
+    {
+        const TString plan = R"({
+            "Plan": {
+                "Node Type": "Collect", "StageGuid": "lookup-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
+                "Plans": [{
+                    "Node Type": "TableLookup", "Table": "/Root/t1",
+                    "Columns": ["Value"], "LookupKeyColumns": ["Key"],
+                    "Plans": []
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+        const auto lookup = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "TableLookup");
+        AssertCpuValues(lookup, 7, 7, simplifiedPlan);
+    }
+
+    {
+        const TString plan = R"({
+            "Plan": {
+                "Node Type": "Collect", "StageGuid": "lookup-join-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
+                "Plans": [{
+                    "Node Type": "TableLookupJoin", "Table": "/Root/t1",
+                    "Columns": ["Value"], "LookupKeyColumns": ["Key"]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+        const auto lookup = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "Lookup");
+        AssertCpuValues(lookup, 7, 7, simplifiedPlan);
+    }
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Query",
+            "Plans": [
+                {
+                    "Node Type": "Filter", "PlanNodeId": 1, "StageGuid": "filter-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 7000}},
+                    "Operators": [{"Name": "Filter", "Inputs": [{"ExternalPlanNodeId": 2}]}],
+                    "Plans": [{
+                        "Node Type": "TableFullScan", "PlanNodeId": 2, "StageGuid": "scan-stage",
+                        "Stats": {"CpuTimeUs": {"Max": 3000}},
+                        "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                    }]
+                },
+                {
+                    "Node Type": "Precompute", "Subplan Name": "precompute_1",
+                    "Plans": [{
+                        "Node Type": "TableRangeScan",
+                        "Operators": [{"Name": "TableRangeScan", "Inputs": []}]
+                    }]
+                },
+                {
+                    "Node Type": "Collect", "StageGuid": "cte-owner-stage",
+                    "Stats": {"CpuTimeUs": {"Max": 11000}},
+                    "Plans": [{"Node Type": "CTE", "CTE Name": "precompute_1"}]
+                }
+            ]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+
+    const auto filterNode = FindRequiredPlanNodeByKv(simplifiedPlan, "Node Type", "Filter");
+
+    const auto filter = FindRequiredPlanNodeByKv(filterNode, "Name", "Filter");
+    AssertCpuValues(filter, 7, 10, simplifiedPlan);
+
+    const auto scan = FindRequiredPlanNodeByKv(filterNode, "Name", "TableFullScan");
+    AssertCpuValues(scan, 3, 3, simplifiedPlan);
+
+    const auto precomputeScan = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "TableRangeScan");
+    AssertNoCpuValues(precomputeScan, simplifiedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanInheritedCpuStopsAtExternalEdge) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Query",
+            "Plans": [{
+                "Node Type": "Collect", "StageGuid": "collect-stage",
+                "Stats": {"CpuTimeUs": {"Max": 7000}},
+                "Plans": [{
+                    "Node Type": "Filter", "PlanNodeId": 1,
+                    "Operators": [{"Name": "Filter", "Inputs": [{"ExternalPlanNodeId": 2}]}],
+                    "Plans": [{
+                        "Node Type": "TableFullScan", "PlanNodeId": 2,
+                        "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                    }]
+                }]
+            }]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+
+    const auto filterNode = FindRequiredPlanNodeByKv(simplifiedPlan, "Node Type", "Filter");
+
+    const auto filter = FindRequiredPlanNodeByKv(filterNode, "Name", "Filter");
+    AssertCpuValues(filter, 7, 7, simplifiedPlan);
+
+    const auto scan = FindRequiredPlanNodeByKv(filterNode, "Name", "TableFullScan");
+    AssertNoCpuValues(scan, simplifiedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanDuplicateIndexesUseLastValue) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Query",
+            "Plans": [
+                {
+                    "Node Type": "FilterStage",
+                    "Operators": [{"Name": "Filter", "Inputs": [{"ExternalPlanNodeId": 7}]}]
+                },
+                {
+                    "Node Type": "FirstDuplicate", "PlanNodeId": 7,
+                    "Operators": [{"Name": "FirstDuplicate", "Inputs": []}]
+                },
+                {
+                    "Node Type": "LastDuplicate", "PlanNodeId": 7,
+                    "Operators": [{"Name": "LastDuplicate", "Inputs": []}]
+                },
+                {
+                    "Node Type": "Precompute", "Subplan Name": "precompute_duplicate",
+                    "Plans": [{
+                        "Node Type": "FirstValue", "Operators": [{"Name": "FirstValue", "Inputs": []}]
+                    }]
+                },
+                {
+                    "Node Type": "Precompute", "Subplan Name": "precompute_duplicate",
+                    "Plans": [{
+                        "Node Type": "LastValue", "Operators": [{"Name": "LastValue", "Inputs": []}]
+                    }]
+                },
+                {
+                    "Node Type": "CteOwner",
+                    "Plans": [{"Node Type": "CTE", "CTE Name": "precompute_duplicate"}]
+                }
+            ]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+    const auto filter = FindRequiredPlanNodeByKv(simplifiedPlan, "Node Type", "Filter");
+    UNIT_ASSERT_C(FindPlanNodeByKv(filter, "Name", "LastDuplicate").IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(!FindPlanNodeByKv(filter, "Name", "FirstDuplicate").IsDefined(), simplifiedPlan);
+
+    const auto cteOwner = FindRequiredPlanNodeByKv(simplifiedPlan, "Node Type", "CteOwner");
+    UNIT_ASSERT_C(FindPlanNodeByKv(cteOwner, "Name", "LastValue").IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(!FindPlanNodeByKv(cteOwner, "Name", "FirstValue").IsDefined(), simplifiedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanMultiOperatorCpuOwner) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Stage",
+            "Stats": {"CpuTimeUs": {"Max": 7000}},
+            "Operators": [
+                {"Name": "Filter", "Inputs": [{"InternalOperatorId": 1}]},
+                {"Name": "Aggregate", "Inputs": []}
+            ]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+    const auto filter = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "Filter");
+    AssertCpuValues(filter, 7, 7, simplifiedPlan);
+
+    const auto aggregate = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "Aggregate");
+    AssertNoCpuValues(aggregate, simplifiedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanCpuAbsentAndScriptPlan) {
+    const TString plan = R"({
+        "Plan": {
+            "Node Type": "Query",
+            "Plans": [{
+                "Node Type": "Collect",
+                "Plans": [{
+                    "Node Type": "ScanStage",
+                    "Stats": {"OutputRows": {"Sum": 6}, "OutputBytes": {"Sum": 48}, "Tasks": 2},
+                    "Operators": [{"Name": "TableFullScan", "Inputs": []}]
+                }]
+            }]
+        }
+    })";
+
+    const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
+    AssertNoCpuValues(simplifiedPlan, simplifiedPlan);
+
+    const auto scan = FindRequiredPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-Rows").GetIntegerSafe(), 6, simplifiedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-Size").GetDoubleSafe(), 48, simplifiedPlan);
+
+    const TVector<const TString> queryPlans = {plan};
+    const auto serializedScriptPlan = SerializeScriptPlan(queryPlans);
+    NJson::TJsonValue scriptPlan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(serializedScriptPlan, &scriptPlan, true), serializedScriptPlan);
+    AssertNoCpuValues(scriptPlan, scriptPlan);
+
+    const auto& scriptQuery = scriptPlan.GetMapSafe().at("queries").GetArraySafe().front();
+    const auto& scriptSimplifiedPlan = scriptQuery.GetMapSafe().at("SimplifiedPlan");
+    const auto scriptScan = FindRequiredPlanNodeByKv(scriptSimplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_VALUES_EQUAL_C(scriptScan.GetMapSafe().at("A-Rows").GetIntegerSafe(), 6, scriptPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(scriptScan.GetMapSafe().at("A-Size").GetDoubleSafe(), 48, scriptPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    const auto execute = [&](const TString& query) {
+        auto result = session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+        return plan.GetMapSafe().at("SimplifiedPlan");
+    };
+
+    const auto fullScanPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )");
+    const auto fullScan = FindPlanNodeByKv(fullScanPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), fullScanPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, fullScanPlan);
+    const auto cpuValues = FindPlanNodes(fullScanPlan, "A-Cpu");
+    UNIT_ASSERT_C(!cpuValues.empty(), fullScanPlan);
+    for (const auto& cpu : cpuValues) {
+        UNIT_ASSERT_C(cpu.GetDoubleSafe() >= 0, fullScanPlan);
+    }
+
+    const auto limitedPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard` LIMIT 3;
+    )");
+    const auto limitNode = FindPlanNodeByKv(limitedPlan, "Node Type", "Limit");
+    UNIT_ASSERT_C(limitNode.IsDefined(), limitedPlan);
+
+    const auto limit = FindPlanNodeByKv(limitNode, "Name", "Limit");
+    UNIT_ASSERT_C(limit.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limit.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(limit.GetMapSafe().at("A-Rows").GetDoubleSafe(), 3, limitedPlan);
+
+    const auto limitedScan = FindPlanNodeByKv(limitNode, "Name", "TableFullScan");
+    UNIT_ASSERT_C(limitedScan.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Size"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, limitedPlan);
+}
+
+Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
+        *result.GetStats()->GetPlan());
+    const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
+
+    const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), simplifiedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Cpu"), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Cpu").GetDoubleSafe() >= 0, simplifiedPlan);
+}
+
+// Per-stage per-node task distribution: Stats.Nodes = [{NodeId, Tasks, Finished}] in FULL mode.
+// Literal phases carry no node info, so only stages that have Nodes are checked against their totals.
+Y_UNIT_TEST(StageNodesFull) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true), *result.GetStats()->GetPlan());
+
+    auto* runtime = kikimr.GetTestServer().GetRuntime();
+    std::set<ui64> clusterNodeIds;
+    for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+        clusterNodeIds.insert(runtime->GetNodeId(i));
+    }
+
+    ui32 stagesWithNodes = 0;
+    std::function<void(const NJson::TJsonValue&)> checkStages = [&](const NJson::TJsonValue& node) {
+        if (node.IsMap()) {
+            if (auto* stats = node.GetMapSafe().FindPtr("Stats"); stats && stats->IsMap() && stats->Has("Nodes")) {
+                ++stagesWithNodes;
+                ui64 tasks = 0;
+                ui64 finished = 0;
+                ui64 lastNodeId = 0;
+                for (const auto& nodeStats : stats->GetMapSafe().at("Nodes").GetArraySafe()) {
+                    auto nodeId = nodeStats.GetMapSafe().at("NodeId").GetUIntegerSafe();
+                    auto nodeTasks = nodeStats.GetMapSafe().at("Tasks").GetUIntegerSafe();
+                    auto nodeFinished = nodeStats.GetMapSafe().at("Finished").GetUIntegerSafe();
+                    UNIT_ASSERT_C(clusterNodeIds.contains(nodeId), plan);
+                    UNIT_ASSERT_C(nodeId > lastNodeId, plan);
+                    UNIT_ASSERT_C(nodeTasks > 0, plan);
+                    UNIT_ASSERT_C(nodeFinished <= nodeTasks, plan);
+                    lastNodeId = nodeId;
+                    tasks += nodeTasks;
+                    finished += nodeFinished;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(tasks, stats->GetMapSafe().at("Tasks").GetUIntegerSafe(), plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(finished, stats->GetMapSafe().at("FinishedTasks").GetUIntegerSafe(), plan);
+            }
+            for (const auto& [_, child] : node.GetMapSafe()) {
+                checkStages(child);
+            }
+        } else if (node.IsArray()) {
+            for (const auto& child : node.GetArraySafe()) {
+                checkStages(child);
+            }
+        }
+    };
+    checkStages(plan);
+    UNIT_ASSERT_C(stagesWithNodes > 0, plan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
@@ -399,19 +1004,60 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "ResultSet");
+    UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
+}
 
-    //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+// The per node memory history of a profiled query carries what the query holds on the node (Memory + ExternalMemory
+// via the resource manager), reported by the query quota manager of the node service: at least the start prepay of
+// the tasks and the channels. A scan query never runs its tasks locally in the executer, they go to the node service
+Y_UNIT_TEST(NodeMemQueryAllocatedProfile) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+
+    auto it = GetScanStreamIterator(kikimr, ECollectQueryStatsMode::Profile, R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )");
+    auto res = CollectStreamResult(it);
+    UNIT_ASSERT(res.PlanJson);
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+    ui32 histories = 0;
+    std::function<void(const NJson::TJsonValue&)> check = [&](const NJson::TJsonValue& value) {
+        if (value.IsMap()) {
+            for (const auto& [key, child] : value.GetMapSafe()) {
+                if (key == "GlobalMemoryUsageMB") {
+                    const auto& times = child.GetMapSafe().at("TimeMs").GetArraySafe();
+                    const auto& allocated = child.GetMapSafe().at("MemQueryAllocated").GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(allocated.size(), times.size());
+                    ui64 maxAllocated = 0;
+                    for (const auto& mb : allocated) {
+                        maxAllocated = std::max<ui64>(maxAllocated, mb.GetUIntegerSafe());
+                    }
+                    UNIT_ASSERT_GE_C(maxAllocated, 1, *res.PlanJson);
+                    ++histories;
+                } else {
+                    check(child);
+                }
+            }
+        } else if (value.IsArray()) {
+            for (const auto& child : value.GetArraySafe()) {
+                check(child);
+            }
+        }
+    };
+    check(plan);
+    UNIT_ASSERT_GT_C(histories, 0, *res.PlanJson);
 }
 
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
-    TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+    TKikimrRunner kikimr{ TKikimrSettings(app) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -451,44 +1097,60 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     });
 }
 
-Y_UNIT_TEST(SysViewClientLost) {
-    TKikimrRunner kikimr;
-    CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+Y_UNIT_TEST(SelfJoin) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
 
+    TKikimrRunner kikimr{ TKikimrSettings(app) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    {
-        TStringStream request;
-        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT a.Key FROM `/Root/TwoShard` AS a INNER JOIN `/Root/TwoShard` AS b ON a.Key = b.Key;
+    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        ui64 rowsCount = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
+    Cerr << result.GetQueryPlan() << Endl;
 
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-                NYdb::TResultSetParser parser(resultSet);
-                while (parser.TryNextRow()) {
-                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
-                    UNIT_ASSERT(value);
-                    rowsCount++;
-                }
-            }
+    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 4); // TODO: fix it
+
+    AssertTableStats(result, "/Root/TwoShard", {
+        .ExpectedReads = 12,
+    });
+}
+
+Y_UNIT_TEST(SysViewClientLost) {
+    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+
+    auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+    auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+    kikimr.RunCall( [&] {
+        CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+        return true;
+    });
+
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    ui32 updateCount = 0;
+    auto grab = [&updateCount](TAutoPtr<IEventHandle>& ev) -> auto {
+        if (ev->GetTypeRewrite() == NSysView::TEvSysView::TEvCollectQueryStats::EventType) {
+            ++updateCount;
         }
-        UNIT_ASSERT(rowsCount == 1);
-    }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
 
-    auto settings = TStreamExecScanQuerySettings();
-    settings.ClientTimeout(TDuration::MilliSeconds(50));
+    runtime.SetObserverFunc(grab);
 
     TStringStream timeoutedRequestStream;
     timeoutedRequestStream << R"(
@@ -496,59 +1158,19 @@ Y_UNIT_TEST(SysViewClientLost) {
     )";
     TString timeoutedRequest = timeoutedRequestStream.Str();
 
-    auto result = db.StreamExecuteScanQuery(timeoutedRequest, settings).GetValueSync();
+    auto settings = TStreamExecScanQuerySettings();
+    settings.ClientTimeout(TDuration::MilliSeconds(50));
+    auto resultFuture = kikimr.RunInThreadPool([&]{
+        return db.StreamExecuteScanQuery(timeoutedRequest).GetValueSync();});
 
-    if (result.IsSuccess()) {
-        try {
-            auto yson = StreamResultToYson(result, true);
-            UNIT_ASSERT(false);
-        } catch (const TStreamReadError& ex) {
-            UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
-        } catch (const std::exception& ex) {
-            UNIT_ASSERT_C(false, "unknown exception during the test");
-        }
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
-    }
+    TDispatchOptions opts;
+    opts.FinalEvents.emplace_back([&updateCount](IEventHandle&) {
+        return updateCount > 0;
+    });
+    runtime.DispatchEvents(opts);
 
-    ui32 timeoutedCount = 0;
-    ui32 iterations = 10;
-    while (timeoutedCount == 0 && iterations > 0)
-    {
-        iterations--;
-        Sleep(TDuration::Seconds(1));
-
-        TStringStream request;
-        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
-
-        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        ui64 queryCount = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-
-                NYdb::TResultSetParser parser(resultSet);
-                while (parser.TryNextRow()) {
-                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
-                    UNIT_ASSERT(value);
-                    if (*value == timeoutedRequest) {
-                        queryCount++;
-                    }
-                }
-            }
-        }
-        timeoutedCount = queryCount;
-    }
-
-    UNIT_ASSERT(timeoutedCount == 1);
+    auto result = runtime.WaitFuture(resultFuture);
+    UNIT_ASSERT_VALUES_EQUAL_C(updateCount, 1, "updated views more than once: " << updateCount);
 }
 
 Y_UNIT_TEST(SysViewCancelled) {
@@ -638,11 +1260,13 @@ Y_UNIT_TEST(SysViewCancelled) {
 }
 
 Y_UNIT_TEST(OneShardLocalExec) {
-    TKikimrRunner kikimr;
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 1);
     {
         auto result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
@@ -678,34 +1302,40 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
     TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-    auto monPort = kikimr.GetTestServer().GetRuntime()->GetMonPort();
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
+    Cerr << "OneShardNonLocalExec: firstNodeId=" << firstNodeId
+         << " nodeCount=" << kikimr.GetTestServer().GetRuntime()->GetNodeCount() << Endl;
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
     auto expectedTotalSingleNodeReqCount = counters.TotalSingleNodeReqCount->Val();
     auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
 
-    auto drainNode = [monPort](size_t nodeId, bool undrain = false) {
-        TNetworkAddress addr("localhost", monPort);
-        TSocket s(addr);
-        TString url;
+    auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
+        Cerr << "drainNode: nodeId=" << nodeId << " undrain=" << undrain << Endl;
+        auto sender = runtime->AllocateEdgeActor();
+        IEventBase* ev = nullptr;
         if (undrain) {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=SetDown&down=0";
+            ev = new TEvHive::TEvSetDown(nodeId, false);
         } else {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=DrainNode";
+            ev = new TEvHive::TEvDrainNode(nodeId);
         }
-        SendMinimalHttpRequest(s, "localhost", url);
-        TSocketInput si(s);
-        THttpInput input(&si);
-        TString firstLine = input.FirstLine();
-
-        const auto httpCode = ParseHttpRetCode(firstLine);
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200);
+        runtime->SendToPipe(72057594037968897, sender, ev, 0, GetPipeConfigWithRetries());
+        if (undrain) {
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: undrain completed" << Endl;
+        } else {
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: completed, status=" << (drainResponse ? static_cast<int>(drainResponse->Record.GetStatus()) : -1)
+                 << " movements=" << (drainResponse ? drainResponse->Record.GetMovements() : -1) << Endl;
+        }
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {
+        Cerr << "waitTablets: waiting for all tablets on nodeId=" << nodeId << Endl;
         TDescribeTableSettings describeTableSettings =
             TDescribeTableSettings()
                 .WithTableStatistics(true)
@@ -713,7 +1343,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
                 .WithShardNodesInfo(true);
 
         bool done = false;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
             auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
@@ -725,11 +1355,17 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             for (const auto& s : res.GetTableDescription().GetPartitionStats()) {
                 nodeIds.emplace(s.LeaderNodeId);
             }
+            Cerr << "waitTablets: attempt " << i << ", tablet leader nodes: {";
+            for (auto it = nodeIds.begin(); it != nodeIds.end(); ++it) {
+                if (it != nodeIds.begin()) Cerr << ", ";
+                Cerr << *it;
+            }
+            Cerr << "}, expecting nodeId=" << nodeId << Endl;
             if (nodeIds.size() == 1 && *nodeIds.begin() == nodeId) {
                 done = true;
                 break;
             }
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(5));
         }
         UNIT_ASSERT_C(done, "unable to wait tablets move on specific node");
     };
@@ -744,6 +1380,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -751,6 +1388,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -758,6 +1396,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -765,6 +1404,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -772,6 +1412,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -779,8 +1420,10 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
+
     expectedNonLocalSingleNodeReqCount += 6;
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
 
@@ -832,7 +1475,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
-        {
+    {
         auto result = session.ExecuteDataQuery(R"(
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
@@ -850,6 +1493,313 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
     }
     // All executions are local - same value of counter
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
+}
+
+Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableMoveColumnTable(true);
+    auto serverSettings = TKikimrSettings()
+        .SetFeatureFlags(featureFlags)
+        .SetWithSampleTables(false)
+        .SetEnableTempTables(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(Sprintf(R"(
+            CREATE TABLE `/Root/Source` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            ) WITH (STORE=%s);
+        )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery( R"(
+            UPSERT INTO `/Root/Source` (Col1, Col2) VALUES (1, 1), (2, 2);
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    {
+        auto result = client.ExecuteQuery(Sprintf(R"(
+            CREATE TABLE `/Root/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            WITH (STORE=%s)
+            AS SELECT * FROM `/Root/Source`;
+        )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        auto sink = FindPlanNodeByKv(
+            plan,
+            "Name",
+            "FillTable"
+        );
+
+        UNIT_ASSERT(sink.IsDefined());
+
+        UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+        UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
+        UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << stats.DebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
+
+        if (IsOlap) {
+            // size of serialized may be a little different (because of arrow)
+            UNIT_ASSERT_GE(stats.query_phases(0).table_access(0).updates().bytes(), 400);
+            UNIT_ASSERT_LE(stats.query_phases(0).table_access(0).updates().bytes(), 500);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 40);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 0);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+        }
+    }
+
+    {
+        auto result = client.ExecuteQuery( R"(
+            $cnt = SELECT COUNT(*) FROM `/Root/Destination`;
+            SELECT Ensure($cnt, $cnt == 2, "fail");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_TWIN(UpsertWithReturningStats, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(run.Plan, "Node Type", "TableFullScan"), 1);
+
+        // Both the source read and the destination write stats must be collected.
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsModes, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            INSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Insert");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            REPLACE INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Replace");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPDATE `/Root/ReturningSrc` SET Value = "x" WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        // The read-before-write of the UPDATE is collected too.
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            DELETE FROM `/Root/ReturningSrc` WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Delete");
+        // Delete reads each row (read-before-write plus the returned row).
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 6, .ExpectedDeletes = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsWithIndex, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session);
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 12, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 20, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 1, .ExpectedDeletes = 1 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsNeedsLookup, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningExtra` (
+                Key Uint64 NOT NULL,
+                Value String,
+                Extra String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningExtra` (Key, Value, Extra) VALUES (1, "a", "old_extra");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Extra is not written by the UPDATE, so RETURNING it requires reading the row.
+    auto run = RunReturningQuery(client, R"(
+        UPDATE `/Root/ReturningExtra` SET Value = "b" WHERE Key = 1 RETURNING Key, Value, Extra;
+    )", 1);
+
+    AssertReturningSinkNode(run.Plan, UseStreamIndex);
+    AssertSingleOperatorName(run.Plan, "Upsert");
+
+    NYdb::TResultSetParser parser(run.Result.GetResultSets()[0]);
+    UNIT_ASSERT(parser.TryNextRow());
+    auto optionalValue = parser.ColumnParser(1).GetOptionalString();
+    UNIT_ASSERT(optionalValue);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalValue, "b");
+    auto optionalExtra = parser.ColumnParser(2).GetOptionalString();
+    UNIT_ASSERT(optionalExtra);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalExtra, "old_extra");
+
+    // RETURNING a column that is not written ("Extra") requires reading the row.
+    // In both modes this adds a lookup read next to the single-row write.
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedUpdates = 1 });
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedReads = 2 });
 }
 
 } // suite

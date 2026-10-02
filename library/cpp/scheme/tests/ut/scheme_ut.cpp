@@ -838,10 +838,10 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             const NSc::TValue& vb = va.Get("y");
-            va = vb;
             TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
-            UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
+            va = vb;
+            UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
         }
     }
 
@@ -875,6 +875,48 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         (*child)["e"]["f"] = 42;
         const NSc::TValue expectedResult = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,e:{f:42}}}");
         UNIT_ASSERT_VALUES_EQUAL(v, expectedResult);
+    }
+
+    Y_UNIT_TEST(TestConstGetNoAdd) {
+        NSc::TValue v = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,x:y}}");
+        UNIT_ASSERT(v.GetNoAdd("a") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("b") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("c") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("d") == nullptr);
+        UNIT_ASSERT(v.GetNoAdd("value") == nullptr);
+        {
+            const NSc::TValue* childPtr = v.GetNoAdd("c");
+            UNIT_ASSERT(childPtr != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd("d") != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd("x") != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd("e") == nullptr);
+            NSc::TValue child = *childPtr;
+            child["e"]["f"] = 42;
+            UNIT_ASSERT(child.GetNoAdd("e") != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd("e") == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(child.Delete("x"), NSc::NUt::AssertFromJson("y"));
+            UNIT_ASSERT_VALUES_EQUAL(v, NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,x:y}}"));
+            UNIT_ASSERT_VALUES_EQUAL(child, NSc::NUt::AssertFromJson("{d:5,e:{f:42}}"));
+        }
+        {
+            const NSc::TValue* childPtr = v.GetNoAdd("a");
+            UNIT_ASSERT(childPtr != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(0) != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(1) != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(2) != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(3) != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(4) == nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(5) == nullptr);
+            NSc::TValue child = *childPtr;
+            child.Push("y");
+            child.Push("z");
+            child[2] = 5;
+            UNIT_ASSERT_VALUES_EQUAL(child.Delete(1), NSc::NUt::AssertFromJson("-1"));
+            UNIT_ASSERT(child.GetNoAdd(4) != nullptr);
+            UNIT_ASSERT(childPtr->GetNoAdd(4) == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(v, NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,x:y}}"));
+            UNIT_ASSERT_VALUES_EQUAL(child, NSc::NUt::AssertFromJson("[null,5,3.4,y,z]"));
+        }
     }
 
     Y_UNIT_TEST(TestNewNodeOnCurrentPool) {

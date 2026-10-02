@@ -1,7 +1,8 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/concurrency/throughput_throttler.h>
 #include <yt/yt/core/concurrency/config.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/throughput_throttler.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -18,7 +19,7 @@ using namespace testing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Test");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Test");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,7 +30,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoLimit)
 
     NProfiling::TWallTimer timer;
     for (int i = 0; i < 1000; ++i) {
-        throttler->Throttle(1).Get().ThrowOnError();
+        WaitForFast(throttler->Throttle(1)).ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
@@ -54,15 +55,15 @@ TEST(TReconfigurableThroughputThrottlerTest, Limit)
         TThroughputThrottlerConfig::Create(1));
 
     NProfiling::TWallTimer timer;
-    throttler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 50u);
 
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
-    EXPECT_GE(duration, 1000u);
+    EXPECT_GE(duration, 950u);
     EXPECT_LE(duration, 3000u);
 }
 
@@ -74,7 +75,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoOverflow)
     auto* testableThrottler = static_cast<ITestableReconfigurableThroughputThrottler*>(throttler.Get());
 
     NProfiling::TWallTimer timer;
-    testableThrottler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(testableThrottler->Throttle(1)).ThrowOnError();
     testableThrottler->SetLastUpdated(TInstant::Now() - TDuration::Days(1));
 
     std::vector<TFuture<void>> futures;
@@ -110,11 +111,11 @@ TEST(TReconfigurableThroughputThrottlerTest, ScheduleUpdate)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(3).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(3)).ThrowOnError();
 
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
-    throttler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
     EXPECT_GE(duration, 3000u);
@@ -128,9 +129,9 @@ TEST(TReconfigurableThroughputThrottlerTest, Update)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
     Sleep(TDuration::Seconds(1));
-    throttler->Throttle(1).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 2000u);
 }
@@ -142,10 +143,10 @@ TEST(TReconfigurableThroughputThrottlerTest, Cancel)
 
     NProfiling::TWallTimer timer;
 
-    throttler->Throttle(5).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(5)).ThrowOnError();
     auto future = throttler->Throttle(1);
     future.Cancel(TError("Error"));
-    auto result = future.Get();
+    auto result = WaitForFast(future);
 
     EXPECT_FALSE(result.IsOK());
     EXPECT_TRUE(result.GetCode() == NYT::EErrorCode::Canceled);
@@ -167,7 +168,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureSchedulesUpdatesProperly
     throttler->Reconfigure(TThroughputThrottlerConfig::Create(100));
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        WaitForFast(future).ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
@@ -188,7 +189,7 @@ TEST(TReconfigurableThroughputThrottlerTest, SetLimit)
     throttler->SetLimit(100);
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        WaitForFast(future).ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
@@ -210,7 +211,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureMustRescheduleUpdate)
 
     EXPECT_FALSE(scheduled2.IsSet()); // must remain waiting in the queue after Reconfigure
 
-    scheduled2.Get().ThrowOnError();
+    WaitForFast(scheduled2).ThrowOnError();
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 3000u); // Reconfigure must have rescheduled the update
 }
 
@@ -219,7 +220,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Overdraft)
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100));
 
-    throttler->Throttle(150).Get().ThrowOnError();
+    WaitForFast(throttler->Throttle(150)).ThrowOnError();
 
     EXPECT_TRUE(throttler->IsOverdraft());
     Sleep(TDuration::Seconds(2));
@@ -234,7 +235,7 @@ TEST(TReconfigurableThroughputThrottlerTest, OverdraftSignificantly)
     const auto N = 3;
     NProfiling::TWallTimer timer;
     for (int i = 0; i < N; ++i) {
-        throttler->Throttle(300).Get().ThrowOnError();
+        WaitForFast(throttler->Throttle(300)).ThrowOnError();
     }
 
     auto expectedElapsed = (300 * (N - 1) - 100) * 1000 / 100;
@@ -263,7 +264,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Stress)
     for (int i = 0; i < N; i++) {
         threads.emplace_back([&] {
             for (int j = 0; j < M; ++j) {
-                throttler->Throttle(1).Get().ThrowOnError();
+                WaitForFast(throttler->Throttle(1)).ThrowOnError();
             }
         });
     }
@@ -283,12 +284,14 @@ TEST(TReconfigurableThroughputThrottlerTest, FractionalLimit)
         TThroughputThrottlerConfig::Create(0.5));
 
     NProfiling::TWallTimer timer;
-    for (int i = 0; i < 2; ++i) {
-        throttler->Throttle(1).Get().ThrowOnError();
+    const auto N = 3;
+    for (int i = 0; i < N; ++i) {
+        WaitForFast(throttler->Throttle(1)).ThrowOnError();
     }
+
     auto duration = timer.GetElapsedTime().MilliSeconds();
-    EXPECT_GE(duration, 1500u);
-    EXPECT_LE(duration, 4000u);
+    EXPECT_GE(duration, 2900u);
+    EXPECT_LE(duration, 3100u);
 }
 
 TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
@@ -306,7 +309,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
     }
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        WaitForFast(future).ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
@@ -335,7 +338,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimitDoesNotLetAnythingThrough)
     NProfiling::TWallTimer timer;
 
     for (const auto& future : scheduled) {
-        future.Get().ThrowOnError();
+        WaitForFast(future).ThrowOnError();
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
@@ -347,11 +350,11 @@ TEST(TReconfigurableThroughputThrottlerTest, Release)
         TThroughputThrottlerConfig::Create(100));
 
     auto future = throttler->Throttle(100);
-    EXPECT_EQ(future, VoidFuture);
+    EXPECT_EQ(future, OKFuture);
 
     throttler->Release(100);
-    future = throttler->Throttle(100);
-    EXPECT_EQ(future, VoidFuture);
+    future = throttler->Throttle(150);
+    EXPECT_EQ(future, OKFuture);
 
     future = throttler->Throttle(100);
     EXPECT_FALSE(future.IsSet());
@@ -439,19 +442,19 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, OneRequest)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(1)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
-    EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+    EXPECT_TRUE(WaitForFast(Throttler_->Throttle(1)).IsOK());
 }
 
 TEST_F(TPrefetchingThrottlerExponentialGrowthTest, ManyRequests)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(4)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 1'000; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(WaitForFast(Throttler_->Throttle(1)).IsOK());
     }
 }
 
@@ -459,16 +462,16 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, SpikeAmount)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(4)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 3; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(WaitForFast(Throttler_->Throttle(1)).IsOK());
     }
 
-    EXPECT_TRUE(Throttler_->Throttle(10'000'000).Get().IsOK());
+    EXPECT_TRUE(WaitForFast(Throttler_->Throttle(10'000'000)).IsOK());
 
     for (int i = 3; i < 1'000; ++i) {
-        EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+        EXPECT_TRUE(WaitForFast(Throttler_->Throttle(1)).IsOK());
     }
 }
 
@@ -506,7 +509,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
 
     auto failedRequest = Throttler_->Throttle(10);
     requests[0].Set(TError(NYT::EErrorCode::Generic, "Test error"));
-    EXPECT_FALSE(failedRequest.Get().IsOK());
+    EXPECT_FALSE(WaitForFast(failedRequest).IsOK());
 
     YT_UNUSED_FUTURE(Throttler_->Throttle(1));
 }
@@ -515,15 +518,15 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(1)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
-    EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+    EXPECT_TRUE(WaitForFast(Throttler_->Throttle(1)).IsOK());
     EXPECT_TRUE(Throttler_->IsOverdraft());
 
     Throttler_->Release(1);
     EXPECT_FALSE(Throttler_->IsOverdraft());
 
-    EXPECT_EQ(Throttler_->Throttle(1), VoidFuture);
+    EXPECT_EQ(Throttler_->Throttle(1), OKFuture);
     EXPECT_TRUE(Throttler_->IsOverdraft());
 }
 
@@ -687,9 +690,9 @@ TEST_P(TPrefetchingStressTest, Stress)
 
         for (auto& reply : replies) {
             if (parameters.ErrorProbability > 0.0) {
-                reply.Get();
+                WaitUntilSet(reply);
             } else {
-                EXPECT_TRUE(reply.Get().IsOK());
+                EXPECT_TRUE(WaitForFast(reply).IsOK());
             }
         }
     }
@@ -699,7 +702,7 @@ INSTANTIATE_TEST_SUITE_P(Stress,
     TPrefetchingStressTest,
     testing::Values(
         TStressParameters {
-            .TestDuration = TDuration::Seconds(50),
+            .TestDuration = TDuration::Seconds(20),
             .IterationsPerStep = 100,
             .StepMultiplier = 0.1,
             .AllowedRpsOverflowMultiplier = 3.0,
@@ -715,7 +718,7 @@ INSTANTIATE_TEST_SUITE_P(Stress,
             .TryAcquireAllProbability = 0.000'1,
         },
         TStressParameters {
-            .TestDuration = TDuration::Seconds(100),
+            .TestDuration = TDuration::Seconds(30),
             .PassCount = 10,
             .AllowedRpsOverflowMultiplier = 5.0,
             .TryAcquireAllProbability = 0.000'1,

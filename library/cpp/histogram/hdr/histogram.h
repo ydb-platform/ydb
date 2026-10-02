@@ -68,6 +68,9 @@ namespace NHdr {
                    i32 numberOfSignificantValueDigits,
                    IAllocator* allocator = TDefaultAllocator::Instance());
 
+        THistogram(THistogram&& other) noexcept;
+        THistogram& operator=(THistogram&& rhs) noexcept;
+
         ~THistogram();
 
         // Histogram structure querying support -----------------------------------

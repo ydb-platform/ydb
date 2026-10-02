@@ -22,8 +22,7 @@ namespace scipy
       double gammaincinv(T0 a, T1 p)
       {
         using namespace boost::math::policies;
-        return boost::math::gamma_p_inv(a, p,
-                                        make_policy(promote_double<true>()));
+        return boost::math::gamma_p_inv(a, p, make_policy(promote_double<true>()));
       }
     } // namespace details
 

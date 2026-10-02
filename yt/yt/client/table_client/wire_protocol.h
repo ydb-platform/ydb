@@ -140,7 +140,6 @@ EWireProtocolCommand GetWireProtocolCommand(const TWireProtocolWriteCommand& com
 //! Builds wire-encoded stream.
 struct IWireProtocolWriter
 {
-public:
     virtual ~IWireProtocolWriter() = default;
 
     virtual size_t GetByteSize() const = 0;
@@ -170,7 +169,7 @@ public:
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
 
     virtual void WriteSerializedRowset(
-        size_t rowCount,
+        int rowCount,
         const std::vector<TSharedRef>& serializedRowset) = 0;
 
     virtual void WriteUnversionedRowset(
@@ -215,7 +214,6 @@ std::unique_ptr<IWireProtocolWriter> CreateWireProtocolWriter();
  */
 struct IWireProtocolReader
 {
-public:
     using TIterator = const char*;
 
     virtual ~IWireProtocolReader() = default;
@@ -288,6 +286,8 @@ struct TWireProtocolOptions
     i64 MaxVersionedRowDataWeight = NTableClient::MaxServerVersionedRowDataWeight;
 };
 
+TWireProtocolOptions CreateUnlimitedWireProtocolOptions();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Creates wire protocol reader.
@@ -308,7 +308,7 @@ struct IWireProtocolRowsetReader
 DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetReader)
 
 IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
-    const std::vector<TSharedRef>& compressedBlocks,
+    std::vector<TSharedRef> compressedBlocks,
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,

@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 PEERDIR(
     contrib/python/boto3
+    library/python/port_manager
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
@@ -16,7 +17,7 @@ DEPENDS(
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

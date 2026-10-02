@@ -45,6 +45,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         client->InitStreamingRequest(*request);
         request->ServerAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
         request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(timeout);
+        request->ClientAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
 
         TString ppath;
         auto tableYPath = ConvertYPathFromOld(richYPath);
@@ -83,9 +84,9 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
 }
 
 NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request) {
-    return CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
+    return CreateRpcClientInputStream(std::move(request)).AsUnique().Apply(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
-            return stream->Read().ApplyUnique(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {
+            return stream->Read().AsUnique().Apply(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {
                 return std::move(stream);
             }));
         }));

@@ -1,0 +1,75 @@
+# doc_verify на translation PR (ветка в upstream или в fork).
+# QA = тот же пайплайн, что после doc_translate (@v1.0.1).
+
+name: ydbdoc-review (doc_verify label)
+
+on:
+  pull_request_target:
+    types: [labeled]
+    paths:
+      - "ydb/docs/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+
+jobs:
+  ydbdoc-verify:
+    if: github.event.label.name == 'doc_verify'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ydbdoc-verify-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Read authoritative source provenance
+        id: source
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const match = body.match(/<!-- ydbdoc-source-sha:([0-9a-f]{40}) -->/);
+            if (!match) {
+              core.setFailed('Translation PR has no valid ydbdoc source SHA provenance marker.');
+              return;
+            }
+            core.setOutput('sha', match[1]);
+
+      - name: Verify translation PR
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+        with:
+          mode: verify
+          pr: ${{ github.event.pull_request.number }}
+          source-sha: ${{ steps.source.outputs.sha }}
+          target-sha: ${{ github.event.pull_request.head.sha }}
+        env:
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDB_GH_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
+          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+
+  trigger-verify-ci:
+    needs: ydbdoc-verify
+    if: ${{ !cancelled() && needs.ydbdoc-verify.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PR-check and docs rebuild on translation PR
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['ok-to-test'],
+            });
+            core.info(
+              `Added ok-to-test to translation PR #${prNumber}`
+            );

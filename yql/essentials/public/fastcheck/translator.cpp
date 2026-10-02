@@ -1,92 +1,70 @@
 #include "check_runner.h"
-#include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include "check_state.h"
 
-namespace NYql {
-namespace NFastCheck {
+#include "settings.h"
+#include "utils.h"
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
+namespace NYql::NFastCheck {
 
 namespace {
 
-class TTranslatorRunner : public ICheckRunner {
+class TTranslatorRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "translator";
     }
 
-    TCheckResponse Run(const TChecksRequest& request) final {
-        switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+    TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
+        switch (state.GetEffectiveSyntax()) {
+            case ESyntax::SExpr:
+                return RunSExpr(request, state);
+            case ESyntax::PG:
+                return RunPg(request, state);
+            case ESyntax::YQL:
+                return RunYql(request, state);
         }
     }
 
 private:
-    TCheckResponse RunSExpr(const TChecksRequest& request) {
+    TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        // no separate check for translator here
-        return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
+        TCheckResponse res{.CheckName = GetCheckName()};
+
+        const auto* astResult = state.TranslateSExpr(&res.Issues);
+        res.Success = astResult && astResult->IsOk();
+
+        return res;
     }
 
-    TCheckResponse RunPg(const TChecksRequest& request) {
-        google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Arena = &arena;
-        settings.PgParser = true;
-        settings.ClusterMapping = request.ClusterMapping;
-        auto astRes = NSQLTranslationPG::PGToYql(request.Program, settings);
-        return TCheckResponse{
-            .CheckName = GetCheckName(),
-            .Success = astRes.IsOk(),
-            .Issues = astRes.Issues
-        };
+    TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(request);
+        TCheckResponse res{.CheckName = GetCheckName()};
+
+        const auto* astResult = state.TranslatePg(&res.Issues);
+        res.Success = astResult && astResult->IsOk();
+
+        return res;
     }
 
-    TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
-        google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Arena = &arena;
-        settings.File = request.File;
-        settings.ClusterMapping = request.ClusterMapping;
-        settings.EmitReadsForExists = true;
-        settings.Antlr4Parser = true;
-        settings.AnsiLexer = request.IsAnsiLexer;
-        settings.SyntaxVersion = request.SyntaxVersion;
-        switch (request.Mode) {
-        case EMode::Default:
-            settings.AlwaysAllowExports = true;
-            break;
-        case EMode::Library:
-            settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
-            break;
-        case EMode::Main:
-            break;
-        case EMode::View:
-            settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-            break;
-        }
+    TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(request);
+        TCheckResponse res{.CheckName = GetCheckName()};
 
-        if (!ParseTranslationSettings(request.Program, settings, res.Issues)) {
-            return res;
-        }
+        const auto* astResult = state.TranslateSql(&res.Issues);
+        res.Success = astResult && astResult->IsOk();
 
-        auto astRes = NSQLTranslationV1::SqlToYql(request.Program, settings);
-        res.Success = astRes.IsOk();
-        res.Issues = astRes.Issues;
         return res;
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeTranslatorRunner() {
     return std::make_unique<TTranslatorRunner>();
 }
 
-}
-}
+} // namespace NYql::NFastCheck

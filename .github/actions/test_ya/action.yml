@@ -27,15 +27,6 @@ inputs:
   additional_ya_make_args:
     type: string
     default: ""
-  testman_token:
-    required: false
-    description: "test manager auth token"
-  testman_url:
-    required: false
-    description: "test manager endpoint"
-  testman_project_id:
-    required: false
-    description: "test manager project id"
   increment:
     type: boolean
     required: true
@@ -60,6 +51,35 @@ inputs:
     type: string
     default: ""
     description: "how many times to retry failed tests"
+  custom_branch_name:
+    description: "Custom branch name required when workflow branch != checkout branch"
+    type: string
+    required: false
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
+  telegram_ydbot_token:
+    type: string
+    required: false
+    description: "Telegram bot token"
+  telegram_alert_logins:
+    type: string
+    required: false
+    description: "Telegram alert logins"
+  telegram_alert_chat:
+    type: string
+    required: false
+    description: "Telegram alert chat"
+  collect_coredumps:
+    type: boolean
+    default: true
+    description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
+
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -77,33 +97,56 @@ runs:
       run: |
         jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
         # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
-        
+        check_url=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: Bearer ${{github.token}}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
+
         platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
         echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
 
-        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+        curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
           -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
         if [[ "${{inputs.run_tests}}" == "true" ]]; then
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
-  
-    - name: Clean ya cache
+
+    - name: Resolve analytics job name
       shell: bash
-      run: rm -rf ~/.ya
-  
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
+        GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
+          echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
+          job_name=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail -sS \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${GITHUB_NUMERIC_JOB_ID}" \
+            | jq -r '.name // empty' || true)
+          if [ -n "$job_name" ]; then
+            echo "GITHUB_JOB_NAME=$job_name" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
+        fi
+
     - name: Init
       id: init
       shell: bash
       run: |
         set -x
-        
+
         echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
-        
+
         export TMP_DIR=$(pwd)/tmp
         rm -rf $TMP_DIR
         mkdir -p $TMP_DIR
@@ -116,76 +159,112 @@ runs:
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
-        export TESTMO_URL=${{ inputs.testman_url }}
-        echo "TESTMO_URL=$TESTMO_URL" >> $GITHUB_ENV
+        echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        export ANALYTICS_FILE
+        echo "ANALYTICS_FILE=$ANALYTICS_FILE" >> $GITHUB_ENV
+        mkdir -p "$(dirname "$ANALYTICS_FILE")"
+        touch "$ANALYTICS_FILE"
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics start init
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        analytics end init --conclusion success
 
-        if [ ${{ inputs.testman_token }} ]; then
-          TESTMO_PROXY_ADDR=127.0.0.1:8888
-          openssl req -x509 -newkey rsa:2048 \
-            -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
-            -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
-          
-          TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
-            --cert-file "$TMP_DIR/cert.pem" \
-            --cert-key "$TMP_DIR/key.pem" \
-            --target-timeout 3,60 \
-            --max-request-time 200 \
-            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy_log.txt 2>&1 &
-            
-          TESTMO_PROXY_PID=$!
-          echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
-          echo "TESTMO_PROXY_PID=$TESTMO_PROXY_PID" >> $GITHUB_ENV
-
-          # testmo rejects self-signed cert without this setting
-          echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
-        fi
-
-    - name: Setup cache
+    - name: Clean ya cache
+      id: clean_ya_cache
       shell: bash
       run: |
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics_run clean_ya_cache rm -rf ~/.ya
+
+    - name: Setup cache
+      id: setup_cache
+      shell: bash
+      run: |
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics start setup_cache
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
+        export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
+        echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
+        echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+        analytics end setup_cache --conclusion success
+
     - name: ya build and test
       id: build
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
+        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
+        trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
+
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          # Bounded loop volume so a flaky suite cannot fill the runner root FS.
+          # File pattern (not a pipe): ya recovers via core_pattern and /coredumps/%p.%s.
+          # %e is the crashing thread's comm, which actor pools rename (ydbd.System),
+          # so a name-based pattern does not match the core ya looks up.
+          COREDUMP_SIZE_GB=100
+          COREDUMP_IMG=/var/lib/ydb-ci-coredumps.img
+          COREDUMP_MNT=/coredumps
+
+          if mountpoint -q "$COREDUMP_MNT"; then
+            sudo umount "$COREDUMP_MNT" || true
+          fi
+          sudo rm -f "$COREDUMP_IMG"
+          sudo mkdir -p "$COREDUMP_MNT"
+
+          avail_kb=$(df -Pk "$(dirname "$COREDUMP_IMG")" | awk 'NR==2 {print $4}')
+          need_kb=$((COREDUMP_SIZE_GB * 1024 * 1024))
+          if [ "$avail_kb" -lt "$need_kb" ]; then
+            echo "Not enough space for ${COREDUMP_SIZE_GB}G coredump volume (available ${avail_kb} KiB)"
+            exit 1
+          fi
+
+          if ! sudo fallocate -l "${COREDUMP_SIZE_GB}G" "$COREDUMP_IMG"; then
+            sudo dd if=/dev/zero of="$COREDUMP_IMG" bs=1M count=$((COREDUMP_SIZE_GB * 1024)) status=none
+          fi
+          sudo mkfs.ext4 -q -F "$COREDUMP_IMG"
+          sudo mount -o loop,rw,nosuid,nodev "$COREDUMP_IMG" "$COREDUMP_MNT"
+          sudo chmod 1777 "$COREDUMP_MNT"
+
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+
+          echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"
+          echo "COREDUMP_MNT=$COREDUMP_MNT" >> "$GITHUB_ENV"
+
+          echo "::group::coredump diagnostics"
+          echo "core_pattern=$(cat /proc/sys/kernel/core_pattern)"
+          echo "coredump_img=$COREDUMP_IMG (${COREDUMP_SIZE_GB}G)"
+          ls -la "$COREDUMP_MNT"
+          df -h "$COREDUMP_MNT" /
+          echo "::endgroup::"
+        else
+          ulimit -c 0
+        fi
+
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
-        
-        if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
-
-          set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=${PIPESTATUS[0]}
-          set -e
-
-          if [ $RC -ne 0 ]; then
-            echo "graph_compare.sh returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
-            exit $RC
-          fi
-          
-          git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
-        else
-          YA_MAKE_TARGET="${{ inputs.build_target }}"
-        fi
+        echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
+
+        export TEST_ICRDMA=1
 
         params=(
           -T
@@ -193,11 +272,13 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          --add-peerdirs-tests all
+          --cleanup-child-processes
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
-        
+
         case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")
@@ -205,20 +286,19 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          release)  
+          release)
             params+=(--build "release")
             ;;
           release-asan)
             params+=(
               --build "release" --sanitize="address"
             )
-            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -227,7 +307,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -237,17 +317,105 @@ runs:
             exit 1
             ;;
         esac
-        
+
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
-        if [ $TEST_RETRY_COUNT -z ]; then
+        if [ -z $TEST_RETRY_COUNT ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
           TEST_RETRY_COUNT=3
         fi
-    
+
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
+
+        params+=(
+          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          --test-failure-code 0 --build-all
+          --cache-size 2TB --force-build-depends
+        )
+
+        echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
+        echo "GITHUB_REF_NAME = ${GITHUB_REF_NAME}"
+        echo "GITHUB_BASE_REF = ${GITHUB_BASE_REF}"
+        echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
+
+        if [ -z "${{ inputs.custom_branch_name }}" ]; then
+          # For pull requests, use the target branch (base_ref) - this ensures that:
+          # - Test history is shown for the target branch (e.g., stable-25-3)
+          # - Test results are uploaded for the target branch
+          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
+            BRANCH_NAME="${GITHUB_BASE_REF}"
+          else
+            BRANCH_NAME="${GITHUB_REF_NAME}"
+          fi
+        else
+          BRANCH_NAME="${{ inputs.custom_branch_name }}"
+        fi
+
+        if [[ "${{inputs.add_vcs_info}}" == "true" ]]; then
+          params+=(
+            -DGIT_BRANCH=$BRANCH_NAME
+            -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
+          )
+        fi
+
+        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+        echo "BRANCH_NAME is set to $BRANCH_NAME"
+
+        echo "::debug::get version"
+        ./ya --version
+
+        if [ true = ${{ inputs.run_tests }} ]; then
+            params+=(-A)
+        fi
+        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        GRAPH_PATH=$(realpath graph.json)
+        CONTEXT_PATH=$(realpath context.json)
+        if [ "${{ inputs.increment }}" = "true" ]; then
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
+
+          analytics start graph_compare
+          set +e
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=${PIPESTATUS[0]}
+          set -e
+          analytics end graph_compare --rc "$RC"
+          analytics flush
+
+          if [ $RC -ne 0 ]; then
+            echo "graph_compare.py returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            exit $RC
+          fi
+
+          analytics start checkout_head
+          git checkout $ORIGINAL_HEAD
+          analytics end checkout_head
+          YA_MAKE_TARGET="ydb"
+        else
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
+          if [ true = ${{ inputs.run_tests }} ]; then
+            YA_MAKE_COMMAND+=" --retest"
+          fi
+          $YA_MAKE_COMMAND -k --cache-tests \
+            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+            $YA_MAKE_TARGET
+        fi
+
+        export CI_YA_ATTEMPT=1
+        analytics start prepare_ya_make
+        export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
+        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
@@ -257,43 +425,16 @@ runs:
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
+
+        analytics track runner_info --kind info --runner
+        analytics flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
           params+=(--retest)
         fi
-
-        params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
-          --test-failure-code 0 --build-all 
-          --cache-size 2TB --force-build-depends
-        )
-
-
-        TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
-        TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        TESTMO_PR_NUMBER=${{ github.event.number }}
-        
-        case "$BUILD_PRESET" in
-          relwithdebinfo)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}"
-            ;;
-          debug)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
-            ;;
-          release*)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
-            ;;
-          *)
-            echo "Invalid preset: $BUILD_PRESET"
-            exit 1
-            ;;
-        esac
-
-        echo "::debug::get version"
-        ./ya --version
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
@@ -305,34 +446,10 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          case $GITHUB_EVENT_NAME in
-            workflow_dispatch)
-              TESTMO_RUN_NAME="${{ github.run_id }} manual"
-              TESTMO_EXTRA_TAG="manual"
-              ;;
-            pull_request | pull_request_target)
-              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-              TESTMO_EXTRA_TAG="pr"
-              TESTMO_BRANCH_TAG=""
-              ;;
-            schedule)
-              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-              TESTMO_EXTRA_TAG="schedule"
-              ;;
-            push)
-              TESTMO_RUN_NAME="${{ github.run_id }} POST"
-              TESTMO_EXTRA_TAG="post-commit"
-              ;;
-            *)
-              TESTMO_RUN_NAME="${{ github.run_id }}"
-              TESTMO_EXTRA_TAG=""
-              ;;
-          esac
-
-          echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
+          export CI_YA_ATTEMPT=$RETRY
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
+            analytics start prepare_ya_make
           else
             IS_RETRY=0
           fi
@@ -342,48 +459,131 @@ runs:
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
+          export TEST_META_INFO=$CURRENT_PUBLIC_DIR/tests_meta
+          mkdir $TEST_META_INFO
 
-          if [ ${{ inputs.testman_token }} ]; then
-            # inititalize testmo session
-            TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
-            TESTMO_RUN_ID=$(
-              TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
-                --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
-                --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
-            )
-            echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
-            TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
+          CURRENT_MESSAGE="ya make is running..."
+          PREV_REPORT="$CURRENT_REPORT"
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
-            # Replace test history link
-            cat $SUMMARY_LINKS | (grep -v "Test history"  || true) > $TMP_DIR/tmp_summary
-            mv $TMP_DIR/tmp_summary $SUMMARY_LINKS
-            echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
-          fi
-
-          CURRENT_MESSAGE="ya make is running..." 
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            RERUN_FAILED_OPT="-X"
+            if [ -z "$GRAPH_PATH" ]; then
+              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
+              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
+            else
+              RERUN_FAILED_OPT=""
+            fi
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
-          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+          monitor_memory() {
+              set +x
+              rm -f ram_usage.txt
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage.txt
+                  sleep 3
+              done
+          }
+
+          monitor_memory &
+          MONITOR_PID=$!
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
+          else
+            GRAPH_OPTS=""
+          fi
+
+          TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+          # Allocate 95% of total memory to ya make cgroup.
+          YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB * 95 / 100 ))
+          YA_MAKE_MEM_MAX="${YA_MAKE_MEM_MAX_KB}K"
+          YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
+
+          echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
+
+          YA_MAKE_CMD=(
+            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+          )
+
+          # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
+          # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            YA_MAKE_RUN_CMD=(
+              prlimit --core=unlimited:unlimited
+              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
+              "${YA_MAKE_CMD[@]}"
+            )
+          else
+            YA_MAKE_RUN_CMD=(
+              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
+            )
+          fi
+
+          # Timestamp for filtering dmesg to this try only.
+          DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          analytics end prepare_ya_make
+          YA_MAKE_NAME="ya_make_try_${RETRY}"
+          analytics start "ya_make_try_${RETRY}"
+
           set +e
-          (./ya make $YA_MAKE_TARGET "${params[@]}" \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+          # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
+          (sudo -n -E systemd-run --scope \
+             --unit="${YA_MAKE_SCOPE_NAME}" \
+             -p MemoryMax="${YA_MAKE_MEM_MAX}" \
+             -p MemorySwapMax=0 \
+             -- "${YA_MAKE_RUN_CMD[@]}"
+           echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          if [ $RC -eq 0 ]; then
+            analytics end "$YA_MAKE_NAME"
+          else
+            analytics end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
+          fi
+          analytics start postprocess_try
+          # Optional sub-steps use || true so they don't abort the step.
+          # Remember if any failed so we don't write conclusion=success.
+          POSTPROCESS_RC=0
+          if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
+            python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
+              --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+              --parent "$YA_MAKE_NAME" \
+              --ya-attempt "$RETRY" || POSTPROCESS_RC=$?
+          fi
 
-          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+          # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
+          OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
+          OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
+          sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
+          if [ -s "$OOM_DMESG_LOG" ]; then
+            echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
+          fi
+
+          kill $MONITOR_PID
+
+          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
+
+          GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
+          .github/scripts/report_ram_analyzer.py \
+            --report-file "$CURRENT_REPORT" \
+            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
+            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --ram-usage-file ram_usage.txt \
+            --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
+            --chat-id '${{ inputs.telegram_alert_chat }}' \
+            --memory-threshold 97 || POSTPROCESS_RC=$?
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -391,8 +591,9 @@ runs:
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+          analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -405,27 +606,44 @@ runs:
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            analytics enrich "$YA_MAKE_NAME" \
+              --label "error=ya make rc=${RC}" \
+              --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+              --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
+            analytics flush
             break
           fi
 
-          # fix junit files (add links, logs etc)
-          # archive unitest reports (orig) 
-          gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
+          # archive build results report (orig)
+          gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
-          # postprocess junit report
-          .github/scripts/tests/transform_ya_junit.py -i \
-            -m .github/config/muted_ya.txt \
+          # postprocess build results report (add links, logs, mute tests etc)
+          analytics start transform_build_results
+          TRANSFORM_RC=0
+          .github/scripts/tests/transform_build_results.py \
+            --build-results-report "$CURRENT_REPORT" \
+            --test_dir="$TEST_META_INFO" \
+            -m "$MUTED_YA_FILE" \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
-            "$CURRENT_JUNIT_XML_PATH"
-          cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || TRANSFORM_RC=$?
+          analytics end transform_build_results --rc "$TRANSFORM_RC"
+          cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          analytics start fail_checker
+          .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+          analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
+          if [ $TESTS_RESULT = 0 ]; then
+            analytics end fail_checker
+            analytics enrich "$YA_MAKE_NAME" --label "tests_status=passed"
+          else
+            analytics end fail_checker --rc "$TESTS_RESULT" --error "failed_tests=${FAILED_TESTS_COUNT}"
+            analytics enrich "$YA_MAKE_NAME" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+          fi
 
           IS_LAST_RETRY=0
 
@@ -433,64 +651,121 @@ runs:
             IS_LAST_RETRY=1
           fi
 
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
+          if [ $FAILED_TESTS_COUNT -gt 500 ]; then
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
           fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
+            # Set PR number only if it exists (for pull request events)
+            PR_ARG=""
+            if [ -n "${{ github.event.number }}" ]; then
+              PR_ARG="--pr_number ${{ github.event.number }}"
+            fi
+            
+            # Set the correct commit SHA - use original head for accurate version tracking
+            export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
+            
+            analytics start generate_summary
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
               --public_dir_url "$PUBLIC_DIR_URL" \
               --build_preset "$BUILD_PRESET" \
+              --branch "$BRANCH_NAME" \
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
               --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
-              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
+              $PR_ARG \
+              --workflow_run_id "${{ github.run_id }}" \
+              --oom_dmesg_log "$OOM_DMESG_LOG" \
+              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
+            analytics end generate_summary
           fi
 
+          analytics start s3_sync_try
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          analytics end s3_sync_try
+          analytics enrich "$YA_MAKE_NAME" \
+            --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
+            --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+            --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
+          analytics flush
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
-          
+
           # upload tests results to YDB
-          ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
-
-          if [ ${{ inputs.testman_token }} ]; then
-            # finish testme session
-
-            # split large junit_report
-            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/try_$RETRY/junit-split
-            mkdir -p $TESTMO_JUNIT_REPORT_PARTS
-            .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
-            # archive unitest reports (transformed)
-            tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
-            
-            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:submit-thread \
-              --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
-              --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
-
-            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
-            echo "runid=" >> $GITHUB_OUTPUT
-          fi
+          # Create run name based on event type and retry number
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              run_name="${{ github.run_id }}_manual"
+              ;;
+            pull_request | pull_request_target)
+              pr_number="${{ github.event.number }}"
+              if [ -n "$pr_number" ]; then
+                run_name="${{ github.run_id }}_PR_${pr_number}"
+              else
+                run_name="${{ github.run_id }}_PR"
+              fi
+              ;;
+            schedule)
+              run_name="${{ github.run_id }}_schedule"
+              ;;
+            push)
+              run_name="${{ github.run_id }}_POST"
+              ;;
+            *)
+              run_name="${{ github.run_id }}"
+              ;;
+          esac
+          run_name="${run_name}_attempt_${RETRY}"
+          analytics start upload_tests_results
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          analytics end upload_tests_results
+          analytics flush
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
+
+          # Free the bounded coredump volume for the next try (ya already postprocessed dumps).
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            echo "Cleaning /coredumps before retry $((RETRY + 1))"
+            sudo find /coredumps -mindepth 1 -delete || true
+            df -h /coredumps || true
+          fi
+
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+              GRAPH_PATH=""
+              CONTEXT_PATH=""
+          fi
         done;
+
+        # Drop dump files after the last try; volume teardown is in a dedicated always() step.
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          echo "Cleaning /coredumps after all test tries"
+          sudo find /coredumps -mindepth 1 -delete || true
+        fi
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
+
+    - name: resolve-status-sha
+      shell: bash
+      run: |
+        status_sha="$ORIGINAL_HEAD"
+        if [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
+          status_sha="${{ github.event.pull_request.head.sha }}"
+        fi
+        echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -499,27 +774,17 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-        
+
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
         else
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
-    
-    - name: Clean up unfinished testmo sessions
-      if: always()
-      shell: bash
-      run: |
-        if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
-        fi
-        if [ ${{ inputs.testman_token }} ]; then
-          kill $TESTMO_PROXY_PID
-        fi
+
     - name: analyze tests results
       shell: bash
       env:
@@ -533,61 +798,23 @@ runs:
           else
             testmessage="The check has been failed"
           fi
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
-          
+
           if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
         fi
-    
+
     - name: check test results
       if: inputs.run_tests
       shell: bash
       run: |
         if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
-          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+          .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi
 
-    - name: show diff mute_ya.txt
-      if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
-      shell: bash
-      continue-on-error: true
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        ORIGINAL_HEAD=$(git rev-parse HEAD)
-        get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
-        file_to_check=.github/config/muted_ya.txt
-        check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
-        if [[ ${check_result} == *"not changed" ]];then
-            echo file ${file_to_check} NOT changed
-        else
-            echo file ${file_to_check} changed
-            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${GITHUB_REF_NAME}"
-            FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
-            SEPARATOR=""
-            if [ -f "$FILE_PATH" ]; then
-              LINE_COUNT=$(wc -l < "$FILE_PATH")
-              if [ "$LINE_COUNT" -gt 0 ]; then
-                SEPARATOR=', '
-                MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_new_muted_tests.txt)"
-              fi
-            fi
-            FILE_PATH=$PUBLIC_DIR/mute_info/3_unmuted_tests.txt
-            if [ -f "$FILE_PATH" ]; then
-              LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
-              if [ "$LINE_COUNT_unmute" -gt 0 ]; then
-                MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/3_unmuted_tests.txt)"
-              fi
-            fi
-            if [ -n "$MESSAGE" ]; then
-              printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange
-            fi
-          fi
-
-        
     - name: sync results to s3 and publish links
       if: always()
       shell: bash
@@ -600,10 +827,47 @@ runs:
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 
+    - name: Flush analytics JSONL
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        # In-job phases from this runner. Job/step timings come from
+        # collect_analytics_fast.yml after the run, not from here.
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        conclusion="${{ job.status }}"
+        if [ -z "$conclusion" ]; then
+          conclusion=failure
+        fi
+        analytics send --conclusion "$conclusion"
+
     - name: show free space
       if: always()
       shell: bash
       run: df -h
+
+    - name: cleanup coredump volume
+      if: always()
+      shell: bash
+      env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
+      run: |
+        if [ "${COLLECT_COREDUMPS}" != "true" ]; then
+          exit 0
+        fi
+        set -x
+        COREDUMP_MNT="${COREDUMP_MNT:-/coredumps}"
+        COREDUMP_IMG="${COREDUMP_IMG:-/var/lib/ydb-ci-coredumps.img}"
+
+        # No-op if volume was never created (collect disabled or setup failed early).
+        if mountpoint -q "$COREDUMP_MNT"; then
+          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
+          sudo umount "$COREDUMP_MNT" || true
+        fi
+        sudo rm -f "$COREDUMP_IMG" || true
+        df -h / || true
 
     - name: build_stats
       shell: bash
@@ -611,8 +875,8 @@ runs:
       if: always()
       run: |
         set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export build_preset="${{ inputs.build_preset }}"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         python3 .github/scripts/send_build_stats.py
 
@@ -624,15 +888,14 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        export branch_to_compare="$GITHUB_REF_NAME" 
+        export build_preset="${{ inputs.build_preset }}"
+        export branch_to_compare="$BRANCH_NAME"
         export yellow_treshold=102400
-        export red_treshold=2097152 
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`
-        
+
         IFS=';;;'
         read -ra comment_arr <<< "$comment_raw"
 
@@ -641,7 +904,7 @@ runs:
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}
-          
+
           printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
 
         else

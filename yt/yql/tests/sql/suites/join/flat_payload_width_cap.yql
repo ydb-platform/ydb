@@ -1,0 +1,9 @@
+USE plato;
+
+-- Should fallback to Variant payload.
+pragma yt.JoinCommonUseFlatPayload="true";
+pragma yt.JoinCommonFlatPayloadColumnLimit="1";
+
+SELECT a.key AS k, a.value AS av, b.value AS bv
+FROM Input1 AS a INNER JOIN Input2 AS b ON a.key == b.key
+ORDER BY k, av, bv;

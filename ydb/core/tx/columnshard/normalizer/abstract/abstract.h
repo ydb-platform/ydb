@@ -2,6 +2,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -25,7 +26,8 @@ class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
 
 public:
     TNormalizerCounters(const TString& normalizerName)
-        : TBase("Normalizer") {
+        : TBase("Normalizer")
+    {
         DeepSubGroup("normalizer", normalizerName);
 
         ObjectsCount = TBase::GetDeriviative("Objects/Count");
@@ -51,7 +53,8 @@ public:
     }
 };
 
-enum class ENormalizerSequentialId : ui32 {
+// DONT REMOVE AND DONT CHANGE PLACES! PERSISTENT! ADD Deprecated PREFIX FOR REMOVED NORMALIZER
+enum class ENormalizerSequentialId: ui32 {
     Granules = 1,
     Chunks,
     DeprecatedPortionsCleaner,
@@ -59,15 +62,19 @@ enum class ENormalizerSequentialId : ui32 {
     DeprecatedPortionsMetadata,
     CleanGranuleId,
     DeprecatedEmptyPortionsCleaner,
-    CleanInsertionDedup,
+    DeprecatedCleanInsertionDedup,
     GCCountersNormalizer,
-    RestorePortionFromChunks,
+    DeprecatedRestorePortionFromChunks,
     SyncPortionFromChunks,
     DeprecatedRestoreV1Chunks,
-    SyncMinSnapshotFromChunks,
+    DeprecatedSyncMinSnapshotFromChunks,
     DeprecatedRestoreV1Chunks_V1,
     RestoreV1Chunks_V2,
     RestoreV2Chunks,
+    CleanDeprecatedSnapshot,
+    RestoreV0ChunksMeta,
+    CopyBlobIdsToV2,
+    RestoreAppearanceSnapshot,
 
     MAX
 };
@@ -88,6 +95,7 @@ class TNormalizationController;
 class INormalizerTask {
 public:
     using TPtr = std::shared_ptr<INormalizerTask>;
+
     virtual ~INormalizerTask() {
     }
 
@@ -97,15 +105,18 @@ public:
 class INormalizerChanges {
 public:
     using TPtr = std::shared_ptr<INormalizerChanges>;
+
     virtual ~INormalizerChanges() {
     }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
+
     virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
         Y_UNUSED(normalizationContext);
     }
 
     virtual ui64 GetSize() const = 0;
+
     virtual TString DebugString() const {
         return TStringBuilder() << "size=" << GetSize();
     }
@@ -116,7 +127,8 @@ class TTrivialNormalizerTask: public INormalizerTask {
 
 public:
     TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
-        : Changes(changes) {
+        : Changes(changes)
+    {
         AFL_VERIFY(Changes);
     }
 
@@ -135,7 +147,8 @@ public:
         TInitContext(TTabletStorageInfo* info, const ui64 tabletId, const NActors::TActorId& actorId)
             : StorageInfo(info)
             , TabletId(tabletId)
-            , TabletActorId(actorId) {
+            , TabletActorId(actorId)
+        {
         }
 
         ui64 GetTabletId() const {
@@ -166,7 +179,8 @@ public:
 
         TNormalizerFullId(const TString& className, const TString& description)
             : ClassName(className)
-            , Description(description) {
+            , Description(description)
+        {
         }
     };
 
@@ -192,9 +206,11 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, TString, TInitContext>;
 
         virtual ~INormalizerComponent() = default;
+
         INormalizerComponent(const TInitContext& context)
             : TabletId(context.GetTabletId())
-            , TabletActorId(context.GetTabletActorId()) {
+            , TabletActorId(context.GetTabletActorId())
+        {
         }
 
         TNormalizerFullId GetNormalizerFullId() const {
@@ -261,10 +277,12 @@ public:
 
         TAtomic ActiveTasksCount = 0;
     };
+
     using TPtr = std::shared_ptr<INormalizerComponent>;
 
 private:
     std::shared_ptr<IStoragesManager> StoragesManager;
+    NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscription;
 
     std::deque<INormalizerComponent::TPtr> Normalizers;
@@ -280,7 +298,19 @@ public:
     TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager,
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
         : StoragesManager(storagesManager)
-        , TaskSubscription("CS::NORMALIZER", counters) {
+        , TaskSubscription("CS::NORMALIZER", counters)
+    {
+        AFL_VERIFY(StoragesManager);
+    }
+
+    void SetDataAccessorsManager(const NDataAccessorControl::TDataAccessorsManagerContainer& dataAccessorsManager) {
+        AFL_VERIFY(!DataAccessorsManager);
+        AFL_VERIFY(!!dataAccessorsManager);
+        DataAccessorsManager = dataAccessorsManager;
+    }
+
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> GetDataAccessorsManager() const {
+        return DataAccessorsManager.GetObjectPtrVerified();
     }
 
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {

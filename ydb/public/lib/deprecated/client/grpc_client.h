@@ -38,6 +38,7 @@ namespace NKikimr {
             TGRpcClient(const TGRpcClientConfig& config);
             ~TGRpcClient();
             const TGRpcClientConfig& GetConfig() const;
+            void SetAuthToken(const TString& token);
             grpc_connectivity_state GetNetworkStatus() const;
 
             // MiniKQL request, TResponseCallback callback (const NKikimrClient::DML& request)
@@ -93,9 +94,6 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // INTROSPECTION
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            void LocalMKQL(const NKikimrClient::TLocalMKQL& request, TResponseCallback callback);
-            void LocalSchemeTx(const NKikimrClient::TLocalSchemeTx& request, TResponseCallback callback);
-            void TabletKillRequest(const NKikimrClient::TTabletKillRequest& request, TResponseCallback callback);
             void InterconnectDebug(const NKikimrClient::TInterconnectDebug& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////

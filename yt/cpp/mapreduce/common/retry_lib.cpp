@@ -123,6 +123,12 @@ public:
         return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->ReadRetryCount), Config_));
     }
 
+    IRequestRetryPolicyPtr CreatePolicyForCheckClusterLiveness() override
+    {
+        return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->CheckLivenessRetryCount), Config_));
+    }
+
+
     IRequestRetryPolicyPtr Wrap(IRequestRetryPolicyPtr basePolicy)
     {
         auto config = RetryConfigProvider_->CreateRetryConfig();
@@ -203,16 +209,11 @@ static bool IsRetriableChunkError(const TSet<int>& codes)
 
 static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorResponse, const TConfigPtr& config)
 {
-    int httpCode = errorResponse.GetHttpCode();
-    if (httpCode / 100 != 4 && !errorResponse.IsFromTrailers()) {
-        return config->RetryInterval;
-    }
-
     auto allCodes = errorResponse.GetError().GetAllErrorCodes();
     using namespace NClusterErrorCodes;
-    if (httpCode == 429
-        || allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded)
-        || allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
+
+    if (allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded) ||
+        allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
     {
         // request rate limit exceeded
         return config->RateLimitExceededRetryInterval;
@@ -227,15 +228,24 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
     }
     for (auto code : {
         NRpc::TransportError,
+        NBus::TransportError,
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
-        NSequoiaClient::SequoiaRetriableError,
+        NRpc::TransientFailure,
+        NScheduler::MasterDisconnected,
         Canceled,
+        Timeout,
     }) {
         if (allCodes.contains(code)) {
             return config->RetryInterval;
         }
     }
+
+    // Temporary workaround
+    if (errorResponse.GetError().ContainsText("Cannot resolve multiproxy target cluster")) {
+        return TDuration::Seconds(60);
+    }
+
     return Nothing();
 }
 
@@ -253,6 +263,8 @@ bool IsRetriable(const TErrorResponse& errorResponse)
 bool IsRetriable(const std::exception& ex)
 {
     if (dynamic_cast<const TRequestRetriesTimeout*>(&ex)) {
+        return false;
+    } else if (dynamic_cast<const TInputStreamAbortedError*>(&ex)) {
         return false;
     }
     return true;

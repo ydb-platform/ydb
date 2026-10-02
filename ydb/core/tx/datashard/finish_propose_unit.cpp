@@ -5,6 +5,8 @@
 #include "execution_unit_ctors.h"
 #include "probes.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
@@ -57,11 +59,11 @@ TDataShard::TPromotePostExecuteEdges TFinishProposeUnit::PromoteImmediatePostExe
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         }
-    } else if (op->MvccReadWriteVersion) {
+    } else if (op->CachedMvccVersion) {
         if (op->IsReadOnly() || op->LockTxId()) {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->CachedMvccVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         } else {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->CachedMvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
         }
     } else {
         return { };
@@ -155,23 +157,27 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
     auto res = std::move(op->Result());
-    Y_ABORT_UNLESS(res);
+    Y_ENSURE(res);
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
     res->Record.SetProposeLatency(duration.MilliSeconds());
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Propose transaction complete txid " << op->GetTxId() << " at tablet "
-                << DataShard.TabletID() << " send to client, exec latency: "
-                << res->Record.GetExecLatency() << " ms, propose latency: "
-                << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
+    YDB_LOG_TRACE_CTX(ctx, "TFinishProposeUnit::CompleteRequest: propose transaction complete, sending result to client",
+        {"txId", op->GetTxId()},
+        {"tabletId", DataShard.TabletID()},
+        {"execLatency", res->Record.GetExecLatency()},
+        {"proposeLatency", duration.MilliSeconds()},
+        {"status", res->GetStatus()});
 
     TString errors = res->GetError();
     if (errors.size()) {
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                    "Errors while proposing transaction txid " << op->GetTxId()
-                    << " at tablet " << DataShard.TabletID() << " status: "
-                    << res->GetStatus() << " errors: " << errors);
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, "Errors while proposing transaction",
+                {"txId", op->GetTxId()},
+                {"tabletId", DataShard.TabletID()},
+                {"status", res->GetStatus()},
+                {"errors", errors});
+        }
     }
 
     if (op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
@@ -198,8 +204,8 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
             LWTRACK(ProposeTransactionSendResult, op->Orbit);
             res->Orbit = std::move(op->Orbit);
         }
-        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->CachedMvccVersion) {
+            DataShard.SendImmediateWriteResult(*op->CachedMvccVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
             // TODO: we should actually measure a read timestamp and use it here
             DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
@@ -226,7 +232,7 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
                                         const TActorContext &ctx)
 {
     auto &res = op->Result();
-    Y_ABORT_UNLESS(res);
+    Y_ENSURE(res);
     auto execLatency = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
     res->Record.SetExecLatency(execLatency.MilliSeconds());
@@ -240,9 +246,12 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
 
         if (res->IsError()) {
             DataShard.IncCounter(COUNTER_PREPARE_ERROR);
-            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx,  NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
-                        "Prepare transaction failed. txid " << op->GetTxId()
-                        << " at tablet " << DataShard.TabletID()  << " errors: " << res->GetError());
+            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters).Kick()) {
+                YDB_LOG_ERROR_CTX(ctx, "Prepare transaction failed",
+                    {"txId", op->GetTxId()},
+                    {"tabletId", DataShard.TabletID()},
+                    {"errors", res->GetError()});
+            }
         } else {
             DataShard.IncCounter(COUNTER_PREPARE_IMMEDIATE);
         }
@@ -259,3 +268,7 @@ THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

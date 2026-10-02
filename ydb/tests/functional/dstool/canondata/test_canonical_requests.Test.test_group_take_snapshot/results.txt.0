@@ -1,0 +1,4 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk stop --node-id=1 --pdisk-id=1
+Exit Status: 0
+===== stderr =====
+success

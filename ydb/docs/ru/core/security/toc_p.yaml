@@ -1,9 +1,12 @@
 items:
 - name: Аутентификация
   href: authentication.md
+  items:
+  - name: Кеширование результатов аутентификации
+    href: caching-authentication-results.md
 - name: Авторизация
   href: authorization.md
-- name: Встроенная настройка безопасности
+- name: Начальная настройка безопасности
   href: builtin-security.md
 - name: Аудитный лог
   href: audit-log.md

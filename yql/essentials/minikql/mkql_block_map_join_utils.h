@@ -2,12 +2,10 @@
 
 #include <util/system/types.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 constexpr ui64 BlockMapJoinIndexEntrySize = 20;
 
 ui64 EstimateBlockMapJoinIndexSize(ui64 rowsCount);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

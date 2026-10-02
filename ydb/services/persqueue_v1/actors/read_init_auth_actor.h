@@ -1,20 +1,18 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-
 #include <ydb/services/lib/actors/type_definitions.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor> {
+class TReadInitAndAuthActor : public NPQ::TBaseActor<TReadInitAndAuthActor>
+                            , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TReadInitAndAuthActor>;
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
@@ -28,8 +26,16 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_READ; }
+
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session});
+    }
 
 private:
 

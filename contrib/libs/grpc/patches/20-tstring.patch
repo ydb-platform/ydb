@@ -1,3 +1,22 @@
+--- contrib/libs/grpc/src/core/lib/surface/call.cc	(3aa9ce0a2551c55167cc7f1129fae1b840fbaa4c)
++++ contrib/libs/grpc/src/core/lib/surface/call.cc	(26aa0c9a05850d6e4fd9f48970eb77e7f79b8baf)
+@@ -2355,14 +2355,14 @@
+   void PartyOver() override {
+     {
+       ScopedContext ctx(this);
+-      TString message;
++      std::string message;
+       grpc_call_final_info final_info;
+       final_info.stats = final_stats_;
+       final_info.final_status = final_status_;
+       // TODO(ctiller): change type here so we don't need to copy this string.
+       final_info.error_string = nullptr;
+       if (!final_message_.empty()) {
+-        message = TString(final_message_.begin(), final_message_.end());
++        message = std::string(final_message_.begin(), final_message_.end());
+         final_info.error_string = message.c_str();
+       }
+       final_info.stats.latency =
 --- contrib/libs/grpc/src/core/lib/transport/metadata_batch.h	(3aa9ce0a2551c55167cc7f1129fae1b840fbaa4c)
 +++ contrib/libs/grpc/src/core/lib/transport/metadata_batch.h	(26aa0c9a05850d6e4fd9f48970eb77e7f79b8baf)
 @@ -661,7 +661,7 @@ class GetStringValueHelper {

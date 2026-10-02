@@ -7,7 +7,6 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
-
 using namespace NKikimr;
 
 namespace NPython {
@@ -16,9 +15,9 @@ namespace NPython {
 // public functions
 //////////////////////////////////////////////////////////////////////////////
 TPyObjectPtr ToPyVariant(
-        const TPyCastContext::TPtr& castCtx,
-        const NUdf::TType* type,
-        const NUdf::TUnboxedValuePod& value)
+    const TPyCastContext::TPtr& castCtx,
+    const NUdf::TType* type,
+    const NUdf::TUnboxedValuePod& value)
 {
     auto& th = *castCtx->PyCtx->TypeInfoHelper;
     NUdf::TVariantTypeInspector varInsp(th, type);
@@ -35,7 +34,7 @@ TPyObjectPtr ToPyVariant(
     } else if (auto structInsp = NUdf::TStructTypeInspector(th, subType)) {
         itemType = structInsp.GetMemberType(index);
         TPyObjectPtr pyName = ToPyUnicode<NUdf::TStringRef>(
-                    structInsp.GetMemberName(index));
+            structInsp.GetMemberName(index));
         TPyObjectPtr pyItem = ToPyObject(castCtx, itemType, item);
         return PyTuple_Pack(2, pyName.Get(), pyItem.Get());
     }
@@ -44,9 +43,9 @@ TPyObjectPtr ToPyVariant(
 }
 
 NUdf::TUnboxedValue FromPyVariant(
-        const TPyCastContext::TPtr& castCtx,
-        const NUdf::TType* type,
-        PyObject* value)
+    const TPyCastContext::TPtr& castCtx,
+    const NUdf::TType* type,
+    PyObject* value)
 {
     PY_ENSURE(PyTuple_Check(value),
               "Expected to get Tuple, but got " << Py_TYPE(value)->tp_name);
@@ -54,7 +53,7 @@ NUdf::TUnboxedValue FromPyVariant(
     Py_ssize_t tupleSize = PyTuple_GET_SIZE(value);
     PY_ENSURE(tupleSize == 2,
               "Expected to get Tuple with 2 elements, but got "
-              << tupleSize << " elements");
+                  << tupleSize << " elements");
 
     auto& th = *castCtx->PyCtx->TypeInfoHelper;
     NUdf::TVariantTypeInspector varInsp(th, type);
@@ -69,12 +68,12 @@ NUdf::TUnboxedValue FromPyVariant(
         if (auto tupleInsp = NUdf::TTupleTypeInspector(th, subType)) {
             PY_ENSURE(index < tupleInsp.GetElementsCount(),
                       "Index must be < " << tupleInsp.GetElementsCount()
-                      << ", but got " << index);
+                                         << ", but got " << index);
             auto* itemType = tupleInsp.GetElementType(index);
             return castCtx->ValueBuilder->NewVariant(index, FromPyObject(castCtx, itemType, el1));
         } else {
             throw yexception() << "Cannot convert " << PyObjectRepr(value)
-                    << " underlying Variant type is not a Tuple";
+                               << " underlying Variant type is not a Tuple";
         }
     } else if (TryPyCast(el0, name)) {
         if (auto structInsp = NUdf::TStructTypeInspector(th, subType)) {
@@ -85,13 +84,14 @@ NUdf::TUnboxedValue FromPyVariant(
             return castCtx->ValueBuilder->NewVariant(index, FromPyObject(castCtx, itemType, el1));
         } else {
             throw yexception() << "Cannot convert " << PyObjectRepr(value)
-                    << " underlying Variant type is not a Struct";
+                               << " underlying Variant type is not a Struct";
         }
     } else {
         throw yexception()
-                << "Expected first Tuple element to either be an int "
-                   "or a str, but got " << Py_TYPE(el0)->tp_name;
+            << "Expected first Tuple element to either be an int "
+               "or a str, but got "
+            << Py_TYPE(el0)->tp_name;
     }
 }
 
-} // namspace NPython
+} // namespace NPython

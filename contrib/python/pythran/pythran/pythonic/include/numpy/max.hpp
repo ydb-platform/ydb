@@ -10,8 +10,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class... Args>
-  auto max(Args &&...args) -> decltype(reduce<operator_::functor::imax>(
-                               std::forward<Args>(args)...));
+  auto max(Args &&...args)
+      -> decltype(reduce<operator_::functor::imax>(std::forward<Args>(args)...));
 
   DEFINE_FUNCTOR(pythonic::numpy, max);
 } // namespace numpy

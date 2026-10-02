@@ -32,6 +32,9 @@ class AbstractTabletByTypeNemesis(Nemesis, AbstractMonitoredNemesis):
         return self.__client
 
     def extract_fault(self):
+        self.logger.info("=== EXTRACT_FAULT START: %s ===", str(self))
+        self.logger.info("Extract fault called for %s (no explicit recovery)", str(self))
+        self.logger.info("=== EXTRACT_FAULT COMPLETED: %s ===", str(self))
         pass
 
     @property
@@ -39,12 +42,33 @@ class AbstractTabletByTypeNemesis(Nemesis, AbstractMonitoredNemesis):
         return self.__tablet_ids
 
     def prepare_state(self):
+        self.logger.info('=== PREPARE_STATE START: %s ===', str(self))
         self.logger.info('Preparing state for nemesis = ' + str(self))
-        response = self.client.tablet_state(self.__tablet_type)
 
-        self.__tablet_ids = [
-            info.TabletId for info in response.TabletStateInfo
-        ]
+        try:
+            self.logger.info("Calling tablet_state for tablet_type: %s", self.__tablet_type)
+            response = self.client.tablet_state(self.__tablet_type)
+            self.logger.info("Received response with %d tablet states", len(response.TabletStateInfo))
+
+            # Clear previous tablet_ids
+            self.logger.info("Clearing previous tablet_ids: %s", self.__tablet_ids)
+            self.__tablet_ids = []
+
+            # Extract tablet IDs
+            for i, info in enumerate(response.TabletStateInfo):
+                tablet_id = info.TabletId
+                self.__tablet_ids.append(tablet_id)
+
+            self.logger.info("Found %d tablets of type %s", len(self.__tablet_ids), self.__tablet_type)
+            self.logger.info("Found tablet_ids: %s (count: %d)", self.__tablet_ids, len(self.__tablet_ids))
+            self.logger.info('=== PREPARE_STATE SUCCESS: %s ===', str(self))
+
+        except Exception as e:
+            self.logger.info('=== PREPARE_STATE FAILED: %s ===', str(self))
+            self.logger.error("Failed to prepare state for %s: %s", str(self), str(e))
+            self.logger.exception("Exception details:")
+
+            self._disabled = True
 
     def __str__(self):
         return "{class_name}(tablet_type={tablet_type})".format(
@@ -57,31 +81,54 @@ class KillSystemTabletByTypeNemesis(AbstractTabletByTypeNemesis):
 
     def __init__(self, tablet_type, cluster, schedule=(45, 90)):
         super(KillSystemTabletByTypeNemesis, self).__init__(tablet_type, cluster, schedule)
-        self.__cluster = cluster
-        self.__client = None
-        self.__tablet_type = tablet_type
 
     def inject_fault(self):
+        self.logger.info("=== INJECT_FAULT START: %s ===", str(self))
+        self.logger.info("Available tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
+
         if self.tablet_ids:
             tablet_id = random.choice(self.tablet_ids)
             self.logger.info(
                 "Killing {tablet_type}, tablet_id = {tablet_id}".format(
-                    tablet_type=self.__tablet_type,
+                    tablet_type=self.tablet_type,
                     tablet_id=tablet_id
                 )
             )
             try:
+                self.logger.info("Calling tablet_kill for tablet_id: %s", tablet_id)
                 self.client.tablet_kill(tablet_id)
+                self.logger.info("Successfully killed tablet_id: %s", tablet_id)
                 self.on_success_inject_fault()
-            except RuntimeError:
+                self.logger.info("=== INJECT_FAULT SUCCESS: %s ===", str(self))
+            except RuntimeError as e:
                 self.logger.error(
-                    "Failed to kill {tablet_type}, tablet_id = {tablet_id}".format(
-                        tablet_type=self.__tablet_type,
-                        tablet_id=tablet_id
+                    "Failed to kill {tablet_type}, tablet_id = {tablet_id}, error: {error}".format(
+                        tablet_type=self.tablet_type,
+                        tablet_id=tablet_id,
+                        error=str(e)
                     )
                 )
+                self.logger.info("=== INJECT_FAULT FAILED: %s ===", str(self))
+            except Exception as e:
+                self.logger.error(
+                    "Unexpected error killing {tablet_type}, tablet_id = {tablet_id}, error: {error}".format(
+                        tablet_type=self.tablet_type,
+                        tablet_id=tablet_id,
+                        error=str(e)
+                    )
+                )
+                self.logger.info("=== INJECT_FAULT ERROR: %s ===", str(self))
         else:
+            self.logger.warning("No tablet_ids available, calling prepare_state()")
             self.prepare_state()
+            self.logger.info("After prepare_state, tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
+
+            if self.tablet_ids:
+                self.logger.info("Retrying inject_fault after prepare_state")
+                self.inject_fault()
+            else:
+                self.logger.warning("Still no tablet_ids after prepare_state, skipping injection")
+                self.logger.info("=== INJECT_FAULT SKIPPED (no tablets): %s ===", str(self))
 
 
 class KillCoordinatorNemesis(KillSystemTabletByTypeNemesis):

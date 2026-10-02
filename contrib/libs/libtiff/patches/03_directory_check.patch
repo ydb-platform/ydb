@@ -1,0 +1,20 @@
+--- contrib/libs/libtiff/tif_dirread.c	(index)
++++ contrib/libs/libtiff/tif_dirread.c	(working tree)
+@@ -5121,7 +5121,7 @@ int TIFFReadCustomDirectory(TIFF *tif, toff_t diroff,
+     dircount = TIFFFetchDirectory(tif, diroff, &dir, NULL);
+     if (!dircount)
+     {
+-        TIFFErrorExtR(tif, module,
++        TIFFWarningExtR(tif, module,
+                       "Failed to read custom directory at offset %" PRIu64,
+                       diroff);
+         return 0;
+@@ -5916,7 +5916,7 @@ static uint16_t TIFFFetchDirectory(TIFF *tif, uint64_t diroff,
+         }
+         if (dircount16 == 0)
+         {
+-            TIFFErrorExtR(tif, module,
++            TIFFWarningExtR(tif, module,
+                           "Sanity check on directory count failed, zero tag "
+                           "directories not supported");
+             return 0;

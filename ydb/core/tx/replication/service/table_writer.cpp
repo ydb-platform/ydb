@@ -4,6 +4,7 @@
 
 #include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -22,6 +23,26 @@ public:
             .WithBody(std::move(body))
             .WithSchema(Schema)
             .Build();
+    }
+
+    ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord& record,
+            NKikimrReplication::TSchemaChange& schema, TString& error) const override
+    {
+        const auto& jsonRecord = static_cast<const TChangeRecord&>(record);
+
+        if (!jsonRecord.IsValidJson(error)) {
+            return ESchemaChangeResult::Error;
+        }
+
+        if (jsonRecord.GetKind() != NChangeExchange::IChangeRecord::EKind::CdcSchemaChange) {
+            return ESchemaChangeResult::NotSchemaChange;
+        }
+
+        if (!jsonRecord.TryGetSchemaChange(schema, error)) {
+            return ESchemaChangeResult::Error;
+        }
+
+        return ESchemaChangeResult::SchemaChange;
     }
 };
 
@@ -75,12 +96,12 @@ private:
     const NKikimr::TKeyDesc& KeyDesc;
 };
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriteMode mode) {
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode) {
     auto createResolverFn = [](const NKikimr::TKeyDesc& keyDesc) {
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode);
+    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode);
 }
 
 } // namespace NKikimr::NReplication::NService

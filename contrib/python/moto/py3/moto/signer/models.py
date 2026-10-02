@@ -1,11 +1,18 @@
-from moto.core import BaseBackend, BaseModel
-from moto.core.utils import BackendDict
+from typing import Any, Dict, List, Optional
+
+from moto.core import BaseBackend, BackendDict, BaseModel
 from moto.moto_api._internal import mock_random
+from moto.utilities.tagging_service import TaggingService
 
 
 class SigningProfile(BaseModel):
     def __init__(
-        self, account_id, region, name, platform_id, signature_validity_period, tags
+        self,
+        backend: "SignerBackend",
+        name: str,
+        platform_id: str,
+        signing_material: Dict[str, str],
+        signature_validity_period: Optional[Dict[str, Any]],
     ):
         self.name = name
         self.platform_id = platform_id
@@ -13,18 +20,19 @@ class SigningProfile(BaseModel):
             "value": 135,
             "type": "MONTHS",
         }
-        self.tags = tags
+        self.backend = backend
 
         self.status = "Active"
-        self.arn = f"arn:aws:signer:{region}:{account_id}:/signing-profiles/{name}"
+        self.arn = f"arn:aws:signer:{backend.region_name}:{backend.account_id}:/signing-profiles/{name}"
         self.profile_version = mock_random.get_random_hex(10)
         self.profile_version_arn = f"{self.arn}/{self.profile_version}"
+        self.signing_material = signing_material
 
-    def cancel(self):
+    def cancel(self) -> None:
         self.status = "Canceled"
 
-    def to_dict(self, full=True):
-        small = {
+    def to_dict(self, full: bool = True) -> Dict[str, Any]:
+        small: Dict[str, Any] = {
             "arn": self.arn,
             "profileVersion": self.profile_version,
             "profileVersionArn": self.profile_version_arn,
@@ -36,7 +44,7 @@ class SigningProfile(BaseModel):
                     "profileName": self.name,
                     "platformId": self.platform_id,
                     "signatureValidityPeriod": self.signature_validity_period,
-                    "signingMaterial": {},
+                    "signingMaterial": self.signing_material,
                     "platformDisplayName": next(
                         (
                             p["displayName"]
@@ -47,8 +55,9 @@ class SigningProfile(BaseModel):
                     ),
                 }
             )
-            if self.tags:
-                small.update({"tags": self.tags})
+            tags = self.backend.list_tags_for_resource(self.arn)
+            if tags:
+                small.update({"tags": tags})
         return small
 
 
@@ -150,44 +159,57 @@ class SignerBackend(BaseBackend):
         },
     ]
 
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.signing_profiles: [str, SigningProfile] = dict()
+        self.signing_profiles: Dict[str, SigningProfile] = dict()
+        self.tagger = TaggingService()
 
-    def cancel_signing_profile(self, profile_name) -> None:
+    def cancel_signing_profile(self, profile_name: str) -> None:
         self.signing_profiles[profile_name].cancel()
 
-    def get_signing_profile(self, profile_name) -> SigningProfile:
+    def get_signing_profile(self, profile_name: str) -> SigningProfile:
         return self.signing_profiles[profile_name]
 
     def put_signing_profile(
         self,
-        profile_name,
-        signature_validity_period,
-        platform_id,
-        tags,
+        profile_name: str,
+        signature_validity_period: Optional[Dict[str, Any]],
+        platform_id: str,
+        signing_material: Dict[str, str],
+        tags: Dict[str, str],
     ) -> SigningProfile:
         """
-        The following parameters are not yet implemented: SigningMaterial, Overrides, SigningParamaters
+        The following parameters are not yet implemented: Overrides, SigningParameters
         """
         profile = SigningProfile(
-            account_id=self.account_id,
-            region=self.region_name,
+            backend=self,
             name=profile_name,
             platform_id=platform_id,
+            signing_material=signing_material,
             signature_validity_period=signature_validity_period,
-            tags=tags,
         )
         self.signing_profiles[profile_name] = profile
+        self.tag_resource(profile.arn, tags)
         return profile
 
-    def list_signing_platforms(self):
+    def list_signing_platforms(self) -> List[Dict[str, Any]]:
         """
         Pagination is not yet implemented. The parameters category, partner, target are not yet implemented
         """
         return SignerBackend.platforms
 
+    def list_tags_for_resource(self, resource_arn: str) -> Dict[str, str]:
+        return self.tagger.get_tag_dict_for_resource(resource_arn)
+
+    def tag_resource(self, resource_arn: str, tags: Dict[str, str]) -> None:
+        self.tagger.tag_resource(
+            resource_arn, TaggingService.convert_dict_to_tags_input(tags)
+        )
+
+    def untag_resource(self, resource_arn: str, tag_keys: List[str]) -> None:
+        self.tagger.untag_resource_using_names(resource_arn, tag_keys)
+
 
 # Using the lambda-regions
 # boto3.Session().get_available_regions("signer") still returns an empty list
-signer_backends: [str, [str, SignerBackend]] = BackendDict(SignerBackend, "lambda")
+signer_backends = BackendDict(SignerBackend, "lambda")

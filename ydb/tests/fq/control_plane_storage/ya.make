@@ -6,22 +6,25 @@ SPLIT_FACTOR(18)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ENDIF()
 
 PEERDIR(
     library/cpp/retry
     library/cpp/testing/unittest
+    ydb/core/base
     ydb/core/external_sources
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/init
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/rate_limiter/control_plane_service
     ydb/core/fq/libs/rate_limiter/events
     ydb/core/testlib/default
     ydb/library/security
+    ydb/library/testlib/common
+    ydb/tests/tools/fqrun/src
+    ydb/tests/tools/kqprun/runlib
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

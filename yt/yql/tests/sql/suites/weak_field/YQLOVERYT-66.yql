@@ -1,0 +1,7 @@
+USE plato;
+
+SELECT
+    Some(Unwrap(WeakField(uiData, Uint64))) AS uiData
+FROM Input
+WHERE key = "020"
+GROUP BY key;

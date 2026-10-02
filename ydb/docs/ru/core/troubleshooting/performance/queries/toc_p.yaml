@@ -1,5 +1,9 @@
 items:
     - name: Инвалидация блокировок транзакций
       href: transaction-lock-invalidation.md
+    - name: Логирование TLI
+      href: tli-logging.md
     - name: Ошибки «overloaded»
       href: overloaded-errors.md
+    - name: Каскадный эффект при частых повторных попытках
+      href: retry-cascade.md

@@ -1,0 +1,49 @@
+#include <yt/yt/core/test_framework/framework.h>
+
+#include <yt/yt/core/misc/collection_helpers.h>
+
+namespace NYT {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TMoveCounter
+{
+public:
+    TMoveCounter() = default;
+    TMoveCounter(const TMoveCounter&) = delete;
+    TMoveCounter& operator=(const TMoveCounter&) = delete;
+
+    TMoveCounter(TMoveCounter&&) noexcept
+    {
+        ++Moves_;
+    }
+
+    TMoveCounter& operator=(TMoveCounter&&) noexcept
+    {
+        ++Moves_;
+        return *this;
+    }
+
+    DEFINE_BYREF_RW_PROPERTY(int, Moves);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TCollectionHelpersTest, EmplaceDefault)
+{
+    THashMap<int, TMoveCounter> map;
+    EmplaceDefault(map, 0);
+    EXPECT_EQ(map[0].Moves(), 0);
+}
+
+TEST(TCollectionHelpersTest, GetOrDefaultReferenceMoveOnly)
+{
+    THashMap<int, TMoveCounter> map;
+    EXPECT_EQ(GetOrDefaultReference(map, 0).Moves(), 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+} // namespace NYT

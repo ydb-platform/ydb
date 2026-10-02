@@ -1,0 +1,6 @@
+/* multirun can not */
+USE plato;
+
+insert into Output
+select * from Input
+assume order by key;

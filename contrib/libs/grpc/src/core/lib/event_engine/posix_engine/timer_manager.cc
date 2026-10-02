@@ -144,14 +144,7 @@ void TimerManager::Shutdown() {
   }
 }
 
-TimerManager::~TimerManager() {
-    // We've faced with the issue that destructor for TimerManager object is called
-    // between PrepareFork and PostforkParent. see forkable.cc
-    // Let's remove object from g_forcable list here
-    // https://github.com/grpc/grpc/issues/33516
-    StopManagingForkable(this);
-    Shutdown();
-}
+TimerManager::~TimerManager() { Shutdown(); }
 
 void TimerManager::Host::Kick() { timer_manager_->Kick(); }
 

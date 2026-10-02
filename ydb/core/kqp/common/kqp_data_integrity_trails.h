@@ -4,11 +4,48 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <util/string/escape.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
+
+inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryText, bool hashed) {
+    if (!hashed) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"queryText", queryText});
+        return;
+    }
+
+    // Hash the query text
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    if (SHA256_Init(&sha256) != 1) {
+        return;
+    }
+    if (SHA256_Update(&sha256, queryText.data(), queryText.size()) != 1) {
+        return;
+    }
+    if (SHA256_Final(hash, &sha256) != 1) {
+        return;
+    }
+    std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
+
+    YDB_LOG_UPDATE_MESSAGE(message,
+        {"queryText", Base64Encode(hashedQueryText)});
+}
+
+inline TStructuredMessage LogQueryText(const TString& queryText) {
+    TStructuredMessage message;
+    const auto& config = AppData()->DataIntegrityTrailsConfig;
+    LogQueryTextImpl(message, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+    return message;
+}
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -38,39 +75,25 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         return;
     }
 
-    auto log = [](const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "SessionActor", ss);
-        LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
-        LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
-        LogKeyValue("Type", "Request", ss);
-        LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
-        LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
 
-        const auto queryTextLogMode = AppData()->DataIntegrityTrailsConfig.HasQueryTextLogMode()
-            ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
-            : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
-        if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
-            LogKeyValue("QueryText", request->Get()->GetQuery(), ss);
-        } else {
-            std::string hashedQueryText;
-            hashedQueryText.resize(SHA256_DIGEST_LENGTH);
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "SessionActor"},
+        {"sessionId", request->Get()->GetSessionId()},
+        {"traceId", request->Get()->GetTraceId()},
+        {"type", "Request"},
+        {"queryAction", ToString(request->Get()->GetAction())},
+        {"queryType", ToString(request->Get()->GetType())},
+        LogQueryText(request->Get()->GetQuery())
+    );
 
-            SHA256_CTX sha256;
-            SHA256_Init(&sha256);
-            SHA256_Update(&sha256, request->Get()->GetQuery().data(), request->Get()->GetQuery().size());
-            SHA256_Final(reinterpret_cast<unsigned char*>(&hashedQueryText[0]), &sha256);
-            LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
-        }
+    if (request->Get()->HasTxControl()) {
+        YDB_LOG_UPDATE_MESSAGE(message, LogTxControl(request->Get()->GetTxControl()));
+    }
 
-        if (request->Get()->HasTxControl()) {
-            LogTxControl(request->Get()->GetTxControl(), ss);
-        }
-
-        return ss.Str();
-    };
-
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(request));
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type, const std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse>& response, const TActorContext& ctx) {
@@ -78,61 +101,153 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         return;
     }
 
-    auto log = [](const auto& traceId, const auto& response) {
-        auto& record = response->Record;
+    auto& record = response->Record;
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "SessionActor"},
+        {"sessionId", record.GetResponse().GetSessionId()},
+        {"traceId", traceId},
+        {"type", "Response"},
+        {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
+}
 
-        TStringStream ss;
-        LogKeyValue("Component", "SessionActor", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId, ss);
-        LogKeyValue("Type", "Response", ss);
-        LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
+inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lock) {
+    TStructuredMessage result;
+    if (lock.HasLockId()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"lockId", lock.GetLockId()});
+    }
 
-        return ss.Str();
-    };
+    if (lock.HasDataShard()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"dataShard", lock.GetDataShard()});
+    }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    if (lock.HasGeneration()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"generation", lock.GetGeneration()});
+    }
+
+    if (lock.HasCounter()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"counter", lock.GetCounter()});
+    }
+
+    if (lock.HasSchemeShard()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetSchemeShard()});
+    }
+
+    if (lock.HasPathId()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"pathId", lock.GetPathId()});
+    }
+
+    if (lock.HasHasWrites()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"hasWrites", lock.GetHasWrites()});
+    }
+
+    if (lock.WriteSeqNumsSize() !=0) {
+        std::vector<std::string> items;
+        for(size_t i=0;i<lock.WriteSeqNumsSize();i++) {
+            items.push_back(lock.GetWriteSeqNums(i).ShortUtf8DebugString());
+        }
+        YDB_LOG_UPDATE_MESSAGE(result, {"writeSeqNums", items});
+    }
+
+    return result;
 }
 
 // DataExecuter
-inline void LogIntegrityTrails(const TString& txType, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
-    auto log = [](const auto& type, const auto& traceId, const auto& txId, const auto& shardId) {
-        TStringStream ss;
-        LogKeyValue("Component", "Executer", ss);
-        LogKeyValue("TraceId", traceId, ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
+inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
 
-        if (shardId) {
-            LogKeyValue("ShardId", ToString(*shardId), ss);
+    const auto& record = ev->Get()->Record;
+
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(record.GetIssues(), issues);
+
+    auto message = YDB_LOG_CREATE_MESSAGE({"component", "Executer"},
+        {"type", "Response"},
+        {"state", state},
+        {"traceId", traceId},
+        {"phyTxId", ToString(record.GetTxId())},
+        {"shardId", ToString(record.GetOrigin())},
+        {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+        {"issues", issues.ToString()});
+
+    if (record.GetTxLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    for (const auto& lock : record.GetTxLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", ToStructuredMessage(lock)});
+    }
+}
+
+inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
+
+    const auto& record = ev->Get()->Record;
+
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "Executer"},
+        {"type", "Response"},
+        {"state", state},
+        {"traceId", traceId},
+        {"phyTxId", ToString(record.GetTxId())},
+        {"shardId", ToString(record.GetOrigin())},
+        {"status", NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(ev->Get()->GetStatus())},
+        {"issues", ev->Get()->GetError()});
+
+    if (record.GetTxLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    for (const auto& lock : record.GetTxLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", ToStructuredMessage(lock)});
         }
+}
 
-        LogKeyValue("Type", type, ss, /*last*/ true);
+template <typename TActorResultInfo>
+inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64 txId, const TActorResultInfo& info, const TActorContext& ctx) {
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "Executer"},
+        {"type", type},
+        {"traceId", traceId},
+        {"phyTxId", ToString(txId)});
 
-        return ss.Str();
-    };
+    if (info.GetLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, traceId, txId, shardId));
+    for (const auto& lock : info.GetLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", ToStructuredMessage(lock)});
+    }
 }
 
 // WriteActor,BufferActor
 inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx, const TStringBuf component) {
-    auto log = [](const auto& type, const auto& txId, const auto& shardId, const auto component) {
-        TStringStream ss;
-        LogKeyValue("Component", component, ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-
-        if (shardId) {
-            LogKeyValue("ShardId", ToString(*shardId), ss);
-        }
-
-        LogKeyValue("Type", type, ss, /*last*/ true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txId, shardId, component));
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+        return;
+    }
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", component},
+        {"type", txType},
+        {"phyTxId", ToString(txId)});
+    if (shardId) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"shardId", ToString(*shardId)});
+    }
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 }

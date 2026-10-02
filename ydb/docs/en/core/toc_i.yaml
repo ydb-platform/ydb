@@ -8,16 +8,21 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: For DevOps
+- name: Cluster Administration
   href: devops/index.md
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: For Developers
+- name: For Application Developers
   href: dev/index.md
   include:
     mode: link
     path: dev/toc_p.yaml
+- name: For Analysts
+  href: analyst/index.md
+  include:
+    mode: link
+    path: analyst/toc_p.yaml
 - name: For Security Engineers
   href: security/index.md
   include:
@@ -29,6 +34,7 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 - name: Reference
+  href: reference/index.md
   include:
     mode: link
     path: reference/toc_p.yaml
@@ -53,6 +59,9 @@ items:
     path: public-materials/toc_p.yaml
 - name: Downloads
   href: downloads/index.md
+  include:
+    mode: link
+    path: downloads/toc_i.yaml
 - name: Changelog
   include:
     mode: link

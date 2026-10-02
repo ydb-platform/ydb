@@ -8,7 +8,7 @@ from math import isinf
 from copy import deepcopy
 
 
-class RangeBasedSimplify(Transformation):
+class RangeBasedSimplify(Transformation[RangeValues]):
     '''
     Simplify expressions based on range analysis
 
@@ -39,9 +39,6 @@ class RangeBasedSimplify(Transformation):
         x = (1, 1, 2)
         return (2, 1)
     '''
-
-    def __init__(self):
-        Transformation.__init__(self, RangeValues)
 
     def visit_OMPDirective(self, node):
         return node

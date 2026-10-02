@@ -2,6 +2,8 @@
 
 #include "signature.h"
 
+#include <yt/yt/client/api/public.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NSignature {
@@ -10,42 +12,49 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr ISignatureGenerator::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
     auto signature = New<TSignature>();
-    signature->Payload_ = std::move(data);
-    Sign(signature);
+    signature->Payload_ = std::move(payload);
+    Resign(signature);
     return signature;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummySignatureGenerator
+namespace {
+
+struct TDummySignatureGenerator
     : public ISignatureGenerator
 {
-public:
-    void Sign(const TSignaturePtr& signature) override
+    void Resign(const TSignaturePtr& /*signature*/) const final
+    { }
+};
+
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
+{
+    void Resign(const TSignaturePtr& /*signature*/) const final
     {
-        signature->Header_ = NYson::TYsonString("DummySignature"_sb);
+        THROW_ERROR_EXCEPTION(NYT::NApi::EErrorCode::SignatureGenerationIsUnsupported,
+            "Signature generation is unsupported");
     }
 };
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
 
 ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
     return New<TDummySignatureGenerator>();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-class TAlwaysThrowingSignatureGenerator
-    : public ISignatureGenerator
+const ISignatureGeneratorPtr& GetDummySignatureGenerator()
 {
-public:
-    void Sign(const TSignaturePtr& /*signature*/) override
-    {
-        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
-    }
-};
+    static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
+    return signatureGenerator;
+}
 
 ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {

@@ -2,6 +2,8 @@
 #include <ydb/core/formats/factory.h>
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -86,7 +88,7 @@ public:
         , BlockBuilder(std::move(blockBuilder))
     {}
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -95,8 +97,8 @@ public:
         return hello;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
-        Y_ABORT_UNLESS(seq == 0, "Unexpected repeated Seek");
+    EScan Seek(TLead& lead, ui64 seq) override {
+        Y_ENSURE(seq == 0, "Unexpected repeated Seek");
 
         lead.To(ValueColumns, From.Key.GetCells(), From.Inclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper);
         lead.Until(To.Key.GetCells(), To.Inclusive);
@@ -104,11 +106,11 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         const auto& keyTypes = Scheme->Keys->BasicTypes();
 
-        Y_ABORT_UNLESS(key.size() == keyTypes.size());
-        Y_ABORT_UNLESS((*row).size() == ValueColumnTypes.size());
+        Y_ENSURE(key.size() == keyTypes.size());
+        Y_ENSURE((*row).size() == ValueColumnTypes.size());
 
         TDbTupleRef rowKey(keyTypes.data(), key.data(), keyTypes.size());
         TDbTupleRef rowValues(ValueColumnTypes.data(), (*row).data(), ValueColumnTypes.size());
@@ -127,10 +129,10 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
-        if (reason == EAbort::None) {
+        if (status == EStatus::Done) {
             TString buffer = BlockBuilder->Finish();
             buffer.resize(BlockBuilder->Bytes());
             BlockBuilder.reset();
@@ -140,16 +142,21 @@ public:
             Result->Record.SetLastKeyInclusive(ShardFinished ? ShardEnd.Inclusive : true);
             Result->Record.SetEndOfShard(ShardFinished);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan result for table [" << TableName << "]: "
-                        << Rows << " rows, " << Bytes << " bytes (event size "
-                        << Result->Record.GetBlocks().size() << ") shardFinished: " << ShardFinished);
+            YDB_LOG_DEBUG("Read columns scan result",
+                {"tabletId", TabletId},
+                {"tableName", TableName},
+                {"rows", Rows},
+                {"bytes", Bytes},
+                {"eventsSize", Result->Record.GetBlocks().size()},
+                {"shardFinished", ShardFinished});
         } else {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan failed for table [" << TableName << "]");
+            YDB_LOG_NOTICE("Read columns scan failed for table",
+                {"tabletId", TabletId},
+                {"tableName", TableName},
+                {"status", status});
 
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            Result->Record.SetErrorDescription("Scan aborted");
+            Result->Record.SetErrorDescription(TStringBuilder() << "Scan finished unsuccessfully with status " << status);
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
@@ -158,11 +165,11 @@ public:
         return this;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    void Describe(IOutputStream& str) const noexcept override {
+    void Describe(IOutputStream& str) const override {
         str << "ReadColumnsScan table: ["<< TableName << "]shard: " << TabletId;
     }
 
@@ -220,7 +227,9 @@ public:
             return true;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Read columns: " << Ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Read columns",
+            {"tabletId", Self->TabletID()},
+            {"record", Ev->Get()->Record});
 
         if (Self->State != TShardState::Ready &&
             Self->State != TShardState::Readonly)
@@ -378,3 +387,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TAc
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

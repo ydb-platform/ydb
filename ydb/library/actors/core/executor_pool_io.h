@@ -26,7 +26,7 @@ namespace NActors {
         const TString PoolName;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
-        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr, bool useRingQueue = false);
+        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr);
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);
         ~TIOExecutorPool();
 
@@ -44,6 +44,7 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
 

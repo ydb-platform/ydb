@@ -71,7 +71,7 @@ public:
 
 public:
     STFUNC(Handler) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(TEvPullDataResponse, OnPullResponse);
             cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
             sFunc(TEvMessageProcessed, OnMessageProcessed)
@@ -84,7 +84,7 @@ public:
     }
 
     STFUNC(ShutdownHandler) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             sFunc(TEvMessageProcessed, OnMessageProcessed);
             default:
                 TBase::ShutdownHandlerBase(ev);

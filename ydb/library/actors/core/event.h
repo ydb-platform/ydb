@@ -12,23 +12,21 @@
 #include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     class TChunkSerializer;
     class IActor;
 
     class IEventBase
         : TNonCopyable {
-    protected:
-        // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
-
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
-
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {
@@ -39,15 +37,23 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
+        virtual std::optional<TRope> SerializeToRope(IRcBufAllocator*) const {
+            return std::nullopt;
+        }
         virtual bool IsSerializable() const = 0;
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();
         }
-        virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
+        virtual TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const { return {}; }
     };
 
     template <typename TEventType>
     class TEventHandle;
+
+    template <typename TEvent>
+    concept TEventWithLoadSupport = requires {
+        TEvent::Load;
+    };
 
     // fat handle
     class IEventHandle : TNonCopyable {
@@ -59,6 +65,8 @@ namespace NActors {
             {
             }
         };
+
+        static const TEventSerializedData EmptyBuffer;
 
     public:
         typedef TAutoPtr<IEventHandle> TPtr;
@@ -94,19 +102,27 @@ namespace NActors {
 
         template <typename TEventType>
         TEventType* Get() {
-            if (Type != TEventType::EventType)
-                Y_ABORT("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
+            Y_ENSURE(Type == TEventType::EventType,
+                "Event type " << Type << " doesn't match the expected type " << TEventType::EventType
+                << " class " << TypeName<TEventType>());
 
             if (!Event) {
-                static TEventSerializedData empty;
-                Event.Reset(TEventType::Load(Buffer ? Buffer.Get() : &empty));
+                if constexpr (TEventWithLoadSupport<TEventType>) {
+                    // Note: we require Load to return the correct derived type
+                    // This makes sure static_cast below is always type-safe
+                    TEventType* loaded = TEventType::Load(Buffer ? Buffer.Get() : &EmptyBuffer);
+                    Event.Reset(loaded);
+                    Buffer.Reset();
+                } else {
+                    Y_ENSURE(false, "Event type " << Type << " cannot be loaded by class " << TypeName<TEventType>());
+                }
             }
 
             if (Event) {
                 return static_cast<TEventType*>(Event.Get());
             }
 
-            Y_ABORT("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
+            Y_ENSURE(false, "Failed to Load() event type " << Type << " class " << TypeName<TEventType>());
         }
 
         template <typename T>
@@ -117,6 +133,7 @@ namespace NActors {
             return x;
         }
 
+        // Note that ChannelBits bits in Flags are reserved for channel
         enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
@@ -125,6 +142,11 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagFailFastWhenDisconnected = 1 << 7,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
+            // System messages are handled by the actor runtime and must never
+            // reach actor awaiters or the user state function.
+            FlagSystemMessage = 1 << 9,
         };
         using TEventFlags = ui32;
 
@@ -160,8 +182,8 @@ namespace NActors {
         }
 
         static ui32 MakeFlags(ui32 channel, TEventFlags flags) {
-            Y_ABORT_UNLESS(channel < (1 << ChannelBits));
-            Y_ABORT_UNLESS(flags < (1 << ChannelShift));
+            Y_ENSURE(channel < (1 << ChannelBits));
+            Y_ENSURE(flags < (1 << ChannelShift));
             return (flags | (channel << ChannelShift));
         }
 
@@ -295,6 +317,11 @@ namespace NActors {
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
 
+        // Serializes the event now and drops the IEventBase. Pass allowExternalDataChannel when the
+        // session that will transmit it can route sections over an external data channel: the retained
+        // serialization info decides whether that is still possible once the event is only a rope.
+        void Preserialize(bool allowExternalDataChannel);
+
         ui32 GetSize() const {
             if (Buffer) {
                 return Buffer->GetSize();
@@ -410,9 +437,6 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         Y_ABORT("Local event " #eventType " is not serializable");       \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        Y_ABORT("Local event " #eventType " has no load method");        \
-    }                                                                   \
     bool IsSerializable() const override {                              \
         return false;                                                   \
     }
@@ -424,7 +448,7 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         return true;                                                    \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+    static eventType* Load(const NActors::TEventSerializedData*) {      \
         return new eventType();                                         \
     }                                                                   \
     bool IsSerializable() const override {                              \

@@ -1,34 +1,6 @@
 #include "datetime.h"
 
-#include <yql/essentials/minikql/mkql_type_ops.h>
-
-namespace NYql::DateTime {
-
-bool DoAddMonths(TTMStorage& storage, i64 months, const NUdf::IDateBuilder& builder) {
-    i64 newMonth = months + storage.Month;
-    storage.Year += (newMonth - 1) / 12;
-    newMonth = 1 + (newMonth - 1) % 12;
-    if (newMonth <= 0) {
-        storage.Year--;
-        newMonth += 12;
-    }
-    storage.Month = newMonth;
-    bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-    ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap);
-    storage.Day = std::min(monthLength, storage.Day);
-    return storage.Validate(builder);
-}
-
-bool DoAddYears(TTMStorage& storage, i64 years, const NUdf::IDateBuilder& builder) {
-    storage.Year += years;
-    if (storage.Month == 2 && storage.Day == 29) {
-        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-        if (!isLeap) {
-            storage.Day--;
-        }
-    }
-    return storage.Validate(builder);
-}
+namespace NYql::NDateTime {
 
 TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& builder) {
     TTMStorage storage;
@@ -48,4 +20,9 @@ TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& build
     return TInstant::FromValue(storage.ToTimestamp(builder));
 }
 
-}
+} // namespace NYql::NDateTime
+
+// TODO(YQL-20086): Migrate YDB to NYql::NDateTime
+namespace NYql::DateTime { // NOLINT(readability-identifier-naming)
+using namespace NYql::NDateTime;
+} // namespace NYql::DateTime

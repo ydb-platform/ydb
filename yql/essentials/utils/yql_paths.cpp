@@ -20,4 +20,4 @@ TString BuildTablePath(TStringBuf prefixPath, TStringBuf path) {
     return prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct();
 }
 
-}
+} // namespace NYql

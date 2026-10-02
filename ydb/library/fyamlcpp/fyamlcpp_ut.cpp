@@ -61,6 +61,12 @@ a: 3
                 UNIT_ASSERT(e.Errors().ysize() == 1);
             }
         }
+        {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                NFyaml::TDocument::Parse("#"),
+                NFyaml::TFyamlEx,
+                "Failed to build YAML document from string");
+        }
     }
 
     Y_UNIT_TEST(Out) {
@@ -542,4 +548,24 @@ c: bar
         }
     }
 
+    Y_UNIT_TEST(SetTag) {
+        const char *yaml = R"(
+test:
+  field_1: 1
+  field_2: 2
+)";
+
+        auto doc = NFyaml::TDocument::Parse(yaml);
+
+        auto node = doc.Root().Map().at("test");
+
+        UNIT_ASSERT(node);
+
+        for (int i = 0; i < 10; i++) {
+            auto tag = TString("!tag") + ToString(i);
+            node.SetTag(tag);
+
+            UNIT_ASSERT_VALUES_EQUAL(node.Tag(), tag);
+        }
+    }
 }

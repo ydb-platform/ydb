@@ -7,9 +7,11 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 
 #include <yql/essentials/utils/log/log.h>
+
+#include <util/string/cast.h>
 
 namespace NYql {
 
@@ -40,10 +42,52 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
+        cluster.SetUseSsl(TryFromString<bool>(properties.Value("use_tls", "true")).GetOrElse(false));
+
+        const TString& project = properties.Value("project", "");
+        const TString& clusterName = properties.Value("cluster", "");
+
+        if (project && clusterName) {
+            // Cloud monitoring: PROJECT is the cloud id, CLUSTER the folder id.
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(project);
+            cluster.MutablePath()->SetCluster(clusterName);
+        } else if (project) {
+            // Monium project addressed by its own id: the cluster is a plain selector
+            // label there, not a container, so it belongs in the query.
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(project);
+            cluster.MutablePath()->SetCluster("");
+
+            auto moniumProject = cluster.MutableSettings()->Add();
+            *moniumProject->MutableName() = "monium_project";
+            *moniumProject->MutableValue() = "true";
+        } else {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
+        }
+
+        if (auto value = properties.Value("grpc_location", "")) {
+            auto grpcPort = cluster.MutableSettings()->Add();
+            *grpcPort->MutableName() = "grpc_location";
+            *grpcPort->MutableValue() = value;
+        }
+
+        auto authMethod = properties.Value("authMethod", "");
+        TString structuredToken = "";
+        if (authMethod == "SERVICE_ACCOUNT") {
+            structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+        } else if (authMethod == "IAM") {
+            const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
+            const TString& resourceId = properties.Value("iamResourceId", "");
+            structuredToken = ComposeStructuredTokenJsonForIamAuth(serviceAccountId, resourceId);
+        } else {
+            structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
+
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->Tokens[name] = structuredToken;
         State_->Configuration->ClusterConfigs[name] = cluster;
     }
 
@@ -51,17 +95,21 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
     }
 
-   IGraphTransformer& GetIODiscoveryTransformer() override {
-       return *IODiscoveryTransformer_;
-   }
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
 
-   IGraphTransformer& GetLoadTableMetadataTransformer() override {
-       return *LoadMetaDataTransformer_;
-   }
+    IGraphTransformer& GetLoadTableMetadataTransformer() override {
+        return *LoadMetaDataTransformer_;
+    }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
@@ -76,7 +124,7 @@ public:
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
-                if (!State_->Gateway->HasCluster(clusterName)) {
+                if (clusterName != NCommon::ALL_CLUSTERS && !State_->Gateway->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
                         "Unknown cluster name: " << clusterName));
                     return false;

@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TTest_t1ha) {
                 hasher.SetKey(key);
 
                 TSimpleTimer timer;
-                hasher.Hash(in, size);
+                hasher.Hash(in, size - inShift);
                 times.push_back(timer.Get());
             }
             TDuration min_time = *std::min_element(times.begin(), times.end());

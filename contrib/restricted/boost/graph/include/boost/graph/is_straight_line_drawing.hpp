@@ -15,75 +15,59 @@
 #include <boost/property_map/property_map.hpp>
 #include <boost/graph/properties.hpp>
 #include <boost/graph/planar_detail/bucket_sort.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/numeric/conversion/cast.hpp>
 
 #include <algorithm>
 #include <vector>
-#include <set>
 #include <map>
 
 namespace boost
 {
 
-// Return true exactly when the line segments s1 = ((x1,y1), (x2,y2)) and
-// s2 = ((a1,b1), (a2,b2)) intersect in a point other than the endpoints of
-// the line segments. The one exception to this rule is when s1 = s2, in
-// which case false is returned - this is to accomodate multiple edges
-// between the same pair of vertices, which shouldn't invalidate the straight
-// line embedding. A tolerance variable epsilon can also be used, which
-// defines how far away from the endpoints of s1 and s2 we want to consider
-// an intersection.
+template<typename Int128>
+int orientation2d(Int128 ax, Int128 ay,
+                  Int128 bx, Int128 by,
+                  Int128 cx, Int128 cy) {
+    // If coordinates are in [0, 2^63], this will not overflow.
+    const Int128 detleft = (bx - ax) * (cy - ay);
+    const Int128 detright = (by - ay) * (cx - ax);
+    return detleft > detright ? 1 : (detleft == detright ? 0 : -1);
+}
 
-inline bool intersects(double x1, double y1, double x2, double y2, double a1,
-    double b1, double a2, double b2, double epsilon = 0.000001)
+template<typename Point>
+bool between(const Point& a, const Point& b, const Point& c) {
+    return (b.y == a.y ?
+          std::min(a.x, b.x) < c.x && c.x < std::max(a.x, b.x)
+        : std::min(a.y, b.y) < c.y && c.y < std::max(a.y, b.y));
+}
+
+// Crosses in the sense the e and f intersect but are not equal and the
+// intersection set is not a shared endpoint.
+template<typename Graph, typename GridPositionMap>
+bool crosses(typename graph_traits<Graph>::edge_descriptor e,
+             typename graph_traits<Graph>::edge_descriptor f,
+             Graph const &g,
+             GridPositionMap const &drawing)
 {
+    const auto& p1 = drawing[source(e, g)];
+    const auto& p2 = drawing[target(e, g)];
+    const auto& q1 = drawing[source(f, g)];
+    const auto& q2 = drawing[target(f, g)];
 
-    if (x1 - x2 == 0)
-    {
-        std::swap(x1, a1);
-        std::swap(y1, b1);
-        std::swap(x2, a2);
-        std::swap(y2, b2);
-    }
+    using boost::multiprecision::int128_t;
+    int o1 = orientation2d<int128_t>(p1.x, p1.y, p2.x, p2.y, q1.x, q1.y);
+    int o2 = orientation2d<int128_t>(p1.x, p1.y, p2.x, p2.y, q2.x, q2.y);
+    int o3 = orientation2d<int128_t>(q1.x, q1.y, q2.x, q2.y, p1.x, p1.y);
+    int o4 = orientation2d<int128_t>(q1.x, q1.y, q2.x, q2.y, p2.x, p2.y);
 
-    if (x1 - x2 == 0)
-    {
-        BOOST_USING_STD_MAX();
-        BOOST_USING_STD_MIN();
-
-        // two vertical line segments
-        double min_y = min BOOST_PREVENT_MACRO_SUBSTITUTION(y1, y2);
-        double max_y = max BOOST_PREVENT_MACRO_SUBSTITUTION(y1, y2);
-        double min_b = min BOOST_PREVENT_MACRO_SUBSTITUTION(b1, b2);
-        double max_b = max BOOST_PREVENT_MACRO_SUBSTITUTION(b1, b2);
-        if ((max_y > max_b && max_b > min_y)
-            || (max_b > max_y && max_y > min_b))
-            return true;
-        else
-            return false;
-    }
-
-    double x_diff = x1 - x2;
-    double y_diff = y1 - y2;
-    double a_diff = a2 - a1;
-    double b_diff = b2 - b1;
-
-    double beta_denominator = b_diff - (y_diff / ((double)x_diff)) * a_diff;
-
-    if (beta_denominator == 0)
-    {
-        // parallel lines
-        return false;
-    }
-
-    double beta = (b2 - y2 - (y_diff / ((double)x_diff)) * (a2 - x2))
-        / beta_denominator;
-    double alpha = (a2 - x2 - beta * (a_diff)) / x_diff;
-
-    double upper_bound = 1 - epsilon;
-    double lower_bound = 0 + epsilon;
-
-    return (beta < upper_bound && beta > lower_bound && alpha < upper_bound
-        && alpha > lower_bound);
+    // X-like crossing of (p1, p2), (q1, q2)
+    return ((o1 * o2 < 0) && (o3 * o4 < 0))
+        // T-like crossing, e.g. q1 in (p1, p2), or partial overlap
+        || (o1 == 0 && between(p1, p2, q1))
+        || (o2 == 0 && between(p1, p2, q2))
+        || (o3 == 0 && between(q1, q2, p1))
+        || (o4 == 0 && between(q1, q2, p2));
 }
 
 template < typename Graph, typename GridPositionMap, typename VertexIndexMap >
@@ -161,33 +145,15 @@ bool is_straight_line_drawing(
 
             if (before != active_edges.end())
             {
-
                 edge_t f = before->second;
-                vertex_t e_source(source(e, g));
-                vertex_t e_target(target(e, g));
-                vertex_t f_source(source(f, g));
-                vertex_t f_target(target(f, g));
-
-                if (intersects(drawing[e_source].x, drawing[e_source].y,
-                        drawing[e_target].x, drawing[e_target].y,
-                        drawing[f_source].x, drawing[f_source].y,
-                        drawing[f_target].x, drawing[f_target].y))
+                if (crosses(e, f, g, drawing))
                     return false;
             }
 
             if (after != active_edges.end())
             {
-
                 edge_t f = after->second;
-                vertex_t e_source(source(e, g));
-                vertex_t e_target(target(e, g));
-                vertex_t f_source(source(f, g));
-                vertex_t f_target(target(f, g));
-
-                if (intersects(drawing[e_source].x, drawing[e_source].y,
-                        drawing[e_target].x, drawing[e_target].y,
-                        drawing[f_source].x, drawing[f_source].y,
-                        drawing[f_target].x, drawing[f_target].y))
+                if (crosses(e, f, g, drawing))
                     return false;
             }
 

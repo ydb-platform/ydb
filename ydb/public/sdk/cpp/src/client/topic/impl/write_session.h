@@ -1,14 +1,17 @@
 #pragma once
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/write_session_impl.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/buffer.h>
 
 #include <atomic>
+#include <memory>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
@@ -37,12 +40,13 @@ public:
                std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
-               NTable::TTransaction* tx = nullptr) override;
+               TTransactionBase* tx = nullptr) override;
 
     void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message,
-                      NTable::TTransaction* tx = nullptr) override;
+                      TTransactionBase* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<bool> Flush() override;
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
@@ -70,7 +74,7 @@ public:
                const TDuration& blockTimeout = TDuration::Max()) override;
 
     bool Write(TWriteMessage&& message,
-               NTable::TTransaction* tx = nullptr,
+               TTransactionBase* tx = nullptr,
                const TDuration& blockTimeout = TDuration::Max()) override;
 
     uint64_t GetInitSeqNo() override;
@@ -88,6 +92,5 @@ private:
 
     std::atomic_bool Closed = false;
 };
-
 
 } // namespace NYdb::NTopic

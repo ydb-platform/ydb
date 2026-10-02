@@ -4,6 +4,7 @@
 #include "flat_boot_back.h"
 #include "flat_boot_blobs.h"
 #include "flat_dbase_naked.h"
+#include "flat_executor_bootlogic.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -21,16 +22,19 @@ namespace NBoot {
         { }
 
     private:
-        void Start() noexcept override {
+        void Start() override {
             if (TSharedData* data = Back->TxStatusCaches.FindPtr(DataId.Lead)) {
                 TxStatus = MakeIntrusive<NTable::TTxStatusPartStore>(DataId, Epoch, *data);
+                for (const TLogoBlobID& blobId : DataId.Blobs()) {
+                    Logic->SeenBlob(blobId);
+                }
             } else {
                 LeftBlobs += Spawn<TLoadBlobs>(DataId, 0);
             }
             TryFinish();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftBlobs);
             TSharedData data = load->PlainData();
@@ -40,7 +44,7 @@ namespace NBoot {
         }
 
     private:
-        void TryFinish() noexcept {
+        void TryFinish() {
             if (!LeftBlobs) {
                 // TODO: we probably want to delay merge as late as possible?
                 Back->DatabaseImpl->Merge(Table, std::move(TxStatus));

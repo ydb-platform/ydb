@@ -54,21 +54,26 @@ namespace NJson {
 
     private:
         static bool PathElementMatch(const TPathElem& templ, const TPathElem& real) {
-            if (templ.Type != real.Type)
+            if (templ.Type != real.Type) {
                 return false;
-            if (templ.Type == NImpl::ARRAY)
+            }
+            if (templ.Type == NImpl::ARRAY) {
                 return templ.ArrayCounter == -1 || templ.ArrayCounter == real.ArrayCounter;
-            if (templ.Type == NImpl::MAP_KEY)
+            }
+            if (templ.Type == NImpl::MAP_KEY) {
                 return templ.Key == ANY_IDENTIFIER || templ.Key == real.Key;
+            }
             return true;
         }
 
         bool CheckFilter(const TVector<TPathElem>& path) const {
-            if (Stack.size() < path.size())
+            if (Stack.size() < path.size()) {
                 return false;
+            }
             for (size_t n = 0; n < path.size(); ++n) {
-                if (!PathElementMatch(path[n], Stack[n]))
+                if (!PathElementMatch(path[n], Stack[n])) {
                     return false;
+                }
             }
             return true;
         }
@@ -90,8 +95,9 @@ namespace NJson {
         void IncreaseArrayCounter() {
             if (!Stack.empty() && Stack.back().Type == NImpl::ARRAY) {
                 ++Stack.back().ArrayCounter;
-                if (ShouldUpdateOnArrayChange)
+                if (ShouldUpdateOnArrayChange) {
                     UpdateRule();
+                }
             }
         }
 
@@ -114,43 +120,49 @@ namespace NJson {
             , HasFormatError(false)
         {
             for (size_t n = 0; n < Parent.Fields.size(); ++n) {
-                if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY)
+                if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY) {
                     ShouldUpdateOnArrayChange = true;
+                }
             }
         }
 
         bool OnOpenMap() override {
             IncreaseArrayCounter();
             Stack.push_back(TPathElem(NImpl::MAP));
-            if (CurrentFieldIdx >= 0)
+            if (CurrentFieldIdx >= 0) {
                 HasFormatError = true;
-            else
+            } else {
                 UpdateRule();
+            }
             return true;
         }
 
         bool OnOpenArray() override {
             IncreaseArrayCounter();
             Stack.push_back(TPathElem(-1));
-            if (CurrentFieldIdx >= 0)
+            if (CurrentFieldIdx >= 0) {
                 HasFormatError = true;
-            else
+            } else {
                 UpdateRule();
+            }
             return true;
         }
 
         bool OnCloseMap() override {
-            while (!Stack.empty() && Stack.back().Type != NImpl::MAP)
+            while (!Stack.empty() && Stack.back().Type != NImpl::MAP) {
                 Pop();
-            if (!Stack.empty())
+            }
+            if (!Stack.empty()) {
                 Pop();
+            }
             UpdateRule();
             return true;
         }
 
         bool OnCloseArray() override {
-            if (!Stack.empty())
+            if (!Stack.empty()) {
                 Pop();
+            }
             UpdateRule();
             return true;
         }
@@ -161,10 +173,11 @@ namespace NJson {
                 UpdateRule();
             }
             Stack.push_back(TPathElem(TString{key}));
-            if (CurrentFieldIdx >= 0)
+            if (CurrentFieldIdx >= 0) {
                 HasFormatError = true;
-            else
+            } else {
                 UpdateRule();
+            }
             return true;
         }
 
@@ -185,17 +198,21 @@ namespace NJson {
         }
 
         bool IsOK() const {
-            if (HasFormatError)
+            if (HasFormatError) {
                 return false;
-            for (size_t n = 0; n < FieldValues.size(); ++n)
-                if (Parent.Fields[n].NonEmpty && FieldValues[n].empty())
+            }
+            for (size_t n = 0; n < FieldValues.size(); ++n) {
+                if (Parent.Fields[n].NonEmpty && FieldValues[n].empty()) {
                     return false;
+                }
+            }
             return true;
         }
 
         void WriteTo(IOutputStream& out) const {
-            for (size_t n = 0; n < FieldValues.size(); ++n)
+            for (size_t n = 0; n < FieldValues.size(); ++n) {
                 out << "\t" << FieldValues[n];
+            }
         }
 
         void WriteTo(TVector<TString>* res) const {
@@ -220,17 +237,18 @@ namespace NJson {
         if (impl.IsOK()) {
             impl.WriteTo(res);
             return true;
-        } else
+        } else {
             return false;
+        }
     }
 
-    //struct TTestMe {
-    //    TTestMe() {
-    //        TJsonParser worker;
-    //        worker.AddField("/x/y/z", true);
-    //        TString ret1 = worker.ConvertToTabDelimited("{ \"x\" : { \"y\" : { \"w\" : 1, \"z\" : 2 } } }");
-    //        TString ret2 = worker.ConvertToTabDelimited(" [1, 2, 3, 4, 5] ");
-    //    }
-    //} testMe;
+    // struct TTestMe {
+    //     TTestMe() {
+    //         TJsonParser worker;
+    //         worker.AddField("/x/y/z", true);
+    //         TString ret1 = worker.ConvertToTabDelimited("{ \"x\" : { \"y\" : { \"w\" : 1, \"z\" : 2 } } }");
+    //         TString ret2 = worker.ConvertToTabDelimited(" [1, 2, 3, 4, 5] ");
+    //     }
+    // } testMe;
 
-}
+} // namespace NJson

@@ -9,7 +9,9 @@
 
 static const uint64_t NS_PER_SEC = 1000000000;
 
-#if defined(CLOCK_MONOTONIC_RAW)
+#if defined(CLOCK_BOOTTIME)
+#    define HIGH_RES_CLOCK CLOCK_BOOTTIME
+#elif defined(CLOCK_MONOTONIC_RAW)
 #    define HIGH_RES_CLOCK CLOCK_MONOTONIC_RAW
 #else
 #    define HIGH_RES_CLOCK CLOCK_MONOTONIC
@@ -43,11 +45,11 @@ static int s_legacy_get_time(uint64_t *timestamp) {
 
 #    if MAC_OS_X_VERSION_MAX_ALLOWED >= 101200
 static aws_thread_once s_thread_once_flag = AWS_THREAD_ONCE_STATIC_INIT;
-static int (*s_gettime_fn)(clockid_t __clock_id, struct timespec *__tp) = NULL;
+static int (*s_gettime_fn)(clockid_t clock_id, struct timespec *tp) = NULL;
 
 static void s_do_osx_loads(void *user_data) {
     (void)user_data;
-    s_gettime_fn = (int (*)(clockid_t __clock_id, struct timespec * __tp)) dlsym(RTLD_DEFAULT, "clock_gettime");
+    s_gettime_fn = (int (*)(clockid_t clock_id, struct timespec *tp))dlsym(RTLD_DEFAULT, "clock_gettime");
 }
 
 int aws_high_res_clock_get_ticks(uint64_t *timestamp) {

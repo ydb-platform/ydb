@@ -7,6 +7,7 @@ import get_main_build_size
 import humanize
 import os
 import subprocess
+import sys
 
 
 # Форматирование числа
@@ -21,7 +22,6 @@ def bytes_to_human_iec(num):
 def main():
 
     yellow_treshold = int(os.environ.get("yellow_treshold"))
-    red_treshold = int(os.environ.get("red_treshold"))
 
     github_srv = os.environ.get("GITHUB_SERVER_URL")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
@@ -39,7 +39,7 @@ def main():
         )
         git_commit_time_unix = int(git_commit_time.timestamp())
     else:
-        print(f"Error: Cant get commit {current_pr_commit_sha} timestamp")
+        print(f"Error: Cant get commit {current_pr_commit_sha} timestamp", file=sys.stderr)
         return 1
 
     current_sizes_result = get_current_build_size.get_build_size()
@@ -68,10 +68,7 @@ def main():
         human_readable_stripped_size_diff = bytes_to_human_iec(stripped_bytes_diff)
         if bytes_diff > 0:
             sign = "+"
-            if bytes_diff >= red_treshold:
-                color = "red"
-                summary_core = f" >= {bytes_to_human_iec(red_treshold)} vs {branch}: **Alert**"
-            elif bytes_diff >= yellow_treshold:
+            if bytes_diff >= yellow_treshold:
                 color = "yellow"
                 summary_core = f" >= {bytes_to_human_iec(yellow_treshold)} vs {branch}: **Warning**"
             else:
@@ -101,7 +98,8 @@ def main():
         print(f"{color};;;{comment}")
     else:
         print(
-            f"Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}"
+            f"Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}",
+            file=sys.stderr
         )
 
 

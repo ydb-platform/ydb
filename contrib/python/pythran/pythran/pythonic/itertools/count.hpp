@@ -13,8 +13,7 @@ namespace itertools
   namespace details
   {
     template <class T>
-    count_iterator<T>::count_iterator(T value, T step)
-        : value(value), step(step)
+    count_iterator<T>::count_iterator(T value, T step) : value(value), step(step)
     {
     }
 

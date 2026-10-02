@@ -3,7 +3,7 @@ import sys
 import subprocess
 import time
 
-from yatest.common.network import PortManager
+from library.python.port_manager import PortManager
 
 
 def __get_port_range():

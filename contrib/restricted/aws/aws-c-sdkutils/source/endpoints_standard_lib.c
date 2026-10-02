@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/host_utils.h>
 #include <aws/common/json.h>
 #include <aws/common/string.h>
 #include <aws/common/uri.h>
 
+#include <aws/sdkutils/private/endpoints_regex.h>
 #include <aws/sdkutils/private/endpoints_types_impl.h>
 #include <aws/sdkutils/private/endpoints_util.h>
 #include <aws/sdkutils/resource_name.h>
@@ -260,7 +262,7 @@ on_done:
 }
 
 static bool s_is_uri_ip(struct aws_byte_cursor host, bool is_uri_encoded) {
-    return aws_is_ipv4(host) || aws_is_ipv6(host, is_uri_encoded);
+    return aws_host_utils_is_ipv4(host) || aws_host_utils_is_ipv6(host, is_uri_encoded);
 }
 
 static int s_resolve_fn_parse_url(
@@ -449,13 +451,24 @@ static int s_resolve_fn_aws_partition(
         goto on_done;
     }
 
-    key = aws_map_region_to_partition(key);
+    struct aws_byte_cursor partition_cur = {0};
+    for (struct aws_hash_iter iter = aws_hash_iter_begin(&scope->partitions->base_partitions);
+         !aws_hash_iter_done(&iter);
+         aws_hash_iter_next(&iter)) {
 
-    if (key.len == 0) {
-        key = aws_byte_cursor_from_c_str("aws");
+        struct aws_partition_info *partition = (struct aws_partition_info *)iter.element.value;
+
+        if (partition->region_regex && aws_endpoints_regex_match(partition->region_regex, key) == AWS_OP_SUCCESS) {
+            partition_cur = partition->name;
+            break;
+        }
     }
 
-    if (aws_hash_table_find(&scope->partitions->region_to_partition_info, &key, &element) || element == NULL) {
+    if (partition_cur.len == 0) {
+        partition_cur = aws_byte_cursor_from_c_str("aws");
+    }
+
+    if (aws_hash_table_find(&scope->partitions->base_partitions, &partition_cur, &element) || element == NULL) {
         AWS_LOGF_ERROR(
             AWS_LS_SDKUTILS_ENDPOINTS_RESOLVE, "Failed to find partition info. " PRInSTR, AWS_BYTE_CURSOR_PRI(key));
         result = aws_raise_error(AWS_ERROR_SDKUTILS_ENDPOINTS_RESOLVE_FAILED);
@@ -600,7 +613,7 @@ static int s_resolve_is_virtual_hostable_s3_bucket(
     out_value->type = AWS_ENDPOINTS_VALUE_BOOLEAN;
     out_value->v.boolean = (label_cur.len >= 3 && label_cur.len <= 63) && !has_uppercase_chars &&
                            aws_is_valid_host_label(label_cur, argv_allow_subdomains.v.boolean) &&
-                           !aws_is_ipv4(label_cur);
+                           !aws_host_utils_is_ipv4(label_cur);
 
 on_done:
     aws_endpoints_value_clean_up(&argv_value);

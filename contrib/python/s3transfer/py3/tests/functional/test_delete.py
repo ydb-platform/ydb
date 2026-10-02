@@ -15,7 +15,6 @@ from __tests__ import BaseGeneralInterfaceTest
 
 
 class TestDeleteObject(BaseGeneralInterfaceTest):
-
     __test__ = True
 
     def setUp(self):

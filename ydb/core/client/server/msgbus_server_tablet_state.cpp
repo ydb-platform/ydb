@@ -15,7 +15,9 @@ namespace NMsgBusProxy {
 
 using namespace NNodeWhiteboard;
 
-class TMessageBusTabletStateRequest : public TActorBootstrapped<TMessageBusTabletStateRequest>, public TMessageBusSessionIdentHolder {
+class TMessageBusTabletStateRequest : public TMessageBusCancellableRequest<TMessageBusTabletStateRequest> {
+    using TBase = TMessageBusCancellableRequest<TMessageBusTabletStateRequest>;
+
 protected:
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
@@ -34,7 +36,7 @@ public:
     }
 
     TMessageBusTabletStateRequest(TBusMessageContext &msg)
-        : TMessageBusSessionIdentHolder(msg)
+        : TBase(msg)
         , NodesRequested(0)
         , NodesReceived(0)
         , Record(static_cast<TBusTabletStateRequest*>(msg.GetMessage())->Record)
@@ -51,6 +53,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 
@@ -59,6 +62,7 @@ public:
             HFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Undelivered);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 

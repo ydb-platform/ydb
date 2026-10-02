@@ -1,14 +1,9 @@
 RECURSE(
     adapters
     examples
+    plugins
     src
 )
-
-IF (NOT OPENSOURCE)
-    RECURSE(
-        client
-    )
-ENDIF()
 
 RECURSE_FOR_TESTS(
     tests

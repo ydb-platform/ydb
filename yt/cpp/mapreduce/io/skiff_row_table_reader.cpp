@@ -1,5 +1,6 @@
 #include "skiff_row_table_reader.h"
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/interface/skiff_row.h>
@@ -67,7 +68,8 @@ void TSkiffRowTableReader::ReadRow(const ISkiffRowParserPtr& parser)
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error during parsing: %v", ex.what());
+            YT_TLOG_ERROR("Read error during parsing")
+                .With("Error", ex.what());
 
             if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
@@ -90,7 +92,8 @@ void TSkiffRowTableReader::SkipRow()
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error during skipping row: %v", ex.what());
+            YT_TLOG_ERROR("Read error during skipping row")
+                .With("Error", ex.what());
 
             if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
@@ -100,6 +103,9 @@ void TSkiffRowTableReader::SkipRow()
 }
 
 void TSkiffRowTableReader::CheckValidity() const {
+    if (IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     if (!IsValid()) {
         ythrow yexception() << "Iterator is not valid";
     }
@@ -113,7 +119,7 @@ void TSkiffRowTableReader::Next()
 
     CheckValidity();
 
-    if (Y_UNLIKELY(Finished_ || !Parser_->HasMoreData())) {
+    if (Finished_ || !Parser_->HasMoreData()) [[unlikely]] {
         Finished_ = true;
         Valid_ = false;
         return;
@@ -171,7 +177,8 @@ void TSkiffRowTableReader::Next()
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error: %v", ex.what());
+            YT_TLOG_ERROR("Read error")
+                .With("Error", ex.what());
 
             if (!PrepareRetry(std::make_exception_ptr(ex))) {
                 throw;
@@ -228,6 +235,16 @@ bool TSkiffRowTableReader::IsEndOfStream() const {
 
 bool TSkiffRowTableReader::IsRawReaderExhausted() const {
     return Finished_;
+}
+
+void TSkiffRowTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TSkiffRowTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

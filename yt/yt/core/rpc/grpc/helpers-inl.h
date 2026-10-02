@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "helpers.h"
 #endif
-#undef HELPERS_INL_H_
 
 namespace NYT::NRpc::NGrpc {
 
@@ -60,14 +59,14 @@ TGrpcObjectPtr<T, Dtor>::TGrpcObjectPtr(T* obj)
 { }
 
 template <class T, void(*Dtor)(T*)>
-TGrpcObjectPtr<T, Dtor>::TGrpcObjectPtr(TGrpcObjectPtr&& other)
+TGrpcObjectPtr<T, Dtor>::TGrpcObjectPtr(TGrpcObjectPtr&& other) noexcept
     : Ptr_(other.Ptr_)
 {
     other.Ptr_ = nullptr;
 }
 
 template <class T, void(*Dtor)(T*)>
-TGrpcObjectPtr<T, Dtor>& TGrpcObjectPtr<T, Dtor>::operator=(TGrpcObjectPtr&& other)
+TGrpcObjectPtr<T, Dtor>& TGrpcObjectPtr<T, Dtor>::operator=(TGrpcObjectPtr&& other) noexcept
 {
     if (this != &other) {
         Reset();

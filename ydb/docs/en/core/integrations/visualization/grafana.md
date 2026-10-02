@@ -121,7 +121,7 @@ Only the first text field will be represented as a log line by default. This beh
 ### Macros
 
 The query can contain macros, which simplify syntax and allow for dynamic parts, like date range filters.
-There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side.
+There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macros will be treated by {{ ydb-short-name }} server-side.
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 
@@ -137,12 +137,25 @@ FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))
 ```
 
-Macro                                        | Description                                                                                                                      | Output example                                                                                  |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `$__timeFilter(expr)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS Timestamp) AND foo <=  CAST(1668253526371000 AS Timestamp)' )` |
-| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel cast to Timestamp                                                      | `CAST(1636717526371000 AS Timestamp)`                                                           |
-| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel cast to Timestamp                                                        | `CAST(1636717526371000 AS Timestamp)`                                                           |
-| `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `$bar`'s value                                                               |
+#|
+|| Macro | Description | Output example ||
+|| `$__timeFilter(expr)` |
+Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds |
+`foo >= CAST(1636717526371000 AS Timestamp) AND foo <=  CAST(1668253526371000 AS Timestamp)' )`
+    ||
+|| `$__fromTimestamp` |
+Replaced by the starting time of the range of the panel cast to Timestamp |
+`CAST(1636717526371000 AS Timestamp)`
+    ||
+|| `$__toTimestamp` |
+Replaced by the ending time of the range of the panel cast to Timestamp |
+`CAST(1636717526371000 AS Timestamp)`
+    ||
+| `$__varFallback(condition, $templateVar)` |
+Replaced by the first parameter when the template variable in the second parameter is not provided. |
+`$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `$bar`'s value
+    ||
+|#
 
 ### Templates and variables
 

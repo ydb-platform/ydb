@@ -5,7 +5,13 @@
 
 #include <yt/yt/core/ypath/tokenizer.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NYTree {
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,7 +28,7 @@ void TStaticServiceDispatcher::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     auto result = BuildYsonStringFluently()
         .DoListFor(
@@ -32,7 +38,7 @@ void TStaticServiceDispatcher::ListSelf(
                     .Item().Value(pair.first);
             });
 
-    response->set_value(result.ToString());
+    response->set_value(ToProto(result));
     context->Reply();
 }
 

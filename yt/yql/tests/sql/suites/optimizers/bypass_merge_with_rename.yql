@@ -1,0 +1,12 @@
+/* FIXME ytfile can not: yt/yql/providers/yt/codec/yt_codec.cpp:256  InitDecoder(): requirement ... failed, message: Bad column key */
+pragma AnsiInForEmptyOrNullableItemsCollections;
+pragma yt.JoinEnableStarJoin;
+
+use plato;
+
+$all = (
+    select * from Input1
+    where key not in (select key from Input2) and key not in (select key from Input3)
+);
+
+select count(distinct key) from $all

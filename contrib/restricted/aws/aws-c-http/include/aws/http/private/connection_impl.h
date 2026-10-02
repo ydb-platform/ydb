@@ -20,10 +20,10 @@ struct aws_http_make_request_options;
 struct aws_http_request_handler_options;
 struct aws_http_stream;
 
-typedef int aws_client_bootstrap_new_socket_channel_fn(struct aws_socket_channel_bootstrap_options *options);
-
+/* vtable of functions that aws_http_connection uses to interact with external systems.
+ * tests override the vtable to mock those systems */
 struct aws_http_connection_system_vtable {
-    aws_client_bootstrap_new_socket_channel_fn *new_socket_channel;
+    int (*aws_client_bootstrap_new_socket_channel)(struct aws_socket_channel_bootstrap_options *options);
 };
 
 struct aws_http_connection_vtable {
@@ -103,7 +103,7 @@ struct aws_http_connection {
 
     union {
         struct aws_http_connection_client_data {
-            uint8_t delete_me; /* exists to prevent "empty struct" errors */
+            uint64_t response_first_byte_timeout_ms;
         } client;
 
         struct aws_http_connection_server_data {
@@ -133,6 +133,7 @@ struct aws_http_client_bootstrap {
     aws_http_on_client_connection_setup_fn *on_setup;
     aws_http_on_client_connection_shutdown_fn *on_shutdown;
     aws_http_proxy_request_transform_fn *proxy_request_transform;
+    uint64_t response_first_byte_timeout_ms;
 
     struct aws_http1_connection_options http1_options;
     struct aws_http2_connection_options http2_options; /* allocated with bootstrap */

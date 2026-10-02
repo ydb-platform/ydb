@@ -73,6 +73,7 @@
 #define ABSL_STRINGS_SUBSTITUTE_H_
 
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -106,7 +107,7 @@ class Arg {
   // Overloads for string-y things
   //
   // Explicitly overload `const char*` so the compiler doesn't cast to `bool`.
-  Arg(absl::Nullable<const char*> value)  // NOLINT(google-explicit-constructor)
+  Arg(const char* absl_nullable value)  // NOLINT(google-explicit-constructor)
       : piece_(absl::NullSafeStringView(value)) {}
   template <typename Allocator>
   Arg(  // NOLINT
@@ -123,9 +124,9 @@ class Arg {
   // probably using them as 8-bit integers and would probably prefer an integer
   // representation. However, we can't really know, so we make the caller decide
   // what to do.
-  Arg(char value)  // NOLINT(google-explicit-constructor)
-      : piece_(scratch_, 1) {
+  Arg(char value) {  // NOLINT(google-explicit-constructor)
     scratch_[0] = value;
+    piece_ = absl::string_view(scratch_, 1);
   }
   Arg(short value)  // NOLINT(*)
       : piece_(scratch_,
@@ -176,8 +177,7 @@ class Arg {
   Arg(bool value)  // NOLINT(google-explicit-constructor)
       : piece_(value ? "true" : "false") {}
 
-  template <typename T, typename = typename std::enable_if<
-                            HasAbslStringify<T>::value>::type>
+  template <typename T, typename = std::enable_if_t<HasAbslStringify<T>::value>>
   Arg(  // NOLINT(google-explicit-constructor)
       const T& v, strings_internal::StringifySink&& sink = {})
       : piece_(strings_internal::ExtractStringification(sink, v)) {}
@@ -188,27 +188,27 @@ class Arg {
   // vector<bool>::reference and const_reference require special help to convert
   // to `Arg` because it requires two user defined conversions.
   template <typename T,
-            absl::enable_if_t<
-                std::is_class<T>::value &&
-                (std::is_same<T, std::vector<bool>::reference>::value ||
-                 std::is_same<T, std::vector<bool>::const_reference>::value)>* =
-                nullptr>
+            std::enable_if_t<
+                std::is_class_v<T> &&
+                    (std::is_same_v<T, std::vector<bool>::reference> ||
+                     std::is_same_v<T, std::vector<bool>::const_reference>),
+                bool> = true>
   Arg(T value)  // NOLINT(google-explicit-constructor)
       : Arg(static_cast<bool>(value)) {}
 
   // `void*` values, with the exception of `char*`, are printed as
   // "0x<hex value>". However, in the case of `nullptr`, "NULL" is printed.
   Arg(  // NOLINT(google-explicit-constructor)
-      absl::Nullable<const void*> value);
+      const void* absl_nullable value);
 
   // Normal enums are already handled by the integer formatters.
   // This overload matches only scoped enums.
   template <typename T,
-            typename = typename std::enable_if<
-                std::is_enum<T>{} && !std::is_convertible<T, int>{} &&
-                !HasAbslStringify<T>::value>::type>
+            typename = std::enable_if_t<std::is_enum<T>{} &&
+                                        !std::is_convertible<T, int>{} &&
+                                        !HasAbslStringify<T>::value>>
   Arg(T value)  // NOLINT(google-explicit-constructor)
-      : Arg(static_cast<typename std::underlying_type<T>::type>(value)) {}
+      : Arg(static_cast<std::underlying_type_t<T>>(value)) {}
 
   Arg(const Arg&) = delete;
   Arg& operator=(const Arg&) = delete;
@@ -222,12 +222,13 @@ class Arg {
 
 // Internal helper function. Don't call this from outside this implementation.
 // This interface may change without notice.
-void SubstituteAndAppendArray(
-    absl::Nonnull<std::string*> output, absl::string_view format,
-    absl::Nullable<const absl::string_view*> args_array, size_t num_args);
+void SubstituteAndAppendArray(std::string* absl_nonnull output,
+                              absl::string_view format,
+                              const absl::string_view* absl_nullable args_array,
+                              size_t num_args);
 
 #if defined(ABSL_BAD_CALL_IF)
-constexpr int CalculateOneBit(absl::Nonnull<const char*> format) {
+constexpr int CalculateOneBit(const char* absl_nonnull format) {
   // Returns:
   // * 2^N for '$N' when N is in [0-9]
   // * 0 for correct '$' escaping: '$$'.
@@ -236,11 +237,11 @@ constexpr int CalculateOneBit(absl::Nonnull<const char*> format) {
                                           : (1 << (*format - '0'));
 }
 
-constexpr const char* SkipNumber(absl::Nonnull<const char*> format) {
+constexpr const char* absl_nonnull SkipNumber(const char* absl_nonnull format) {
   return !*format ? format : (format + 1);
 }
 
-constexpr int PlaceholderBitmask(absl::Nonnull<const char*> format) {
+constexpr int PlaceholderBitmask(const char* absl_nonnull format) {
   return !*format
              ? 0
              : *format != '$' ? PlaceholderBitmask(format + 1)
@@ -273,39 +274,39 @@ constexpr int PlaceholderBitmask(absl::Nonnull<const char*> format) {
 //    absl::SubstituteAndAppend(boilerplate, format, args...);
 //  }
 //
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format) {
   substitute_internal::SubstituteAndAppendArray(output, format, nullptr, 0);
 }
 
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format,
                                 const substitute_internal::Arg& a0) {
   const absl::string_view args[] = {a0.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format,
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1) {
   const absl::string_view args[] = {a0.piece(), a1.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format,
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2) {
   const absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format,
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
@@ -314,10 +315,10 @@ inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
   const absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
                                     a3.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
-inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
+inline void SubstituteAndAppend(std::string* absl_nonnull output,
                                 absl::string_view format,
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
@@ -327,22 +328,22 @@ inline void SubstituteAndAppend(absl::Nonnull<std::string*> output,
   const absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
                                     a3.piece(), a4.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 inline void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::string_view format,
+    std::string* absl_nonnull output, absl::string_view format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5) {
   const absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
                                     a3.piece(), a4.piece(), a5.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 inline void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::string_view format,
+    std::string* absl_nonnull output, absl::string_view format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -351,11 +352,11 @@ inline void SubstituteAndAppend(
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 inline void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::string_view format,
+    std::string* absl_nonnull output, absl::string_view format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -364,11 +365,11 @@ inline void SubstituteAndAppend(
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece(), a7.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 inline void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::string_view format,
+    std::string* absl_nonnull output, absl::string_view format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -378,11 +379,11 @@ inline void SubstituteAndAppend(
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece(), a7.piece(), a8.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 inline void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::string_view format,
+    std::string* absl_nonnull output, absl::string_view format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -392,22 +393,22 @@ inline void SubstituteAndAppend(
       a0.piece(), a1.piece(), a2.piece(), a3.piece(), a4.piece(),
       a5.piece(), a6.piece(), a7.piece(), a8.piece(), a9.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
-                                                ABSL_ARRAYSIZE(args));
+                                                std::size(args));
 }
 
 #if defined(ABSL_BAD_CALL_IF)
 // This body of functions catches cases where the number of placeholders
 // doesn't match the number of data arguments.
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format)
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format)
     ABSL_BAD_CALL_IF(
         substitute_internal::PlaceholderBitmask(format) != 0,
         "There were no substitution arguments "
         "but this format string either has a $[0-9] in it or contains "
         "an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format,
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format,
                          const substitute_internal::Arg& a0)
     ABSL_BAD_CALL_IF(substitute_internal::PlaceholderBitmask(format) != 1,
                      "There was 1 substitution argument given, but "
@@ -415,8 +416,8 @@ void SubstituteAndAppend(absl::Nonnull<std::string*> output,
                      "one of $1-$9, or contains an unescaped $ character (use "
                      "$$ instead)");
 
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format,
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format,
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1)
     ABSL_BAD_CALL_IF(
@@ -425,8 +426,8 @@ void SubstituteAndAppend(absl::Nonnull<std::string*> output,
         "missing its $0/$1, contains one of $2-$9, or contains an "
         "unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format,
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format,
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2)
@@ -436,8 +437,8 @@ void SubstituteAndAppend(absl::Nonnull<std::string*> output,
         "this format string is missing its $0/$1/$2, contains one of "
         "$3-$9, or contains an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format,
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format,
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2,
@@ -448,8 +449,8 @@ void SubstituteAndAppend(absl::Nonnull<std::string*> output,
         "this format string is missing its $0-$3, contains one of "
         "$4-$9, or contains an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(absl::Nonnull<std::string*> output,
-                         absl::Nonnull<const char*> format,
+void SubstituteAndAppend(std::string* absl_nonnull output,
+                         const char* absl_nonnull format,
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2,
@@ -462,7 +463,7 @@ void SubstituteAndAppend(absl::Nonnull<std::string*> output,
         "$5-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::Nonnull<const char*> format,
+    std::string* absl_nonnull output, const char* absl_nonnull format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5)
@@ -473,7 +474,7 @@ void SubstituteAndAppend(
         "$6-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::Nonnull<const char*> format,
+    std::string* absl_nonnull output, const char* absl_nonnull format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -485,7 +486,7 @@ void SubstituteAndAppend(
         "$7-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::Nonnull<const char*> format,
+    std::string* absl_nonnull output, const char* absl_nonnull format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -497,7 +498,7 @@ void SubstituteAndAppend(
         "$8-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::Nonnull<const char*> format,
+    std::string* absl_nonnull output, const char* absl_nonnull format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -510,7 +511,7 @@ void SubstituteAndAppend(
         "contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    absl::Nonnull<std::string*> output, absl::Nonnull<const char*> format,
+    std::string* absl_nonnull output, const char* absl_nonnull format,
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
@@ -539,20 +540,20 @@ void SubstituteAndAppend(
 //  void VarMsg(absl::string_view format, const Args&... args) {
 //    std::string s = absl::Substitute(format, args...);
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(absl::string_view format) {
+[[nodiscard]] inline std::string Substitute(absl::string_view format) {
   std::string result;
   SubstituteAndAppend(&result, format);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0) {
   std::string result;
   SubstituteAndAppend(&result, format, a0);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1) {
   std::string result;
@@ -560,7 +561,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2) {
   std::string result;
@@ -568,7 +569,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3) {
@@ -577,7 +578,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4) {
@@ -586,7 +587,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -596,7 +597,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -606,7 +607,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -617,7 +618,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -628,7 +629,7 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline std::string Substitute(
+[[nodiscard]] inline std::string Substitute(
     absl::string_view format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -643,13 +644,13 @@ ABSL_MUST_USE_RESULT inline std::string Substitute(
 #if defined(ABSL_BAD_CALL_IF)
 // This body of functions catches cases where the number of placeholders
 // doesn't match the number of data arguments.
-std::string Substitute(absl::Nonnull<const char*> format)
+std::string Substitute(const char* absl_nonnull format)
     ABSL_BAD_CALL_IF(substitute_internal::PlaceholderBitmask(format) != 0,
                      "There were no substitution arguments "
                      "but this format string either has a $[0-9] in it or "
                      "contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0)
     ABSL_BAD_CALL_IF(
         substitute_internal::PlaceholderBitmask(format) != 1,
@@ -657,7 +658,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "this format string is missing its $0, contains one of $1-$9, "
         "or contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0,
                        const substitute_internal::Arg& a1)
     ABSL_BAD_CALL_IF(
@@ -666,7 +667,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "this format string is missing its $0/$1, contains one of "
         "$2-$9, or contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0,
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2)
@@ -676,7 +677,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "this format string is missing its $0/$1/$2, contains one of "
         "$3-$9, or contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0,
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
@@ -687,7 +688,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "this format string is missing its $0-$3, contains one of "
         "$4-$9, or contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0,
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
@@ -699,7 +700,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "this format string is missing its $0-$4, contains one of "
         "$5-$9, or contains an unescaped $ character (use $$ instead)");
 
-std::string Substitute(absl::Nonnull<const char*> format,
+std::string Substitute(const char* absl_nonnull format,
                        const substitute_internal::Arg& a0,
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
@@ -713,7 +714,7 @@ std::string Substitute(absl::Nonnull<const char*> format,
         "$6-$9, or contains an unescaped $ character (use $$ instead)");
 
 std::string Substitute(
-    absl::Nonnull<const char*> format, const substitute_internal::Arg& a0,
+    const char* absl_nonnull format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6)
@@ -724,7 +725,7 @@ std::string Substitute(
         "$7-$9, or contains an unescaped $ character (use $$ instead)");
 
 std::string Substitute(
-    absl::Nonnull<const char*> format, const substitute_internal::Arg& a0,
+    const char* absl_nonnull format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
@@ -736,7 +737,7 @@ std::string Substitute(
         "$8-$9, or contains an unescaped $ character (use $$ instead)");
 
 std::string Substitute(
-    absl::Nonnull<const char*> format, const substitute_internal::Arg& a0,
+    const char* absl_nonnull format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
@@ -748,7 +749,7 @@ std::string Substitute(
         "contains an unescaped $ character (use $$ instead)");
 
 std::string Substitute(
-    absl::Nonnull<const char*> format, const substitute_internal::Arg& a0,
+    const char* absl_nonnull format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,

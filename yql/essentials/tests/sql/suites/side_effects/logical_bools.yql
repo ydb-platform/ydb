@@ -1,0 +1,2 @@
+/* custom error: Condition violated */
+select (not WithSideEffects(x)) and false from (select Ensure(false, false) as x)

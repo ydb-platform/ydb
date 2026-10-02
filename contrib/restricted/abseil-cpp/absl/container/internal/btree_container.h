@@ -18,12 +18,15 @@
 #include <algorithm>
 #include <initializer_list>
 #include <iterator>
+#include <memory>
+#include <type_traits>
 #include <utility>
 
 #include "absl/base/attributes.h"
-#include "absl/base/internal/throw_delegate.h"
+#include "absl/base/throw_delegate.h"
 #include "absl/container/internal/btree.h"  // IWYU pragma: export
 #include "absl/container/internal/common.h"
+#include "absl/hash/internal/weakly_mixed_integer.h"
 #include "absl/memory/memory.h"
 #include "absl/meta/type_traits.h"
 
@@ -78,21 +81,21 @@ class btree_container {
   explicit btree_container(const allocator_type &alloc)
       : tree_(key_compare(), alloc) {}
 
-  btree_container(const btree_container &other)
-      : btree_container(other, absl::allocator_traits<allocator_type>::
+  btree_container(const btree_container& other)
+      : btree_container(other, std::allocator_traits<allocator_type>::
                                    select_on_container_copy_construction(
                                        other.get_allocator())) {}
   btree_container(const btree_container &other, const allocator_type &alloc)
       : tree_(other.tree_, alloc) {}
 
-  btree_container(btree_container &&other) noexcept(
-      std::is_nothrow_move_constructible<Tree>::value) = default;
+  btree_container(btree_container&& other) noexcept(
+      std::is_nothrow_move_constructible_v<Tree>) = default;
   btree_container(btree_container &&other, const allocator_type &alloc)
       : tree_(std::move(other.tree_), alloc) {}
 
   btree_container &operator=(const btree_container &other) = default;
-  btree_container &operator=(btree_container &&other) noexcept(
-      std::is_nothrow_move_assignable<Tree>::value) = default;
+  btree_container& operator=(btree_container&& other) noexcept(
+      std::is_nothrow_move_assignable_v<Tree>) = default;
 
   // Iterator routines.
   iterator begin() ABSL_ATTRIBUTE_LIFETIME_BOUND { return tree_.begin(); }
@@ -266,7 +269,8 @@ class btree_container {
     for (const auto &v : b) {
       h = State::combine(std::move(h), v);
     }
-    return State::combine(std::move(h), b.size());
+    return State::combine(std::move(h),
+                          hash_internal::WeaklyMixedInteger{b.size()});
   }
 
  protected:
@@ -407,16 +411,15 @@ class btree_set_container : public btree_container<Tree> {
   // Merge routines.
   // Moves elements from `src` into `this`. If the element already exists in
   // `this`, it is left unmodified in `src`.
-  template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
-  void merge(btree_container<T> &src) {  // NOLINT
+  template <typename T,
+            typename std::enable_if_t<
+                std::conjunction_v<
+                    std::is_same<value_type, typename T::value_type>,
+                    std::is_same<allocator_type, typename T::allocator_type>,
+                    std::is_same<typename params_type::is_map_container,
+                                 typename T::params_type::is_map_container>>,
+                int> = 0>
+  void merge(btree_container<T>& src) {  // NOLINT
     for (auto src_it = src.begin(); src_it != src.end();) {
       if (insert(std::move(params_type::element(src_it.slot()))).second) {
         src_it = src.erase(src_it);
@@ -426,16 +429,15 @@ class btree_set_container : public btree_container<Tree> {
     }
   }
 
-  template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
-  void merge(btree_container<T> &&src) {
+  template <typename T,
+            typename std::enable_if_t<
+                std::conjunction_v<
+                    std::is_same<value_type, typename T::value_type>,
+                    std::is_same<allocator_type, typename T::allocator_type>,
+                    std::is_same<typename params_type::is_map_container,
+                                 typename T::params_type::is_map_container>>,
+                int> = 0>
+  void merge(btree_container<T>&& src) {
     merge(src);
   }
 };
@@ -451,6 +453,29 @@ class btree_map_container : public btree_set_container<Tree> {
   template <class K>
   using key_arg = typename super_type::template key_arg<K>;
 
+  // NOTE: The mess here is to shorten the code for the (very repetitive)
+  // function overloads, and to allow the lifetime-bound overloads to dispatch
+  // to the non-lifetime-bound overloads, to ensure there is a single source of
+  // truth for each overload set.
+  //
+  // Enabled if an assignment from the given type would require the
+  // source object to remain alive for the life of the element.
+  //
+  // TODO(b/402804213): Remove these traits and simplify the overloads whenever
+  // we have a better mechanism available to handle lifetime analysis.
+  template <class K, bool Value, typename = void>
+  using LifetimeBoundK =
+      HasValue<Value, type_traits_internal::IsLifetimeBoundAssignment<
+                          typename Tree::key_type, K>>;
+  template <class M, bool Value, typename = void>
+  using LifetimeBoundV =
+      HasValue<Value, type_traits_internal::IsLifetimeBoundAssignment<
+                          typename Tree::params_type::mapped_type, M>>;
+  template <class K, bool KValue, class M, bool MValue, typename... Dummy>
+  using LifetimeBoundKV =
+      std::conjunction<LifetimeBoundK<K, KValue, std::void_t<Dummy...>>,
+                       LifetimeBoundV<M, MValue>>;
+
  public:
   using key_type = typename Tree::key_type;
   using mapped_type = typename params_type::mapped_type;
@@ -464,99 +489,175 @@ class btree_map_container : public btree_set_container<Tree> {
   using super_type::super_type;
   btree_map_container() {}
 
+  // TODO(b/402804213): Remove these macros whenever we have a better mechanism
+  // available to handle lifetime analysis.
+#define ABSL_INTERNAL_X(Func, Callee, KQual, MQual, KValue, MValue, ...)     \
+  template <                                                                 \
+      typename K = key_type, class M,                                        \
+      ABSL_INTERNAL_IF_##KValue##_NOR_##MValue(                              \
+          int = (EnableIf<LifetimeBoundKV<K, KValue, M, MValue,              \
+                                          IfRRef<int KQual>::AddPtr<K>,      \
+                                          IfRRef<int MQual>::AddPtr<M>>>()), \
+          ABSL_INTERNAL_SINGLE_ARG(                                          \
+              int&...,                                                       \
+              decltype(EnableIf<LifetimeBoundKV<K, KValue, M, MValue>>()) =  \
+                  0))>                                                       \
+  decltype(auto) Func(                                                       \
+      __VA_ARGS__ key_arg<K> KQual k ABSL_INTERNAL_IF_##KValue(              \
+          ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS),                         \
+      M MQual obj ABSL_INTERNAL_IF_##MValue(                                 \
+          ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS))                         \
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {                                        \
+    return ABSL_INTERNAL_IF_##KValue##_OR_##MValue(                          \
+        (this->template Func<K, M, 0>), Callee)(                             \
+        __VA_ARGS__ std::forward<decltype(k)>(k),                            \
+        std::forward<decltype(obj)>(obj));                                   \
+  }                                                                          \
+  static_assert(true, "this assertion forces a semicolon")
   // Insertion routines.
   // Note: the nullptr template arguments and extra `const M&` overloads allow
   // for supporting bitfield arguments.
-  template <typename K = key_type, class M>
-  std::pair<iterator, bool> insert_or_assign(const key_arg<K> &k, const M &obj)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_impl(k, obj);
-  }
-  template <typename K = key_type, class M, K * = nullptr>
-  std::pair<iterator, bool> insert_or_assign(key_arg<K> &&k, const M &obj)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_impl(std::forward<K>(k), obj);
-  }
-  template <typename K = key_type, class M, M * = nullptr>
-  std::pair<iterator, bool> insert_or_assign(const key_arg<K> &k, M &&obj)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_impl(k, std::forward<M>(obj));
-  }
-  template <typename K = key_type, class M, K * = nullptr, M * = nullptr>
-  std::pair<iterator, bool> insert_or_assign(key_arg<K> &&k, M &&obj)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_impl(std::forward<K>(k), std::forward<M>(obj));
-  }
-  template <typename K = key_type, class M>
-  iterator insert_or_assign(const_iterator hint, const key_arg<K> &k,
-                            const M &obj) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_hint_impl(hint, k, obj);
-  }
-  template <typename K = key_type, class M, K * = nullptr>
-  iterator insert_or_assign(const_iterator hint, key_arg<K> &&k,
-                            const M &obj) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_hint_impl(hint, std::forward<K>(k), obj);
-  }
-  template <typename K = key_type, class M, M * = nullptr>
-  iterator insert_or_assign(const_iterator hint, const key_arg<K> &k,
-                            M &&obj) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_hint_impl(hint, k, std::forward<M>(obj));
-  }
-  template <typename K = key_type, class M, K * = nullptr, M * = nullptr>
-  iterator insert_or_assign(const_iterator hint, key_arg<K> &&k,
-                            M &&obj) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return insert_or_assign_hint_impl(hint, std::forward<K>(k),
-                                      std::forward<M>(obj));
-  }
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, const &,
+                  false, false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, const &,
+                  false, true);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, const &,
+                  true, false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, const &,
+                  true, true);
 
-  template <typename K = key_type, typename... Args,
-            typename absl::enable_if_t<
-                !std::is_convertible<K, const_iterator>::value, int> = 0>
-  std::pair<iterator, bool> try_emplace(const key_arg<K> &k, Args &&...args)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return try_emplace_impl(k, std::forward<Args>(args)...);
-  }
-  template <typename K = key_type, typename... Args,
-            typename absl::enable_if_t<
-                !std::is_convertible<K, const_iterator>::value, int> = 0>
-  std::pair<iterator, bool> try_emplace(key_arg<K> &&k, Args &&...args)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return try_emplace_impl(std::forward<K>(k), std::forward<Args>(args)...);
-  }
-  template <typename K = key_type, typename... Args>
-  iterator try_emplace(const_iterator hint, const key_arg<K> &k,
-                       Args &&...args) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return try_emplace_hint_impl(hint, k, std::forward<Args>(args)...);
-  }
-  template <typename K = key_type, typename... Args>
-  iterator try_emplace(const_iterator hint, key_arg<K> &&k,
-                       Args &&...args) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return try_emplace_hint_impl(hint, std::forward<K>(k),
-                                 std::forward<Args>(args)...);
-  }
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, &&, false,
+                  false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, &&, false,
+                  true);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, &&, true,
+                  false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, const &, &&, true,
+                  true);
 
-  template <typename K = key_type>
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, const &, false,
+                  false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, const &, false,
+                  true);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, const &, true,
+                  false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, const &, true,
+                  true);
+
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, &&, false,
+                  false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, &&, false, true);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, &&, true, false);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_impl, &&, &&, true, true);
+
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &,
+                  const &, false, false,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &,
+                  const &, false, true,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &,
+                  const &, true, false,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &,
+                  const &, true, true,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &, &&,
+                  false, false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &, &&,
+                  false, true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &, &&,
+                  true, false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, const &, &&,
+                  true, true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, const &,
+                  false, false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, const &,
+                  false, true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, const &,
+                  true, false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, const &,
+                  true, true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, &&, false,
+                  false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, &&, false,
+                  true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, &&, true,
+                  false, const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(insert_or_assign, insert_or_assign_hint_impl, &&, &&, true,
+                  true, const_iterator(hint) ABSL_INTERNAL_COMMA);
+#undef ABSL_INTERNAL_X
+
+#define ABSL_INTERNAL_X(Func, Callee, KQual, KValue, ...)                      \
+  template <                                                                   \
+      class K = key_type,                                                      \
+      ABSL_INTERNAL_IF_##KValue(                                               \
+          class... Args,                                                       \
+          int = (EnableIf<                                                     \
+                 LifetimeBoundK<K, KValue, IfRRef<int KQual>::AddPtr<K>>>())), \
+      ABSL_INTERNAL_IF_##KValue(                                               \
+          decltype(EnableIf<LifetimeBoundK<                                    \
+                       K, KValue, IfRRef<int KQual>::AddPtr<K>>>()) = 0,       \
+          class... Args),                                                      \
+      std::enable_if_t<!std::is_convertible_v<K, const_iterator>, int> = 0>    \
+  decltype(auto) Func(                                                         \
+      __VA_ARGS__ key_arg<K> KQual k ABSL_INTERNAL_IF_##KValue(                \
+          ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS),                           \
+      Args&&... args) ABSL_ATTRIBUTE_LIFETIME_BOUND {                          \
+    return ABSL_INTERNAL_IF_##KValue((this->template Func<K, 0>), Callee)(     \
+        __VA_ARGS__ std::forward<decltype(k)>(k),                              \
+        std::forward<decltype(args)>(args)...);                                \
+  }                                                                            \
+  static_assert(true, "this assertion forces a semicolon")
+  ABSL_INTERNAL_X(try_emplace, try_emplace_impl, const &, false);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_impl, const &, true);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_impl, &&, false);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_impl, &&, true);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_hint_impl, const &, false,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_hint_impl, const &, true,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_hint_impl, &&, false,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+  ABSL_INTERNAL_X(try_emplace, try_emplace_hint_impl, &&, true,
+                  const_iterator(hint) ABSL_INTERNAL_COMMA);
+#undef ABSL_INTERNAL_X
+
+  template <class K = key_type, int = EnableIf<LifetimeBoundK<K, false>>()>
   mapped_type &operator[](const key_arg<K> &k) ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return try_emplace(k).first->second;
   }
-  template <typename K = key_type>
+  template <class K = key_type, int &..., EnableIf<LifetimeBoundK<K, true>> = 0>
+  mapped_type &operator[](
+      const key_arg<K> &k ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS)
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return this->template operator[]<K, 0>(k);
+  }
+  template <class K = key_type, int = EnableIf<LifetimeBoundK<K, false>>()>
   mapped_type &operator[](key_arg<K> &&k) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return try_emplace(std::forward<K>(k)).first->second;
+    return try_emplace(std::forward<key_arg<K>>(k)).first->second;
+  }
+  template <class K = key_type, int &..., EnableIf<LifetimeBoundK<K, true>> = 0>
+  mapped_type &operator[](
+      key_arg<K> &&k ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS)
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return this->template operator[]<K, 0>(std::forward<key_arg<K>>(k));
   }
 
   template <typename K = key_type>
   mapped_type &at(const key_arg<K> &key) ABSL_ATTRIBUTE_LIFETIME_BOUND {
     auto it = this->find(key);
-    if (it == this->end())
-      base_internal::ThrowStdOutOfRange("absl::btree_map::at");
+    if (it == this->end()) ThrowStdOutOfRange("absl::btree_map::at");
     return it->second;
   }
   template <typename K = key_type>
   const mapped_type &at(const key_arg<K> &key) const
       ABSL_ATTRIBUTE_LIFETIME_BOUND {
     auto it = this->find(key);
-    if (it == this->end())
-      base_internal::ThrowStdOutOfRange("absl::btree_map::at");
+    if (it == this->end()) ThrowStdOutOfRange("absl::btree_map::at");
     return it->second;
   }
 
@@ -568,27 +669,36 @@ class btree_map_container : public btree_set_container<Tree> {
   std::pair<iterator, bool> insert_or_assign_impl(K &&k, M &&obj) {
     const std::pair<iterator, bool> ret =
         this->tree_.insert_unique(k, std::forward<K>(k), std::forward<M>(obj));
-    if (!ret.second) ret.first->second = std::forward<M>(obj);
+    if (!ret.second) {
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      ret.first->second = std::forward<M>(obj);
+    }
     return ret;
   }
   template <class K, class M>
   iterator insert_or_assign_hint_impl(const_iterator hint, K &&k, M &&obj) {
     const std::pair<iterator, bool> ret = this->tree_.insert_hint_unique(
         iterator(hint), k, std::forward<K>(k), std::forward<M>(obj));
-    if (!ret.second) ret.first->second = std::forward<M>(obj);
+    if (!ret.second) {
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      ret.first->second = std::forward<M>(obj);
+    }
     return ret.first;
   }
 
   template <class K, class... Args>
   std::pair<iterator, bool> try_emplace_impl(K &&k, Args &&... args) {
     return this->tree_.insert_unique(
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         k, std::piecewise_construct, std::forward_as_tuple(std::forward<K>(k)),
         std::forward_as_tuple(std::forward<Args>(args)...));
   }
   template <class K, class... Args>
   iterator try_emplace_hint_impl(const_iterator hint, K &&k, Args &&... args) {
     return this->tree_
-        .insert_hint_unique(iterator(hint), k, std::piecewise_construct,
+        .insert_hint_unique(iterator(hint),
+                            // NOLINTNEXTLINE(bugprone-use-after-move)
+                            k, std::piecewise_construct,
                             std::forward_as_tuple(std::forward<K>(k)),
                             std::forward_as_tuple(std::forward<Args>(args)...))
         .first;
@@ -711,32 +821,30 @@ class btree_multiset_container : public btree_container<Tree> {
 
   // Merge routines.
   // Moves all elements from `src` into `this`.
-  template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
-  void merge(btree_container<T> &src) {  // NOLINT
+  template <typename T,
+            typename std::enable_if_t<
+                std::conjunction_v<
+                    std::is_same<value_type, typename T::value_type>,
+                    std::is_same<allocator_type, typename T::allocator_type>,
+                    std::is_same<typename params_type::is_map_container,
+                                 typename T::params_type::is_map_container>>,
+                int> = 0>
+  void merge(btree_container<T>& src) {  // NOLINT
     for (auto src_it = src.begin(), end = src.end(); src_it != end; ++src_it) {
       insert(std::move(params_type::element(src_it.slot())));
     }
     src.clear();
   }
 
-  template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
-  void merge(btree_container<T> &&src) {
+  template <typename T,
+            typename std::enable_if_t<
+                std::conjunction_v<
+                    std::is_same<value_type, typename T::value_type>,
+                    std::is_same<allocator_type, typename T::allocator_type>,
+                    std::is_same<typename params_type::is_map_container,
+                                 typename T::params_type::is_map_container>>,
+                int> = 0>
+  void merge(btree_container<T>&& src) {
     merge(src);
   }
 };

@@ -1,0 +1,5 @@
+generic:
+  access_service_type: "yandex_v2"
+
+  auth:
+    token_file: ydb/mvp/core/examples/token_file.pb.txt

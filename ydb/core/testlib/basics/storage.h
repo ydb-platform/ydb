@@ -44,12 +44,7 @@ namespace NKikimr {
                 }
             }
 
-            const bool strandedPDisk = STRAND_PDISK && !Runtime.IsRealThreads();
-            if (strandedPDisk) {
-                Factory = new TStrandedPDiskServiceFactory(Runtime);
-            } else {
-                Factory = new TRealPDiskServiceFactory();
-            }
+            SetupPDiskSubsystem(&Runtime, STRAND_PDISK);
 
             NPDisk::TKey mainKey = NPDisk::YdbDefaultPDiskSequence;
 
@@ -64,10 +59,13 @@ namespace NKikimr {
             PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat";
 
             if (!Mock && conf.FormatDisk) {
+                TFormatOptions options;
+                options.SectorMap = SectorMap;
+                options.EnableSmallDiskOptimization = false;
                 FormatPDisk(PDiskPath,
                     Conf.DiskSize, Conf.SectorSize, Conf.ChunkSize, PDiskGuid,
                     0x123 + salt, 0x456 + salt, 0x789 + salt, mainKey,
-                    "", false, false, SectorMap, false);
+                    "", options);
             }
         }
 
@@ -84,15 +82,15 @@ namespace NKikimr {
 
         TIntrusivePtr<TNodeWardenConfig> MakeWardenConf(const TDomainsInfo &domains, const NKikimrProto::TKeyConfig& keyConfig) const
         {
-            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig(Factory));
+            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig());
 
             {
                 auto text = MakeTextConf(domains);
 
-                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig.MutableServiceSet());
+                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig->MutableServiceSet());
             }
 
-            conf->BlobStorageConfig.MutableServiceSet()->SetEnableProxyMock(Mock);
+            conf->BlobStorageConfig->MutableServiceSet()->SetEnableProxyMock(Mock);
             conf->PDiskConfigOverlay.SetGetDriveDataSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
             conf->PDiskConfigOverlay.SetWriteCacheSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
 
@@ -178,7 +176,6 @@ namespace NKikimr {
 
     private:
         TTestActorRuntime &Runtime;
-        TIntrusivePtr<IPDiskServiceFactory> Factory;
         TString PDiskPath;
         TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     };

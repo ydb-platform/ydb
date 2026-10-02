@@ -1,0 +1,22 @@
+dstool -e <endpoint> --mon-port <mon_port> vdisk evict --ignore-degraded-group-check --ignore-failure-model-group-check --vdisk-ids [82000000:_:0:1:0] --suppress-donor-mode
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke StreamStorageState ===
+include_vdisks: true
+
+=== Invoke ReassignVDisk ===
+vdisk_id {
+  group_id: 2181038080
+  group_generation: 2
+  fail_domain_idx: 1
+}
+options {
+  safety {
+    ignore_degraded_groups: true
+    ignore_group_failure_model: true
+  }
+  suppress_donor_mode: true
+}

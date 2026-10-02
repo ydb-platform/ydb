@@ -342,7 +342,7 @@ namespace orc {
         char* literalOutputLimit = output + literalLength;
         if (literalOutputLimit > fastOutputLimit ||
             input + literalLength > inputLimit - SIZE_OF_LONG) {
-          if (literalOutputLimit > outputLimit) {
+          if (literalOutputLimit > outputLimit || input + literalLength > inputLimit) {
             throw MalformedInputException(input - inputAddress);
           }
 
@@ -365,7 +365,10 @@ namespace orc {
         lastLiteralLength = literalLength;
       }
 
-      if (input + SIZE_OF_SHORT > inputLimit && *reinterpret_cast<const int16_t*>(input) != 0) {
+      if (input + SIZE_OF_SHORT > inputLimit) {
+        throw MalformedInputException(input - inputAddress);
+      }
+      if (input[0] != 0 || input[1] != 0) {
         throw MalformedInputException(input - inputAddress);
       }
       input += SIZE_OF_SHORT;

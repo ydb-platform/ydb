@@ -3,6 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE)
     ENV(TIMEOUT=400)
@@ -11,10 +12,14 @@ ENDIF()
 SRCS(
     defs.h
     env.h
+    blob_stat.cpp
     huge.cpp
+    compaction.cpp
+    space_report.cpp
 )
 
 PEERDIR(
+    contrib/libs/xxhash
     ydb/apps/version
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure

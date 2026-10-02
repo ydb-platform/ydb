@@ -1,4 +1,4 @@
-GTEST(core-rpc-allocation-tags)
+GTEST(unittester-core-rpc-allocation-tags)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

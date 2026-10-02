@@ -9,8 +9,8 @@ namespace {
 
 TEST(TLocalYPClusterTest, Basic)
 {
-    TString ypHostNameMan = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
-    TString ypHostNameSas = "hellodarknessmyoldfriend.sas.yp-c.yandex.net";
+    std::string ypHostNameMan = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
+    std::string ypHostNameSas = "hellodarknessmyoldfriend.sas.yp-c.yandex.net";
 
     SetLocalHostName(ypHostNameMan);
     TStringBuf localYPCluster1{GetLocalYPClusterRaw()};

@@ -1,6 +1,7 @@
 #pragma once
+#include <functional>
 #include <memory>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -18,6 +19,14 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr FailsDuration;
     NMonitoring::TDynamicCounters::TCounterPtr Success;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessDuration;
+
+    TTaskSignals(const NColumnShard::TCommonCountersOwner& baseObject, const TString& taskClassIdentifier)
+        : TBase(baseObject, "task_class_name", taskClassIdentifier) {
+        Fails = TBase::GetDeriviative("Fails");
+        FailsDuration = TBase::GetDeriviative("FailsDuration");
+        Success = TBase::GetDeriviative("Success");
+        SuccessDuration = TBase::GetDeriviative("SuccessDuration");
+    }
 
     TTaskSignals(const TString& moduleId, const TString& taskClassIdentifier, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr)
         : TBase(moduleId, baseSignals) {
@@ -65,7 +74,7 @@ private:
     YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
     bool ExecutedFlag = false;
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) = 0;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) = 0;
     virtual void DoOnCannotExecute(const TString& reason);
 public:
     using TPtr = std::shared_ptr<ITask>;
@@ -73,10 +82,20 @@ public:
 
     virtual TString GetTaskClassIdentifier() const = 0;
 
+    // Test/observability hook: composite conveyor calls this with the assigned worker index.
+    virtual void OnAssignedToWorker(const ui64 /*workerIdx*/) {
+    }
+
+    // Optional test barrier: returns a callback that does not keep this task alive.
+    // Invoked after TotalCPU is updated on the distributor.
+    virtual std::function<void()> MakeAccountedCallback() const {
+        return {};
+    }
+
     void OnCannotExecute(const TString& reason) {
         return DoOnCannotExecute(reason);
     }
-    TConclusionStatus Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
+    void Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
 };
 
 }

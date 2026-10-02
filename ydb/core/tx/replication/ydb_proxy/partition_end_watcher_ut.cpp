@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <vector>
+
 namespace NKikimr::NReplication {
 
 Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
@@ -56,7 +58,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         CType Events;
     };
 
-    struct MockPartitionSession : public TPartitionSession {
+    struct MockPartitionSession: public TPartitionSession {
         MockPartitionSession()
             : TPartitionSession()
         {
@@ -68,7 +70,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
     };
 
     TActorId MakeActorId() {
-        return TActorId(1,2,RandomNumber<ui64>(), 0);
+        return TActorId(1, 2, RandomNumber<ui64>(), 0);
     }
 
     TReadSessionEvent::TEndPartitionSessionEvent MakeTEndPartitionSessionEvent() {
@@ -94,7 +96,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
 
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events[0].first, client);
-        auto* e = dynamic_cast<TEvYdbProxy::TEvTopicEndPartition*>(actorOps.Events[0].second);
+        auto* e = dynamic_cast<TEvYdbProxy::TEvEndTopicPartition*>(actorOps.Events[0].second);
         UNIT_ASSERT(e);
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});
@@ -118,7 +120,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
 
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events[0].first, client);
-        auto* e = dynamic_cast<TEvYdbProxy::TEvTopicEndPartition*>(actorOps.Events[0].second);
+        auto* e = dynamic_cast<TEvYdbProxy::TEvEndTopicPartition*>(actorOps.Events[0].second);
         UNIT_ASSERT(e);
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});

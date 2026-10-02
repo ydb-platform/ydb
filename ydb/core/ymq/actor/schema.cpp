@@ -1,4 +1,4 @@
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "log.h"
 #include "params.h"
@@ -210,6 +210,19 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
+    trans->MutableDrop()->SetName(name);
+
+    return ev;
+}
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeRemoveTopicEvent(const TString& root, const TString& name)
+{
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    // Transaction info
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+    trans->SetWorkingDir(root);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
     trans->MutableDrop()->SetName(name);
 
     return ev;

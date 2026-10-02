@@ -1,0 +1,22 @@
+/* custom error: YqlSelect unsupported: Aggregation 'AggList' */
+PRAGMA YqlSelect = 'force';
+
+-- FIXME(YQL-20436): bad test.
+SELECT
+    a,
+    ListSort(AggList(b)) AS bs
+FROM (
+    VALUES
+        (1, 100),
+        (2, 200),
+        (2, 250),
+        (3, 300),
+        (3, 300),
+        (3, 390)
+) AS x (
+    a,
+    b
+)
+GROUP BY
+    a
+;

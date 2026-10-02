@@ -1,0 +1,115 @@
+name: Run and debug tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_targets:
+        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        required: false
+        type: string
+        default: 'ydb/tests/olap/'
+      build_preset:
+        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        required: false
+        type: string
+        default: 'relwithdebinfo, release-asan'
+      branches:
+        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        required: false
+        type: string
+        default: ''
+      use_branches_config:
+        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branches_json: ${{ steps.format-branches.outputs.branches_json }}
+      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+    steps:
+      - name: Format branches
+        id: format-branches
+        run: |
+          if [ -z "${{ inputs.branches }}" ]; then
+            # Empty - will use branches_config_path or default
+            echo "branches_json=" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.branches }}" == \[* ]]; then
+            # Already JSON array
+            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
+          else
+            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
+            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
+            JSON_BRANCHES="["
+            FIRST=true
+            for branch in "${BRANCHES[@]}"; do
+              branch=$(echo "$branch" | xargs)  # trim whitespace
+              if [ -n "$branch" ]; then
+                if [ "$FIRST" = true ]; then
+                  FIRST=false
+                else
+                  JSON_BRANCHES+=", "
+                fi
+                JSON_BRANCHES+="\"$branch\""
+              fi
+            done
+            JSON_BRANCHES+="]"
+            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
+            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+          fi
+
+      - name: Format build presets
+        id: format-build-preset
+        run: |
+          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
+          if [ -z "$BUILD_PRESET_INPUT" ]; then
+            BUILD_PRESET_INPUT="relwithdebinfo"
+          fi
+          
+          # Check if already JSON array
+          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
+            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
+          else
+            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
+            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
+            JSON_PRESETS="["
+            FIRST=true
+            for preset in "${PRESETS[@]}"; do
+              preset=$(echo "$preset" | xargs)  # trim whitespace
+              if [ -n "$preset" ]; then
+                if [ "$FIRST" = true ]; then
+                  FIRST=false
+                else
+                  JSON_PRESETS+=", "
+                fi
+                JSON_PRESETS+="\"$preset\""
+              fi
+            done
+            JSON_PRESETS+="]"
+            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
+            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
+          fi
+
+  main:
+    name: Run and debug tests
+    needs: prepare
+    uses: ./.github/workflows/run_tests.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
+    with:
+      test_targets: ${{ inputs.test_targets }}
+      test_size: small,medium
+      build_preset: ${{ matrix.build_preset }}
+      branches: ${{ needs.prepare.outputs.branches_json || '' }}
+      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+
+  collect_combined_summary:
+    needs: main
+    if: always()
+    uses: ./.github/workflows/collect_combined_summary.yml

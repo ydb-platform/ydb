@@ -1,4 +1,5 @@
 PROTO_LIBRARY(library-formats-arrow-protos)
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     ssa.proto

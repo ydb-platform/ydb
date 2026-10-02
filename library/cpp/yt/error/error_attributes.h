@@ -3,6 +3,7 @@
 #include "error_attribute.h"
 #include "mergeable_dictionary.h"
 
+#include <library/cpp/yt/containers/ordered_hash_map.h>
 #include <library/cpp/yt/misc/optional.h>
 
 namespace NYT {
@@ -10,7 +11,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(arkady-e1ppa): Try switching to TString/std::string eventually.
-// representing text-encoded yson string eventually (maybe).
+// representing text-encoded YSON string eventually (maybe).
 class TErrorAttributes
 {
 public:
@@ -74,7 +75,7 @@ public:
     void MergeFrom(const TDictionary& dict);
 
 private:
-    THashMap<TKey, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>> Map_;
+    TOrderedHashMap<TKey, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>> Map_;
 
     friend class TErrorOr<void>;
     TErrorAttributes() = default;

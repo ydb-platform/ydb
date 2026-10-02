@@ -10,13 +10,13 @@ namespace NYT::NYPath {
 
 template <class E>
     requires TEnumTraits<E>::IsEnum
-TString ToYPathLiteral(E value)
+std::string ToYPathLiteral(E value)
 {
     return FormatEnum(value);
 }
 
 template <class T, class TTag>
-TString ToYPathLiteral(const TStrongTypedef<T, TTag>& value)
+std::string ToYPathLiteral(const TStrongTypedef<T, TTag>& value)
 {
     return ToYPathLiteral(value.Underlying());
 }
@@ -24,4 +24,3 @@ TString ToYPathLiteral(const TStrongTypedef<T, TTag>& value)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYPath
-

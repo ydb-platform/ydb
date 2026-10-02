@@ -13,6 +13,7 @@ extern "C" {
 #include "../src/setup.h"
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <stdlib.h>
 
 enum t_setup_ret {
 	T_SETUP_OK	= 0,
@@ -24,6 +25,13 @@ enum t_test_result {
 	T_EXIT_FAIL   = 1,
 	T_EXIT_SKIP   = 77,
 };
+
+/*
+ * Some Android versions lack aligned_alloc in stdlib.h.
+ * To avoid making large changes in tests, define a helper
+ * function that wraps posix_memalign as our own aligned_alloc.
+ */
+void *t_aligned_alloc(size_t alignment, size_t size);
 
 /*
  * Helper for binding socket to an ephemeral port.
@@ -73,6 +81,11 @@ struct iovec *t_create_buffers(size_t buf_num, size_t buf_size);
  */
 int t_create_socket_pair(int fd[2], bool stream);
 
+int t_create_socketpair_ip(struct sockaddr_storage *addr,
+				int *sock_client, int *sock_server,
+				bool ipv6, bool client_connect,
+				bool msg_zc, bool tcp, const char *name);
+
 /*
  * Helper for setting up a ring and checking for user privs
  */
@@ -86,6 +99,8 @@ enum t_setup_ret t_register_buffers(struct io_uring *ring,
 				    unsigned nr_iovecs);
 
 bool t_probe_defer_taskrun(void);
+void t_set_nonblock(int fd);
+void t_clear_nonblock(int fd);
 
 unsigned __io_uring_flush_sq(struct io_uring *ring);
 
@@ -106,6 +121,13 @@ unsigned long long mtime_since(const struct timeval *s, const struct timeval *e)
 unsigned long long mtime_since_now(struct timeval *tv);
 unsigned long long utime_since(const struct timeval *s, const struct timeval *e);
 unsigned long long utime_since_now(struct timeval *tv);
+
+int t_submit_and_wait_single(struct io_uring *ring, struct io_uring_cqe **cqe);
+
+size_t t_iovec_data_length(struct iovec *iov, unsigned iov_len);
+
+unsigned long t_compare_data_iovec(struct iovec *iov_src, unsigned nr_src,
+				   struct iovec *iov_dst, unsigned nr_dst);
 
 #ifdef __cplusplus
 }

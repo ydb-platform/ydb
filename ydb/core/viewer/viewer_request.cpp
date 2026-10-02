@@ -1,7 +1,4 @@
 #include "viewer_request.h"
-#include "viewer_autocomplete.h"
-#include "viewer_query_old.h"
-#include "viewer_render.h"
 #include "viewer_sysinfo.h"
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
@@ -122,12 +119,6 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kNodeRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>(request);
-        case NKikimrViewer::TEvViewerRequest::kQueryRequest:
-            return new TJsonQueryOld(request);
-        case NKikimrViewer::TEvViewerRequest::kRenderRequest:
-            return new TJsonRender(request);
-        case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
-            return new TJsonAutocomplete(request);
         default:
             return nullptr;
     }
@@ -199,6 +190,11 @@ template<>
 void TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>::Merge(
         NKikimrViewer::TEvViewerResponse& viewerResponse, TNodeId nodeId, NKikimrWhiteboard::TEvPDiskStateResponse& nodeResponse) {
     auto& target = *viewerResponse.MutablePDiskResponse();
+    for (const auto& info : nodeResponse.GetDDiskStateInfo()) {
+        auto* ddisk = target.AddDDiskStateInfo();
+        ddisk->CopyFrom(info);
+        ddisk->SetNodeId(nodeId);
+    }
     for (auto& info : *nodeResponse.MutablePDiskStateInfo()) {
         auto& i = *target.AddPDiskStateInfo();
         i.MergeFrom(info);

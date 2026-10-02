@@ -31,7 +31,7 @@
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
-#include "upb/def.h"
+#include "upb/reflection/def.h"
 
 #include "src/core/ext/xds/xds_common_types.h"
 #include "src/core/ext/xds/xds_resource_type.h"
@@ -39,6 +39,7 @@
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/gprpp/validation_errors.h"
 #include "src/core/lib/json/json.h"
+#include "src/core/lib/json/json_writer.h"
 
 namespace grpc_core {
 
@@ -54,7 +55,7 @@ class XdsHttpFilterImpl {
     }
     TString ToString() const {
       return y_absl::StrCat("{config_proto_type_name=", config_proto_type_name,
-                          " config=", config.Dump(), "}");
+                          " config=", JsonDump(config), "}");
     }
   };
 

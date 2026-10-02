@@ -1,0 +1,5 @@
+--- contrib/python/oauthlib/tests/oauth1/rfc5849/test_signatures.py	(index)
++++ contrib/python/oauthlib/tests/oauth1/rfc5849/test_signatures.py	(working tree)
+@@ -775 +775 @@ MmgDHR2tt8KeYTSgfU+BAkBcaVF91EQ7VXhvyABNYjeYP7lU7orOgdWMa/zbLXSU
+-        self.assertRaises(InvalidKeyError,
++        self.assertRaises((InvalidKeyError, ValueError),

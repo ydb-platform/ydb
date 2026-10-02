@@ -1,4 +1,0 @@
-RECURSE(
-    go-libpq
-    library
-)

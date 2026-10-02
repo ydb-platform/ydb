@@ -76,6 +76,13 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ESimpleLogicalValueType, ui32,
     ((Datetime64)  (0x1011))
     ((Timestamp64) (0x1012))
     ((Interval64)  (0x1013))
+
+    ((TzDate)        (0x1014))
+    ((TzDatetime)    (0x1015))
+    ((TzTimestamp)   (0x1016))
+    ((TzDate32)      (0x1017))
+    ((TzDatetime64)  (0x1018))
+    ((TzTimestamp64) (0x1019))
 );
 
 //! Debug printers for Gtest unittests.
@@ -95,6 +102,22 @@ inline bool IsIntegralTypeSigned(ESimpleLogicalValueType type)
         case ESimpleLogicalValueType::Uint32:
         case ESimpleLogicalValueType::Uint64:
             return false;
+        default:
+            YT_ABORT();
+    }
+}
+
+inline int IsTzTypeSigned(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+            return false;
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return true;
         default:
             YT_ABORT();
     }
@@ -156,6 +179,23 @@ inline int GetIntegralTypeBitWidth(ESimpleLogicalValueType type)
             return 32;
         case ESimpleLogicalValueType::Int64:
         case ESimpleLogicalValueType::Uint64:
+            return 64;
+        default:
+            YT_ABORT();
+    }
+}
+
+inline int GetTzTypeBitWidth(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::TzDate:
+            return 16;
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzDate32:
+            return 32;
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
             return 64;
         default:
             YT_ABORT();
@@ -228,6 +268,14 @@ inline constexpr EValueType GetPhysicalType(ESimpleLogicalValueType type)
         case ESimpleLogicalValueType::Timestamp64:
         case ESimpleLogicalValueType::Interval64:
             return EValueType::Int64;
+
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return EValueType::String;
 
         default:
             YT_ABORT();
@@ -327,7 +375,7 @@ public:
     using TIndexes = TCompactVector<int, TypicalColumnCount>;
 
     TColumnFilter();
-    TColumnFilter(const std::initializer_list<int>& indexes);
+    TColumnFilter(std::initializer_list<int> indexes);
     explicit TColumnFilter(TIndexes&& indexes);
     explicit TColumnFilter(const std::vector<int>& indexes);
     explicit TColumnFilter(int schemaColumnCount);

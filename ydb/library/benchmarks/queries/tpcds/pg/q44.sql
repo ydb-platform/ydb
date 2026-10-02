@@ -30,7 +30,7 @@ from(select *
 where asceding.rnk = descending.rnk
   and i1.i_item_sk=asceding.item_sk
   and i2.i_item_sk=descending.item_sk
-order by asceding.rnk
+order by asceding.rnk, best_performing, worst_performing
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query44.tpl

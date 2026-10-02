@@ -1,14 +1,15 @@
 #pragma once
 
-#include <ydb/library/yql/dq/runtime/dq_compute.h>
-
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yql/dq/runtime/dq_compute.h>
+
+#include <functional>
 
 // TODO rename file to runtime_compute_context.h
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
 public:
@@ -16,14 +17,25 @@ public:
         NTable::TTag Tag;
         NScheme::TTypeInfo Type;
         TString TypeMod;
+        TPgType* PgType = nullptr;
     };
 
     // used only at then building of a computation graph, to inject taskId in runtime nodes
     void SetCurrentTaskId(ui64 taskId) { CurrentTaskId = taskId; }
     ui64 GetCurrentTaskId() const { return CurrentTaskId; }
 
+    void SetWakeupCallback(std::function<void()> wakeupCallback);
+    const std::function<void()>& GetWakeupCallback() const;
+
+    void SetQueryContext(const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+    const TString& GetDatabase() const;
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const;
+
 private:
     ui64 CurrentTaskId = 0;
+    std::function<void()> WakeupCallback;
+    TString Database;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx);
@@ -49,6 +61,7 @@ private:
 
 IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapKqpIndexLookupJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapKqpStreamEnumerate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

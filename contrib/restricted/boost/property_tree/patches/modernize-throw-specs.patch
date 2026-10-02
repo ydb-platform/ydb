@@ -1,0 +1,5 @@
+--- a/include/boost/property_tree/detail/rapidxml.hpp	(index)
++++ b/include/boost/property_tree/detail/rapidxml.hpp	(working tree)
+@@ -58,1 +58,1 @@ namespace boost { namespace property_tree { namespace detail {namespace rapidxml
+-        const char *what() const throw() override
++        const char *what() const noexcept override

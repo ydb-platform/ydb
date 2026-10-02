@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_s3_datasink.cpp
+    yql_s3_datasink_constraints.cpp
     yql_s3_datasink_execution.cpp
     yql_s3_datasink_type_ann.cpp
     yql_s3_datasource.cpp
@@ -44,6 +45,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/provider
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/s3/actors

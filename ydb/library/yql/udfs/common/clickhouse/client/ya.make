@@ -1,7 +1,11 @@
 IF (CLANG AND NOT WITH_VALGRIND)
     YQL_UDF_YDB(clickhouse_client_udf)
 
-    YQL_LAST_ABI_VERSION()
+    YQL_ABI_VERSION(
+        2
+        44
+        0
+    )
 
     NO_COMPILER_WARNINGS()
 

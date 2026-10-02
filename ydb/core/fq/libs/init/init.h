@@ -5,15 +5,14 @@
 #include <ydb/core/fq/libs/actors/nodes_manager.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/actors/proxy_private.h>
+#include <ydb/core/fq/libs/config/protos/audit.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
-#include <ydb/library/folder_service/proto/config.pb.h>
-#include <ydb/core/fq/libs/config/protos/audit.pb.h>
-
-#include <ydb/library/yql/providers/pq/cm_client/client.h>
-
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/folder_service/proto/config.pb.h>
+#include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 #include <util/generic/ptr.h>
 
@@ -36,7 +35,8 @@ void Init(
     const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
-    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
+    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr
 );
 
 } // NFq

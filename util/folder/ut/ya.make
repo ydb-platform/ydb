@@ -7,6 +7,7 @@ SRCS(
     folder/iterator_ut.cpp
     folder/path_ut.cpp
     folder/pathsplit_ut.cpp
+    folder/tempdir_ut.cpp
 )
 
 PEERDIR(

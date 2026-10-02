@@ -1,18 +1,21 @@
 #pragma once
 #include "dq_output.h"
-#include "dq_channel_storage.h"
+#include "dq_channel_settings.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node.h>
-
-#include <util/generic/size_literals.h>
-
+#include <atomic>
+#include <memory>
 
 namespace NYql::NDq {
+
+// Moves when an output channel of one owner (a compute actor) may have finished: a channel which opts in increments
+// it when it becomes finished, before it wakes the owner up, so that the owner calls IsFinished only once it has
+// moved. A change detector, not a count of finishes: a channel increments it on binding too (in Channels 2.0 on
+// BindFinishEpoch and again on Bind, as it may be finished already), and may do so more than once on a finish.
+using TDqOutputFinishEpoch = std::atomic<ui64>;
 
 struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 ChannelId = 0;
@@ -23,6 +26,8 @@ struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
+    TInstant FinishCheckTime;
+    bool FinishCheckResult = false;
 };
 
 class IDqOutputChannel : public IDqOutput {
@@ -55,22 +60,21 @@ public:
     virtual ui64 Drop() = 0;
 
     virtual void Terminate() = 0;
-};
 
-struct TDqOutputChannelSettings {
-    ui64 MaxStoredBytes = 8_MB;
-    ui64 MaxChunkBytes = 2_MB;
-    ui64 ChunkSizeLimit = 48_MB;
-    NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-    IDqChannelStorage::TPtr ChannelStorage;
-    TCollectStatsLevel Level = TCollectStatsLevel::None;
+    virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
+    virtual bool IsLocal() const = 0;
+
+    // Opt in to TDqOutputFinishEpoch: an output which returns true increments `epoch` whenever it becomes finished,
+    // and once on binding, as it may be finished already. An output which returns false is checked as before.
+    virtual bool BindFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+        Y_UNUSED(epoch);
+        return false;
+    }
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {
 };
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const TDqOutputChannelSettings& settings, const TLogFunc& logFunc = {});
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc = {});
 
 } // namespace NYql::NDq

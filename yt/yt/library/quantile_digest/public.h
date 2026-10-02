@@ -9,7 +9,7 @@ namespace NYT {
 
 DECLARE_REFCOUNTED_STRUCT(IQuantileDigest)
 
-DECLARE_REFCOUNTED_CLASS(TTDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TTDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

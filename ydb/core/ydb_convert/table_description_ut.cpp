@@ -124,6 +124,7 @@ PartitionConfig {
         AllowOtherKinds: false
       }
       ExternalThreshold: 1
+      ExternalChannelsCount: 7
     }
   }
 })", R"(
@@ -132,6 +133,7 @@ storage_settings {
     media: "hdd"
   }
   store_external_blobs: ENABLED
+  external_data_channels_count: 7
 }
 )");
     }
@@ -282,6 +284,71 @@ column_families {
   keep_in_memory: ENABLED
 }
 )");
+
+        // cache mode
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillColumnFamilies, R"(
+PartitionConfig {
+  ColumnFamilies {
+    ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+  }
+})", R"(
+column_families {
+  name: "default"
+  compression: COMPRESSION_NONE
+  cache_mode: CACHE_MODE_IN_MEMORY
+}
+)");
+    }
+
+    using TFillIndexDescFn = void(*)(Ydb::Table::DescribeTableResult&, const NKikimrSchemeOp::TTableDescription&);
+
+    Y_UNIT_TEST(IndexDescriptionLocalBloomFilter) {
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(
+            static_cast<TFillIndexDescFn>(&FillIndexDescription), R"(
+TableIndexes {
+  Name: "bloom_idx"
+  Type: EIndexTypeLocalBloomFilter
+  State: EIndexStateReady
+  KeyColumnNames: "data"
+  BloomFilterDescription {
+    FalsePositiveProbability: 0.05
+  }
+})", R"(
+indexes {
+  name: "bloom_idx"
+  index_columns: "data"
+  status: STATUS_READY
+  local_bloom_filter_index {
+    false_positive_probability: 0.05
+  }
+})");
+    }
+
+    Y_UNIT_TEST(IndexDescriptionLocalBloomNgramFilter) {
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(
+            static_cast<TFillIndexDescFn>(&FillIndexDescription), R"(
+TableIndexes {
+  Name: "ngram_idx"
+  Type: EIndexTypeLocalBloomNgramFilter
+  State: EIndexStateReady
+  KeyColumnNames: "text_col"
+  BloomNGrammFilterDescription {
+    NGrammSize: 3
+    HashesCount: 2
+    FilterSizeBytes: 512
+    RecordsCount: 1024
+    CaseSensitive: true
+  }
+})", R"(
+indexes {
+  name: "ngram_idx"
+  index_columns: "text_col"
+  status: STATUS_READY
+  local_bloom_ngram_filter_index {
+    ngram_size: 3
+    case_sensitive: true
+  }
+})");
     }
 
 } // ConvertTableDescription

@@ -11,25 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// This header file contains C++14 versions of standard <utility> header
-// abstractions available within C++17, and are designed to be drop-in
-// replacement for code compliant with C++14 and C++17.
-//
-// The following abstractions are defined:
-//
-//   * apply<Functor, Tuple>         == std::apply<Functor, Tuple>
-//   * exchange<T>                   == std::exchange<T>
-//   * make_from_tuple<T>            == std::make_from_tuple<T>
-//
-// This header file also provides the tag types `in_place_t`, `in_place_type_t`,
-// and `in_place_index_t`, as well as the constant `in_place`, and
-// `constexpr` `std::move()` and `std::forward()` implementations in C++11.
-//
-// References:
-//
-//  https://en.cppreference.com/w/cpp/utility/apply
-//  http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2013/n3658.html
 
 #ifndef ABSL_UTILITY_UTILITY_H_
 #define ABSL_UTILITY_UTILITY_H_
@@ -37,12 +18,17 @@
 #include <cstddef>
 #include <cstdlib>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
+#include "absl/base/attributes.h"
 #include "absl/base/config.h"
-#include "absl/base/internal/inline_variable.h"
-#include "absl/base/internal/invoke.h"
+#include "absl/base/macros.h"
+
+// TODO(b/290784225): Include what you use cleanup required.
 #include "absl/meta/type_traits.h"
+
+// TODO(b/509512528): Deprecate the C++14/C++17 symbols publicly, in all files.
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -51,178 +37,113 @@ ABSL_NAMESPACE_BEGIN
 // abstractions for platforms that had not yet provided them. Those
 // platforms are no longer supported. New code should simply use the
 // the ones from std directly.
-using std::exchange;
-using std::forward;
-using std::index_sequence;
-using std::index_sequence_for;
-using std::integer_sequence;
-using std::make_index_sequence;
-using std::make_integer_sequence;
-using std::move;
+template <class F, class T>
+ABSL_DEPRECATE_AND_INLINE()
+constexpr decltype(auto)
+    apply(F&& f, T&& t) noexcept(noexcept(std::apply(std::declval<F>(),
+                                                     std::declval<T>()))) {
+  return std::apply(std::forward<F>(f), std::forward<T>(t));
+}
 
-namespace utility_internal {
+template <class T1, class T2 = T1>
+ABSL_DEPRECATE_AND_INLINE()
+constexpr T1 exchange(T1& obj, T2&& new_value) noexcept(
+    noexcept(std::exchange(std::declval<T1&>(), std::declval<T2>()))) {
+  return std::exchange(obj, std::forward<T2>(new_value));
+}
 
-template <typename T>
-struct InPlaceTypeTag {
-  explicit InPlaceTypeTag() = delete;
-  InPlaceTypeTag(const InPlaceTypeTag&) = delete;
-  InPlaceTypeTag& operator=(const InPlaceTypeTag&) = delete;
+template <class T>
+[[deprecated("Use std::forward instead.")]] [[nodiscard]] constexpr T&& forward(
+    std::remove_reference_t<T>& arg ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept {
+  // NOLINTNEXTLINE: Avoid warnings about T not being the spelled type of arg.
+  return std::forward<T>(arg);
+}
+
+template <class T>
+[[deprecated("Use std::forward instead.")]] [[nodiscard]] constexpr T&& forward(
+    std::remove_reference_t<T>&& arg ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept {
+  // NOLINTNEXTLINE: Avoid warnings about T not being the spelled type of arg.
+  return std::forward<T>(arg);
+}
+
+inline constexpr const std::in_place_t& in_place ABSL_DEPRECATE_AND_INLINE() =
+    std::in_place;
+
+template <size_t I>
+inline constexpr const std::in_place_index_t<I>& in_place_index
+    [[deprecated("Use std::in_place_index<I> instead.")]] =
+        std::in_place_index<I>;
+
+template <size_t I>
+using in_place_index_t [[deprecated("Use std::in_place_index_t<I> instead.")]] =
+    std::in_place_index_t<I>;
+
+using in_place_t ABSL_DEPRECATE_AND_INLINE() = std::in_place_t;
+
+template <class T>
+inline constexpr const std::in_place_type_t<T>& in_place_type
+ABSL_DEPRECATE_AND_INLINE() = std::in_place_type<T>;
+
+template <class T>
+using in_place_type_t ABSL_DEPRECATE_AND_INLINE() = std::in_place_type_t<T>;
+
+template <size_t... I>
+using index_sequence [[deprecated("Use std::index_sequence instead.")]] =
+    std::index_sequence<I...>;
+
+template <class T, T... I>
+using integer_sequence [[deprecated("Use std::integer_sequence instead.")]] =
+    std::integer_sequence<T, I...>;
+
+template <class... T>
+using index_sequence_for
+    [[deprecated("Use std::index_sequence_for instead.")]] =
+        std::index_sequence_for<T...>;
+
+template <class T, class Tuple>
+ABSL_DEPRECATE_AND_INLINE()
+[[nodiscard]] constexpr decltype(std::make_from_tuple<T>(std::declval<Tuple>()))
+    make_from_tuple(Tuple&& arg) noexcept(
+        noexcept(std::make_from_tuple<T>(std::declval<Tuple>()))) {
+  return std::make_from_tuple<T>(std::forward<Tuple>(arg));
+}
+
+template <size_t N>
+using make_index_sequence
+    [[deprecated("Use std::make_index_sequence instead.")]] =
+        std::make_index_sequence<N>;
+
+template <class T, T N>
+using make_integer_sequence
+    [[deprecated("Use std::make_integer_sequence instead.")]] =
+        std::make_integer_sequence<T, N>;
+
+template <class It, class OutIt>
+[[deprecated("Use std::move instead.")]]
+constexpr OutIt move(It&& begin, It&& end, OutIt&& output) {
+  return std::move(std::forward<It>(begin), std::forward<It>(end),
+                   std::forward<OutIt>(output));
+}
+
+template <class T>
+[[deprecated("Use std::move instead.")]]
+[[nodiscard]] constexpr std::remove_reference_t<T>&&
+move(T&& arg ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept {
+  return std::move(arg);  // NOLINT(bugprone-move-forwarding-reference)
+}
+
+#if ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+// Backfill for std::nontype_t. An instance of this class can be provided as a
+// disambiguation tag to `absl::function_ref` to pass the address of a known
+// callable at compile time.
+// Requires C++20 due to `auto` template parameter.
+template <auto>
+struct nontype_t {
+  explicit nontype_t() = default;
 };
-
-template <size_t I>
-struct InPlaceIndexTag {
-  explicit InPlaceIndexTag() = delete;
-  InPlaceIndexTag(const InPlaceIndexTag&) = delete;
-  InPlaceIndexTag& operator=(const InPlaceIndexTag&) = delete;
-};
-
-}  // namespace utility_internal
-
-// Tag types
-
-#ifdef ABSL_USES_STD_OPTIONAL
-
-using std::in_place_t;
-using std::in_place;
-
-#else  // ABSL_USES_STD_OPTIONAL
-
-// in_place_t
-//
-// Tag type used to specify in-place construction, such as with
-// `absl::optional`, designed to be a drop-in replacement for C++17's
-// `std::in_place_t`.
-struct in_place_t {};
-
-ABSL_INTERNAL_INLINE_CONSTEXPR(in_place_t, in_place, {});
-
-#endif  // ABSL_USES_STD_OPTIONAL
-
-#if defined(ABSL_USES_STD_ANY) || defined(ABSL_USES_STD_VARIANT)
-using std::in_place_type;
-using std::in_place_type_t;
-#else
-
-// in_place_type_t
-//
-// Tag type used for in-place construction when the type to construct needs to
-// be specified, such as with `absl::any`, designed to be a drop-in replacement
-// for C++17's `std::in_place_type_t`.
-template <typename T>
-using in_place_type_t = void (*)(utility_internal::InPlaceTypeTag<T>);
-
-template <typename T>
-void in_place_type(utility_internal::InPlaceTypeTag<T>) {}
-#endif  // ABSL_USES_STD_ANY || ABSL_USES_STD_VARIANT
-
-#ifdef ABSL_USES_STD_VARIANT
-using std::in_place_index;
-using std::in_place_index_t;
-#else
-
-// in_place_index_t
-//
-// Tag type used for in-place construction when the type to construct needs to
-// be specified, such as with `absl::any`, designed to be a drop-in replacement
-// for C++17's `std::in_place_index_t`.
-template <size_t I>
-using in_place_index_t = void (*)(utility_internal::InPlaceIndexTag<I>);
-
-template <size_t I>
-void in_place_index(utility_internal::InPlaceIndexTag<I>) {}
-#endif  // ABSL_USES_STD_VARIANT
-
-namespace utility_internal {
-// Helper method for expanding tuple into a called method.
-template <typename Functor, typename Tuple, std::size_t... Indexes>
-auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
-    -> decltype(absl::base_internal::invoke(
-        absl::forward<Functor>(functor),
-        std::get<Indexes>(absl::forward<Tuple>(t))...)) {
-  return absl::base_internal::invoke(
-      absl::forward<Functor>(functor),
-      std::get<Indexes>(absl::forward<Tuple>(t))...);
-}
-
-}  // namespace utility_internal
-
-// apply
-//
-// Invokes a Callable using elements of a tuple as its arguments.
-// Each element of the tuple corresponds to an argument of the call (in order).
-// Both the Callable argument and the tuple argument are perfect-forwarded.
-// For member-function Callables, the first tuple element acts as the `this`
-// pointer. `absl::apply` is designed to be a drop-in replacement for C++17's
-// `std::apply`. Unlike C++17's `std::apply`, this is not currently `constexpr`.
-//
-// Example:
-//
-//   class Foo {
-//    public:
-//     void Bar(int);
-//   };
-//   void user_function1(int, std::string);
-//   void user_function2(std::unique_ptr<Foo>);
-//   auto user_lambda = [](int, int) {};
-//
-//   int main()
-//   {
-//       std::tuple<int, std::string> tuple1(42, "bar");
-//       // Invokes the first user function on int, std::string.
-//       absl::apply(&user_function1, tuple1);
-//
-//       std::tuple<std::unique_ptr<Foo>> tuple2(absl::make_unique<Foo>());
-//       // Invokes the user function that takes ownership of the unique
-//       // pointer.
-//       absl::apply(&user_function2, std::move(tuple2));
-//
-//       auto foo = absl::make_unique<Foo>();
-//       std::tuple<Foo*, int> tuple3(foo.get(), 42);
-//       // Invokes the method Bar on foo with one argument, 42.
-//       absl::apply(&Foo::Bar, tuple3);
-//
-//       std::tuple<int, int> tuple4(8, 9);
-//       // Invokes a lambda.
-//       absl::apply(user_lambda, tuple4);
-//   }
-template <typename Functor, typename Tuple>
-auto apply(Functor&& functor, Tuple&& t)
-    -> decltype(utility_internal::apply_helper(
-        absl::forward<Functor>(functor), absl::forward<Tuple>(t),
-        absl::make_index_sequence<std::tuple_size<
-            typename std::remove_reference<Tuple>::type>::value>{})) {
-  return utility_internal::apply_helper(
-      absl::forward<Functor>(functor), absl::forward<Tuple>(t),
-      absl::make_index_sequence<std::tuple_size<
-          typename std::remove_reference<Tuple>::type>::value>{});
-}
-
-namespace utility_internal {
-template <typename T, typename Tuple, size_t... I>
-T make_from_tuple_impl(Tuple&& tup, absl::index_sequence<I...>) {
-  return T(std::get<I>(std::forward<Tuple>(tup))...);
-}
-}  // namespace utility_internal
-
-// make_from_tuple
-//
-// Given the template parameter type `T` and a tuple of arguments
-// `std::tuple(arg0, arg1, ..., argN)` constructs an object of type `T` as if by
-// calling `T(arg0, arg1, ..., argN)`.
-//
-// Example:
-//
-//   std::tuple<const char*, size_t> args("hello world", 5);
-//   auto s = absl::make_from_tuple<std::string>(args);
-//   assert(s == "hello");
-//
-template <typename T, typename Tuple>
-constexpr T make_from_tuple(Tuple&& tup) {
-  return utility_internal::make_from_tuple_impl<T>(
-      std::forward<Tuple>(tup),
-      absl::make_index_sequence<
-          std::tuple_size<absl::decay_t<Tuple>>::value>{});
-}
+template <auto V>
+constexpr nontype_t<V> nontype{};
+#endif
 
 ABSL_NAMESPACE_END
 }  // namespace absl

@@ -1,17 +1,24 @@
 #include "batch_slice.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/splitter/scheme_info.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/column/info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/splitter/chunks.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/splitter/scheme_info.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
-#include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
-#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -26,7 +33,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
     protected:
         virtual NKikimr::NArrow::NAccessor::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
             return NKikimr::NArrow::NAccessor::TColumnSaver(
-                nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+                std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
     public:
@@ -34,13 +41,14 @@ Y_UNIT_TEST_SUITE(Splitter) {
             const ui32 /*columnId*/) const override {
             return {};
         }
+
         virtual std::optional<NKikimr::NArrow::NSplitter::TBatchSerializationStat> GetBatchSerializationStats(
             const std::shared_ptr<arrow::RecordBatch>& /*rb*/) const override {
             return {};
         }
 
         NKikimr::NArrow::NAccessor::TColumnLoader GetColumnLoader(const ui32 columnId) const {
-            return NKikimr::NArrow::NAccessor::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            return NKikimr::NArrow::NAccessor::TColumnLoader(NSerialization::TSerializerContainer::GetDefaultSerializer(),
                 NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(columnId), nullptr, columnId);
         }
 
@@ -109,7 +117,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 auto blobsLocal = slice.GroupChunksByBlobs(groups);
                 internalSplitsCount += slice.GetInternalSplitsCount();
                 blobsCount += blobsLocal.size();
-                THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunks;
+                THashMap<ui32, std::map<ui32, std::shared_ptr<IPortionDataChunk>>> entityChunks;
                 ui32 portionSize = 0;
                 for (auto&& b : blobsLocal) {
                     chunksCount += b.GetChunks().size();
@@ -117,19 +125,20 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     for (auto&& c : b.GetChunks()) {
                         bSize += c->GetData().size();
                         AFL_VERIFY(c->GetEntityId());
-                        auto& v = entityChunks[c->GetEntityId()];
-                        if (v.size()) {
-                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified());
-                        }
-                        entityChunks[c->GetEntityId()].emplace_back(c);
+                        //                        auto& v = entityChunks[c->GetEntityId()];
+                        //                        if (v.size()) {
+                        //                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
+                        //                                                                              "c", c->GetChunkIdxVerified());
+                        //                        }
+                        AFL_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }
                     portionSize += bSize;
                     AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
-                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))(
-                                                                                                           "blob_size", bSize);
+                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize)(
+                                                                                                 "min", settings.GetMinBlobSize());
                 }
                 AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
-                                                                                   "limit", settings.GetMaxPortionSize());
+                                                                               "limit", settings.GetMaxPortionSize());
 
                 THashMap<ui32, std::set<ui32>> entitiesByRecordsCount;
                 ui32 pagesRestore = 0;
@@ -137,11 +146,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
                     AFL_VERIFY(arr);
                     ui32 count = 0;
-                    for (auto&& c : e.second) {
+                    i32 idx = -1;
+                    for (auto&& [idxC, c] : e.second) {
+                        AFL_VERIFY((i32)idxC == idx + 1);
+                        idx = idxC;
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
-                        auto readBatch = Schema->GetColumnLoader(e.first).ApplyRawVerified(c->GetData());
-                        AFL_VERIFY(slice->length() == readBatch->num_rows());
-                        Y_ABORT_UNLESS(readBatch->column(0)->RangeEquals(*slice, 0, readBatch->num_rows(), 0, arrow::EqualOptions::Defaults()));
+                        auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
+                        std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
+                        AFL_VERIFY(chunkedArray->num_chunks() == 1);
+                        AFL_VERIFY(slice->length() == chunkedArray->length());
+                        Y_ABORT_UNLESS(
+                            chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();
                         AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
                         AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
@@ -153,18 +168,18 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 }
                 AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
                 AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
-                for (auto&& c : entityChunks.begin()->second) {
+                for (auto&& [_, c] : entityChunks.begin()->second) {
                     portionShift += c->GetRecordsCountVerified();
                 }
             }
             AFL_VERIFY(portionShift = batch->num_rows());
             AFL_VERIFY(pagesSum == generalSlices.size())("sum", pagesSum)("general_slices", generalSlices.size());
-            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))(
-                                                  "expected", *ExpectedInternalSplitsCount)("real", internalSplitsCount);
+            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))("expected", *ExpectedInternalSplitsCount)(
+                                                "real", internalSplitsCount);
             AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount))("blobs_count", blobsCount)("expected", *ExpectBlobsCount);
             AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum))("sum", pagesSum)("expected", *ExpectSlicesCount);
             AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount))("portions_count", portionsCount)(
-                                            "expected", *ExpectPortionsCount);
+                                          "expected", *ExpectPortionsCount);
             AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount))("chunks_count", chunksCount)("expected", *ExpectChunksCount);
         }
     };
@@ -261,5 +276,78 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
         TSplitTester().SetExpectBlobsCount(72).SetExpectSlicesCount(8).SetExpectedInternalSplitsCount(0).SetExpectPortionsCount(8).Execute(
             batch);
+    }
+
+    namespace {
+    std::shared_ptr<NKikimr::NArrow::NAccessor::TColumnLoader> MakeDictionaryLoader(const std::shared_ptr<arrow::Field>& field) {
+        auto dictConstructor = std::make_shared<NKikimr::NArrow::NAccessor::NDictionary::TConstructor>();
+        NKikimr::NArrow::NAccessor::TConstructorContainer accessor(dictConstructor);
+        return std::make_shared<NKikimr::NArrow::NAccessor::TColumnLoader>(
+            NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), accessor, field, nullptr, 1);
+    }
+
+    NKikimr::NOlap::TSimpleColumnInfo MakeUtf8ColumnInfo() {
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        return NKikimr::NOlap::TSimpleColumnInfo(
+            1, field, NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), false, false, true, nullptr, std::nullopt);
+    }
+
+    std::shared_ptr<NKikimr::NOlap::NChunks::TChunkPreparation> MakeDictionaryChunk(
+        const std::vector<TString>& values, const NKikimr::NOlap::TChunkAddress& address, const NKikimr::NOlap::TSimpleColumnInfo& colInfo) {
+        using namespace NKikimr::NArrow::NAccessor;
+        TTrivialArray::TPlainBuilder builder;
+        for (ui32 i = 0; i < values.size(); ++i) {
+            builder.AddRecord(i, values[i]);
+        }
+        auto arr = builder.Finish(values.size());
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
+        return std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(
+            blobAndMeta.Blob, dict, address, colInfo, std::move(blobAndMeta.Meta));
+    }
+    }   // namespace
+
+    Y_UNIT_TEST(ChunkedColumnReaderDictionaryBlobWithMetadata) {
+        using namespace NKikimr::NArrow::NAccessor;
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "a");
+        builder.AddRecord(1, "b");
+        builder.AddRecord(2, "a");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        const auto colInfo = MakeUtf8ColumnInfo();
+        auto chunk = std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(
+            blobAndMeta.Blob, dict, NKikimr::NOlap::TChunkAddress(1, 0), colInfo, std::move(blobAndMeta.Meta));
+
+        NKikimr::NOlap::TChunkedColumnReader reader({ chunk }, MakeDictionaryLoader(field));
+        UNIT_ASSERT(reader.IsCorrect());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "a");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "b");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(2)->ToString(), "a");
+        UNIT_ASSERT(!reader.ReadNext());
+    }
+
+    Y_UNIT_TEST(ChunkedColumnReaderMultipleDictionaryChunksWithMetadata) {
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        const auto colInfo = MakeUtf8ColumnInfo();
+        auto chunk0 = MakeDictionaryChunk({ "foo", "bar" }, NKikimr::NOlap::TChunkAddress(1, 0), colInfo);
+        auto chunk1 = MakeDictionaryChunk({ "baz" }, NKikimr::NOlap::TChunkAddress(1, 1), colInfo);
+
+        NKikimr::NOlap::TChunkedColumnReader reader({ chunk0, chunk1 }, MakeDictionaryLoader(field));
+        UNIT_ASSERT(reader.IsCorrect());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "foo");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "bar");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "baz");
+        UNIT_ASSERT(!reader.ReadNext());
     }
 };

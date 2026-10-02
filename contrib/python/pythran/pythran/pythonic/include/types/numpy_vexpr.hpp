@@ -40,11 +40,9 @@ namespace types
     }
 
     template <class E>
-    typename std::enable_if<is_iterable<E>::value, numpy_vexpr &>::type
-    operator=(E const &);
+    std::enable_if_t<is_iterable<E>::value, numpy_vexpr &> operator=(E const &);
     template <class E>
-    typename std::enable_if<!is_iterable<E>::value, numpy_vexpr &>::type
-    operator=(E const &expr);
+    std::enable_if_t<!is_iterable<E>::value, numpy_vexpr &> operator=(E const &expr);
 
     numpy_vexpr &operator=(numpy_vexpr const &);
 
@@ -106,9 +104,8 @@ namespace types
     }
 
     template <class S>
-    typename std::enable_if<
-        is_slice<S>::value,
-        numpy_gexpr<numpy_vexpr, decltype(std::declval<S>().normalize(1))>>
+    std::enable_if_t<is_slice<S>::value,
+                     numpy_gexpr<numpy_vexpr, decltype(std::declval<S>().normalize(1))>>
     operator[](S s) const
     {
       return {*this, s.normalize(size())};
@@ -116,35 +113,27 @@ namespace types
 
     /* element filtering */
     template <class E> // indexing through an array of boolean -- a mask
-    typename std::enable_if<
-        is_numexpr_arg<E>::value &&
-            std::is_same<bool, typename E::dtype>::value &&
-            !is_pod_array<F>::value,
-        numpy_vexpr<numpy_vexpr, ndarray<long, pshape<long>>>>::type
+    std::enable_if_t<is_numexpr_arg<E>::value && std::is_same<bool, typename E::dtype>::value &&
+                         !is_pod_array<F>::value,
+                     numpy_vexpr<numpy_vexpr, ndarray<long, pshape<long>>>>
     fast(E const &filter) const;
 
     template <class E> // indexing through an array of boolean -- a mask
-    typename std::enable_if<
-        !is_slice<E>::value && is_numexpr_arg<E>::value &&
-            std::is_same<bool, typename E::dtype>::value &&
-            !is_pod_array<F>::value,
-        numpy_vexpr<numpy_vexpr, ndarray<long, pshape<long>>>>::type
+    std::enable_if_t<!is_slice<E>::value && is_numexpr_arg<E>::value &&
+                         std::is_same<bool, typename E::dtype>::value && !is_pod_array<F>::value,
+                     numpy_vexpr<numpy_vexpr, ndarray<long, pshape<long>>>>
     operator[](E const &filter) const;
 
     template <class E> // indexing through an array of indices -- a view
-    typename std::enable_if<is_numexpr_arg<E>::value &&
-                                !is_array_index<E>::value &&
-                                !std::is_same<bool, typename E::dtype>::value &&
-                                !is_pod_array<F>::value,
-                            numpy_vexpr<numpy_vexpr, E>>::type
+    std::enable_if_t<is_numexpr_arg<E>::value && !is_array_index<E>::value &&
+                         !std::is_same<bool, typename E::dtype>::value && !is_pod_array<F>::value,
+                     numpy_vexpr<numpy_vexpr, E>>
     operator[](E const &filter) const;
 
     template <class E> // indexing through an array of indices -- a view
-    typename std::enable_if<is_numexpr_arg<E>::value &&
-                                !is_array_index<E>::value &&
-                                !std::is_same<bool, typename E::dtype>::value &&
-                                !is_pod_array<F>::value,
-                            numpy_vexpr<numpy_vexpr, E>>::type
+    std::enable_if_t<is_numexpr_arg<E>::value && !is_array_index<E>::value &&
+                         !std::is_same<bool, typename E::dtype>::value && !is_pod_array<F>::value,
+                     numpy_vexpr<numpy_vexpr, E>>
     fast(E const &filter) const;
 
     template <class Op, class Expr>
@@ -175,28 +164,25 @@ namespace types
 
 template <class T, class F>
 struct assignable<types::numpy_vexpr<T, F>> {
-  using type = types::ndarray<typename types::dtype_of<T>::type,
-                              typename types::numpy_vexpr<T, F>::shape_t>;
+  using type =
+      types::ndarray<typename types::dtype_of<T>::type, typename types::numpy_vexpr<T, F>::shape_t>;
 };
 
 template <class T, class F>
 struct lazy<types::numpy_vexpr<T, F>> {
-  using type =
-      types::numpy_vexpr<typename lazy<T>::type, typename lazy<F>::type>;
+  using type = types::numpy_vexpr<typename lazy<T>::type, typename lazy<F>::type>;
 };
 
 PYTHONIC_NS_END
 
 /* combined are sorted such that the assigned type comes first */
 template <class E, class F, class T, class pS>
-struct __combined<pythonic::types::numpy_vexpr<E, F>,
-                  pythonic::types::ndarray<T, pS>> {
+struct __combined<pythonic::types::numpy_vexpr<E, F>, pythonic::types::ndarray<T, pS>> {
   using type = pythonic::types::ndarray<T, pS>;
 };
 
 template <class E, class F, class T, class pS>
-struct __combined<pythonic::types::ndarray<T, pS>,
-                  pythonic::types::numpy_vexpr<E, F>> {
+struct __combined<pythonic::types::ndarray<T, pS>, pythonic::types::numpy_vexpr<E, F>> {
   using type = pythonic::types::ndarray<T, pS>;
 };
 

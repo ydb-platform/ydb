@@ -7,6 +7,7 @@
 #include "typetraits.h"
 #include "singleton.h"
 
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -95,10 +96,14 @@ public:
 
 private:
     /*
-     * we do not want dependancy on cstdlib here...
+     * we do not want a dependency on cstdlib here...
      */
     static void DoDestroy(void* t) noexcept;
 };
+
+namespace NDetail {
+    [[noreturn]] void NullDerefenceThrowImpl();
+} // namespace NDetail
 
 template <class Base, class T>
 class TPointerCommon {
@@ -114,6 +119,18 @@ public:
         T* ptr = AsT();
         Y_ASSERT(ptr);
         return ptr;
+    }
+
+    inline typename std::add_lvalue_reference<T>::type GetRef() const {
+        T* ptr = AsT();
+        if (Y_UNLIKELY(!ptr)) {
+            NDetail::NullDerefenceThrowImpl();
+        }
+        if constexpr (std::is_void<T>::value) {
+            return;
+        } else {
+            return *ptr;
+        }
     }
 
 #ifndef __cpp_impl_three_way_comparison
@@ -161,7 +178,7 @@ public:
 };
 
 /*
- * void*-like pointers does not have operator*
+ * void*-like pointers do not have operator*
  */
 template <class Base>
 class TPointerBase<Base, void>: public TPointerCommon<Base, void> {
@@ -243,8 +260,9 @@ private:
     mutable T* T_;
 };
 
+// Deprecated, use std::unique_ptr instead
 template <class T, class D>
-class THolder: public TPointerBase<THolder<T, D>, T> {
+class Y_TRIVIAL_ABI THolder: public TPointerBase<THolder<T, D>, T> {
 public:
     constexpr THolder() noexcept
         : T_(nullptr)
@@ -280,6 +298,13 @@ public:
     template <class U, class = TGuardConversion<T, U>>
     inline THolder(THolder<U, D>&& that) noexcept
         : T_(that.Release())
+    {
+    }
+
+    template <class U, class = std::enable_if_t<std::is_same_v<D, TDelete> &&
+                                                !std::is_array_v<U> && std::is_convertible_v<U*, T*>>>
+    explicit THolder(std::unique_ptr<U>&& that) noexcept
+        : T_(that.release())
     {
     }
 
@@ -328,6 +353,18 @@ public:
         return T_;
     }
 
+    inline T* release() noexcept Y_WARN_UNUSED_RESULT {
+        return Release();
+    }
+
+    Y_REINITIALIZES_OBJECT inline void reset(T* t) noexcept {
+        Reset(t);
+    }
+
+    Y_REINITIALIZES_OBJECT inline void reset() noexcept {
+        Reset();
+    }
+
     inline operator TAutoPtr<T, D>() noexcept {
         return Release();
     }
@@ -340,6 +377,19 @@ public:
     THolder& operator=(THolder&& that) noexcept {
         this->Reset(that.Release());
         return *this;
+    }
+
+    template <class U, class = std::enable_if_t<std::is_same_v<D, TDelete> &&
+                                                !std::is_array_v<U> && std::is_convertible_v<U*, T*>>>
+    THolder& operator=(std::unique_ptr<U>&& that) noexcept {
+        this->Reset(that.release());
+        return *this;
+    }
+
+    template <class U, class = std::enable_if_t<std::is_same_v<D, TDelete> &&
+                                                !std::is_array_v<U> && std::is_convertible_v<T*, U*>>>
+    explicit operator std::unique_ptr<U>() && noexcept {
+        return std::unique_ptr<U>(Release());
     }
 
     template <class U>
@@ -365,7 +415,7 @@ private:
     T* T_;
 };
 
-template <typename T, typename... Args>
+template <typename T, typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
 [[nodiscard]] THolder<T> MakeHolder(Args&&... args) {
     return THolder<T>(new T(std::forward<Args>(args)...));
 }
@@ -389,13 +439,11 @@ public:
     inline void Ref(intptr_t d) noexcept {
         auto resultCount = Counter_.Add(d);
         Y_ASSERT(resultCount >= d);
-        (void)resultCount;
     }
 
     inline void Ref() noexcept {
         auto resultCount = Counter_.Inc();
         Y_ASSERT(resultCount != 0);
-        (void)resultCount;
     }
 
     inline void UnRef(intptr_t d) noexcept {
@@ -417,7 +465,6 @@ public:
     inline void DecRef() noexcept {
         auto resultCount = Counter_.Dec();
         Y_ASSERT(resultCount >= 0);
-        (void)resultCount;
     }
 
     TRefCounted(const TRefCounted&)
@@ -1016,17 +1063,17 @@ using TAtomicSharedPtr = TSharedPtr<T, TAtomicCounter, D>;
 template <class T, class D = TDelete>
 using TSimpleSharedPtr = TSharedPtr<T, TSimpleCounter, D>;
 
-template <typename T, typename C, typename... Args>
+template <typename T, typename C, typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
 [[nodiscard]] TSharedPtr<T, C> MakeShared(Args&&... args) {
     return new T{std::forward<Args>(args)...};
 }
 
-template <typename T, typename... Args>
+template <typename T, typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
 [[nodiscard]] inline TAtomicSharedPtr<T> MakeAtomicShared(Args&&... args) {
     return MakeShared<T, TAtomicCounter>(std::forward<Args>(args)...);
 }
 
-template <typename T, typename... Args>
+template <typename T, typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
 [[nodiscard]] inline TSimpleSharedPtr<T> MakeSimpleShared(Args&&... args) {
     return MakeShared<T, TSimpleCounter>(std::forward<Args>(args)...);
 }

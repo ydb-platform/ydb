@@ -3,12 +3,16 @@
 #include "fwd.h"
 
 #include <util/generic/bitops.h>
+#include <util/generic/cast.h>
 #include <util/generic/utility.h>
 #include <util/generic/vector.h>
 #include <util/generic/mapfindptr.h>
 
 #include <util/str_stl.h>
+#include <util/system/types.h>
 #include <util/ysaveload.h>
+
+#include <iterator>
 
 /*
  * There are 2 classes in this file:
@@ -38,8 +42,8 @@ private:
         template <class THash2, class TVal2>
         friend class TIteratorBase;
 
-        THash* Hash;
-        size_t Idx;
+        THash* Hash = nullptr;
+        size_t Idx = 0;
 
         // used only to implement end()
         TIteratorBase(THash* hash, size_t initIdx)
@@ -49,6 +53,15 @@ private:
         }
 
     public:
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = std::remove_const_t<TVal>;
+        using difference_type = std::ptrdiff_t;
+        using pointer = TVal*;
+        using reference = TVal&;
+
+        TIteratorBase() = default;
+
         TIteratorBase(THash& hash)
             : Hash(&hash)
             , Idx(0)
@@ -67,10 +80,6 @@ private:
 
         TIteratorBase(const TIteratorBase&) = default;
 
-        static TIteratorBase CreateEmpty() {
-            return TIteratorBase(nullptr, 0);
-        }
-
         TIteratorBase& operator=(const TIteratorBase&) = default;
 
         void Next() {
@@ -85,15 +94,17 @@ private:
             return *this;
         }
 
-        TVal& operator*() {
+        TIteratorBase operator++(int) {
+            TIteratorBase tmp = *this;
+            Next();
+            return tmp;
+        }
+
+        TVal& operator*() const {
             return Hash->Buckets[Idx];
         }
 
-        TVal* operator->() {
-            return &Hash->Buckets[Idx];
-        }
-
-        const TVal* operator->() const {
+        TVal* operator->() const {
             return &Hash->Buckets[Idx];
         }
 
@@ -127,6 +138,11 @@ public:
                                              // std::allocator_traits<Alloc>::const_pointer;
     using iterator = TIteratorBase<TDenseHash, value_type>;
     using const_iterator = TIteratorBase<const TDenseHash, const value_type>;
+
+#if defined(__cpp_lib_concepts) and (__cpp_lib_concepts >= 202002L)
+    static_assert(std::forward_iterator<iterator>);
+    static_assert(std::forward_iterator<const_iterator>);
+#endif
 
 public:
     TDenseHash(const key_type& emptyMarker = key_type{}, size_type initSize = 0)
@@ -168,14 +184,10 @@ public:
         } else {
             initSize = FastClp2(initSize);
         }
-        BucketMask = initSize - 1;
+        Buckets.clear();
+        BucketMask = 0;
         NumFilled = 0;
-        TVector<value_type> tmp;
-        for (size_type i = 0; i < initSize; ++i) {
-            tmp.emplace_back(EmptyMarker, mapped_type{});
-        }
-        tmp.swap(Buckets);
-        GrowThreshold = Max<size_type>(1, initSize * MaxLoadFactor / 100) - 1;
+        Grow(initSize);
     }
 
     template <class K>
@@ -209,7 +221,7 @@ public:
 
     void Save(IOutputStream* s) const {
         // TODO(tender-bum): make SaveLoad great again
-        ::SaveMany(s, BucketMask, NumFilled, GrowThreshold);
+        ::SaveMany(s, SafeIntegerCast<ui64>(BucketMask), SafeIntegerCast<ui64>(NumFilled), SafeIntegerCast<ui64>(GrowThreshold));
         // We need to do so because Buckets may be serialized as a pod-array
         // that doesn't correspond to the previous behaviour
         ::SaveSize(s, Buckets.size());
@@ -223,7 +235,13 @@ public:
 
     void Load(IInputStream* s) {
         // TODO(tender-bum): make SaveLoad great again
-        ::LoadMany(s, BucketMask, NumFilled, GrowThreshold);
+        ui64 bucketMask = 0;
+        ui64 numFilled = 0;
+        ui64 growThreshold = 0;
+        ::LoadMany(s, bucketMask, numFilled, growThreshold);
+        BucketMask = SafeIntegerCast<size_type>(bucketMask);
+        NumFilled = SafeIntegerCast<size_type>(numFilled);
+        GrowThreshold = SafeIntegerCast<size_type>(growThreshold);
         // We need to do so because we can't load const fields
         struct TPairMimic {
             key_type First;
@@ -394,6 +412,19 @@ public:
         return Buckets[p.first].second;
     }
 
+    bool empty() const {
+        return Empty();
+    }
+
+    size_type size() const {
+        return Size();
+    }
+
+    template <class K>
+    bool contains(const K& key) const {
+        return Has(key);
+    }
+
 private:
     key_type EmptyMarker;
     size_type NumFilled;
@@ -530,8 +561,8 @@ private:
     class TIteratorBase {
         friend class TDenseHashSet;
 
-        THash* Hash;
-        size_t Idx;
+        THash* Hash = nullptr;
+        size_t Idx = 0;
 
         // used only to implement end()
         TIteratorBase(THash* hash, size_t initIdx)
@@ -541,6 +572,15 @@ private:
         }
 
     public:
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = TKey;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const TKey*;
+        using reference = const TKey&;
+
+        TIteratorBase() = default;
+
         TIteratorBase(THash& hash)
             : Hash(&hash)
             , Idx(0)
@@ -562,6 +602,12 @@ private:
             return *this;
         }
 
+        TIteratorBase operator++(int) {
+            TIteratorBase tmp = *this;
+            Next();
+            return tmp;
+        }
+
         bool Initialized() const {
             return Hash != nullptr;
         }
@@ -572,6 +618,10 @@ private:
 
         const TKey& operator*() const {
             return Key();
+        }
+
+        const TKey* operator->() const {
+            return &Hash->Buckets[Idx];
         }
 
         const TKey& Key() const {
@@ -590,6 +640,10 @@ private:
 
 public:
     typedef TIteratorBase<const TDenseHashSet> TConstIterator;
+
+#if defined(__cpp_lib_concepts) and (__cpp_lib_concepts >= 202002L)
+    static_assert(std::forward_iterator<TConstIterator>);
+#endif
 
     TConstIterator begin() const {
         return TConstIterator(*this);

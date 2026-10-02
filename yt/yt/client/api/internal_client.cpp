@@ -32,4 +32,13 @@ TSerializableHunkDescriptorPtr CreateSerializableHunkDescriptor(const THunkDescr
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TSerializableGetOrderedTabletSafeTrimRowCountRequest::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("path", &TThis::Path);
+    registrar.BaseClassParameter("tablet_index", &TThis::TabletIndex);
+    registrar.BaseClassParameter("timestamp", &TThis::Timestamp);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NApi

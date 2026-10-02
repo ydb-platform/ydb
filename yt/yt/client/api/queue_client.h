@@ -28,12 +28,17 @@ struct TPullRowsOptions
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
     i64 MaxDataWeight = 20_MB;
+    // Used for throttling, has different logic than UpperTimestamp
+    TInstant MaxTransactionCommitInstant = TInstant::Max();
     IReservingMemoryUsageTrackerPtr MemoryTracker;
+    NTabletClient::TTabletId SelfTabletId = NObjectClient::NullObjectId;
 };
 
 struct TPullRowsResult
 {
     THashMap<NTabletClient::TTabletId, i64> EndReplicationRowIndexes;
+    NTransactionClient::TTimestamp PullRowsMaxTimestamp = NTransactionClient::NullTimestamp;
+    NTransactionClient::TTimestamp PullRowsMinTimestamp = NTransactionClient::NullTimestamp;
     i64 RowCount = 0;
     i64 DataWeight = 0;
     NChaosClient::TReplicationProgress ReplicationProgress;
@@ -47,6 +52,11 @@ struct TPullQueueOptions
 {
     // COMPAT(achulkov2): Remove this once we drop support for legacy PullQueue via SelectRows.
     bool UseNativeTabletNodeApi = true;
+};
+
+struct TPullQueueResult
+{
+    NQueueClient::IQueueRowsetPtr Rowset;
 };
 
 struct TPullQueueConsumerOptions
@@ -77,6 +87,7 @@ struct TListQueueConsumerRegistrationsResult
 
 struct TCreateQueueProducerSessionOptions
     : public TTimeoutOptions
+    , public TMutatingOptions
 {
     NYTree::INodePtr UserMeta;
 };
@@ -112,7 +123,7 @@ struct IQueueClient
     //! Reads a batch of rows from a given partition of a given queue, starting at (at least) the given offset.
     //! Requires the user to have read-access to the specified queue.
     //! There is no guarantee that `rowBatchReadOptions.MaxRowCount` rows will be returned even if they are in the queue.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
+    virtual TFuture<TPullQueueResult> PullQueue(
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,
@@ -121,7 +132,7 @@ struct IQueueClient
 
     //! Same as PullQueue, but requires user to have read-access to the consumer and the consumer being registered for the given queue.
     //! There is no guarantee that `rowBatchReadOptions.MaxRowCount` rows will be returned even if they are in the queue.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
+    virtual TFuture<TPullQueueResult> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,

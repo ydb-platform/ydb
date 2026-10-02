@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "fls.h"
 #endif
-#undef FLS_INL_H_
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -20,6 +19,7 @@ int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
 YT_DECLARE_THREAD_LOCAL(TFls*, CurrentFls);
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 } // namespace NDetail
 
@@ -32,7 +32,7 @@ Y_FORCE_INLINE TFls::TCookie TFls::Get(int index) const
     // Reinterpret casts are required since incrementing a pointer
     // past the allocated storage is UB.
     auto ptr = reinterpret_cast<uintptr_t>(Slots_.data()) + index * sizeof(TCookie);
-    if (Y_UNLIKELY(ptr >= reinterpret_cast<uintptr_t>(Slots_.data() + Slots_.size()))) {
+    if (ptr >= reinterpret_cast<uintptr_t>(Slots_.data() + Slots_.size())) [[unlikely]] {
         return nullptr;
     }
     return *reinterpret_cast<const TCookie*>(ptr);
@@ -43,10 +43,21 @@ Y_FORCE_INLINE TFls::TCookie TFls::Get(int index) const
 inline TFls* GetCurrentFls()
 {
     auto* fls = NDetail::CurrentFls();
-    if (Y_UNLIKELY(!fls)) {
+    if (!fls) [[unlikely]] {
         fls = NDetail::GetPerThreadFls();
     }
     return fls;
+}
+
+inline TFls* TryGetCurrentFls()
+{
+    if (auto* fls = NDetail::CurrentFls()) {
+        return fls;
+    }
+    if (auto* fls = NDetail::PerThreadFls()) {
+        return fls;
+    }
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,10 +97,38 @@ template <class T>
 Y_FORCE_INLINE T* TFlsSlot<T>::GetOrCreate() const
 {
     auto cookie = GetCurrentFls()->Get(Index_);
-    if (Y_UNLIKELY(!cookie)) {
+    if (!cookie) [[unlikely]] {
         cookie = Create();
     }
     return static_cast<T*>(cookie);
+}
+
+template <class T>
+Y_FORCE_INLINE T* TFlsSlot<T>::TryGet()
+{
+    auto* fls = TryGetCurrentFls();
+    if (!fls) {
+        return nullptr;
+    }
+    return TryGet(*fls);
+}
+
+template <class T>
+Y_FORCE_INLINE const T* TFlsSlot<T>::TryGet() const
+{
+    return const_cast<TFlsSlot*>(this)->TryGet();
+}
+
+template <class T>
+Y_FORCE_INLINE T* TFlsSlot<T>::TryGet(TFls& fls) const
+{
+    return static_cast<T*>(fls.Get(Index_));
+}
+
+template <class T>
+Y_FORCE_INLINE const T* TFlsSlot<T>::TryGet(const TFls& fls) const
+{
+    return static_cast<const T*>(fls.Get(Index_));
 }
 
 template <class T>
@@ -101,15 +140,13 @@ T* TFlsSlot<T>::Create() const
 }
 
 template <class T>
-const T* TFlsSlot<T>::Get(const TFls& fls) const
-{
-    return static_cast<const T*>(fls.Get(Index_));
-}
-
-template <class T>
 Y_FORCE_INLINE bool TFlsSlot<T>::IsInitialized() const
 {
-    return static_cast<bool>(GetCurrentFls()->Get(Index_));
+    const auto* fls = TryGetCurrentFls();
+    if (!fls) {
+        return false;
+    }
+    return fls->Get(Index_) != TFls::TCookie();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,7 +6,7 @@
 
 [Документация по формату описания типа](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListCreate(Tuple<String,Double?>);
@@ -16,7 +16,7 @@ SELECT ListCreate(Tuple<String,Double?>);
 SELECT ListCreate(OptionalType(DataType("String")));
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListCreate(T)->List<T>
@@ -26,13 +26,13 @@ ListCreate(T)->List<T>
 
 Сконструировать список из одного или более аргументов. Типы аргументов должны быть совместимы в случае `AsList` и строго совпадать в случае `AsListStrict`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT AsList(1, 2, 3, 4, 5);
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AsList(T..)->List<T>
@@ -42,13 +42,13 @@ AsList(T..)->List<T>
 
 Количество элементов в списке.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListLength(list_column) FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListLength(List<T>)->Uint64
@@ -59,13 +59,13 @@ ListLength(List<T>?)->Uint64?
 
 Проверка того, что список содержит хотя бы один элемент.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListHasItems(list_column) FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListHasItems(List<T>)->Bool
@@ -76,13 +76,13 @@ ListHasItems(List<T>?)->Bool?
 
 Преобразовать ленивый список (строится, например, функциями [ListFilter](#listmap), [ListMap](#listmap), [ListFlatMap](#listmap)) в энергичный. В отличие от ленивого списка, в котором каждый повторный проход заново вычисляет его содержимое, в энергичном списке содержимое списка строится сразу ценой большего потребления памяти.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListCollect(list_column) FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListCollect(LazyList<T>)->List<T>
@@ -98,7 +98,7 @@ ListCollect(LazyList<T>?)->List<T>?
 1. Список;
 2. Опциональное выражение для получения ключа сортировки из элемента списка (по умолчанию сам элемент).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListSortDesc(list_column) FROM my_table;
@@ -122,7 +122,7 @@ SELECT ListSort($list, ($x) -> {
 
 {% endnote %}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListSort(List<T>)->List<T>
@@ -139,7 +139,7 @@ ListSort(List<T>?, (T)->U)->List<T>?
 Если хотя бы один из списков является опциональным, то таким же является и результат.
 Если хотя бы один аргумент является `NULL`, то тип результата - `NULL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListExtend(
@@ -157,7 +157,7 @@ $l3 = AsList("d", "e");
 SELECT ListExtend($l1, $l2, $l3);  -- ["a","b","b","c","d","e"]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListExtend(List<T>..)->List<T>
@@ -170,7 +170,7 @@ ListExtend(List<T>?..)->List<T>?
 
 Если хотя бы один из списков является опциональным, то таким же является и результат.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListUnionAll(
@@ -193,7 +193,7 @@ SELECT ListUnionAll($l1, $l2);  -- result: [("value":1),("value":2),("key":"a"),
                                 -- schema: List<Struct<key : String?, value : Int32?>>
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListUnionAll(List<Struct<..>>, List<Struct<..>>..)->List<Struct<..>>
@@ -207,7 +207,7 @@ ListUnionAll(List<Struct<..>>?, List<Struct<..>>?..)->List<Struct<..>>?
 Длина возвращаемого списка определяется самым коротким списком для ListZip и самым длинным — для ListZipAll.
 Когда более короткий список исчерпан, в качестве пары к элементам более длинного списка подставляется пустое значение (`NULL`) соответствующего [optional типа](../types/optional.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -224,7 +224,7 @@ SELECT ListZip($l1, $l2);  -- [("a",1),("b",2)]
 SELECT ListZipAll($l1, $l2);  -- [("a",1),("b",2),(null,3)]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListZip(List<T1>, List<T2>)->List<Tuple<T1, T2>>
@@ -238,13 +238,13 @@ ListZipAll(List<T1>?, List<T2>?)->List<Tuple<T1?, T2?>>?
 
 Построить список пар (Tuple), содержащих номер элемента и сам элемент (`List<Tuple<Uint64,list_element_type>>`).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListEnumerate(list_column) FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListEnumerate(List<T>)->List<Tuple<Uint64, T>>
@@ -255,13 +255,13 @@ ListEnumerate(List<T>?)->List<Tuple<Uint64, T>>?
 
 Развернуть список.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListReverse(list_column) FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListReverse(List<T>)->List<T>
@@ -274,7 +274,7 @@ ListReverse(List<T>?)->List<T>?
 
 Первый аргумент — исходный список, второй — сколько элементов пропустить.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -288,7 +288,7 @@ $l1 = AsList(1, 2, 3, 4, 5);
 SELECT ListSkip($l1, 2);  -- [3,4,5]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListSkip(List<T>, Uint64)->List<T>
@@ -301,7 +301,7 @@ ListSkip(List<T>?, Uint64)->List<T>?
 
 Первый аргумент — исходный список, второй — не больше скольких элементов с начала оставить.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListTake(list_column, 3) FROM my_table;
@@ -313,7 +313,7 @@ $l1 = AsList(1, 2, 3, 4, 5);
 SELECT ListTake($l1, 2);  -- [1,2]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListTake(List<T>, Uint64)->List<T>
@@ -332,7 +332,7 @@ ListTake(List<T>?, Uint64)->List<T>?
 
 Дополнительный аргумент используется для управления случайностью, подробнее см. [документацию к `Random`](basic.md#random).
 
-### Примеры
+#### Примеры
 
 ```yql
 $list = AsList(1, 2, 3, 4, 5);
@@ -341,7 +341,7 @@ SELECT ListSample($list, 0.5);  -- [1, 2, 5]
 SELECT ListSampleN($list, 2);  -- [4, 2]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListSample(List<T>, Double?[, U])->List<T>
@@ -355,7 +355,7 @@ ListSampleN(List<T>?, Uint64?[, U])->List<T>?
 
 Возвращает копию списка с элементами, перестановленными в случайном порядке. Дополнительный аргумент используется для управления случайностью, подробнее см. [документацию к `Random`](basic.md#random).
 
-### Примеры
+#### Примеры
 
 ```yql
 $list = AsList(1, 2, 3, 4, 5);
@@ -363,7 +363,7 @@ $list = AsList(1, 2, 3, 4, 5);
 SELECT ListShuffle($list);  -- [1, 3, 5, 2, 4]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListShuffle(List<T>[, U])->List<T>
@@ -374,7 +374,7 @@ ListShuffle(List<T>?[, U])->List<T>?
 
 Ищет элемент с указанным значением в списке и при первом обнаружении возвращает его индекс. Отсчет индексов начинается с 0, а в случае отсутствия элемента возвращается `NULL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -388,7 +388,7 @@ $l1 = AsList(1, 2, 3, 4, 5);
 SELECT ListIndexOf($l1, 2);  -- 1
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListIndexOf(List<T>, T)->Uint64?
@@ -419,7 +419,7 @@ ListIndexOf(List<T>?, T)->Uint64?
 
 Если исходный список является опциональным, то таким же является и выходной список.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -444,7 +444,7 @@ $callable = Python::test(Callable<(Int64)->Bool>, "def test(i): return i % 2");
 SELECT ListFilter($list, $callable);  -- [1,3]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListMap(List<T>, (T)->U)->List<U>
@@ -465,14 +465,14 @@ ListFilter(List<T>?, (T)->Bool)->List<T>?
 
 Если исходный список является опциональным, то таким же является и выходной список.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListNotNull([1,2]),   -- [1,2]
     ListNotNull([3,null,4]); -- [3,4]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListNotNull(List<T?>)->List<T>
@@ -485,14 +485,14 @@ ListNotNull(List<T?>?)->List<T>?
 
 Если исходный список является опциональным, то таким же является и выходной список.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListFlatten([[1,2],[3,4]]),   -- [1,2,3,4]
     ListFlatten([null,[3,4],[5,6]]); -- [3,4,5,6]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListFlatten(List<List<T>?>)->List<T>
@@ -503,7 +503,7 @@ ListFlatten(List<List<T>?>?)->List<T>?
 
 Возвращает копию списка, в котором оставлен только уникальный набор элементов. В случае ListUniq порядок элементов результирующего набора не определен, в случае ListUniqStable элементы находятся в порядке вхождения в исходный список.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListUniq([1, 2, 3, 2, 4, 5, 1]) -- [5, 4, 2, 1, 3]
@@ -511,7 +511,7 @@ SELECT ListUniqStable([1, 2, 3, 2, 4, 5, 1]) -- [1, 2, 3, 4, 5]
 SELECT ListUniqStable([1, 2, null, 7, 2, 8, null]) -- [1, 2, null, 7, 8]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListUniq(List<T>)->List<T>
@@ -528,9 +528,14 @@ ListUniqStable(List<T>?)->List<T>?
 * `ListAny` — хотя бы один элемент равен `true`;
 * `ListAll` — все элементы равны `true`.
 
-В противном случае возвращает false.
+В противном случае возвращает `false`.
 
-### Примеры
+Поведение на пустом списке:
+
+* `ListAny` возвращает `false`;
+* `ListAll` возвращает `true`.
+
+#### Примеры
 
 ```yql
 SELECT
@@ -539,7 +544,7 @@ SELECT
 FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListAny(List<Bool>)->Bool
@@ -552,7 +557,7 @@ ListAll(List<Bool>?)->Bool?
 
 Содержит ли список указанный элемент. При этом `NULL` значения считаются равными друг другу, а при `NULL` входном списке результат всегда `false`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -567,7 +572,7 @@ SELECT ListHas($l1, 2);  -- true
 SELECT ListHas($l1, 6);  -- false
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListHas(List<T>, U)->Bool
@@ -578,7 +583,7 @@ ListHas(List<T>?, U)->Bool
 
 Возвращают первый и последний элемент списка.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -587,7 +592,7 @@ SELECT
 FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListHead(List<T>)->T?
@@ -600,7 +605,7 @@ ListLast(List<T>?)->T?
 
 Применяет соответствующую агрегатную функцию ко всем элементам списка числовых значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -611,7 +616,7 @@ SELECT
 FROM my_table;
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListMin(List<T>)->T?
@@ -631,7 +636,9 @@ ListMin(List<T>?)->T?
 Возвращаемый тип:
 U для ListFold, опциональный U для ListFold1.
 
-### Примеры
+`ListFold` допускает [линейные типы](../types/linear.md) `Linear<T>` в типе состояния U. Если состояние содержит линейные значения, `updateLambda` должна на каждой итерации потребить каждое переданное линейное значение ровно один раз и вернуть результирующее состояние того же типа.
+
+#### Примеры
 
 ```yql
 $l = [1, 4, 7, 2];
@@ -645,7 +652,22 @@ SELECT
     ListFold1([], $z, $y) AS fold1_empty;              -- Null
 ```
 
-### Сигнатура
+С помощью линейного состояния в `ListFold` можно изменять мутабельный словарь без его копирования на каждой итерации:
+
+```yql
+SELECT Block(($arg) -> {
+    $dict = ListFold(
+        [1, 2, 3, 2, 1],
+        ToMutDict({0: 0}, $arg),
+        ($item, $state) -> {
+            RETURN MutDictInsert($state, $item, 1);
+        }
+    );
+    RETURN ListSort(DictKeys(FromMutDict($dict)));
+}); -- [0, 1, 2, 3]
+```
+
+#### Сигнатура
 
 ```yql
 ListFold(List<T>, U, (T, U)->U)->U
@@ -668,7 +690,7 @@ ListFold1(List<T>?, (T)->U, (T, U)->U)->U?
 Возвращаемый тип:
 Список элементов U.
 
-### Примеры
+#### Примеры
 
 ```yql
 $l = [1, 4, 7, 2];
@@ -682,7 +704,7 @@ SELECT
     ListFold1Map($l, $t, $x);              -- [2, 12, 49, 28]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListFoldMap(List<T>, S, (T, S)->Tuple<U,S>)->List<U>
@@ -694,7 +716,7 @@ ListFold1Map(List<T>?, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>?
 
 ## ListFromRange {#listfromrange}
 
-Генерация последовательности чисел или дат с указанным шагом. Аналог `xrange` в Python 2, но дополнительно с поддержкой дат и чисел с плавающей точкой.
+Генерация последовательности чисел или дат с указанным шагом. Аналог `xrange` в Python 2, но дополнительно с поддержкой дат, `Decimal` и чисел с плавающей точкой.
 
 Аргументы:
 
@@ -706,6 +728,7 @@ ListFold1Map(List<T>?, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>?
 
 * Конец не включительный, т.е. `ListFromRange(1,3) == AsList(1,2)`.
 * Тип элементов результатов выбирается как наиболее широкий из типов аргументов, например результатом `ListFromRange(1, 2, 0.5)` получится список `Double`.
+* Диапазоны `Decimal` поддерживаются начиная с версии языка [2026.02](../changelog/2026.02.md).
 * Если начало и конец имеют один из типов дат, то шаг должен иметь тип `Interval`.
 * Список является «ленивым», но при неправильном использовании всё равно может привести к потреблению большого объема оперативной памяти.
 * Если шаг положительный и конец меньше или равен началу, то список будет пустой.
@@ -713,20 +736,22 @@ ListFold1Map(List<T>?, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>?
 * Если шаг не положительный и не отрицательный (0 или NaN), то список будет пустой.
 * Если один из параметров опциональный, то результат будет опциональный список.
 * Если один из параметров равен `NULL`, то результат будет `NULL`.
+* Если один из параметров типа `Float`, `Double` или `Decimal` равен NaN или бесконечности, то список будет пустым.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
     ListFromRange(-2, 2), -- [-2, -1, 0, 1]
-    ListFromRange(2, 1, -0.5); -- [2.0, 1.5]
+    ListFromRange(2, 1, -0.5), -- [2.0, 1.5]
+    ListFromRange(Decimal("1.00", 5, 2), Decimal("2.00", 5, 2), Decimal("0.25", 5, 2)); -- [1.00, 1.25, 1.50, 1.75]
 ```
 
 ```yql
 SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:30:00Z"), DateTime::IntervalFromDays(1));
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, T?)->LazyList<T> -- T — числовой тип
@@ -742,13 +767,13 @@ ListFromRange(T{Flags:AutoMap}, T{Flags:AutoMap}, I?)->LazyList<T> -- T — ти
 1. Значение;
 2. Число копий.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListReplicate(true, 3); -- [true, true, true]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListReplicate(T, Uint64)->List<T>
@@ -759,7 +784,7 @@ ListReplicate(T, Uint64)->List<T>
 Объединяет список строк в одну строку.
 Вторым параметром можно задать разделитель.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -775,7 +800,7 @@ SELECT ListConcat($l1);  -- "hello"
 SELECT ListConcat($l1, " ");  -- "h e l l o"
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListConcat(List<String>)->String?
@@ -789,7 +814,7 @@ ListConcat(List<String>?, String)->String?
 
 По списку структур возвращает список содержащихся в них полей с указанным именем.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -805,7 +830,7 @@ $l = AsList(
 SELECT ListExtract($l, "key");  -- ["a", "b"]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListExtract(List<Struct<..>>, String)->List<T>
@@ -827,7 +852,7 @@ ListExtract(List<Struct<..>>?, String)->List<T>?
 
 Если входной список является опциональным, то таким же является и результат.
 
-### Примеры
+#### Примеры
 
 ```yql
 $data = AsList(1, 2, 5, 1, 2, 7);
@@ -839,7 +864,7 @@ SELECT
     ListSkipWhileInclusive($data, ($x) -> {return $x <= 3}); -- [1, 2, 7]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListTakeWhile(List<T>, (T)->Bool)->List<T>
@@ -857,13 +882,13 @@ ListTakeWhile(List<T>?, (T)->Bool)->List<T>?
 1. Список;
 2. [Фабрика агрегационных функций](basic.md#aggregationfactory).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListAggregate(AsList(1, 2, 3), AggregationFactory("Sum")); -- 6
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListAggregate(List<T>, AggregationFactory)->T
@@ -881,7 +906,7 @@ ListAggregate(List<T>?, AggregationFactory)->T?
 
 Также поддерживаются опциональные списки, что приводит к опциональному словарю в результате.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -894,7 +919,7 @@ $l = AsList(("a",1), ("b", 2), ("a", 3));
 SELECT ToDict($l);  -- {"a": 1,"b": 2}
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ToDict(List<Tuple<K,V>>)->Dict<K,V>
@@ -908,7 +933,7 @@ ToDict(List<Tuple<K,V>>?)->Dict<K,V>?
 
 Обратная функция - получить список ключей словаря [DictKeys](dict.md#dictkeys).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -921,7 +946,7 @@ $l = AsList(1,1,2,2,3);
 SELECT ToSet($l);  -- {1,2,3}
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ToSet(List<T>)->Set<T>
@@ -932,14 +957,14 @@ ToSet(List<T>?)->Set<T>?
 
 Строит список из кортежа, в котором типы элементов совместимы друг с другом. Для опционального кортежа на выходе получается опциональный список. Для NULL аргумента - NULL. Для пустого кортежа - EmptyList.
 
-### Примеры
+#### Примеры
 
 ```yql
 $t = (1,2,3);
 SELECT ListFromTuple($t);  -- [1,2,3]
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListFromTuple(Null)->Null
@@ -952,14 +977,14 @@ ListFromTuple(Tuple<T1,T2,...>?)->List<T>?
 
 Строит кортеж из списка и явно указанной ширины кортежа. Все элементы кортежа будут иметь тот же тип, что и тип элемента списка. Если длина списка не соотвествует указанной ширине кортежа, будет возвращена ошибка. Для опционального списка на выходе получается опциональный кортеж. Для NULL аргумента - NULL.
 
-### Примеры
+#### Примеры
 
 ```yql
 $l = [1,2,3];
 SELECT ListToTuple($l, 3);  -- (1,2,3)
 ```
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListToTuple(Null,N)->Null
@@ -980,7 +1005,7 @@ ListToTuple(List<T>?, N)->Tuple<T,T,...T>? -- ширина кортежа N
 2. Размер выборки;
 3. Опциональное выражение для получения ключа сортировки из элемента списка (по умолчанию сам элемент).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListTop(List<T>{Flags:AutoMap}, N)->List<T>
@@ -988,4 +1013,3 @@ ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
 ```
 
 Сигнатуры остальных функций совпадают с `ListTop`.
-

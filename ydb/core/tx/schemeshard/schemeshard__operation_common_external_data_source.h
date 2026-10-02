@@ -5,8 +5,6 @@
 
 #include <utility>
 
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard::NExternalDataSource {
@@ -26,7 +24,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
     }
     Y_UNUSED(tx);
 
-    return std::move(checks);
+    return checks;
 }
 
 inline bool IsParentPathValid(const THolder<TProposeResponse>& result,

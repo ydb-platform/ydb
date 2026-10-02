@@ -1,12 +1,13 @@
 """
-    getargspec excerpted from:
+getargspec excerpted from:
 
-    sphinx.util.inspect
-    ~~~~~~~~~~~~~~~~~~~
-    Helpers for inspecting Python modules.
-    :copyright: Copyright 2007-2015 by the Sphinx team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
+sphinx.util.inspect
+~~~~~~~~~~~~~~~~~~~
+Helpers for inspecting Python modules.
+:copyright: Copyright 2007-2015 by the Sphinx team, see AUTHORS.
+:license: BSD, see LICENSE for details.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -47,5 +48,5 @@ def getargspec(func: Any) -> inspect.FullArgSpec:
     while hasattr(func, "__wrapped__"):
         func = func.__wrapped__
     if not inspect.isfunction(func):
-        raise TypeError("%r is not a Python function" % func)
+        raise TypeError(f"{func!r} is not a Python function")
     return inspect.getfullargspec(func)

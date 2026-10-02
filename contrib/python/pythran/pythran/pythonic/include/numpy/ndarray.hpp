@@ -10,20 +10,23 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
 
-  template <class pS, class dtype = functor::float64>
-  types::ndarray<typename dtype::type, sutils::shape_t<pS>>
-  ndarray(pS const &shape, dtype d = dtype());
+  namespace anonymous
+  {
 
-  template <class dtype = functor::float64>
-  types::ndarray<typename dtype::type, types::pshape<long>>
-  ndarray(long size, dtype d = dtype());
+    template <class pS, class dtype = functor::float64>
+    types::ndarray<typename dtype::type, sutils::shape_t<pS>> ndarray(pS const &shape,
+                                                                      dtype d = dtype());
 
-  template <long N, class dtype = functor::float64>
-  types::ndarray<typename dtype::type,
-                 types::pshape<std::integral_constant<long, N>>>
-  ndarray(std::integral_constant<long, N>, dtype d = dtype());
+    template <class dtype = functor::float64>
+    types::ndarray<typename dtype::type, types::pshape<long>> ndarray(long size, dtype d = dtype());
 
-  DEFINE_FUNCTOR(pythonic::numpy, ndarray);
+    template <long N, class dtype = functor::float64>
+    types::ndarray<typename dtype::type, types::pshape<std::integral_constant<long, N>>>
+    ndarray(std::integral_constant<long, N>, dtype d = dtype());
+
+  } // namespace anonymous
+
+  DEFINE_FUNCTOR(pythonic::numpy::anonymous, ndarray);
 } // namespace numpy
 PYTHONIC_NS_END
 

@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -26,9 +28,10 @@ public:
     {
         auto nodeId = Event->Get()->Record.GetNodeId();
 
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot extend lease for node #" << nodeId
-                    << ": " << code << ": " << reason);
+        YDB_LOG_ERROR_CTX(ctx, "TTxExtendLease: cannot extend lease",
+            {"nodeId", nodeId},
+            {"statusCode", code},
+            {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -40,51 +43,59 @@ public:
     {
         auto nodeId = Event->Get()->Record.GetNodeId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxExtendLease Execute node #" << nodeId);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Execute",
+            {"nodeId", nodeId});
 
         Response = new TEvNodeBroker::TEvExtendLeaseResponse;
         Response->Record.SetNodeId(nodeId);
 
-        auto it = Self->Nodes.find(nodeId);
-        if (it == Self->Nodes.end()) {
-            if (Self->ExpiredNodes.contains(nodeId))
+        auto it = Self->Dirty.Nodes.find(nodeId);
+        if (it == Self->Dirty.Nodes.end()) {
+            if (Self->Dirty.ExpiredNodes.contains(nodeId))
                 return Error(TStatus::WRONG_REQUEST, "Node has expired", ctx);
             else
                 return Error(TStatus::WRONG_REQUEST, "Unknown node", ctx);
         }
 
-        if (Self->IsBannedId(nodeId))
+        if (Self->Dirty.IsBannedId(nodeId))
             return Error(TStatus::WRONG_REQUEST, "Node ID is banned", ctx);
 
         auto &node = it->second;
-        if (!node.IsFixed()) {
-            Self->DbUpdateNodeLease(node, txc);
-            Response->Record.SetExpire(Self->Epoch.NextEnd.GetValue());
+        if (Self->Dirty.IsLeaseExtendable(node)) {
+            Self->Dirty.ExtendLease(node);
+            Self->Dirty.DbAddNode(node, txc);
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Update = true;
-        } else {
-            Response->Record.SetExpire(TInstant::Max().GetValue());
         }
 
+        Response->Record.SetExpire(node.Expire.GetValue());
+        Response->Record.SetExpireV2(node.ExpireV2.GetValue());
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
-        Self->Epoch.Serialize(*Response->Record.MutableEpoch());
+        Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxExtendLease Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Complete");
 
         Y_ABORT_UNLESS(Response);
-        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxExtendLease reply with: " << Response->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TTxExtendLease: reply",
+            {"response", Response->ToString()});
         ctx.Send(Event->Sender, Response.Release());
 
-        if (Update)
-            Self->ExtendLease(Self->Nodes.at(Event->Get()->Record.GetNodeId()));
+        if (Update) {
+            auto& node = Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId());
+            Self->Committed.ExtendLease(node);
+            Self->Committed.UpdateEpochVersion();
+            Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
+        }
 
-        Self->TxCompleted(Event->Get()->Record.GetNodeId(), this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

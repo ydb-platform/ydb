@@ -138,7 +138,12 @@ TNode SerializeParamsForListJobs(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options);
+
+TNode SerializeParamsForSelectRows(
+    const TString& query,
+    const TSelectRowsOptions& options);
 
 TNode SerializeParametersForInsertRows(
     const TString& pathPrefix,
@@ -158,6 +163,14 @@ TNode SerializeParametersForTrimRows(
 TNode SerializeParamsForReadTable(
     const TTransactionId& transactionId,
     const TTableReaderOptions& options);
+
+TNode SerializeParamsForReadTablePartition(
+    const TString& cookie,
+    const TTablePartitionReaderOptions& options);
+
+TNode SerializeParamsForReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options);
 
 TNode SerializeParamsForReadBlobTable(
     const TTransactionId& transactionId,
@@ -194,6 +207,18 @@ TNode SerializeParamsForAlterTable(
     const TYPath& path,
     const TAlterTableOptions& options);
 
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options);
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options);
+
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
@@ -203,6 +228,19 @@ TNode SerializeParamsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
+
+TNode SerializeParamsForGetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options);
+
+TNode SerializeParamsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
+
+TNode SerializeParamsForReadFile(
+    const TTransactionId& transactionId,
+    const TFileReaderOptions& options);
 
 TNode SerializeParamsForGetFileFromCache(
     const TTransactionId& transactionId,
@@ -241,7 +279,8 @@ TNode SerializeParamsForAbortTransaction(
     const TTransactionId& transactionId);
 
 TNode SerializeParamsForCommitTransaction(
-    const TTransactionId& transactionId);
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options);
 
 TNode SerializeParamsForStartTransaction(
     const TTransactionId& parentTransactionId,

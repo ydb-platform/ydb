@@ -1,10 +1,13 @@
 #pragma once
 
 #include "public.h"
+#include "context_switch.h"
 
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/tracing/public.h>
+
+#include <optional>
 
 #ifdef _win_
 #undef Yield
@@ -38,96 +41,53 @@ void SetCurrentFiberId(TFiberId id);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Returns |true| if fiber context switch is currently forbidden.
-bool IsContextSwitchForbidden();
-
-class TForbidContextSwitchGuard
+//! Options governing how a wait is performed.
+struct TWaitOptions
 {
-public:
-    TForbidContextSwitchGuard();
-    TForbidContextSwitchGuard(const TForbidContextSwitchGuard&) = delete;
+    //! Yield the fiber (SuspendFiber) or block the thread (BlockThread).
+    EWaitForStrategy Strategy = EWaitForStrategy::SuspendFiber;
 
-    ~TForbidContextSwitchGuard();
+    //! Invoker the fiber is resumed on (SuspendFiber only); null means the current one.
+    IInvokerPtr ResumingInvoker = {};
 
-private:
-    const bool OldValue_;
+    //! Whether to yield the fiber even when |future| is already set (SuspendFiber only).
+    //! false gives the "fast" behavior — no reschedule when the future is ready.
+    bool AlwaysYieldFiber = true;
+
+    //! Absolute deadline; std::nullopt means no timeout.
+    /*!
+     *  Reaching the deadline does not cancel the awaited future — the wait simply gives up
+     *  while the future keeps running. This is the principal difference from
+     *  #TFuture::WithTimeout.
+     */
+    std::optional<TInstant> Deadline = {};
+
+    //! Sets #Deadline to |timeout| from now.
+    TWaitOptions WithTimeout(TDuration timeout) &&;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-// NB: Use function pointer to minimize the overhead.
-using TGlobalContextSwitchHandler = void(*)();
-
-void InstallGlobalContextSwitchHandlers(
-    TGlobalContextSwitchHandler outHandler,
-    TGlobalContextSwitchHandler inHandler);
-
-////////////////////////////////////////////////////////////////////////////////
-
-using TContextSwitchHandler = std::function<void()>;
-
-class TContextSwitchGuard
-{
-public:
-    TContextSwitchGuard(
-        TContextSwitchHandler outHandler,
-        TContextSwitchHandler inHandler);
-
-    TContextSwitchGuard(const TContextSwitchGuard& other) = delete;
-    ~TContextSwitchGuard();
-};
-
-class TOneShotContextSwitchGuard
-    : public TContextSwitchGuard
-{
-public:
-    explicit TOneShotContextSwitchGuard(TContextSwitchHandler outHandler);
-
-private:
-    bool Active_;
-};
-
-//! Blocks the current fiber until #future is set.
-//! The fiber is resceduled to #invoker.
-void WaitUntilSet(
-    TFuture<void> future,
+//! Blocks the current fiber until |future| is set and returns the resulting value.
+//! The fiber is rescheduled to |invoker|.
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitFor(
+    TFuture future,
     IInvokerPtr invoker = GetCurrentInvoker());
 
-//! Blocks the current fiber until #future is set and returns the resulting value.
-//! The fiber is rescheduled to #invoker.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitFor(
-    TFuture<T> future,
-    IInvokerPtr invoker = GetCurrentInvoker());
-
-//! Similar to #WaitFor but if #future is already set then the fiber
+//! Similar to #WaitFor but if |future| is already set then the fiber
 //! is not rescheduled. If not, the fiber is rescheduled via
 //! the current invoker.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForFast(
-    TFuture<T> future);
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForFast(
+    TFuture future);
 
-//! Similar to #WaitFor but extracts the value from #future via |GetUnique|.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUnique(
-    const TFuture<T>& future,
-    IInvokerPtr invoker = GetCurrentInvoker());
-
-//! From the authors of #WaitForUnique and #WaitForFast.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(
-    const TFuture<T>& future);
-
-//! A possibly blocking version of #WaitFor.
-template <class T>
-TErrorOr<T> WaitForWithStrategy(
-    TFuture<T> future,
-    EWaitForStrategy strategy);
+//! Waits until |future| is set or #TWaitOptions::Deadline elapses; inspect |future|
+//! afterwards (e.g. #TFuture::IsSet / #TFuture::TryGet) for the outcome.
+void WaitUntilSet(TFuture<void> future, TWaitOptions options = {});
 
 //! Reschedules the current fiber to the current invoker.
 void Yield();
 
-//! Reschedules the current fiber to #invoker.
+//! Reschedules the current fiber to |invoker|.
 void SwitchTo(IInvokerPtr invoker);
 
 //! Returns |true| if there is enough remaining stack space.
@@ -135,7 +95,7 @@ bool CheckFreeStackSpace(size_t space);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency
 
 #define SCHEDULER_API_INL_H_
 #include "scheduler_api-inl.h"

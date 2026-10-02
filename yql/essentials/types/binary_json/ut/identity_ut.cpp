@@ -7,7 +7,7 @@
 
 using namespace NKikimr;
 
-class TBinaryJsonIdentityTest : public TBinaryJsonTestBase {
+class TBinaryJsonIdentityTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonIdentityTest()
         : TBinaryJsonTestBase()
@@ -15,33 +15,33 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonIdentityTest);
-        UNIT_TEST(TestReadToJsonDom);
-        UNIT_TEST(TestSerializeToJson);
-        UNIT_TEST(TestSerializeDomToBinaryJson);
+    UNIT_TEST(TestReadToJsonDom);
+    UNIT_TEST(TestSerializeToJson);
+    UNIT_TEST(TestSerializeDomToBinaryJson);
     UNIT_TEST_SUITE_END();
 
     const TVector<TString> TestCases = {
-            "false",
-            "true",
-            "null",
-            "\"test string\"",
-            "\"\"",
-            "1.2345",
-            "1",
-            "-23",
-            "0",
-            "0.12345",
-            "{}",
-            "{\"a\":1}",
-            "[]",
-            "[1]",
-            R"([{"key":[true,false,null,"first","second","second","third"]},"fourth",0.34])",
-        };
+        "false",
+        "true",
+        "null",
+        "\"test string\"",
+        "\"\"",
+        "1.2345",
+        "1",
+        "-23",
+        "0",
+        "0.12345",
+        "{}",
+        "{\"a\":1}",
+        "[]",
+        "[1]",
+        R"([{"key":[true,false,null,"first","second","second","third"]},"fourth",0.34])",
+    };
 
     void TestReadToJsonDom() {
         for (const TStringBuf json : TestCases) {
             const auto binaryJson = std::get<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
-            const auto value = NBinaryJson::ReadToJsonDom(binaryJson, &ValueBuilder);
+            const auto value = NBinaryJson::ReadToJsonDom(binaryJson, &ValueBuilder_);
             const auto jsonAfterBinaryJson = NDom::SerializeJsonDom(value);
 
             UNIT_ASSERT_VALUES_EQUAL(json, jsonAfterBinaryJson);
@@ -59,7 +59,7 @@ public:
 
     void TestSerializeDomToBinaryJson() {
         for (const TStringBuf json : TestCases) {
-            const auto dom = NDom::TryParseJsonDom(json, &ValueBuilder);
+            const auto dom = NDom::TryParseJsonDom(json, &ValueBuilder_);
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(dom);
             const auto jsonAfterBinaryJson = NBinaryJson::SerializeToJson(binaryJson);
 

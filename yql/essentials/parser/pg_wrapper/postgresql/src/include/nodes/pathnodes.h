@@ -1054,9 +1054,10 @@ typedef struct RelOptInfo
  * IndexOptInfo
  *		Per-index information for planning/optimization
  *
- *		indexkeys[], indexcollations[] each have ncolumns entries.
- *		opfamily[], and opcintype[]	each have nkeycolumns entries. They do
- *		not contain any information about included attributes.
+ *		indexkeys[] and canreturn[] each have ncolumns entries.
+ *
+ *		indexcollations[], opfamily[], and opcintype[] each have nkeycolumns
+ *		entries.  These don't contain any information about INCLUDE columns.
  *
  *		sortopfamily[], reverse_sort[], and nulls_first[] have
  *		nkeycolumns entries, if the index is ordered; but if it is unordered,
@@ -1085,6 +1086,8 @@ typedef struct RelOptInfo
 typedef struct IndexOptInfo IndexOptInfo;
 #define HAVE_INDEXOPTINFO_TYPEDEF 1
 #endif
+
+struct IndexPath;				/* forward declaration */
 
 struct IndexOptInfo
 {
@@ -1185,7 +1188,7 @@ struct IndexOptInfo
 	bool		amcanmarkpos;
 	/* AM's cost estimator */
 	/* Rather than include amapi.h here, we declare amcostestimate like this */
-	void		(*amcostestimate) () pg_node_attr(read_write_ignore);
+	void		(*amcostestimate) (struct PlannerInfo *, struct IndexPath *, double, Cost *, Cost *, Selectivity *, double *, double *) pg_node_attr(read_write_ignore);
 };
 
 /*

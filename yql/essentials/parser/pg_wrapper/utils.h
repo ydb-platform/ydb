@@ -155,6 +155,7 @@ class TExtensionsRegistry {
 class TImpl;
 public:
     static TExtensionsRegistry& Instance();
+    static std::shared_ptr<TExtensionsRegistry>& InstanceShared();
     void InitThread();
     void CleanupThread();
     void Load(ui32 extensionIndex, const TString& name, const TString& path);

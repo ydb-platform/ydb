@@ -6,7 +6,7 @@
 #include <string>
 
 namespace NYdb {
-    inline namespace V3 {
+    inline namespace Dev {
         class TResultSet;
     }
 

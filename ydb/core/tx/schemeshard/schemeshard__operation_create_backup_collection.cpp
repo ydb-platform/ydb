@@ -1,24 +1,19 @@
-#include "schemeshard__operation_common.h"
 #include "schemeshard__backup_collection_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateBackupCollection TPropose"
-            << ", operationId: " << OperationId;
-    }
 
 public:
     explicit TPropose(TOperationId id)
@@ -27,7 +22,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -40,8 +35,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -69,6 +65,8 @@ public:
 };
 
 class TCreateBackupCollection : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateBackupCollection"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -95,8 +93,8 @@ class TCreateBackupCollection : public TSubOperation {
         }
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
+    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner, const TPathId& allocatedPathId) {
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
@@ -114,13 +112,15 @@ class TCreateBackupCollection : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& desc = Transaction.GetCreateBackupCollection();
         const TString& name = desc.GetName();
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", rootPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                     static_cast<ui64>(OperationId.GetTxId()),
@@ -149,7 +149,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -169,21 +169,38 @@ public:
             return result;
         }
 
-        AddPathInSchemeShard(result, dstPath, owner);
+        // Track memory and database changes for proper abort handling
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, rootPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewBackupCollection(context.SS, allocatedPathId);
+        context.MemChanges.GrabDomain(context.SS, rootPath.GetPathIdForDomain());
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(rootPath.Base()->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        AddPathInSchemeShard(result, dstPath, owner, allocatedPathId);
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        IncAliveChildrenDirect(OperationId, rootPath, context); // for correct discard of ChildrenExist prop
-        rootPath.DomainInfo()->IncPathsInside(context.SS);
+        if (!acl.empty()) {
+            pathEl->ApplyACL(acl);
+        }
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
-        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
-        context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
-        context.SS->CreateTx(
+        context.SS->BackupCollections.Set(allocatedPathId, backupCollection);
+        context.SS->RegisterBackupCollectionTables(backupCollection);
+
+        context.DbChanges.PersistBackupCollection(allocatedPathId, backupCollection);
+
+        TTxState& txState = context.SS->CreateTx(
             OperationId,
             TTxState::TxCreateBackupCollection,
-            pathEl->PathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
+            allocatedPathId);
+        txState.State = TTxState::Propose;
 
         if (rootPath.Base()->HasActiveChanges()) {
             const TTxId parentTxId = rootPath.Base()->PlannedToCreate()
@@ -192,40 +209,31 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-
-        const auto& backupCollectionPathId = pathEl->PathId;
-
-        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
-        context.SS->IncrementPathDbRefCount(backupCollectionPathId);
-
-        if (!acl.empty()) {
-            pathEl->ApplyACL(acl);
-        }
-        context.SS->PersistPath(db, backupCollectionPathId);
-
-        context.SS->PersistBackupCollection(db,
-                                            backupCollectionPathId,
-                                            backupCollection);
-        context.SS->PersistTxState(db, OperationId);
-
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
                                                           context.SS,
                                                           context.OnComplete);
 
+        rootPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenSafeWithUndo(OperationId, rootPath, context);
+
+        context.OnComplete.ActivateTx(OperationId);
+
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateBackupCollection AbortPropose: opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
         Y_ABORT("no AbortPropose for TCreateBackupCollection");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateBackupCollection AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBackupCollection AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -266,3 +274,5 @@ ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxStat
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

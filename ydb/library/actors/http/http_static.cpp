@@ -16,14 +16,14 @@ public:
     const TFsPath URL;
     const TFsPath FilePath;
     const TFsPath ResourcePath;
-    const TFsPath Index;
+    TUrlAdapter UrlAdapter;
 
-    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index)
+    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter)
         : TBase(&THttpStaticContentHandler::StateWork)
         , URL(url)
         , FilePath(filePath)
         , ResourcePath(resourcePath)
-        , Index(index)
+        , UrlAdapter(std::move(urlAdapter))
     {}
 
     static constexpr char ActorName[] = "HTTP_STATIC_ACTOR";
@@ -47,13 +47,13 @@ public:
             Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
-        if (url.GetPath().EndsWith('/') && Index.IsDefined()) {
-            url /= Index;
+        if (UrlAdapter) {
+            UrlAdapter(url);
         }
         url = url.RelativeTo(URL);
         try {
             // TODO: caching?
-            TString contentType = mimetypeByExt(url.GetExtension().c_str());
+            TString contentType = mimetypeByExt(url.GetName().c_str());
             TString data;
             TFileStat filestat;
             TFsPath resourcename(ResourcePath / url);
@@ -90,8 +90,16 @@ public:
     }
 };
 
+NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter) {
+    return new THttpStaticContentHandler(url, filePath, resourcePath, std::move(urlAdapter));
+}
+
 NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index) {
-    return new THttpStaticContentHandler(url, filePath, resourcePath, index);
+    return CreateHttpStaticContentHandler(url, filePath, resourcePath, [index](TFsPath& url) {
+        if (url.GetPath().EndsWith('/') && index) {
+            url /= index;
+        }
+    });
 }
 
 }

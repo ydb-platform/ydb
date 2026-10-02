@@ -105,20 +105,6 @@ FILE_INCLUDE LICENSE found in files: re2/bitmap256.cc at line 3, re2/bitmap256.h
         util/strutil.cc [2:3]
         util/strutil.h [2:3]
 
-SKIP     Apache-2.0           4f259c3df2e0ec98e3ba6ca286e690cc
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: README at line 31
-    License text:
-        Unless otherwise noted, the RE2 source files are distributed
-        under the BSD-style license found in the LICENSE file.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 80.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README [30:31]
-
 KEEP     X11-Lucent           71c654f01a03bded10ee9ebcb4aad7ac
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -149,19 +135,6 @@ FILE_IGNORE util/rune.cc found in files: util/utf.h at line 14
         Links           : http://plan9.bell-labs.com/plan9/license.html, https://spdx.org/licenses/LPL-1.02
     Files with this license:
         util/utf.h [4:14]
-
-KEEP     BSD-3-Clause         cfdf581c1aced09db4a64f39adeb5675
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: README at line 31
-    License text:
-        under the BSD-style license found in the LICENSE file.
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 90.00
-        Match type      : REFERENCE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        README [31:31]
 
 KEEP     BSD-3-Clause         dc296f6ff032e932bf091ed8f47e321c
 BELONGS ya.make

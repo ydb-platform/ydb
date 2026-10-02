@@ -112,6 +112,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ====================COPYRIGHT====================
+/* Copyright (c) 2022 The ANTLR Project. All rights reserved.
+
+
+====================COPYRIGHT====================
 // Copyright 2012-2022 The ANTLR Project
 
 

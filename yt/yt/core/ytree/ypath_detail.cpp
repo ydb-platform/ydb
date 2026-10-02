@@ -6,6 +6,8 @@
 #include "system_attribute_provider.h"
 #include "ypath_client.h"
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 #include <yt/yt/core/yson/attribute_consumer.h>
 
 #include <yt/yt/core/ypath/tokenizer.h>
@@ -154,7 +156,7 @@ IMPLEMENT_SUPPORTS_METHOD(Remove)
 IMPLEMENT_SUPPORTS_METHOD_RESOLVE(
     Exists,
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         Reply(context, /*exists*/ false);
     })
 
@@ -164,7 +166,7 @@ void TSupportsExists::ExistsAttribute(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ false);
 }
@@ -174,7 +176,7 @@ void TSupportsExists::ExistsSelf(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ true);
 }
@@ -185,7 +187,7 @@ void TSupportsExists::ExistsRecursive(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ false);
 }
@@ -194,7 +196,8 @@ void TSupportsExists::ExistsRecursive(
 
 DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, Multiset)
 {
-    context->SetRequestInfo("KeyCount: %v", request->subrequests_size());
+    context->AnnotateRequest()
+        .With("KeyCount", request->subrequests_size());
 
     auto ctx = New<TCtxMultisetAttributes>(
         context->GetUnderlyingContext(),
@@ -210,7 +213,8 @@ DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, Multiset)
 
 DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, MultisetAttributes)
 {
-    context->SetRequestInfo("KeyCount: %v", request->subrequests_size());
+    context->AnnotateRequest()
+        .With("KeyCount", request->subrequests_size());
 
     DoSetAttributes(GetRequestTargetYPath(context->RequestHeader()), request, response, context);
 
@@ -245,7 +249,7 @@ void TSupportsMultisetAttributes::SetAttributes(
     Y_UNUSED(request);
     Y_UNUSED(response);
     Y_UNUSED(context);
-    ThrowMethodNotSupported("MultisetAttributes", TString("attributes"));
+    ThrowMethodNotSupported("MultisetAttributes", std::string("attributes"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -256,20 +260,30 @@ void TSupportsPermissions::ValidatePermission(
     const std::string& /*user*/)
 { }
 
+void TSupportsPermissions::ValidateAdHocPermission(
+    EPermission permission,
+    const std::string& user)
+{
+    return ValidatePermission(
+        EPermissionCheckScope::This,
+        permission,
+        user);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
-    TSupportsPermissions* owner,
-    EPermissionCheckScope scope)
+TSupportsPermissions::TCachingAdHocPermissionValidator::TCachingAdHocPermissionValidator(
+    TSupportsPermissions* owner)
     : Owner_(owner)
-    , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
+void TSupportsPermissions::TCachingAdHocPermissionValidator::Validate(
+    EPermission permission,
+    const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {
-        Owner_->ValidatePermission(Scope_, permission, user);
+        Owner_->ValidateAdHocPermission(permission, user);
         validatedPermissions |= permission;
     }
 }
@@ -284,8 +298,7 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const -> std:
 {
     std::vector<TKey> keys;
 
-    auto* provider = Owner_->GetBuiltinAttributeProvider();
-    if (provider) {
+    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
         std::vector<ISystemAttributeProvider::TAttributeDescriptor> descriptors;
         provider->ReserveAndListSystemAttributes(&descriptors);
         for (const auto& descriptor : descriptors) {
@@ -295,13 +308,9 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const -> std:
         }
     }
 
-    auto* customAttributes = Owner_->GetCustomAttributes();
-    if (customAttributes) {
-        auto customKeys = customAttributes->ListKeys();
-        for (auto&& key : customKeys) {
-            keys.push_back(std::move(key));
-        }
-    }
+    auto customKeys = Owner_->CustomAttributes().ListKeys();
+    keys.insert(keys.end(), std::make_move_iterator(customKeys.begin()), std::make_move_iterator(customKeys.end()));
+
     return keys;
 }
 
@@ -324,20 +333,15 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListPairs() const -> std
         }
     }
 
-    auto* customAttributes = Owner_->GetCustomAttributes();
-    if (customAttributes) {
-        for (const auto& pair : customAttributes->ListPairs()) {
-            pairs.push_back(pair);
-        }
-    }
+    auto customPairs = Owner_->CustomAttributes().ListPairs();
+    pairs.insert(pairs.end(), std::make_move_iterator(customPairs.begin()), std::make_move_iterator(customPairs.end()));
 
     return pairs;
 }
 
 auto TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TKeyView key) const -> TValue
 {
-    auto* provider = Owner_->GetBuiltinAttributeProvider();
-    if (provider) {
+    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -347,17 +351,12 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TKeyView key) c
         }
     }
 
-    auto* customAttributes = Owner_->GetCustomAttributes();
-    if (!customAttributes) {
-        return TYsonString();
-    }
-    return customAttributes->FindYson(key);
+    return Owner_->CustomAttributes().FindYson(key);
 }
 
 void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(TKeyView key, const TYsonString& value)
 {
-    auto* provider = Owner_->GetBuiltinAttributeProvider();
-    if (provider) {
+    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -370,17 +369,17 @@ void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(TKeyView key, co
         }
     }
 
-    auto* customAttributes = Owner_->GetCustomAttributes();
+    auto* customAttributes = Owner_->MutableCustomAttributesOrNull();
     if (!customAttributes) {
         ThrowNoSuchBuiltinAttribute(key);
     }
+
     customAttributes->SetYson(key, value);
 }
 
 bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(TKeyView key)
 {
-    auto* provider = Owner_->GetBuiltinAttributeProvider();
-    if (provider) {
+    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -390,10 +389,11 @@ bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(TKeyView key)
         }
     }
 
-    auto* customAttributes = Owner_->GetCustomAttributes();
+    auto* customAttributes = Owner_->MutableCustomAttributesOrNull();
     if (!customAttributes) {
         ThrowNoSuchBuiltinAttribute(key);
     }
+
     return customAttributes->Remove(key);
 }
 
@@ -424,17 +424,11 @@ IYPathService::TResolveResult TSupportsAttributes::ResolveAttributes(
 
 TFuture<TYsonString> TSupportsAttributes::DoFindAttribute(TStringBuf key)
 {
-    auto* customAttributes = GetCustomAttributes();
-    auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
-
-    if (customAttributes) {
-        auto attribute = customAttributes->FindYson(key);
-        if (attribute) {
-            return MakeFuture(attribute);
-        }
+    if (auto attribute = CustomAttributes().FindYson(key)) {
+        return MakeFuture(attribute);
     }
 
-    if (builtinAttributeProvider) {
+    if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             if (auto builtinYson = builtinAttributeProvider->FindBuiltinAttribute(internedKey)) {
@@ -442,8 +436,7 @@ TFuture<TYsonString> TSupportsAttributes::DoFindAttribute(TStringBuf key)
             }
         }
 
-        auto asyncResult = builtinAttributeProvider->GetBuiltinAttributeAsync(internedKey);
-        if (asyncResult) {
+        if (auto asyncResult = builtinAttributeProvider->GetBuiltinAttributeAsync(internedKey)) {
             return asyncResult;
         }
     }
@@ -488,8 +481,9 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
                 builtinAttributeProvider->ListBuiltinAttributes(&builtinDescriptors);
                 for (const auto& descriptor : builtinDescriptors) {
-                    if (!descriptor.Present)
+                    if (!descriptor.Present) {
                         continue;
+                    }
 
                     auto key = descriptor.InternedKey.Unintern();
                     TAttributeValueConsumer attributeValueConsumer(&writer, key);
@@ -510,12 +504,9 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
                 }
             }
 
-            auto* customAttributes = GetCustomAttributes();
-            if (customAttributes) {
-                for (const auto& [key, value] : customAttributes->ListPairs()) {
-                    writer.OnKeyedItem(key);
-                    Serialize(value, &writer);
-                }
+            for (const auto& [key, value] : CustomAttributes().ListPairs()) {
+                writer.OnKeyedItem(key);
+                Serialize(value, &writer);
             }
         }
 
@@ -573,7 +564,7 @@ void TSupportsAttributes::GetAttribute(
     TRspGet* response,
     const TCtxGetPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
@@ -621,17 +612,13 @@ TFuture<TYsonString> TSupportsAttributes::DoListAttribute(const TYPath& path)
 
         writer.OnBeginList();
 
-        auto* customAttributes = GetCustomAttributes();
-        if (customAttributes) {
-            auto userKeys = customAttributes->ListKeys();
-            for (const auto& key : userKeys) {
-                writer.OnListItem();
-                writer.OnStringScalar(key);
-            }
+        auto userKeys = CustomAttributes().ListKeys();
+        for (const auto& key : userKeys) {
+            writer.OnListItem();
+            writer.OnStringScalar(key);
         }
 
-        auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
-        if (builtinAttributeProvider) {
+        if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
             std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
             builtinAttributeProvider->ListBuiltinAttributes(&builtinDescriptors);
             for (const auto& descriptor : builtinDescriptors) {
@@ -669,7 +656,7 @@ void TSupportsAttributes::ListAttribute(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     DoListAttribute(path).Subscribe(BIND([=] (const TErrorOr<TYsonString>& ysonOrError) {
         OnAttributeRead(context.Get(), response, ysonOrError);
@@ -702,35 +689,33 @@ TFuture<bool> TSupportsAttributes::DoExistsAttribute(const TYPath& path)
 
     NYPath::TTokenizer tokenizer(path);
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
-        return TrueFuture;
+        return MakeFuture(true);
     }
 
     tokenizer.Expect(NYPath::ETokenType::Literal);
     auto key = tokenizer.GetLiteralValue();
 
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
-        auto* customAttributes = GetCustomAttributes();
-        if (customAttributes && customAttributes->FindYson(key)) {
-            return TrueFuture;
+        if (CustomAttributes().FindYson(key)) {
+            return MakeFuture(true);
         }
 
-        auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
-        if (builtinAttributeProvider) {
+        if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
             auto internedKey = TInternedAttributeKey::Lookup(key);
             if (internedKey != InvalidInternedAttribute) {
                 auto optionalDescriptor = builtinAttributeProvider->FindBuiltinAttributeDescriptor(internedKey);
                 if (optionalDescriptor) {
                     const auto& descriptor = *optionalDescriptor;
-                    return descriptor.Present ? TrueFuture : FalseFuture;
+                    return descriptor.Present ? MakeFuture(true) : MakeFuture(false);
                 }
             }
         }
 
-        return FalseFuture;
+        return MakeFuture(false);
     } else {
         auto asyncYson = DoFindAttribute(key);
         if (!asyncYson) {
-            return FalseFuture;
+            return MakeFuture(false);
         }
 
         return asyncYson.Apply(BIND(
@@ -746,7 +731,7 @@ void TSupportsAttributes::ExistsAttribute(
     TRspExists* response,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     DoExistsAttribute(path).Subscribe(BIND([=] (const TErrorOr<bool>& result) {
         if (!result.IsOK()) {
@@ -755,16 +740,17 @@ void TSupportsAttributes::ExistsAttribute(
         }
         bool exists = result.Value();
         response->set_value(exists);
-        context->SetResponseInfo("Result: %v", exists);
+        context->AnnotateResponse()
+            .With("Result", exists);
         context->Reply();
     }));
 }
 
 void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& newYson, bool force)
 {
-    TCachingPermissionValidator permissionValidator(this, EPermissionCheckScope::This);
+    TCachingAdHocPermissionValidator permissionValidator(this);
 
-    auto* customAttributes = GetCustomAttributes();
+    auto* customAttributes = MutableCustomAttributesOrNull();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
 
     NYPath::TTokenizer tokenizer(path);
@@ -779,7 +765,6 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
 
             // Set custom attributes.
             if (customAttributes) {
-
                 auto modifyPermission = builtinAttributeProvider
                     ? builtinAttributeProvider->GetCustomAttributeModifyPermission()
                     : EPermission::Write;
@@ -927,7 +912,7 @@ void TSupportsAttributes::SetAttribute(
     TRspSet* /*response*/,
     const TCtxSetPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     // Request instances are pooled, and thus are request->values.
     // Check if this pooled string has a small overhead (<= 25%).
@@ -942,9 +927,9 @@ void TSupportsAttributes::SetAttribute(
 
 void TSupportsAttributes::DoRemoveAttribute(const TYPath& path, bool force)
 {
-    TCachingPermissionValidator permissionValidator(this, EPermissionCheckScope::This);
+    TCachingAdHocPermissionValidator permissionValidator(this);
 
-    auto* customAttributes = GetCustomAttributes();
+    auto* customAttributes = MutableCustomAttributesOrNull();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
 
     NYPath::TTokenizer tokenizer(path);
@@ -1068,7 +1053,7 @@ void TSupportsAttributes::RemoveAttribute(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     bool force = request->force();
     DoRemoveAttribute(path, force);
@@ -1099,12 +1084,22 @@ void TSupportsAttributes::SetAttributes(
     }
 }
 
-IAttributeDictionary* TSupportsAttributes::GetCombinedAttributes()
+const IAttributeDictionary& TSupportsAttributes::CombinedAttributes() const
+{
+    return *CombinedAttributes_;
+}
+
+IAttributeDictionary* TSupportsAttributes::MutableCombinedAttributes()
 {
     return CombinedAttributes_.Get();
 }
 
-IAttributeDictionary* TSupportsAttributes::GetCustomAttributes()
+const IAttributeDictionary& TSupportsAttributes::CustomAttributes() const
+{
+    return EmptyAttributes();
+}
+
+IAttributeDictionary* TSupportsAttributes::MutableCustomAttributesOrNull()
 {
     return nullptr;
 }
@@ -1123,7 +1118,7 @@ bool TSupportsAttributes::GuardedGetBuiltinAttribute(TInternedAttributeKey key, 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error getting builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1136,7 +1131,7 @@ bool TSupportsAttributes::GuardedSetBuiltinAttribute(TInternedAttributeKey key, 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error setting builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1149,7 +1144,7 @@ bool TSupportsAttributes::GuardedRemoveBuiltinAttribute(TInternedAttributeKey ke
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error removing builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1186,7 +1181,7 @@ const THashSet<TInternedAttributeKey>& TSystemBuiltinAttributeKeysCache::GetBuil
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const THashSet<TString>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys(
+const THashSet<std::string>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys(
     ISystemAttributeProvider* provider)
 {
     if (!Initialized_) {
@@ -1210,7 +1205,7 @@ const THashSet<TString>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const THashSet<TString>& TOpaqueAttributeKeysCache::GetOpaqueAttributeKeys(
+const THashSet<std::string>& TOpaqueAttributeKeysCache::GetOpaqueAttributeKeys(
     ISystemAttributeProvider* provider)
 {
     if (!Initialized_) {
@@ -1286,10 +1281,10 @@ class TNodeSetter
 #define END_SETTER() \
     };
 
-BEGIN_SETTER(String, TString)
+BEGIN_SETTER(String, std::string)
     void OnMyStringScalar(TStringBuf value) override
     {
-        Node_->SetValue(TString(value));
+        Node_->SetValue(std::string(value));
     }
 END_SETTER()
 
@@ -1364,10 +1359,10 @@ private:
         YT_VERIFY(TreeBuilder_);
 
         TreeBuilder_->BeginTree();
-        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this, TString(key)));
+        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this, std::string(key)));
     }
 
-    void OnForwardingFinished(TString itemKey)
+    void OnForwardingFinished(std::string itemKey)
     {
         if (!Map_->AddChild(itemKey, TreeBuilder_->EndTree())) {
             THROW_ERROR_EXCEPTION("Duplicate key %Qv", itemKey);
@@ -1467,7 +1462,7 @@ private:
         AttributeWriter_.reset(new TBufferedBinaryYsonWriter(&AttributeStream_));
         Forward(
             AttributeWriter_.get(),
-            [this, key = TString(key)] {
+            [this, key = std::string(key)] {
                 AttributeWriter_->Flush();
                 AttributeWriter_.reset();
                 Attributes_->SetYson(key, TYsonString(AttributeStream_.Str()));
@@ -1658,17 +1653,19 @@ protected:
 
         delimitedBuilder->AppendFormat("Retry: %v", IsRetry());
 
-        for (const auto& info : RequestInfos_){
-            delimitedBuilder->AppendString(info);
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
         }
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(RequestInfoAnnotation, logMessage);
+            traceContext->AddTag(RequestAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
 
         Timer_.emplace();
+
+        RequestAnnotationState_ = ERequestAnnotationState::Flushed;
     }
 
     void LogResponse() override
@@ -1701,8 +1698,8 @@ protected:
                 usage.ResultSize);
         }
 
-        for (const auto& info : ResponseInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         if (Timer_) {
@@ -1713,7 +1710,7 @@ protected:
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(ResponseInfoAnnotation, logMessage);
+            traceContext->AddTag(ResponseAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
     }

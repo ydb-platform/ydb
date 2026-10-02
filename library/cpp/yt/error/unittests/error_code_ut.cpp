@@ -40,10 +40,9 @@ namespace NInternalLittleWorld {
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_ERROR_ENUM(
-    ((A) (-1))
-    ((B) (-2))
-    ((C) (-3))
-    ((D) (-4))
+    ((A) (-2))
+    ((B) (-3))
+    ((C) (-4))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -61,7 +60,7 @@ YT_DEFINE_ERROR_ENUM(
     ((Kukarek) (-2007))
 );
 
-TString TestErrorCodeFormatter(int code)
+std::string TestErrorCodeFormatter(int code)
 {
     return Format("formatted%v", code);
 }
@@ -74,7 +73,7 @@ DEFINE_ENUM(EDifferentTestErrorCode,
     ((ErrorNumberThree) (-10002))
 );
 
-TString DifferentTestErrorCodeFormatter(int code)
+std::string DifferentTestErrorCodeFormatter(int code)
 {
     return TEnumTraits<EDifferentTestErrorCode>::ToString(static_cast<EDifferentTestErrorCode>(code));
 }
@@ -94,7 +93,7 @@ TEST(TErrorCodeRegistryTest, Basic)
 #endif
     EXPECT_EQ(
         TErrorCodeRegistry::Get()->Get(-3),
-        (TErrorCodeRegistry::TErrorCodeInfo{"NYT::NInternalLittleWorld", "C"}));
+        (TErrorCodeRegistry::TErrorCodeInfo{"NYT::NInternalLittleWorld", "B"}));
     EXPECT_EQ(
         TErrorCodeRegistry::Get()->Get(-33),
         (TErrorCodeRegistry::TErrorCodeInfo{"NExternalWorld", "Z"}));

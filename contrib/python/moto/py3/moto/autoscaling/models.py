@@ -8,8 +8,8 @@ from moto.packages.boto.ec2.blockdevicemapping import (
 from moto.ec2.exceptions import InvalidInstanceIdError
 
 from collections import OrderedDict
-from moto.core import BaseBackend, BaseModel, CloudFormationModel
-from moto.core.utils import camelcase_to_underscores, BackendDict
+from moto.core import BaseBackend, BackendDict, BaseModel, CloudFormationModel
+from moto.core.utils import camelcase_to_underscores
 from moto.ec2 import ec2_backends
 from moto.ec2.models import EC2Backend
 from moto.ec2.models.instances import Instance
@@ -30,7 +30,7 @@ DEFAULT_COOLDOWN = 300
 ASG_NAME_TAG = "aws:autoscaling:groupName"
 
 
-class InstanceState(object):
+class InstanceState:
     def __init__(
         self,
         instance: "Instance",
@@ -174,13 +174,14 @@ class FakeLaunchConfiguration(CloudFormationModel):
     def create_from_instance(
         cls, name: str, instance: Instance, backend: "AutoScalingBackend"
     ) -> "FakeLaunchConfiguration":
+        security_group_names = [sg.name for sg in instance.security_groups]
         config = backend.create_launch_configuration(
             name=name,
             image_id=instance.image_id,
             kernel_id="",
             ramdisk_id="",
             key_name=instance.key_name,
-            security_groups=instance.security_groups,
+            security_groups=security_group_names,
             user_data=instance.user_data,
             instance_type=instance.instance_type,
             instance_monitoring=False,
@@ -381,6 +382,20 @@ def set_string_propagate_at_launch_booleans_on_tags(
     return tags
 
 
+class FakeWarmPool(CloudFormationModel):
+    def __init__(
+        self,
+        max_capacity: Optional[int],
+        min_size: Optional[int],
+        pool_state: Optional[str],
+        instance_reuse_policy: Optional[Dict[str, bool]],
+    ):
+        self.max_capacity = max_capacity
+        self.min_size = min_size or 0
+        self.pool_state = pool_state or "Stopped"
+        self.instance_reuse_policy = instance_reuse_policy
+
+
 class FakeAutoScalingGroup(CloudFormationModel):
     def __init__(
         self,
@@ -398,7 +413,7 @@ class FakeAutoScalingGroup(CloudFormationModel):
         load_balancers: List[str],
         target_group_arns: List[str],
         placement_group: str,
-        termination_policies: str,
+        termination_policies: List[str],
         autoscaling_backend: "AutoScalingBackend",
         ec2_backend: EC2Backend,
         tags: List[Dict[str, str]],
@@ -448,6 +463,7 @@ class FakeAutoScalingGroup(CloudFormationModel):
         self.set_desired_capacity(desired_capacity)
 
         self.metrics: List[str] = []
+        self.warm_pool: Optional[FakeWarmPool] = None
 
     @property
     def tags(self) -> List[Dict[str, str]]:
@@ -483,7 +499,7 @@ class FakeAutoScalingGroup(CloudFormationModel):
         if vpc_zone_identifier:
             # extract azs for vpcs
             subnet_ids = vpc_zone_identifier.split(",")
-            subnets = self.autoscaling_backend.ec2_backend.get_all_subnets(
+            subnets = self.autoscaling_backend.ec2_backend.describe_subnets(
                 subnet_ids=subnet_ids
             )
             vpc_zones = [subnet.availability_zone for subnet in subnets]
@@ -521,9 +537,13 @@ class FakeAutoScalingGroup(CloudFormationModel):
             if launch_template:
                 launch_template_id = launch_template.get("launch_template_id")
                 launch_template_name = launch_template.get("launch_template_name")
+                # If no version is specified, AWS will use '$Default'
+                # However, AWS will never show the version if it is not specified
+                # (If the user explicitly specifies '$Default', it will be returned)
                 self.launch_template_version = (
                     launch_template.get("version") or "$Default"
                 )
+                self.provided_launch_template_version = launch_template.get("version")
             elif mixed_instance_policy:
                 spec = mixed_instance_policy["LaunchTemplate"][
                     "LaunchTemplateSpecification"
@@ -810,6 +830,23 @@ class FakeAutoScalingGroup(CloudFormationModel):
     def enable_metrics_collection(self, metrics: List[str]) -> None:
         self.metrics = metrics or []
 
+    def put_warm_pool(
+        self,
+        max_capacity: Optional[int],
+        min_size: Optional[int],
+        pool_state: Optional[str],
+        instance_reuse_policy: Optional[Dict[str, bool]],
+    ) -> None:
+        self.warm_pool = FakeWarmPool(
+            max_capacity=max_capacity,
+            min_size=min_size,
+            pool_state=pool_state,
+            instance_reuse_policy=instance_reuse_policy,
+        )
+
+    def get_warm_pool(self) -> Optional[FakeWarmPool]:
+        return self.warm_pool
+
 
 class AutoScalingBackend(BaseBackend):
     def __init__(self, region_name: str, account_id: str):
@@ -824,7 +861,7 @@ class AutoScalingBackend(BaseBackend):
         self.elbv2_backend: ELBv2Backend = elbv2_backends[self.account_id][region_name]
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region: str, zones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:  # type: ignore[misc]
+    def default_vpc_endpoint_service(service_region: str, zones: List[str]) -> List[Dict[str, Any]]:  # type: ignore[misc]
         """Default VPC endpoint service."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "autoscaling"
@@ -980,7 +1017,7 @@ class AutoScalingBackend(BaseBackend):
         load_balancers: List[str],
         target_group_arns: List[str],
         placement_group: str,
-        termination_policies: str,
+        termination_policies: List[str],
         tags: List[Dict[str, str]],
         capacity_rebalance: bool = False,
         new_instances_protected_from_scale_in: bool = False,
@@ -1219,11 +1256,11 @@ class AutoScalingBackend(BaseBackend):
     ) -> FakeLifeCycleHook:
         lifecycle_hook = FakeLifeCycleHook(name, as_name, transition, timeout, result)
 
-        self.lifecycle_hooks["%s_%s" % (as_name, name)] = lifecycle_hook
+        self.lifecycle_hooks[f"{as_name}_{name}"] = lifecycle_hook
         return lifecycle_hook
 
     def describe_lifecycle_hooks(
-        self, as_name: str, lifecycle_hook_names: Optional[str] = None
+        self, as_name: str, lifecycle_hook_names: Optional[List[str]] = None
     ) -> List[FakeLifeCycleHook]:
         return [
             lifecycle_hook
@@ -1235,7 +1272,7 @@ class AutoScalingBackend(BaseBackend):
         ]
 
     def delete_lifecycle_hook(self, as_name: str, name: str) -> None:
-        self.lifecycle_hooks.pop("%s_%s" % (as_name, name), None)
+        self.lifecycle_hooks.pop(f"{as_name}_{name}", None)
 
     def put_scaling_policy(
         self,
@@ -1540,6 +1577,33 @@ class AutoScalingBackend(BaseBackend):
     def enable_metrics_collection(self, group_name: str, metrics: List[str]) -> None:
         group = self.describe_auto_scaling_groups([group_name])[0]
         group.enable_metrics_collection(metrics)
+
+    def put_warm_pool(
+        self,
+        group_name: str,
+        max_capacity: Optional[int],
+        min_size: Optional[int],
+        pool_state: Optional[str],
+        instance_reuse_policy: Optional[Dict[str, bool]],
+    ) -> None:
+        group = self.describe_auto_scaling_groups([group_name])[0]
+        group.put_warm_pool(
+            max_capacity=max_capacity,
+            min_size=min_size,
+            pool_state=pool_state,
+            instance_reuse_policy=instance_reuse_policy,
+        )
+
+    def describe_warm_pool(self, group_name: str) -> Optional[FakeWarmPool]:
+        """
+        Pagination is not yet implemented. Does not create/return any Instances currently.
+        """
+        group = self.describe_auto_scaling_groups([group_name])[0]
+        return group.get_warm_pool()
+
+    def delete_warm_pool(self, group_name: str) -> None:
+        group = self.describe_auto_scaling_groups([group_name])[0]
+        group.warm_pool = None
 
 
 autoscaling_backends = BackendDict(AutoScalingBackend, "autoscaling")

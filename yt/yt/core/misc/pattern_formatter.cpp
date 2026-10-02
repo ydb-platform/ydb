@@ -8,20 +8,21 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const char Dollar = '$';
-static const char LeftParen = '(';
-static const char RightParen = ')';
+constexpr char Dollar = '$';
+constexpr char LeftParen = '(';
+constexpr char RightParen = ')';
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TPatternFormatter::AddProperty(const TString& name, const TString& value)
+TPatternFormatter& TPatternFormatter::SetProperty(std::string name, std::string value)
 {
-    PropertyMap[name] = value;
+    PropertyMap_[std::move(name)] = std::move(value);
+    return *this;
 }
 
-TString TPatternFormatter::Format(const TString& pattern)
+std::string TPatternFormatter::Format(TStringBuf pattern)
 {
-    TString result;
+    std::string result;
 
     for (size_t pos = 0; pos < pattern.size(); ++pos) {
         if (pattern[pos] == Dollar && (pos + 1 < pattern.size() && pattern[pos + 1] == LeftParen)) {
@@ -32,10 +33,9 @@ TString TPatternFormatter::Format(const TString& pattern)
             }
 
             if (right < pattern.size()) {
-                auto property = pattern.substr(left, right - left);
-
-                auto it = PropertyMap.find(property);
-                if (it != PropertyMap.end()) {
+                auto propertyName = std::string(pattern.substr(left, right - left));
+                auto it = PropertyMap_.find(propertyName);
+                if (it != PropertyMap_.end()) {
                     result.append(it->second);
                     pos = right;
                     continue;
@@ -43,7 +43,7 @@ TString TPatternFormatter::Format(const TString& pattern)
             }
         }
 
-        result.append(pattern[pos]);
+        result.push_back(pattern[pos]);
     }
 
     return result;

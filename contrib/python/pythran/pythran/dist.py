@@ -15,18 +15,11 @@ except ImportError:
 import os.path
 import os
 import re
+import sys
 
-try:
-    from distutils.command.build_ext import build_ext as LegacyBuildExt
-except ImportError:
-    from setuptools.command.build_ext import build_ext as LegacyBuildExt
 
-try:
-    # `numpy.distutils` is deprecated, and won't be present on Python >=3.12
-    # If it is installed, we need to use it though, so try-import it:
-    from numpy.distutils.extension import Extension
-except ImportError:
-    from setuptools.extension import Extension
+from setuptools.command.build_ext import build_ext as LegacyBuildExt
+from setuptools.extension import Extension
 
 
 
@@ -60,9 +53,11 @@ class PythranBuildExtMixIn(object):
                 'preprocessor': None,
                 'compiler_cxx': None,
                 'compiler_so': None,
+                'compiler_so_cxx': None,
                 'compiler': None,
                 'linker_exe': None,
                 'linker_so': None,
+                'linker_so_cxx': None,
                 # Windows-like
                 'cc': None,
         }
@@ -72,7 +67,6 @@ class PythranBuildExtMixIn(object):
                 prev[key] = get_value(self.compiler, key)
             else:
                 del prev[key]
-
         # try hard to modify the compiler
         if getattr(ext, 'cxx', None) is not None:
             for comp in prev:
@@ -83,6 +77,8 @@ class PythranBuildExtMixIn(object):
         if getattr(ext, 'cc', None) is not None:
             try:
                 import distutils._msvccompiler as msvc
+                if not hasattr(msvc, "_find_exe"):
+                    msvc = msvc.msvc
                 # install hook
                 find_exe = msvc._find_exe
 
@@ -92,7 +88,7 @@ class PythranBuildExtMixIn(object):
                     return find_exe(exe, *args, **kwargs)
 
                 msvc._find_exe = _find_exe
-            except ImportError:
+            except (AttributeError, ImportError) as e:
                 pass
 
         # In general, distutils uses -Wstrict-prototypes, but this option
@@ -175,7 +171,6 @@ class PythranExtension(Extension):
             # Inserting at head so that user-specified config in CLI takes
             # precedence.
             kwargs['config'] = ['compiler.blas=none'] + kwargs.get('config', [])
-
         cfg_ext = cfg.make_extension(python=True, **kwargs)
         self.cxx = cfg_ext.pop('cxx', None)
         self.cc = cfg_ext.pop('cc', None)

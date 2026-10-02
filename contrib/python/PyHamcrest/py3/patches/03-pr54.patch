@@ -1,0 +1,42 @@
+From 178dba673b36e36ca4257ecc8f0590b81334775c Mon Sep 17 00:00:00 2001
+From: "mouad.benchchaoui@deliveryhero.com" <mouadino@gmail.com>
+Date: Mon, 11 May 2015 15:28:54 +0200
+Subject: [PATCH] Make instance_of work with tuple like isinstance and
+ unittest's assertIsInstance
+
+---
+ hamcrest/core/core/isinstanceof.py             | 11 ++++++++---
+ hamcrest/core/helpers/wrap_matcher.py          |  3 +++
+ tests/hamcrest_unit_test/core/isinstanceof_test.py |  3 +++
+ 3 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/hamcrest/core/core/isinstanceof.py b/hamcrest/core/core/isinstanceof.py
+index c96fdf31..f8eb4a2f 100644
+--- a/hamcrest/core/core/isinstanceof.py
++++ b/hamcrest/core/core/isinstanceof.py
+@@ -11,1 +11,1 @@ class IsInstanceOf(BaseMatcher):
+-            raise TypeError("IsInstanceOf requires type")
++            raise TypeError("IsInstanceOf requires type or a tuple of classes and types")
+@@ -15,1 +15,5 @@ class IsInstanceOf(BaseMatcher):
+-        description.append_text("an instance of ").append_text(self.expected_type.__name__)
++        try:
++            type_description = self.expected_type.__name__
++        except AttributeError:
++            type_description = "one of %s" % ",".join(str(e) for e in self.expected_type)
++        description.append_text("an instance of ").append_text(type_description)
+@@ -25,1 +25,2 @@ class IsInstanceOf(BaseMatcher):
+-    :param atype: The type to compare against as the expected type.
++    :param atype: The type to compare against as the expected type or a tuple
++        of types.
+diff --git a/hamcrest/core/helpers/wrap_matcher.py b/hamcrest/core/helpers/wrap_matcher.py
+index 1ec9ab58..587ae4c6 100644
+--- a/hamcrest/core/helpers/wrap_matcher.py
++++ b/hamcrest/core/helpers/wrap_matcher.py
+@@ -28,4 +28,7 @@ def is_matchable_type(expected_type):
+     if isinstance(expected_type, six.class_types):
+         return True
+ 
++    if isinstance(expected_type, tuple) and all(map(is_matchable_type, expected_type)):
++        return True
++
+     return False

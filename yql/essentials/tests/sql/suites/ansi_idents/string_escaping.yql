@@ -1,0 +1,2 @@
+--!ansi_lexer
+select '\', '', 'foo''bar', '''baz';

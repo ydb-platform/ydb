@@ -3,6 +3,12 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/abstract/initialization.h>
 
+namespace NKikimr::NPQ {
+    // TTL for SourceId mapping rows in TopicPartitionsMapping table (16 days = 1382400 seconds)
+    constexpr TDuration SourceIdMappingTtl = TDuration::Days(16);
+
+}
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using TInitBehaviourPtr = std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour>;

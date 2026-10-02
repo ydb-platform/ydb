@@ -1,16 +1,12 @@
 #include "connection_impl.h"
-#include "discovery_service_proxy.h"
 #include "connection_impl.h"
 #include "client_impl.h"
 #include "config.h"
-#include "helpers.h"
-#include "private.h"
 
 #include <yt/yt/core/net/local_address.h>
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
-#include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
@@ -27,6 +23,7 @@
 #include <yt/yt/core/rpc/roaming_channel.h>
 #include <yt/yt/core/rpc/caching_channel_factory.h>
 #include <yt/yt/core/rpc/dynamic_channel_pool.h>
+#include <yt/yt/core/rpc/dynamic_channel_pool_provider.h>
 #include <yt/yt/core/rpc/dispatcher.h>
 #include <yt/yt/core/rpc/peer_discovery.h>
 
@@ -41,6 +38,7 @@
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NBus;
+using namespace NBus::NTcp;
 using namespace NRpc;
 using namespace NNet;
 using namespace NHttp;
@@ -58,7 +56,7 @@ static const std::string ProxyUrlCanonicalSuffix = ".yt.yandex.net";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& envConfig)
+THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const std::string& envConfig)
 {
     if (envConfig.empty()) {
         return {};
@@ -66,24 +64,30 @@ THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& env
     return ConvertTo<THashMap<std::string, std::string>>(TYsonString(envConfig));
 }
 
-void ApplyProxyUrlAliasingRules(std::string& url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
+void ApplyProxyUrlAliasingRules(std::string& url, const THashMap<std::string, std::string>& proxyUrlAliasingRules)
 {
     static const auto rulesFromEnv = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
 
-    const auto& rules = proxyUrlAliasingRules.value_or(rulesFromEnv);
+    auto lookup = [&](const auto& rules) {
+        if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
+            url = ruleIt->second;
+        }
+    };
 
-    if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
-        url = ruleIt->second;
+    if (proxyUrlAliasingRules) {
+        lookup(proxyUrlAliasingRules);
+    } else if (rulesFromEnv) {
+        lookup(rulesFromEnv);
     }
 }
 
-std::string NormalizeHttpProxyUrl(std::string url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
+std::string NormalizeHttpProxyUrl(std::string url, const THashMap<std::string, std::string>& proxyUrlAliasingRules)
 {
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
-    if (url.find('.') == TString::npos &&
-        url.find(':') == TString::npos &&
-        url.find("localhost") == TString::npos)
+    if (url.find('.') == std::string::npos &&
+        url.find(':') == std::string::npos &&
+        url.find("localhost") == std::string::npos)
     {
         url.append(ProxyUrlCanonicalSuffix);
     }
@@ -102,43 +106,47 @@ bool IsProxyUrlSecure(const std::string& url)
     return url.starts_with(ProxyUrlCanonicalHttpsPrefix);
 }
 
-std::string MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
+NLogging::TLoggingTagList MakeConnectionLoggingTags(const TConnectionConfigPtr& config, TGuid connectionId)
 {
-    TStringBuilder builder;
-    TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
+    NLogging::TLoggingTagList tags;
     if (config->ClusterUrl) {
-        delimitedBuilder->AppendFormat("ClusterUrl: %v", *config->ClusterUrl);
+        tags.Add("ClusterUrl", *config->ClusterUrl);
     }
     if (config->ProxyRole) {
-        delimitedBuilder->AppendFormat("ProxyRole: %v", *config->ProxyRole);
+        tags.Add("ProxyRole", *config->ProxyRole);
     }
-    delimitedBuilder->AppendFormat("ConnectionId: %v", connectionId);
-    return builder.Flush();
+    tags.Add("ConnectionId", connectionId);
+    return tags;
 }
 
-TString MakeEndpointDescription(const TConnectionConfigPtr& config, TGuid connectionId)
+std::string MakeEndpointDescription(const TConnectionConfigPtr& config, TGuid connectionId)
 {
-    return Format("Rpc{%v}", MakeConnectionLoggingTag(config, connectionId));
+    return Format("Rpc{%v}", MakeConnectionLoggingTags(config, connectionId));
+}
+
+IAttributeDictionaryPtr MakeErrorAttributes(const TConnectionConfigPtr& config)
+{
+    auto attributes = CreateEphemeralAttributes();
+    if (config->ProxyEndpoints) {
+        attributes->Set("endpoint_set_cluster", config->ProxyEndpoints->Cluster);
+        attributes->Set("endpoint_set_id", config->ProxyEndpoints->EndpointSetId);
+    }
+    if (config->ClusterUrl) {
+        attributes->Set("cluster_url", config->ClusterUrl);
+    }
+    attributes->Set("proxy_role", config->ProxyRole.value_or(DefaultRpcProxyRole));
+    return attributes;
 }
 
 IAttributeDictionaryPtr MakeEndpointAttributes(const TConnectionConfigPtr& config, TGuid connectionId)
 {
-    return ConvertToAttributes(BuildYsonStringFluently()
-        .BeginMap()
-            .Item("rpc_proxy").Value(true)
-            .DoIf(config->ClusterUrl.has_value(), [&] (auto fluent) {
-                fluent
-                    .Item("cluster_url").Value(*config->ClusterUrl);
-            })
-            .DoIf(config->ProxyRole.has_value(), [&] (auto fluent) {
-                fluent
-                    .Item("proxy_role").Value(*config->ProxyRole);
-            })
-            .Item("connection_id").Value(connectionId)
-        .EndMap());
+    auto attributes = MakeErrorAttributes(config);
+    attributes->Set("rpc_proxy", true);
+    attributes->Set("connection_id", connectionId);
+    return attributes;
 }
 
-TString MakeConnectionClusterId(const TConnectionConfigPtr& config)
+std::string MakeConnectionClusterId(const TConnectionConfigPtr& config)
 {
     if (config->ClusterName) {
         return Format("Rpc(Name=%v)", *config->ClusterName);
@@ -148,69 +156,6 @@ TString MakeConnectionClusterId(const TConnectionConfigPtr& config)
         return Format("Rpc(ProxyAddresses=%v)", config->ProxyAddresses);
     }
 }
-
-class TProxyChannelProvider
-    : public IRoamingChannelProvider
-{
-public:
-    TProxyChannelProvider(
-        TConnectionConfigPtr config,
-        TGuid connectionId,
-        TDynamicChannelPoolPtr pool,
-        bool sticky)
-        : Pool_(std::move(pool))
-        , Sticky_(sticky)
-        , EndpointDescription_(MakeEndpointDescription(config, connectionId))
-        , EndpointAttributes_(MakeEndpointAttributes(config, connectionId))
-    { }
-
-    const std::string& GetEndpointDescription() const override
-    {
-        return EndpointDescription_;
-    }
-
-    const NYTree::IAttributeDictionary& GetEndpointAttributes() const override
-    {
-        return *EndpointAttributes_;
-    }
-
-    TFuture<IChannelPtr> GetChannel() override
-    {
-        if (Sticky_) {
-            auto guard = Guard(SpinLock_);
-            if (!Channel_) {
-                Channel_ = Pool_->GetRandomChannel();
-            }
-            return Channel_;
-        } else {
-            return Pool_->GetRandomChannel();
-        }
-    }
-
-    void Terminate(const TError& /*error*/) override
-    { }
-
-    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
-    {
-        return GetChannel();
-    }
-
-    TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
-    {
-        return GetChannel();
-    }
-
-private:
-    const TDynamicChannelPoolPtr Pool_;
-    const bool Sticky_;
-    const TGuid ConnectionId_;
-
-    const std::string EndpointDescription_;
-    const IAttributeDictionaryPtr EndpointAttributes_;
-
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TFuture<IChannelPtr> Channel_;
-};
 
 TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr config)
 {
@@ -226,9 +171,9 @@ TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr conf
 TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options)
     : Config_(GetPostprocessedConfigAndValidate(std::move(config)))
     , ConnectionId_(TGuid::Create())
-    , LoggingTag_(MakeConnectionLoggingTag(Config_, ConnectionId_))
+    , LoggingTags_(MakeConnectionLoggingTags(Config_, ConnectionId_))
     , ClusterId_(MakeConnectionClusterId(Config_))
-    , Logger(RpcProxyClientLogger().WithRawTag(LoggingTag_))
+    , Logger(RpcProxyClientLogger().WithTags(LoggingTags_))
     , ChannelFactory_(Config_->ProxyUnixDomainSocket
         ? NRpc::NBus::CreateUdsBusChannelFactory(Config_->BusClient)
         : NRpc::NBus::CreateTcpBusChannelFactory(Config_->BusClient))
@@ -242,27 +187,20 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         MakeEndpointAttributes(Config_, ConnectionId_),
         TApiServiceProxy::GetDescriptor().ServiceName,
         CreateDefaultPeerDiscovery()))
+    , ActionQueue_(options.ConnectionInvoker ? nullptr : New<TActionQueue>("RpcProxyConn"))
+    , ConnectionInvoker_(options.ConnectionInvoker ? options.ConnectionInvoker : ActionQueue_->GetInvoker())
+    , UpdateProxyListBackoffStrategy_(TExponentialBackoffOptions{
+        .InvocationCount = std::numeric_limits<int>::max(),
+        .MinBackoff = Config_->ProxyListRetryPeriod,
+        .MaxBackoff = Config_->MaxProxyListRetryPeriod,
+    })
+    , ServiceDiscovery_(Config_->EnableProxyDiscovery && Config_->ProxyEndpoints
+        ? NRpc::TDispatcher::Get()->GetServiceDiscovery()
+        : nullptr)
 {
-    if (options.ConnectionInvoker) {
-        ConnectionInvoker_ = options.ConnectionInvoker;
-    } else {
-        ActionQueue_ = New<TActionQueue>("RpcProxyConn");
-        ConnectionInvoker_ = ActionQueue_->GetInvoker();
-    }
-
-    if (Config_->EnableProxyDiscovery) {
-        UpdateProxyListExecutor_ = New<TPeriodicExecutor>(
-            GetInvoker(),
-            BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
-            TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod));
-    }
-
-    if (Config_->EnableProxyDiscovery && Config_->ProxyEndpoints) {
-        ServiceDiscovery_ = NRpc::TDispatcher::Get()->GetServiceDiscovery();
-        if (!ServiceDiscovery_) {
-            ChannelPool_->SetPeerDiscoveryError(TError("No Service Discovery is configured"));
-            return;
-        }
+    if (Config_->EnableProxyDiscovery && Config_->ProxyEndpoints && !ServiceDiscovery_) {
+        ChannelPool_->SetPeerDiscoveryError(TError("No Service Discovery is configured"));
+        return;
     }
 
     if (Config_->ProxyAddresses) {
@@ -283,11 +221,19 @@ TConnection::~TConnection()
 
 IChannelPtr TConnection::CreateChannel(bool sticky)
 {
-    auto provider = New<TProxyChannelProvider>(
-        Config_,
-        ConnectionId_,
-        ChannelPool_,
-        sticky);
+    auto endpointDescription = MakeEndpointDescription(Config_, ConnectionId_);
+    auto endpointAttributes = MakeEndpointAttributes(Config_, ConnectionId_);
+
+    auto provider = sticky
+        ? CreateStickyDynamicChannelPoolProvider(
+            ChannelPool_,
+            std::move(endpointDescription),
+            std::move(endpointAttributes))
+        : CreateDynamicChannelPoolProvider(
+            ChannelPool_,
+            std::move(endpointDescription),
+            std::move(endpointAttributes));
+
     return CreateRoamingChannel(std::move(provider));
 }
 
@@ -303,12 +249,12 @@ TClusterTag TConnection::GetClusterTag() const
     return *Config_->ClusterTag;
 }
 
-const std::string& TConnection::GetLoggingTag() const
+const NLogging::TLoggingTagList& TConnection::GetLoggingTags() const
 {
-    return LoggingTag_;
+    return LoggingTags_;
 }
 
-const TString& TConnection::GetClusterId() const
+const std::string& TConnection::GetClusterId() const
 {
     return ClusterId_;
 }
@@ -316,6 +262,12 @@ const TString& TConnection::GetClusterId() const
 const std::optional<std::string>& TConnection::GetClusterName() const
 {
     return Config_->ClusterName;
+}
+
+const std::optional<NAuth::TTvmId>& TConnection::GetTvmId() const
+{
+    static std::optional<NAuth::TTvmId> TvmId_;
+    return TvmId_;
 }
 
 bool TConnection::IsSameCluster(const IConnectionPtr& other) const
@@ -337,7 +289,9 @@ NApi::IClientPtr TConnection::CreateClient(const TClientOptions& options)
     }
 
     if (Config_->EnableProxyDiscovery && (Config_->ClusterUrl || Config_->ProxyEndpoints)) {
-        UpdateProxyListExecutor_->Start();
+        if (!ProxyListUpdateStarted_.exchange(true)) {
+            ScheduleProxyListUpdate(TDuration::Zero());
+        }
     }
 
     return New<TClient>(this, options);
@@ -355,17 +309,16 @@ void TConnection::ClearMetadataCaches()
 
 void TConnection::Terminate()
 {
-    YT_LOG_DEBUG("Terminating connection");
-    Terminated_ = true;
-    ChannelPool_->Terminate(TError("Connection terminated"));
-    if (Config_->EnableProxyDiscovery) {
-        YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    YT_TLOG_DEBUG("Terminating connection");
+    if (Terminated_.exchange(true)) {
+        return;
     }
+    ChannelPool_->Terminate(TError("Connection terminated"));
 }
 
 bool TConnection::IsTerminated() const
 {
-    return Terminated_;
+    return Terminated_.load();
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()
@@ -378,12 +331,13 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
     auto correlationId = TGuid::Create();
 
     try {
-        YT_LOG_DEBUG("Updating proxy list via HTTP (CorrelationId: %v)", correlationId);
+        YT_TLOG_DEBUG("Updating proxy list via HTTP")
+            .With("CorrelationId", correlationId);
 
-        auto poller = TTcpDispatcher::Get()->GetXferPoller();
+        auto poller = NYT::NBus::NTcp::TDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
-        if (auto token = DiscoveryToken_.Load()) {
+        if (auto token = DiscoveryToken_.Load(); !token.empty()) {
             headers->Add("Authorization", "OAuth " + token);
         }
         headers->Add("X-YT-Correlation-Id", ToString(correlationId));
@@ -402,37 +356,39 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
                     .OptionalItem("network_name", Config_->ProxyNetworkName)
                 .EndMap().ToString());
 
-        auto url = NormalizeHttpProxyUrl(*Config_->ClusterUrl) + "/api/v4/discover_proxies";
-        auto client = IsProxyUrlSecure(*Config_->ClusterUrl)
+        auto url = NormalizeHttpProxyUrl(
+            *Config_->ClusterUrl,
+            Config_->ProxyUrlAliasingRules) + "/api/v4/discover_proxies";
+        auto client = IsProxyUrlSecure(url)
             ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
             : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
-        // TODO(babenko): switch to std::string
-        auto rsp = WaitFor(client->Get(TString(url), headers))
+        auto rsp = WaitFor(client->Get(url, headers))
             .ValueOrThrow();
 
         if (rsp->GetStatusCode() != EStatusCode::OK) {
             THROW_ERROR_EXCEPTION("HTTP proxy discovery request returned an error")
-                << TErrorAttribute("correlation_id", correlationId)
-                << TErrorAttribute("status_code", rsp->GetStatusCode())
-                << ParseYTError(rsp);
+                .With("correlation_id", correlationId)
+                .With("status_code", rsp->GetStatusCode())
+                .With(ParseYTError(rsp));
         }
 
         auto body = rsp->ReadAll();
-        YT_LOG_DEBUG("Received proxy list via HTTP (CorrelationId: %v)", correlationId);
+        YT_TLOG_DEBUG("Received proxy list via HTTP")
+            .With("CorrelationId", correlationId);
 
         auto node = ConvertTo<INodePtr>(TYsonString(ToString(body)));
         node = node->AsMap()->FindChild("proxies");
         return ConvertTo<std::vector<std::string>>(node);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error discovering RPC proxies via HTTP")
-            << TErrorAttribute("correlation_id", correlationId)
-            << ex;
+            .With("correlation_id", correlationId)
+            .With(ex);
     }
 }
 
 std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
 {
-    YT_LOG_DEBUG("Updating proxy list via Service Discovery");
+    YT_TLOG_DEBUG("Updating proxy list via Service Discovery");
 
     if (!ServiceDiscovery_) {
         THROW_ERROR_EXCEPTION("No service discovery configured");
@@ -455,11 +411,10 @@ std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
     for (int i = 0; i < std::ssize(endpointSets); ++i) {
         if (!endpointSets[i].IsOK()) {
             errors.push_back(endpointSets[i]);
-            YT_LOG_WARNING(
-                endpointSets[i],
-                "Could not resolve endpoints from cluster (Cluster: %v, EndpointSetId: %v)",
-                clusters[i],
-                Config_->ProxyEndpoints->EndpointSetId);
+            YT_TLOG_WARNING("Could not resolve endpoints from cluster")
+                .With("Cluster", clusters[i])
+                .With("EndpointSetId", Config_->ProxyEndpoints->EndpointSetId)
+                .With(endpointSets[i]);
             continue;
         }
 
@@ -468,63 +423,62 @@ std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
     }
 
     if (errors.size() == endpointSets.size()) {
-        THROW_ERROR_EXCEPTION("Error discovering RPC proxies via Service Discovery") << errors;
+        THROW_ERROR_EXCEPTION("Error discovering RPC proxies via Service Discovery").With(errors);
     }
 
     return allAddresses;
 }
 
+void TConnection::ScheduleProxyListUpdate(TDuration delay)
+{
+    TDelayedExecutor::Submit(
+        BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
+        delay,
+        GetInvoker());
+}
+
 void TConnection::OnProxyListUpdate()
 {
-    auto attributes = CreateEphemeralAttributes();
-    if (Config_->ProxyEndpoints) {
-        attributes->Set("endpoint_set_cluster", Config_->ProxyEndpoints->Cluster);
-        attributes->Set("endpoint_set_id", Config_->ProxyEndpoints->EndpointSetId);
-    } else if (Config_->ClusterUrl) {
-        attributes->Set("cluster_url", Config_->ClusterUrl);
-    } else {
-        YT_ABORT();
+    if (Terminated_.load()) {
+        return;
     }
-    attributes->Set("proxy_role", Config_->ProxyRole.value_or(DefaultRpcProxyRole));
 
-    auto backoff = Config_->ProxyListRetryPeriod;
-    for (int attempt = 0;; ++attempt) {
-        try {
-            std::vector<std::string> proxies;
+    try {
+        YT_TLOG_DEBUG("Updating proxy list");
+
+        auto proxies = [&] {
             if (Config_->ProxyEndpoints) {
-                proxies = DiscoverProxiesViaServiceDiscovery();
+                return DiscoverProxiesViaServiceDiscovery();
             } else if (Config_->ClusterUrl) {
-                proxies = DiscoverProxiesViaHttp();
+                return DiscoverProxiesViaHttp();
             } else {
                 YT_ABORT();
             }
+        }();
 
-            if (proxies.empty()) {
-                THROW_ERROR_EXCEPTION("Proxy list is empty");
-            }
-
-            ChannelPool_->SetPeers(proxies);
-
-            break;
-        } catch (const std::exception& ex) {
-            if (attempt > Config_->MaxProxyListUpdateAttempts) {
-                ChannelPool_->SetPeerDiscoveryError(TError(ex) << *attributes);
-            }
-
-            YT_LOG_WARNING(ex, "Error updating proxy list (Attempt: %v, Backoff: %v)",
-                attempt,
-                backoff);
-
-            TDelayedExecutor::WaitForDuration(backoff);
-
-            if (backoff < Config_->MaxProxyListRetryPeriod) {
-                backoff *= 1.2;
-            }
-
-            if (attempt > Config_->MaxProxyListUpdateAttempts) {
-                attempt = 0;
-            }
+        if (proxies.empty()) {
+            THROW_ERROR_EXCEPTION("Proxy list is empty");
         }
+
+        ChannelPool_->SetPeers(proxies);
+
+        UpdateProxyListBackoffStrategy_.Restart();
+
+        ScheduleProxyListUpdate(
+            TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod)
+                .GenerateDelay());
+    } catch (const std::exception& ex) {
+        UpdateProxyListBackoffStrategy_.Next();
+        int attempt = UpdateProxyListBackoffStrategy_.GetInvocationIndex() % Config_->MaxProxyListUpdateAttempts;
+        if (attempt == 0) {
+            ChannelPool_->SetPeerDiscoveryError(TError(ex).With(*MakeErrorAttributes(Config_)));
+        }
+
+        auto backoff = UpdateProxyListBackoffStrategy_.GetBackoff();
+        YT_TLOG_WARNING("Error updating proxy list, backing off and retrying")
+            .With("Backoff", backoff)
+            .With(ex);
+        ScheduleProxyListUpdate(backoff);
     }
 }
 

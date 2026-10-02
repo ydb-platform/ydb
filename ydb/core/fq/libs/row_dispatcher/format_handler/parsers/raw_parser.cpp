@@ -2,10 +2,12 @@
 
 #include "parser_base.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -17,13 +19,15 @@ public:
     using TPtr = TIntrusivePtr<TRawParser>;
 
 public:
-    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, counters)
+    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager)
+        : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters, std::move(memoryQuotaManager), "RawParserAlloc")
         , Schema(schema)
         , LogPrefix("TRawParser: ")
     {}
 
     TStatus InitColumnParser() {
+        NumberOptionals = 0;
+
         auto typeStatus = ParseTypeYson(Schema.TypeYson);
         if (typeStatus.IsFail()) {
             return typeStatus;
@@ -51,7 +55,9 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
+        YDB_LOG_TRACE("Add messages to parse",
+            {"logPrefix", LogPrefix},
+            {"messages", messages.size()});
 
         for (const auto& message : messages) {
             CurrentMessage = message.GetData();
@@ -60,18 +66,38 @@ public:
         }
     }
 
-    const TVector<ui64>& GetOffsets() const override {
+    TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) override {
+        Refresh(true);
+
+        if (auto status = TBase::ChangeConsumer(std::move(consumer)); status.IsFail()) {
+            return status;
+        }
+
+        const auto& columns = Consumer->GetColumns();
+        if (columns.size() != 1) {
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
+        }
+
+        Schema = columns[0];
+
+        return InitColumnParser();
+    }
+
+    std::span<const ui64> GetOffsets() const override {
         return Offsets;
     }
 
-    TValueStatus<const TVector<NYql::NUdf::TUnboxedValue>*> GetParsedColumn(ui64 columnId) const override {
+    TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         Y_ENSURE(columnId == 0, "Invalid column id for raw parser");
-        return &ParsedColumn;
+        return std::span<NYql::NUdf::TUnboxedValue>(ParsedColumn);
     }
 
 protected:
     TStatus DoParsing() override {
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Offsets.front() << ", value: " << CurrentMessage);
+        YDB_LOG_TRACE("Do parsing",
+            {"logPrefix", LogPrefix},
+            {"offset", Offsets.front()},
+            {"firstValue", CurrentMessage});
 
         NYql::NUdf::TUnboxedValue value = LockObject(NKikimr::NMiniKQL::ValueFromString(DataSlot, CurrentMessage));
         if (value) {
@@ -79,7 +105,7 @@ protected:
                 value = value.MakeOptional();
             }
         } else if (!NumberOptionals) {
-            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse massege at offset " << Offsets.back() << ", can't parse data type " << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
+            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse massage at offset " << Offsets.back() << ", can't parse data type " << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
         }
 
         ParsedColumn.emplace_back(std::move(value));
@@ -92,29 +118,30 @@ protected:
         }
         ParsedColumn.clear();
         Offsets.clear();
+        CurrentMessage = {};
     }
 
 private:
-    const TSchemaColumn Schema;
+    TSchemaColumn Schema;
     const TString LogPrefix;
 
     NYql::NUdf::EDataSlot DataSlot;
     ui64 NumberOptionals = 0;
 
-    TString CurrentMessage;
+    TStringBuf CurrentMessage;
     TVector<ui64> Offsets;
     TVector<NYql::NUdf::TUnboxedValue> ParsedColumn;
 };
 
 }  // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const TCountersDesc& counters) {
+TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager) {
     const auto& columns = consumer->GetColumns();
     if (columns.size() != 1) {
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
     }
 
-    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], counters);
+    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], functionRegistry, counters, std::move(memoryQuotaManager));
     if (auto status = parser->InitColumnParser(); status.IsFail()) {
         return status.AddParentIssue(TStringBuilder() << "Failed to create raw parser for column " << columns[0].ToString());
     }

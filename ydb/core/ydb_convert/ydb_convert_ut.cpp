@@ -1051,7 +1051,7 @@ Y_UNIT_TEST(SimpleConvertGood) {
     using namespace NACLib;
     auto aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.database.connect");
     UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::ConnectDatabase);
-    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritNone);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
 
     aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.tables.modify");
     UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights(UpdateRow | EraseRow));
@@ -1210,6 +1210,46 @@ Y_UNIT_TEST(TestEqualGranularAndDeprecatedAcl) {
 
 } // ConvertYdbPermissionNameToACLAttrs
 
+Y_UNIT_TEST_SUITE(ConvertDirectoryEntryTest) {
+    Y_UNIT_TEST(InterruptPermissionsInheritance) {
+        NACLib::TACL acl;
+        acl.SetInterruptInheritance(true);
+        TString aclStr;
+        UNIT_ASSERT(acl.SerializeToString(&aclStr));
+
+        NKikimrSchemeOp::TDirEntry from;
+        from.SetACL(aclStr);
+
+        Ydb::Scheme::Entry to;
+        ConvertDirectoryEntry(from, &to, true);
+
+        UNIT_ASSERT(to.interrupt_permission_inheritance());
+    }
+
+    Y_UNIT_TEST(DefaultInterruptPermissionsInheritance) {
+        const NKikimrSchemeOp::TDirEntry from;
+        Ydb::Scheme::Entry to;
+        ConvertDirectoryEntry(from, &to, true);
+
+        UNIT_ASSERT(!to.interrupt_permission_inheritance());
+    }
+
+    Y_UNIT_TEST(SkipAclProcessing) {
+        NACLib::TACL acl;
+        acl.SetInterruptInheritance(true);
+        TString aclStr;
+        UNIT_ASSERT(acl.SerializeToString(&aclStr));
+
+        NKikimrSchemeOp::TDirEntry from;
+        from.SetACL(aclStr);
+
+        Ydb::Scheme::Entry to;
+        ConvertDirectoryEntry(from, &to, false);
+
+        UNIT_ASSERT(!to.interrupt_permission_inheritance());
+        UNIT_ASSERT_EQUAL(to.permissions_size(), 0);
+    }
+}
 
 Y_UNIT_TEST_SUITE(CellsFromTupleTest) {
 

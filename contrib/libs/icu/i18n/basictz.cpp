@@ -140,8 +140,8 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
     int32_t initialRaw, initialDst;
     UnicodeString initialName;
 
-    AnnualTimeZoneRule *ar1 = nullptr;
-    AnnualTimeZoneRule *ar2 = nullptr;
+    LocalPointer<AnnualTimeZoneRule> ar1;
+    LocalPointer<AnnualTimeZoneRule> ar2;
     UnicodeString name;
 
     UBool avail;
@@ -160,12 +160,13 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
               || (tr.getFrom()->getDSTSavings() != 0 && tr.getTo()->getDSTSavings() == 0))
             && (date + MILLIS_PER_YEAR > nextTransitionTime)) {
  
-            int32_t year, month, dom, dow, doy, mid;
+            int32_t year, mid;
+            int8_t month, dom, dow;
             UDate d;
 
             // Get local wall time for the next transition time
             Grego::timeToFields(nextTransitionTime + initialRaw + initialDst,
-                year, month, dom, dow, doy, mid, status);
+                year, month, dom, dow, mid, status);
             if (U_FAILURE(status)) return;
             int32_t weekInMonth = Grego::dayOfWeekInMonth(year, month, dom);
             // Create DOW rule
@@ -178,8 +179,8 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
             // zone to return wrong offset after the transition.
             // When we encounter such case, we do not inspect next next
             // transition for another rule.
-            ar1 = new AnnualTimeZoneRule(name, initialRaw, tr.getTo()->getDSTSavings(),
-                dtr, year, AnnualTimeZoneRule::MAX_YEAR);
+            ar1.adoptInstead(new AnnualTimeZoneRule(name, initialRaw, tr.getTo()->getDSTSavings(),
+                dtr, year, AnnualTimeZoneRule::MAX_YEAR));
 
             if (tr.getTo()->getRawOffset() == initialRaw) {
                 // Get the next next transition
@@ -193,14 +194,14 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
 
                         // Get local wall time for the next transition time
                         Grego::timeToFields(tr.getTime() + tr.getFrom()->getRawOffset() + tr.getFrom()->getDSTSavings(),
-                            year, month, dom, dow, doy, mid, status);
+                            year, month, dom, dow, mid, status);
                         if (U_FAILURE(status)) return;
                         weekInMonth = Grego::dayOfWeekInMonth(year, month, dom);
                         // Generate another DOW rule
                         dtr = new DateTimeRule(month, weekInMonth, dow, mid, DateTimeRule::WALL_TIME);
                         tr.getTo()->getName(name);
-                        ar2 = new AnnualTimeZoneRule(name, tr.getTo()->getRawOffset(), tr.getTo()->getDSTSavings(),
-                            dtr, year - 1, AnnualTimeZoneRule::MAX_YEAR);
+                        ar2.adoptInstead(new AnnualTimeZoneRule(name, tr.getTo()->getRawOffset(), tr.getTo()->getDSTSavings(),
+                            dtr, year - 1, AnnualTimeZoneRule::MAX_YEAR));
 
                         // Make sure this rule can be applied to the specified date
                         avail = ar2->getPreviousStart(date, tr.getFrom()->getRawOffset(), tr.getFrom()->getDSTSavings(), true, d);
@@ -208,13 +209,12 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
                                 || initialRaw != tr.getTo()->getRawOffset()
                                 || initialDst != tr.getTo()->getDSTSavings()) {
                             // We cannot use this rule as the second transition rule
-                            delete ar2;
-                            ar2 = nullptr;
+                            ar2.adoptInstead(nullptr);
                         }
                     }
                 }
             }
-            if (ar2 == nullptr) {
+            if (ar2.isNull()) {
                 // Try previous transition
                 avail = getPreviousTransition(date, true, tr);
                 if (avail) {
@@ -225,7 +225,7 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
 
                         // Generate another DOW rule
                         Grego::timeToFields(tr.getTime() + tr.getFrom()->getRawOffset() + tr.getFrom()->getDSTSavings(),
-                            year, month, dom, dow, doy, mid, status);
+                            year, month, dom, dow, mid, status);
                         if (U_FAILURE(status)) return;
                         weekInMonth = Grego::dayOfWeekInMonth(year, month, dom);
                         dtr = new DateTimeRule(month, weekInMonth, dow, mid, DateTimeRule::WALL_TIME);
@@ -233,23 +233,21 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
 
                         // second rule raw/dst offsets should match raw/dst offsets
                         // at the given time
-                        ar2 = new AnnualTimeZoneRule(name, initialRaw, initialDst,
-                            dtr, ar1->getStartYear() - 1, AnnualTimeZoneRule::MAX_YEAR);
+                        ar2.adoptInstead(new AnnualTimeZoneRule(name, initialRaw, initialDst,
+                            dtr, ar1->getStartYear() - 1, AnnualTimeZoneRule::MAX_YEAR));
 
                         // Check if this rule start after the first rule after the specified date
                         avail = ar2->getNextStart(date, tr.getFrom()->getRawOffset(), tr.getFrom()->getDSTSavings(), false, d);
                         if (!avail || d <= nextTransitionTime) {
                             // We cannot use this rule as the second transition rule
-                            delete ar2;
-                            ar2 = nullptr;
+                            ar2.adoptInstead(nullptr);
                         }
                     }
                 }
             }
-            if (ar2 == nullptr) {
+            if (ar2.isNull()) {
                 // Cannot find a good pair of AnnualTimeZoneRule
-                delete ar1;
-                ar1 = nullptr;
+                ar1.adoptInstead(nullptr);
             } else {
                 // The initial rule should represent the rule before the previous transition
                 ar1->getName(initialName);
@@ -277,13 +275,13 @@ BasicTimeZone::getSimpleRulesNear(UDate date, InitialTimeZoneRule*& initial,
     initial = new InitialTimeZoneRule(initialName, initialRaw, initialDst);
 
     // Set the standard and daylight saving rules
-    if (ar1 != nullptr && ar2 != nullptr) {
+    if (ar1.isValid() && ar2.isValid()) {
         if (ar1->getDSTSavings() != 0) {
-            dst = ar1;
-            std = ar2;
+            dst = ar1.orphan();
+            std = ar2.orphan();
         } else {
-            std = ar1;
-            dst = ar2;
+            std = ar1.orphan();
+            dst = ar2.orphan();
         }
     }
 }
@@ -486,8 +484,7 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
                 }
             } else {
                 // Calculate the transition year
-                int32_t year, month, dom, dow, doy, mid;
-                Grego::timeToFields(tzt.getTime(), year, month, dom, dow, doy, mid, status);
+                int32_t year = Grego::timeToYear(tzt.getTime(), status);
                 if (U_FAILURE(status)) {
                     return;
                 }

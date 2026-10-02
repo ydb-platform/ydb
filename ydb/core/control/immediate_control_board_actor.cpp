@@ -1,5 +1,7 @@
 #include "immediate_control_board_actor.h"
 
+#include <ydb/core/control/lib/immediate_control_board_html_renderer.h>
+
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -17,12 +19,15 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         TString ParamName;
         TAtomicBase PrevValue;
         TAtomicBase NewValue;
+        // Operator action that produced this history record.
+        TString Action;
 
-        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue)
+        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue, TString action)
             : Timestamp(timestamp)
             , ParamName(paramName)
             , PrevValue(prevValue)
             , NewValue(newValue)
+            , Action(action)
         {}
 
         TString TimestampToStr() {
@@ -33,7 +38,8 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         }
     };
 
-    TIntrusivePtr<TControlBoard> Board;
+    TIntrusivePtr<TControlBoard> Icb;
+    TIntrusivePtr<TDynamicControlBoard> Dcb;
     TVector<TLogRecord> HistoryLog;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
@@ -44,9 +50,12 @@ public:
         return NKikimrServices::TActivity::IMMEDIATE_CONTROL_BOARD;
     }
 
-    TImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-        : Board(board)
+    TImmediateControlActor(
+                            TIntrusivePtr<TControlBoard> board,
+                            TIntrusivePtr<TDynamicControlBoard> dcb,
+                            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        : Icb(board)
+        , Dcb(dcb)
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
@@ -65,26 +74,46 @@ public:
     }
 
 private:
-    void HandlePostParams(const TCgiParameters &cgi) {
-        if (cgi.Has("restoreDefaults")) {
-            Board->RestoreDefaults();
-            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
-            *HasChanged = 0;
-            *ChangedCount = 0;
+    // Record a numeric change together with the operator action that caused it.
+    void RecordChange(const TString& name, TAtomicBase prevValue, TAtomicBase newValue, const TString& action) {
+        if (prevValue != newValue) {
+            HistoryLog.emplace_back(TInstant::Now(), name, prevValue, newValue, action);
         }
-        for (const auto &param : cgi) {
-            TAtomicBase newValue = strtoull(param.second.data(), nullptr, 10);
-            TAtomicBase prevValue = newValue;
-            bool isDefault = Board->SetValue(param.first, newValue, prevValue);
-            if (prevValue != newValue) {
-                HistoryLog.emplace_back(TInstant::Now(), param.first, prevValue, newValue);
-                if (isDefault) {
-                    ChangedCount->Dec();
-                } else {
-                    ChangedCount->Inc();
-                }
-                *HasChanged = (ui64)ChangedCount->Val() > 0;
+    }
+
+    void HandlePostParams(const TCgiParameters &cgi) {
+        // Handle a named restore before the text input from the same form.
+        if (cgi.Has("restoreDefault")) {
+            const TString& controlName = cgi.Get("restoreDefault");
+            TAtomicBase prevValue;
+            TAtomicBase newValue;
+            bool controlExists;
+            if (auto control = Icb->GetControlByName(controlName)) {
+                control->RestoreDefault(prevValue, newValue);
+                controlExists = true;
+            } else {
+                controlExists = Dcb->RestoreDefault(controlName, prevValue, newValue);
             }
+            if (controlExists) {
+                RecordChange(controlName, prevValue, newValue, "Restore default");
+            }
+            return;
+        }
+        if (cgi.Has("restoreDefaults")) {
+            Icb->RestoreDefaults();
+            Dcb->RestoreDefaults();
+            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0, "Restore defaults");
+            return;
+        }
+        for (const auto& [paramName, paramValue] : cgi) {
+            TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
+            TAtomicBase prevValue = newValue;
+            if (auto control = Icb->GetControlByName(paramName)) {
+                prevValue = control->SetFromHtmlRequest(newValue);
+            } else {
+                Dcb->SetValue(paramName, newValue, prevValue);
+            }
+            RecordChange(paramName, prevValue, newValue, "Set value");
         }
     }
 
@@ -94,7 +123,18 @@ private:
             HandlePostParams(ev->Get()->Request.GetPostParams());
         }
         TStringStream str;
-        str << Board->RenderAsHtml();
+
+        TControlBoardTableHtmlRenderer renderer;
+        renderer.AddNewTable("Static Controls");
+        Icb->RenderAsHtml(renderer);
+        renderer.AddNewTable("Dynamic Controls");
+        Dcb->RenderAsHtml(renderer);
+
+        const ui64 count = renderer.GetChangedCount();
+        *ChangedCount = count;
+        *HasChanged = count > 0;
+
+        str << renderer.GetHtml();
         HTML(str) {
             str << "<h3>History</h3>";
             TABLE_SORTABLE_CLASS("historyLogTable") {
@@ -104,6 +144,7 @@ private:
                         TABLEH() {str << "Parameter"; }
                         TABLEH() {str << "PrevValue"; }
                         TABLEH() {str << "NewValue"; }
+                        TABLEH() {str << "Action"; }
                     }
                 }
                 TABLEBODY() {
@@ -113,6 +154,7 @@ private:
                             TABLED() { str << record.ParamName; }
                             TABLED() { str << record.PrevValue; }
                             TABLED() { str << record.NewValue; }
+                            TABLED() { str << record.Action; }
                         }
                     }
                 }
@@ -128,8 +170,11 @@ private:
     }
 };
 
-NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    return new NKikimr::TImmediateControlActor(board, counters);
+NActors::IActor* CreateImmediateControlActor(
+                    TIntrusivePtr<TControlBoard> icb,
+                    TIntrusivePtr<TDynamicControlBoard> dcb,
+                     const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
+    return new NKikimr::TImmediateControlActor(icb, dcb, counters);
 }
+
 };

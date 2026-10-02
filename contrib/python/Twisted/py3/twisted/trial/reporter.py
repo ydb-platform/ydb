@@ -16,7 +16,7 @@ import unittest as pyunit
 import warnings
 from collections import OrderedDict
 from types import TracebackType
-from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Union
 
 from zope.interface import implementer
 
@@ -36,12 +36,12 @@ try:
 except ImportError:
     TestProtocolClient = None
 
-ExcInfo: TypeAlias = Tuple[Type[BaseException], BaseException, TracebackType]
-XUnitFailure = Union[ExcInfo, Tuple[None, None, None]]
+ExcInfo: TypeAlias = tuple[type[BaseException], BaseException, TracebackType]
+XUnitFailure = Union[ExcInfo, tuple[None, None, None]]
 TrialFailure = Union[XUnitFailure, Failure]
 
 
-def _makeTodo(value: str) -> "Todo":
+def _makeTodo(value: str) -> Todo:
     """
     Return a L{Todo} object built from C{value}.
 
@@ -97,13 +97,19 @@ class TestResult(pyunit.TestResult):
     # Used when no todo provided to addExpectedFailure or addUnexpectedSuccess.
     _DEFAULT_TODO = "Test expected to fail"
 
-    skips: List[Tuple[itrial.ITestCase, str]]
-    expectedFailures: List[Tuple[itrial.ITestCase, str, "Todo"]]  # type: ignore[assignment]
-    unexpectedSuccesses: List[Tuple[itrial.ITestCase, str]]  # type: ignore[assignment]
+    errors: list[
+        tuple[itrial.ITestCase | pyunit.TestCase, str | Failure]
+    ]  # type:ignore[assignment]
+    skips: list[tuple[itrial.ITestCase, str]]
+    expectedFailures: list[tuple[itrial.ITestCase, str | Failure, Todo]]  # type: ignore[assignment]
+    unexpectedSuccesses: list[tuple[itrial.ITestCase, str]]  # type: ignore[assignment]
     successes: int
-    _testStarted: Optional[int]
+    _testStarted: int | None
     # The duration of the test. It is None until the test completes.
-    _lastTime: Optional[int]
+    _lastTime: int | None
+
+    # Make pytest not think this is test class
+    __test__ = False
 
     def __init__(self):
         super().__init__()
@@ -168,7 +174,13 @@ class TestResult(pyunit.TestResult):
         """
         self.failures.append((test, self._getFailure(fail)))
 
-    def addError(self, test, error):
+    def addError(
+        self,
+        test: pyunit.TestCase,
+        error: Failure
+        | tuple[type[BaseException], BaseException, TracebackType]
+        | tuple[None, None, None],
+    ) -> None:
         """
         Report an error that occurred while running the given test.
 
@@ -250,9 +262,9 @@ class TestResult(pyunit.TestResult):
         """
 
 
-@implementer(itrial.IReporter)
+@implementer(itrial.IReporterWithDurations)
 class TestResultDecorator(
-    proxyForInterface(itrial.IReporter, "_originalReporter")  # type: ignore[misc]
+    proxyForInterface(itrial.IReporterWithDurations, "_originalReporter")  # type: ignore[misc]
 ):
     """
     Base class for TestResult decorators.
@@ -532,29 +544,37 @@ class Reporter(TestResult):
 
         When a C{SynchronousTestCase} method fails synchronously, the stack
         looks like this:
-         - [0]: C{SynchronousTestCase._run}
+         - [0]: C{TestCase._run}
          - [1]: C{util.runWithWarningsSuppressed}
          - [2:-2]: code in the test method which failed
          - [-1]: C{_synctest.fail}
 
         When a C{TestCase} method fails synchronously, the stack looks like
         this:
-         - [0]: C{defer.maybeDeferred}
-         - [1]: C{utils.runWithWarningsSuppressed}
-         - [2]: C{utils.runWithWarningsSuppressed}
-         - [3:-2]: code in the test method which failed
+         - [0]: C{TestCase._deferSetUpAndRun}
+         - [1]: C{defer.__iter__}
+         - [2]: C{defer.raiseException}
+         - [3]: C{defer.maybeDeferred}
+         - [4]: C{utils.runWithWarningsSuppressed}
+         - [5]: C{utils.runWithWarningsSuppressed}
+         - [6:-2]: code in the test method which failed
          - [-1]: C{_synctest.fail}
 
         When a method fails inside a C{Deferred} (i.e., when the test method
         returns a C{Deferred}, and that C{Deferred}'s errback fires), the stack
         captured inside the resulting C{Failure} looks like this:
-         - [0]: C{defer.Deferred._runCallbacks}
-         - [1:-2]: code in the testmethod which failed
+
+         - [0]: C{defer._deferSetUpAndRun}
+         - [1]: C{defer.__iter__}
+         - [2]: C{defer.Deferred._runCallbacks}
+         - [3:-2]: code in the testmethod which failed
          - [-1]: C{_synctest.fail}
 
-        As a result, we want to trim either [maybeDeferred, runWWS, runWWS] or
-        [Deferred._runCallbacks] or [SynchronousTestCase._run, runWWS] from the
-        front, and trim the [unittest.fail] from the end.
+        As a result, we want to trim either
+        [deferTestMethod, __iter__, raiseException, maybeDeferred, runWWS, runWWS] or
+        [defer.deferTestMethod, __iter__, Deferred._runCallbacks] or
+        [SynchronousTestCase._run, runWWS] from the front, and trim the [unittest.fail]
+        from the end.
 
         There is also another case, when the test method is badly defined and
         contains extra arguments.
@@ -568,19 +588,25 @@ class Reporter(TestResult):
         """
         newFrames = list(frames)
 
-        if len(frames) < 2:
+        if len(frames) < 3:
             return newFrames
 
-        firstMethod = newFrames[0][0]
-        firstFile = os.path.splitext(os.path.basename(newFrames[0][1]))[0]
+        frames = [
+            (frame[0], os.path.splitext(os.path.basename(frame[1]))[0])
+            for frame in newFrames[:3]
+        ]
 
-        secondMethod = newFrames[1][0]
-        secondFile = os.path.splitext(os.path.basename(newFrames[1][1]))[0]
-
-        syncCase = (("_run", "_synctest"), ("runWithWarningsSuppressed", "util"))
-        asyncCase = (("maybeDeferred", "defer"), ("runWithWarningsSuppressed", "utils"))
-
-        twoFrames = ((firstMethod, firstFile), (secondMethod, secondFile))
+        syncCase = [("_run", "_synctest"), ("runWithWarningsSuppressed", "util")]
+        asyncCase = [
+            ("_deferSetUpAndRun", "_asynctest"),
+            ("__iter__", "defer"),
+            ("raiseException", "failure"),
+        ]
+        deferCase = [
+            ("_deferSetUpAndRun", "_asynctest"),
+            ("__iter__", "defer"),
+            ("_runCallbacks", "defer"),
+        ]
 
         # On PY3, we have an extra frame which is reraising the exception
         for frame in newFrames:
@@ -589,12 +615,12 @@ class Reporter(TestResult):
                 # If it's in the compat module and is reraise, BLAM IT
                 newFrames.pop(newFrames.index(frame))
 
-        if twoFrames == syncCase:
+        if frames[:2] == syncCase:
             newFrames = newFrames[2:]
-        elif twoFrames == asyncCase:
+        elif frames[:3] == asyncCase:
+            newFrames = newFrames[6:]
+        elif frames[:3] == deferCase:
             newFrames = newFrames[3:]
-        elif (firstMethod, firstFile) == ("_runCallbacks", "defer"):
-            newFrames = newFrames[1:]
 
         if not newFrames:
             # The method fails before getting called, probably an argument

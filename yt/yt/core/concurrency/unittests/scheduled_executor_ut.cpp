@@ -5,6 +5,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/scheduled_executor.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <atomic>
 
@@ -19,31 +20,50 @@ class TScheduledExecutorTest
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr auto ErrorMargin = TDuration::MilliSeconds(50);
-
-////////////////////////////////////////////////////////////////////////////////
-
-void CheckTimeSlotCorrectness(const TDuration& interval)
+// Checks that consecutive invocations are spaced by approximately one interval.
+// Self-adjusting: each Check() records the fire time so the next call measures
+// elapsed from the previous actual fire rather than from an epoch-aligned slot.
+// On the first invocation no assertion is made.
+// Call Reset() before restarting the executor to avoid cross-run checks.
+// The tolerance is 30% of the interval.
+class TTimeSlotChecker
 {
-    auto nowValue = TInstant::Now().GetValue();
-    auto intervalValue = interval.GetValue();
+public:
+    explicit TTimeSlotChecker(TDuration interval)
+        : Interval_(interval)
+    { }
 
-    // NB(arkady-e1ppa): DelayedExecutor has a CoalescingInterval of 100 microseconds
-    // which makes it possible to run callback (and thus this check)
-    // 100 microseconds earlier than the actual deadline
-    auto delay = TDuration::FromValue(nowValue % intervalValue);
-    auto error = std::min(delay, interval - delay);
+    void Check()
+    {
+        auto now = TInstant::Now();
+        if (PrevFireTime_ != TInstant::Zero()) {
+            auto elapsed = now - PrevFireTime_;
+            // Allow up to 30% of an interval of deviation: more and the executor
+            // has clearly fired in a different period, which indicates a bug.
+            auto error = elapsed > Interval_ ? elapsed - Interval_ : Interval_ - elapsed;
+            EXPECT_LT(error, Interval_ * 0.3);
+        }
+        PrevFireTime_ = now;
+    }
 
-    EXPECT_LE(error, ErrorMargin);
-}
+    void Reset()
+    {
+        PrevFireTime_ = TInstant::Zero();
+    }
+
+private:
+    const TDuration Interval_;
+    TInstant PrevFireTime_;
+};
 
 TEST_W(TScheduledExecutorTest, Simple)
 {
     auto interval = TDuration::MilliSeconds(200);
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
+    TTimeSlotChecker checker(interval);
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
+        checker.Check();
         ++count;
     });
 
@@ -66,7 +86,7 @@ TEST_W(TScheduledExecutorTest, Simple)
 
 TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -95,7 +115,7 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 
 TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithNonEmptyInterval)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -119,7 +139,7 @@ TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithNonEmptyInterval)
 
 TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithEmptyInterval)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -141,10 +161,11 @@ TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithEmptyInterval)
 TEST_W(TScheduledExecutorTest, ParallelStop)
 {
     auto interval = TDuration::MilliSeconds(10);
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
+    TTimeSlotChecker checker(interval);
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
+        checker.Check();
         ++count;
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
@@ -166,6 +187,7 @@ TEST_W(TScheduledExecutorTest, ParallelStop)
     }
     EXPECT_EQ(1, count.load());
 
+    checker.Reset();
     executor->Start();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
     {
@@ -184,7 +206,6 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted1)
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
     });
@@ -221,9 +242,10 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
 {
     auto interval = TDuration::MilliSeconds(400);
     std::atomic<int> count = 0;
+    TTimeSlotChecker checker(interval);
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
+        checker.Check();
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         ++count;
     });
@@ -234,8 +256,10 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
         callback,
         interval);
 
-    executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(400));
+    // Firings happen on epoch-aligned slots, so the event must be requested
+    // relative to an actual firing, not to a wall-clock sleep.
+    WaitFor(executor->StartAndGetFirstExecutedEvent())
+        .ThrowOnError();
     {
         auto future1 = executor->GetExecutedEvent();
         auto future2 = executor->GetExecutedEvent();
@@ -244,6 +268,7 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
     }
     EXPECT_EQ(2, count.load());
 
+    checker.Reset();
     executor->Start();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
     {
@@ -262,7 +287,6 @@ TEST_W(TScheduledExecutorTest, OnExecutedEventCanceled)
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         ++count;
     });
@@ -294,9 +318,10 @@ TEST_W(TScheduledExecutorTest, Stop)
     auto interval = TDuration::MilliSeconds(20);
     auto neverSetPromise = NewPromise<void>();
     auto immediatelyCancelableFuture = neverSetPromise.ToFuture().ToImmediatelyCancelable();
+    TTimeSlotChecker checker(interval);
 
     auto callback = BIND([&] {
-        CheckTimeSlotCorrectness(interval);
+        checker.Check();
         WaitUntilSet(immediatelyCancelableFuture);
     });
 
@@ -313,7 +338,7 @@ TEST_W(TScheduledExecutorTest, Stop)
         .ThrowOnError();
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(immediatelyCancelableFuture).GetCode());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,39 +1,41 @@
-#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
-#include "yt/yt/client/table_client/logical_type.h"
-
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/client/table_client/comparator.h>
+#include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/schema_serialization_helpers.h>
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
+
+#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 
 #include <random>
 
 namespace NYT::NTableClient {
 namespace {
 
+////////////////////////////////////////////////////////////////////////////////
+
+using namespace NLogicalTypeShortcuts;
 using namespace NYson;
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
 
 using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TColumnSchema ColumnFromYson(const TString& yson)
+TColumnSchema ColumnFromYson(std::string_view yson)
 {
-    auto maybeDeletedColumn = ConvertTo<TMaybeDeletedColumnSchema>(TYsonStringBuf(yson));
-    YT_VERIFY(!maybeDeletedColumn.Deleted());
-    return static_cast<TColumnSchema>(maybeDeletedColumn);
+    return ConvertTo<TConstrainedColumnSchema>(TYsonStringBuf(yson));
 }
 
 TEST(TTableSchemaTest, ColumnTypeV1Deserialization)
 {
-    using namespace NLogicalTypeShortcuts;
-
     {
         auto column = ColumnFromYson(
             "{"
@@ -73,7 +75,7 @@ TEST(TTableSchemaTest, ColumnTypeV1Deserialization)
             "  name=x;"
             "  type=null;"
             "}");
-        EXPECT_EQ(*column.LogicalType(), *SimpleLogicalType(ESimpleLogicalValueType::Null));
+        EXPECT_EQ(*column.LogicalType(), *Null());
         EXPECT_EQ(column.Required(), false);
         EXPECT_EQ(column.IsOfV1Type(), true);
         EXPECT_EQ(column.IsOfV1Type(ESimpleLogicalValueType::Null), true);
@@ -94,7 +96,6 @@ TEST(TTableSchemaTest, ColumnTypeV1Deserialization)
 
 TEST(TTableSchemaTest, ColumnTypeV3Deserialization)
 {
-    using namespace NLogicalTypeShortcuts;
     auto listUtf8Column = ColumnFromYson(R"(
         {
           name=x;
@@ -283,69 +284,69 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
     expectBad(TColumnSchema(SystemColumnNamePrefix + "Name", EValueType::String));
 
     // Names longer than MaxColumnNameLength are not ok.
-    expectBad(TColumnSchema(TString(MaxColumnNameLength + 1, 'z'), EValueType::String));
+    expectBad(TColumnSchema(std::string(MaxColumnNameLength + 1, 'z'), EValueType::String));
 
     // Empty lock names are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetLock(TString("")));
+            .SetLock(""));
 
     // Locks on key columns are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetLock(TString("LockName")));
+            .SetLock("LockName"));
 
     // Locks longer than MaxColumnLockLength are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetLock(TString(MaxColumnLockLength + 1, 'z')));
+            .SetLock(std::string(MaxColumnLockLength + 1, 'z')));
 
     // Column type should be valid according to the ValidateSchemaValueType function.
     // Non-key columns can't be computed.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetExpression(TString("SomeExpression")));
+            .SetExpression("SomeExpression"));
 
     // Key columns can't be aggregated.
     expectBad(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetAggregate(TString("sum")));
+            .SetAggregate(std::string("sum")));
 
     ValidateColumnSchema(TColumnSchema("Name", EValueType::String));
     ValidateColumnSchema(TColumnSchema("Name", EValueType::Any));
     ValidateColumnSchema(
-        TColumnSchema(TString(256, 'z'), EValueType::String)
-            .SetLock(TString(256, 'z')));
+        TColumnSchema(std::string(256, 'z'), EValueType::String)
+            .SetLock(std::string(256, 'z')));
     ValidateColumnSchema(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetExpression(TString("SomeExpression")));
+            .SetExpression("SomeExpression"));
     ValidateColumnSchema(
         TColumnSchema("Name", EValueType::String)
-            .SetAggregate(TString("sum")));
+            .SetAggregate(std::string("sum")));
 
     // Struct field validation
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"", "", Int8()}
+        }, /*removedFieldStableNames*/ {})));
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {TString(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {std::string(257, 'a'), std::string(257, 'a'), Int8()}
+        }, /*removedFieldStableNames*/ {})));
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"\255", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"\255", "\255", Int8()}
+        }, /*removedFieldStableNames*/ {})));
 
     ValidateColumnSchema(
-        TColumnSchema("Column", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int8)), ESortOrder::Ascending));
+        TColumnSchema("Column", List(Int8()), ESortOrder::Ascending));
 
     expectBad(
-        TColumnSchema("Column", ListLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any))), ESortOrder::Ascending));
+        TColumnSchema("Column", List(Optional(Yson())), ESortOrder::Ascending));
 
     expectBad(
         TColumnSchema("Column", EValueType::String)
@@ -373,9 +374,9 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
-        }), ESortOrder::Ascending));
+            {"foo", "foo", Int64()},
+            {"bar", "bar", String()},
+        }, /*removedFieldStableNames*/ {}), ESortOrder::Ascending));
 
     // Allow some names starting from SystemColumnNamePrefix
     EXPECT_NO_THROW(
@@ -409,6 +410,62 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
 
 }
 
+TEST(TTableSchemaTest, AggregateStateColumnSchemaValidation)
+{
+    EXPECT_NO_THROW(
+        ValidateColumnSchema(
+            TColumnSchema("agg", AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false));
+
+    EXPECT_THROW(
+        ValidateColumnSchema(
+            TColumnSchema("agg", AggregateStateLogicalType(EAggregateFunction::Avg, SimpleLogicalType(ESimpleLogicalValueType::Int64)), ESortOrder::Ascending),
+            /*isTableSorted*/ true,
+            /*isTableDynamic*/ false),
+        std::exception);
+
+}
+
+TEST(TTableSchemaTest, ValidateNoAggregateStateType)
+{
+    auto aggregateStateType = [] {
+        return AggregateStateLogicalType(
+            EAggregateFunction::Avg,
+            SimpleLogicalType(ESimpleLogicalValueType::Int64));
+    };
+
+    std::vector<TLogicalTypePtr> typesWithAggregateState = {
+        aggregateStateType(),
+        OptionalLogicalType(aggregateStateType()),
+        ListLogicalType(aggregateStateType()),
+        StructLogicalType({{"field", "field", aggregateStateType()}}, {}),
+        TupleLogicalType({aggregateStateType()}),
+        VariantStructLogicalType({{"field", "field", aggregateStateType()}}),
+        VariantTupleLogicalType({aggregateStateType()}),
+        DictLogicalType(aggregateStateType(), SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+        DictLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64), aggregateStateType()),
+        TaggedLogicalType("tag", aggregateStateType()),
+        ListLogicalType(StructLogicalType({
+            {"field", "field", OptionalLogicalType(aggregateStateType())}
+        }, {})),
+    };
+
+    for (const auto& logicalType : typesWithAggregateState) {
+        TTableSchema schema({TColumnSchema("column", logicalType)});
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateNoAggregateStateType(schema),
+            "AggregateState type is not available yet");
+    }
+
+    TTableSchema schemaWithoutAggregateState({
+        TColumnSchema("column", ListLogicalType(StructLogicalType({
+            {"field", "field", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))}
+        }, {})))
+    });
+    EXPECT_NO_THROW(ValidateNoAggregateStateType(schemaWithoutAggregateState));
+}
+
 TEST(TTableSchemaTest, ValidateTableSchemaTest)
 {
     auto expectBad = [] (const auto& schemaString) {
@@ -423,6 +480,31 @@ TEST(TTableSchemaTest, ValidateTableSchemaTest)
     expectBad("[{name=x;type=int64;sort_order=ascending;expression=\"uint64(y)\"}; {name=y;type=uint64;sort_order=ascending}; {name=a;type=int64}]");
 }
 
+TEST(TTableSchemaTest, ValidateShuffleColumns)
+{
+    auto makeSchema = [] (ESimpleLogicalValueType producerIdType) {
+        return TTableSchema({
+            TColumnSchema("key", SimpleLogicalType(ESimpleLogicalValueType::String), ESortOrder::Ascending),
+            TColumnSchema(ShuffleProducerIdColumnName, SimpleLogicalType(producerIdType), ESortOrder::Ascending),
+            TColumnSchema(ShuffleRowIdColumnName, SimpleLogicalType(ESimpleLogicalValueType::Int64), ESortOrder::Ascending),
+        });
+    };
+
+    auto schema = makeSchema(ESimpleLogicalValueType::Int64);
+    EXPECT_THROW(ValidateTableSchema(schema), std::exception);
+    EXPECT_NO_THROW(ValidateTableSchema(
+        schema,
+        /*isTableDynamic*/ false,
+        TSchemaValidationOptions{.AllowShuffleColumns = true}));
+
+    EXPECT_THROW(
+        ValidateTableSchema(
+            makeSchema(ESimpleLogicalValueType::String),
+            /*isTableDynamic*/ false,
+            TSchemaValidationOptions{.AllowShuffleColumns = true}),
+        std::exception);
+}
+
 TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;
@@ -432,7 +514,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     TColumnSchema columnSchema;
     FromProto(&columnSchema, columnSchemaProto);
 
-    EXPECT_EQ(*columnSchema.LogicalType(), *OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint64)));
+    EXPECT_EQ(*columnSchema.LogicalType(), *Optional(Uint64()));
     EXPECT_EQ(columnSchema.GetWireType(), EValueType::Uint64);
     EXPECT_EQ(columnSchema.Name(), "foo");
     EXPECT_EQ(columnSchema.StableName().Underlying(), "foo");
@@ -442,7 +524,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     columnSchemaProto.set_stable_name("foo_stable");
     FromProto(&columnSchema, columnSchemaProto);
 
-    EXPECT_EQ(*columnSchema.LogicalType(), *OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint32)));
+    EXPECT_EQ(*columnSchema.LogicalType(), *Optional(Uint32()));
     EXPECT_EQ(columnSchema.GetWireType(), EValueType::Uint64);
     EXPECT_EQ(columnSchema.Name(), "foo");
     EXPECT_EQ(columnSchema.StableName().Underlying(), "foo_stable");
@@ -451,20 +533,206 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 TEST(TTableSchemaTest, EqualIgnoringRequiredness)
 {
     auto schema1 = TTableSchema({
-        TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+        TColumnSchema("foo", Int64()),
     });
 
     auto schema2 = TTableSchema({
-        TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+        TColumnSchema("foo", Optional(Int64())),
     });
 
     auto schema3 = TTableSchema({
-        TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::String)),
+        TColumnSchema("foo", String()),
     });
 
     EXPECT_TRUE(schema1 != schema2);
     EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
     EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema3));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessEmpty)
+{
+    auto empty1 = TTableSchema();
+    auto empty2 = TTableSchema();
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(empty1, empty2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessSameInstance)
+{
+    auto schema = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+        TColumnSchema("bar", String()),
+    });
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema, schema));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessBothRequired)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessBothOptional)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessColumnCountMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessNameMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("bar", Int64()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessStrictMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    }, /*strict*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    }, /*strict*/ false);
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessUniqueKeysMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64()), ESortOrder::Ascending),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64(), ESortOrder::Ascending),
+    }, /*strict*/ true, /*uniqueKeys*/ false);
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessSortOrderMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64()), ESortOrder::Ascending),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessMultipleColumnsMix)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("k", Int64(), ESortOrder::Ascending),
+        TColumnSchema("v1", Optional(String())),
+        TColumnSchema("v2", Optional(Int64())),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("k", Optional(Int64()), ESortOrder::Ascending),
+        TColumnSchema("v1", String()),
+        TColumnSchema("v2", Int64()),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    EXPECT_TRUE(schema1 != schema2);
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessNestedOptionalDropsOnlyOuter)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Optional(Int64()))),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    // Only outer Optional is stripped: schema1 becomes Optional(Int64()), schema2 becomes Int64().
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+
+    auto schema3 = TTableSchema({
+        TColumnSchema("foo", Optional(Optional(Int64()))),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema3));
+
+    auto schema4 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema2, schema4));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessCompositeTypes)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(List(Int64()))),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", List(Int64())),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+
+    auto schema3 = TTableSchema({
+        TColumnSchema("foo", List(Optional(Int64()))),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema3));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessDifferentInnerType)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Uint64())),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
 }
 
 TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)
@@ -486,83 +754,83 @@ TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)
     };
 
     expectGood({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
     });
 
     // Invalid nested key description.
     expectBad({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key()"),
     });
 
     expectGood({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv", List(Int64()))
             .SetAggregate("nested_value(n)")
     });
 
     expectGood({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv", OptionalLogicalType(ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))))
+        TColumnSchema("nv", Optional(List(Int64())))
             .SetAggregate("nested_value(n)")
     });
 
     // Invalid nested value description.
     expectBad({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv", List(Int64()))
             .SetAggregate("nested_value()"),
     });
 
     // No nested key column.
     expectBad({
-        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv", List(Int64()))
             .SetAggregate("nested_value(n)"),
     });
 
     // No corresponding nested key column for nested value column.
     expectBad({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv", List(Int64()))
             .SetAggregate("nested_value(m)"),
     });
 
     // Invalid aggregate.
     expectBad({
-        TColumnSchema("a", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("a", List(Int64()))
             .SetAggregate("nested_()")
     });
 
     // Bad type of columns nv.
     expectBad({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv", SimpleLogicalType(ESimpleLogicalValueType::Int64))
+        TColumnSchema("nv", Int64())
             .SetAggregate("nested_value(n)")
     });
 
     expectGood({
-        TColumnSchema("nk", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv1", List(Int64()))
             .SetAggregate("nested_value(n, sum)"),
-        TColumnSchema("nv2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String)))
+        TColumnSchema("nv2", List(String()))
             .SetAggregate("nested_value(n)"),
     });
 
     expectGood({
-        TColumnSchema("nk1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk1", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nk2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nk2", List(Int64()))
             .SetAggregate("nested_key(n)"),
-        TColumnSchema("nv1", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))
+        TColumnSchema("nv1", List(Int64()))
             .SetAggregate("nested_value(n, sum)"),
-        TColumnSchema("nv2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String)))
+        TColumnSchema("nv2", List(String()))
             .SetAggregate("nested_value(n)"),
     });
 }
@@ -570,7 +838,7 @@ TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)
 TEST(TTableSchemaTest, WithSystemColumns)
 {
     const auto schema1 = TTableSchema({
-        TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+        TColumnSchema("foo", Int64()),
     });
 
     const auto schema2Ptr = schema1.WithSystemColumns({
@@ -601,7 +869,7 @@ TEST(TTableSchemaTest, WithSystemColumns)
 
     EXPECT_THROW_WITH_SUBSTRING(
         TTableSchema({
-            TColumnSchema(RowIndexColumnName, SimpleLogicalType(ESimpleLogicalValueType::String)),
+            TColumnSchema(RowIndexColumnName, String()),
         }).WithSystemColumns({.EnableRowIndex = true}),
         "Cannot add column");
 }
@@ -655,6 +923,38 @@ TEST(TLockMaskTest, ConvertToLegacy)
         } else {
             EXPECT_EQ(lock, ELockType::None);
         }
+    }
+}
+
+TEST(TLegacyLockMaskTest, GetLockedPrefixLength)
+{
+    EXPECT_EQ(TLegacyLockMask().GetLockedPrefixLength(), 0);
+
+    for (auto lock : {ELockType::SharedWeak, ELockType::SharedStrong, ELockType::Exclusive}) {
+        for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
+            TLegacyLockMask mask;
+            mask.Set(index, lock);
+            EXPECT_EQ(mask.GetLockedPrefixLength(), index + 1);
+        }
+    }
+
+    TLegacyLockMask mask;
+    mask.Set(3, ELockType::Exclusive);
+    mask.Set(20, ELockType::SharedWeak);
+    EXPECT_EQ(mask.GetLockedPrefixLength(), 21);
+    mask.Set(20, ELockType::None);
+    EXPECT_EQ(mask.GetLockedPrefixLength(), 4);
+
+    std::mt19937_64 rng(42);
+    for (int iteration = 0; iteration < 100'000; ++iteration) {
+        TLegacyLockMask randomMask(rng());
+        int expected = 0;
+        for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
+            if (randomMask.Get(index) != ELockType::None) {
+                expected = index + 1;
+            }
+        }
+        EXPECT_EQ(randomMask.GetLockedPrefixLength(), expected);
     }
 }
 

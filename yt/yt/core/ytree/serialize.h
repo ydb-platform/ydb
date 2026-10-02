@@ -2,10 +2,13 @@
 
 #include "public.h"
 
+#include "proto_yson_struct.h"
+
 #include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/misc/guid.h>
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 #include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>
@@ -18,6 +21,11 @@
 #include <optional>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Infers value format (microseconds/nanoseconds) and returns unix time.
+TInstant ConvertRawValueToUnixTime(ui64 value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -151,29 +159,34 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// Any associative container (except TCompactFlatMap).
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
-void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
+template <class T>
+struct TAssociativeContainerKeyHelper;
 
-// TCompactFlatMap.
-template <class K, class V, size_t N>
-void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer);
+// Any associative container (except TCompactFlatMap/TCompactSet). Keys are serialized with TAssociativeContainerKeyHelper.
+template <NMpl::CAssociative TContainer>
+void Serialize(const TContainer& value, NYson::IYsonConsumer* consumer);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
 
 // Subtypes of google::protobuf::Message
-template <class T>
+template <CProtobufMessageAsYson T>
 void Serialize(
     const T& message,
-    NYson::IYsonConsumer* consumer,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
+    NYson::IYsonConsumer* consumer);
 
-template <class T, class TTag>
-void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
+template <CProtobufMessageAsString T>
+void Serialize(
+    const T& message,
+    NYson::IYsonConsumer* consumer);
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Serialize(const TStrongTypedef<T, TTag, Options>& value, NYson::IYsonConsumer* consumer);
 
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
+
+void Serialize(std::filesystem::path& path, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -246,6 +259,14 @@ void Deserialize(std::deque<T, A>& value, INodePtr node);
 template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node);
 
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& items, INodePtr node);
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& items, INodePtr node);
+
 // TErrorOr
 template <class T>
 void Deserialize(TErrorOr<T>& error, INodePtr node);
@@ -262,25 +283,31 @@ void Deserialize(std::array<T, N>& value, INodePtr node);
 template <class... T>
 void Deserialize(std::tuple<T...>& value, INodePtr node);
 
-// For any associative container.
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
-void Deserialize(C<T...>& value, INodePtr node);
+// For any associative container. Keys are serialized with TAssociativeContainerKeyHelper.
+template <NMpl::CAssociative TContainer>
+void Deserialize(TContainer& mapping, INodePtr node);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
 void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <CProtobufMessageAsYson T>
 void Deserialize(
     T& message,
     const INodePtr& node);
 
-template <class T, class TTag>
-void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+template <CProtobufMessageAsString T>
+void Deserialize(
+    T& message,
+    const INodePtr& node);
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Deserialize(TStrongTypedef<T, TTag, Options>& value, INodePtr node);
 
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
+
+void Deserialize(std::filesystem::path& path, INodePtr node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -289,6 +316,15 @@ concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* cons
 {
     { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
 };
+
+template <class T>
+concept CYsonDeserializable = requires (T& value, INodePtr node)
+{
+    { Deserialize(value, node) } -> std::same_as<void>;
+};
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializableDeserializable = CYsonSerializable<T, TExtraArgs...> && CYsonDeserializable<T>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

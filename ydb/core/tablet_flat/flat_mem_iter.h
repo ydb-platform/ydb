@@ -9,6 +9,7 @@
 #include "flat_part_iface.h"
 #include "flat_page_label.h"
 #include "flat_table_committed.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 
@@ -32,8 +33,8 @@ namespace NTable {
         {
             Key.reserve(KeyCellDefaults->Size());
 
-            Y_ABORT_UNLESS(Key.capacity() > 0, "No key cells in part scheme");
-            Y_ABORT_UNLESS(Remap, "Remap cannot be NULL");
+            Y_ENSURE(Key.capacity() > 0, "No key cells in part scheme");
+            Y_ENSURE(Remap, "Remap cannot be NULL");
         }
 
         static TAutoPtr<TMemIter> Make(
@@ -44,7 +45,7 @@ namespace NTable {
                 TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap *remap,
                 IPages *env,
-                EDirection direction = EDirection::Forward) noexcept
+                EDirection direction = EDirection::Forward)
         {
             auto *iter = new TMemIter(&memTable, std::move(keyDefaults), remap, env, snapshot.Iterator());
 
@@ -60,7 +61,7 @@ namespace NTable {
             return iter;
         }
 
-        void Seek(TCells key, ESeek seek) noexcept
+        void Seek(TCells key, ESeek seek)
         {
             Key.clear();
             CurrentVersion = nullptr;
@@ -92,7 +93,7 @@ namespace NTable {
             }
         }
 
-        void SeekReverse(TCells key, ESeek seek) noexcept
+        void SeekReverse(TCells key, ESeek seek)
         {
             Key.clear();
             CurrentVersion = nullptr;
@@ -132,39 +133,64 @@ namespace NTable {
             const auto *key = RowIt.GetKey();
 
             if (len >= KeyCellDefaults->BasicTypes().size()) {
-                return { KeyCellDefaults->BasicTypes().begin(), key, len };
+                return { KeyCellDefaults->BasicTypes().data(), key, len };
             } else if (!Key) {
                 Key.insert(Key.end(), key, key + len);
                 Key.insert(Key.end(), (**KeyCellDefaults).begin() + len, (**KeyCellDefaults).end());
             }
 
-            return { KeyCellDefaults->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
+            return { KeyCellDefaults->BasicTypes().data(), Key.data(), ui32(Key.size()) };
         }
 
-        bool IsDelta() const noexcept
+        bool IsDelta() const
         {
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
+            Y_ENSURE(update);
 
             return update->RowVersion.Step == Max<ui64>();
         }
 
-        ui64 GetDeltaTxId() const noexcept
+        bool IsDeltaLockOnly() const
         {
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
-            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            return update->Rop == ERowOp::Absent;
+        }
+
+        ui64 GetDeltaTxId() const
+        {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
 
             return update->RowVersion.TxId;
         }
 
-        void ApplyDelta(TRowState& row) const noexcept
+        std::tuple<ELockMode, ui64> GetLockInfo() const {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+
+            if (update->RowVersion.Step == Max<ui64>() && update->Lock != ELockMode::None) {
+                return { update->Lock, update->RowVersion.TxId };
+            } else {
+                return { ELockMode::None, 0 };
+            }
+        }
+
+        void ApplyDelta(TRowState& row) const
         {
-            Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
+            Y_ENSURE(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
-            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            if (update->Rop == ERowOp::Absent) {
+                // Skip lock only updates
+                return;
+            }
 
             if (row.Touch(update->Rop)) {
                 for (auto& up : **update) {
@@ -173,11 +199,11 @@ namespace NTable {
             }
         }
 
-        bool SkipDelta() noexcept
+        bool SkipDelta()
         {
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
-            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
 
             CurrentVersion = update->Next;
             return bool(CurrentVersion);
@@ -185,32 +211,34 @@ namespace NTable {
 
         void Apply(TRowState& row,
                    NTable::ITransactionMapSimplePtr committedTransactions,
-                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const
         {
-            Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
+            Y_ENSURE(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
+            Y_ENSURE(update);
 
             for (;;) {
                 const bool isDelta = update->RowVersion.Step == Max<ui64>();
-                const TRowVersion* commitVersion;
-                if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
-                    if (!isDelta) {
-                        transactionObserver.OnApplyCommitted(update->RowVersion);
-                    } else {
-                        transactionObserver.OnApplyCommitted(*commitVersion, update->RowVersion.TxId);
-                    }
-                    if (row.Touch(update->Rop)) {
-                        for (auto& up : **update) {
-                            ApplyColumn(row, up);
+                if (update->Rop != ERowOp::Absent) {
+                    const TRowVersion* commitVersion;
+                    if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
+                        if (!isDelta) {
+                            transactionObserver.OnApplyCommitted(update->RowVersion);
+                        } else {
+                            transactionObserver.OnApplyCommitted(*commitVersion, update->RowVersion.TxId);
                         }
+                        if (row.Touch(update->Rop)) {
+                            for (auto& up : **update) {
+                                ApplyColumn(row, up);
+                            }
+                        }
+                        if (isDelta && row.IsFinalized()) {
+                            break;
+                        }
+                    } else {
+                        transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                     }
-                    if (isDelta && row.IsFinalized()) {
-                        break;
-                    }
-                } else {
-                    transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                 }
                 if (!isDelta) {
                     break;
@@ -224,11 +252,11 @@ namespace NTable {
         /**
          * Returns row version at which current row state materialized
          */
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
             auto* update = GetCurrentVersion();
-            Y_ABORT_UNLESS(update);
-            Y_ABORT_UNLESS(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
             return update->RowVersion;
         }
 
@@ -241,7 +269,7 @@ namespace NTable {
         bool SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                               NTable::ITransactionMapSimplePtr committedTransactions,
                               NTable::ITransactionObserverSimplePtr transactionObserver,
-                              const NTable::ITransactionSet& decidedTransactions) noexcept
+                              const NTable::ITransactionSet& decidedTransactions)
         {
             // Temporary: we don't cache erases when there are uncompacted deltas
             Y_UNUSED(decidedTransactions);
@@ -251,12 +279,21 @@ namespace NTable {
             auto* chain = GetCurrentVersion();
             Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
-            // Skip uncommitted deltas
-            while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
-                // We cannot cache when there are uncompacted deltas
+            // Skip uncommitted and lock only deltas
+            while (chain->RowVersion.Step == Max<ui64>()) {
+                bool isCommitted = bool(committedTransactions.Find(chain->RowVersion.TxId));
+                if (isCommitted && chain->Rop != ERowOp::Absent) {
+                    break;
+                }
+
+                // We cannot cache when there are uncompacted deltas (including lock only)
                 stats.UncertainErase = true;
 
-                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                // Lock only deltas are not observed (whether committed or not)
+                if (chain->Rop != ERowOp::Absent) {
+                    transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                }
+
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return false;
@@ -275,11 +312,14 @@ namespace NTable {
                     stats.UncertainErase = true;
                 }
             } else {
+                // We must have skipped to the first non lock only update
+                Y_DEBUG_ABORT_UNLESS(chain->Rop != ERowOp::Absent);
+
                 // We cannot cache when there are uncompacted deltas
                 stats.UncertainErase = true;
 
                 auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                Y_ABORT_UNLESS(commitVersion);
+                Y_ENSURE(commitVersion);
                 if (*commitVersion <= rowVersion) {
                     return true;
                 }
@@ -305,6 +345,12 @@ namespace NTable {
                     // We cannot cache when there are uncompacted deltas
                     stats.UncertainErase = true;
 
+                    if (chain->Rop == ERowOp::Absent) {
+                        // Lock only deltas are ignored on the data path
+                        // They don't trigger observer callbacks and don't affect invisible row skips
+                        continue;
+                    }
+
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         CurrentVersion = chain;
@@ -327,22 +373,29 @@ namespace NTable {
         /**
          * Finds the first committed row and returns its version
          */
-        std::optional<TRowVersion> SkipToCommitted(
+        TSkipToCommittedResult SkipToCommitted(
                 NTable::ITransactionMapSimplePtr committedTransactions,
-                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                NTable::ITransactionObserverSimplePtr transactionObserver,
+                ELockMode& lockMode, ui64& lockTxId)
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             auto* chain = GetCurrentVersion();
             Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
-            // Skip uncommitted deltas
+            // Skip uncommitted and lock only deltas
             while (chain->RowVersion.Step == Max<ui64>()) {
-                auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                if (commitVersion) {
-                    return *commitVersion;
+                if (chain->Lock != ELockMode::None && lockMode == ELockMode::None) {
+                    lockMode = chain->Lock;
+                    lockTxId = chain->RowVersion.TxId;
                 }
-                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                if (chain->Rop != ERowOp::Absent) {
+                    auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
+                    if (commitVersion) {
+                        return { *commitVersion, chain->RowVersion.TxId, chain->Rop };
+                    }
+                    transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                }
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return { };
@@ -350,7 +403,7 @@ namespace NTable {
                 CurrentVersion = chain;
             }
 
-            return chain->RowVersion;
+            return { chain->RowVersion, 0, chain->Rop };
         }
 
         bool IsValid() const
@@ -379,7 +432,7 @@ namespace NTable {
         }
 
     private:
-        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
+        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const
         {
             const auto pos = Remap->Has(up.Tag);
             auto op = up.Op;
@@ -389,14 +442,14 @@ namespace NTable {
             } else if (op == ELargeObj::Inline) {
                 row.Set(pos, op, up.Value);
             } else if (op != ELargeObj::Extern) {
-                Y_ABORT("Got an unknown ELargeObj reference type");
+                Y_TABLET_ERROR("Got an unknown ELargeObj reference type");
             } else {
                 const auto ref = up.Value.AsValue<ui64>();
 
                 if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
-                    Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
+                    Y_ENSURE(got == NPage::ECodec::Plain && got.Version == 0);
 
                     row.Set(pos, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else {
@@ -407,7 +460,7 @@ namespace NTable {
             }
         }
 
-        const NMem::TUpdate* GetCurrentVersion() const noexcept
+        const NMem::TUpdate* GetCurrentVersion() const
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 

@@ -21,6 +21,8 @@
 
 namespace NYdbGrpc {
 
+std::atomic<bool> GrpcDead = false;
+
 static void PullEvents(grpc::ServerCompletionQueue* cq, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     TThread::SetCurrentThreadName("grpc_server");
     auto okCounter = counters->GetCounter("RequestExecuted", true);
@@ -139,6 +141,8 @@ void TGRpcServer::AddService(IGRpcServicePtr service) {
 }
 
 void TGRpcServer::Start() {
+    Stopped_.store(false, std::memory_order_release);
+
     TString server_address(Join(":", Options_.Host, Options_.Port)); // https://st.yandex-team.ru/DTCC-695
     using grpc::ServerBuilder;
     using grpc::ResourceQuota;
@@ -152,7 +156,9 @@ void TGRpcServer::Start() {
         sslOps.pem_root_certs = std::move(Options_.SslData->Root);
         sslOps.pem_key_cert_pairs.push_back(keycert);
 
-        if (Options_.SslData->DoRequestClientCertificate) {
+        if (Options_.SslData->ClientCertificateRequired) {
+            sslOps.client_certificate_request = GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_AND_VERIFY;
+        } else if (Options_.SslData->DoRequestClientCertificate) {
             sslOps.client_certificate_request = GRPC_SSL_REQUEST_CLIENT_CERTIFICATE_AND_VERIFY;
         }
 
@@ -273,6 +279,15 @@ void TGRpcServer::Start() {
 }
 
 void TGRpcServer::Stop() {
+    // Stop() may be called more than once on the same instance (e.g. by
+    // TGRpcServersManager::Stop() and then again by KikimrStop()). Make it
+    // idempotent so the second pass does not re-shutdown the server and its
+    // completion queues.
+    if (Stopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    NYdbGrpc::GrpcDead = true;
     for (auto& service : Services_) {
         service->StopService();
     }
@@ -300,12 +315,13 @@ void TGRpcServer::Stop() {
         auto spent = (TInstant::Now() - now).SecondsFloat();
         if ((attempt + 1) % 300 == 0) {
             // don't log too much
-            Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl;
+            Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec. GRpcShutdownDeadline: "
+                 << Options_.GRpcShutdownDeadline.SecondsFloat() << Endl;
         }
 
         if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat()) {
-            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent << " sec"
-                 << Endl;
+            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent
+                 << " sec. GRpcShutdownDeadline: " << Options_.GRpcShutdownDeadline.SecondsFloat() << Endl;
             break;
         }
         Sleep(TDuration::MilliSeconds(10));

@@ -1,0 +1,314 @@
+name: compare_index_performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+        required: false
+        default: ''
+      duration:
+        description: 'Duration of each workload run in seconds'
+        required: false
+        default: '100'
+      iterations:
+        description: 'Number of iterations per workload (median reported)'
+        required: false
+        default: '10'
+      build_preset:
+        description: 'Build preset (must match S3 prebuilt binary)'
+        required: false
+        type: choice
+        options:
+          - release
+          - relwithdebinfo
+          - profile
+        default: release
+      ref:
+        description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
+        required: false
+        default: 'main'
+      workload:
+        description: 'Workload to run'
+        required: false
+        type: choice
+        options:
+          - vector
+          - fulltext
+        default: vector
+      index_type:
+        description: 'Index type passed to the workload with --index-type (empty = workload default)'
+        required: false
+        default: ''
+      rows:
+        description: 'Number of rows in generated database'
+        required: false
+        default: '10000'
+      targets:
+        description: 'Number of query vectors for vector select'
+        required: false
+        default: '1000'
+      warmup:
+        description: 'Warmup duration in seconds before each measured run'
+        required: false
+        default: '30'
+      threads:
+        description: 'Number of threads for load testing'
+        required: false
+        default: '10'
+      main_config:
+        description: 'Comma-separated top-level config options for main branch; dotted paths allowed (e.g. data_shard_config.stats_report_interval_seconds=1)'
+        required: false
+        default: ''
+      current_config:
+        description: 'Comma-separated top-level config options for current branch; dotted paths allowed (e.g. data_shard_config.stats_report_interval_seconds=1)'
+        required: false
+        default: ''
+      build_baseline:
+        description: 'Build baseline ydbd from the exact resolved commit instead of downloading a prebuilt S3 binary'
+        required: false
+        type: boolean
+        default: true
+      vector_clusters:
+        description: 'Number of clusters in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      vector_levels:
+        description: 'Number of levels in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      dataset_source:
+        description: 'Source of the test dataset: generate (random data) or s3 (import fixed dataset from S3)'
+        required: false
+        type: choice
+        options:
+          - generate
+          - s3
+        default: generate
+      s3_endpoint:
+        description: 'S3 endpoint for dataset import (required when dataset_source=s3)'
+        required: false
+        default: 'https://storage.yandexcloud.net'
+      s3_bucket:
+        description: 'S3 bucket for dataset import (required when dataset_source=s3)'
+        required: false
+        default: 'vector-index'
+      s3_source:
+        description: 'S3 object key prefix for dataset import (required when dataset_source=s3)'
+        required: false
+        default: ''
+      s3_destination:
+        description: 'Database destination path for dataset import (required when dataset_source=s3)'
+        required: false
+        default: '/Root/testdb/wikipedia'
+      s3_query_source:
+        description: 'S3 object key prefix for pre-computed queries table (optional when dataset_source=s3)'
+        required: false
+        default: ''
+      s3_query_destination:
+        description: 'Database destination path for queries table (optional, used with s3_query_source)'
+        required: false
+        default: ''
+
+jobs:
+  compare:
+    name: Compare performance (${{ inputs.ref || 'main' }} vs ${{ inputs.pull_number && format('PR {0}', inputs.pull_number) || 'current' }})
+    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'release' }}" ]
+    timeout-minutes: 1200
+    steps:
+      - name: Resolve checkout ref
+        id: resolve-ref
+        env:
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_number || '' }}
+          INPUT_REF: ${{ inputs.ref || 'main' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Resolve the baseline SHA (HEAD of the S3 ref branch).
+          BASELINE_SHA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${INPUT_REF}" \
+            | jq -r '.sha')
+          echo "baseline_sha=$BASELINE_SHA" >> "$GITHUB_OUTPUT"
+
+          # When a pull_number is given, run the current side against the PR's
+          # merge commit (mirrors run_tests.yml); otherwise use the triggering ref.
+          if [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ "$PULL_REQUEST_NUMBER" =~ ^[0-9]+$ ]]; then
+            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              echo "Testing PR #$PULL_REQUEST_NUMBER at merge commit $MERGE_SHA"
+              echo "checkout_ref=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
+          else
+            echo "checkout_ref=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
+
+      - name: Build baseline ydbd
+        id: build-baseline
+        if: ${{ inputs.build_baseline != 'false' }}
+        env:
+          BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+        run: |
+          # Self-hosted runners reuse the workspace, so a ../baseline worktree
+          # (and its .git/worktrees admin entry) may linger from a prior run and
+          # make `git worktree add` fail with "'../baseline' already exists".
+          # Clean any stale copy first so the step is idempotent.
+          git worktree remove --force ../baseline 2>/dev/null || true
+          rm -rf ../baseline
+          git worktree prune
+          git fetch --depth=1 origin "$BASELINE_SHA"
+          git worktree add ../baseline "$BASELINE_SHA"
+          cd ../baseline
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
+          BINARY=$(realpath "$BINARY")
+          echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
+
+      - name: Run performance comparison
+        env:
+          INPUT_DURATION: ${{ inputs.duration || '100' }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+          INPUT_REF: ${{ inputs.ref || 'main' }}
+          INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
+          INPUT_INDEX_TYPE: ${{ inputs.index_type || '' }}
+          INPUT_ROWS: ${{ inputs.rows || '10000' }}
+          INPUT_TARGETS: ${{ inputs.targets || '1000' }}
+          INPUT_ITERATIONS: ${{ inputs.iterations || '10' }}
+          INPUT_WARMUP: ${{ inputs.warmup || '30' }}
+          INPUT_THREADS: ${{ inputs.threads || '10' }}
+          INPUT_MAIN_CONFIG: ${{ inputs.main_config || '' }}
+          INPUT_CURRENT_CONFIG: ${{ inputs.current_config || '' }}
+          INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
+          INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
+          INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
+          INPUT_VECTOR_CLUSTERS: ${{ inputs.vector_clusters || '' }}
+          INPUT_VECTOR_LEVELS: ${{ inputs.vector_levels || '' }}
+          INPUT_DATASET_SOURCE: ${{ inputs.dataset_source || 'generate' }}
+          INPUT_S3_ENDPOINT: ${{ inputs.s3_endpoint || '' }}
+          INPUT_S3_BUCKET: ${{ inputs.s3_bucket || '' }}
+          INPUT_S3_SOURCE: ${{ inputs.s3_source || '' }}
+          INPUT_S3_DESTINATION: ${{ inputs.s3_destination || '' }}
+          INPUT_S3_QUERY_SOURCE: ${{ inputs.s3_query_source || '' }}
+          INPUT_S3_QUERY_DESTINATION: ${{ inputs.s3_query_destination || '' }}
+        run: |
+          # Config inputs are comma-separated strings; the test splits them
+          # itself, so they are passed through as-is.
+          EXTRA_PARAMS=""
+          if [[ -n "$INPUT_BASELINE_YDBD" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+          fi
+          if [[ -n "$INPUT_VECTOR_CLUSTERS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_clusters=$INPUT_VECTOR_CLUSTERS"
+          fi
+          if [[ -n "$INPUT_VECTOR_LEVELS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_levels=$INPUT_VECTOR_LEVELS"
+          fi
+          if [[ "$INPUT_DATASET_SOURCE" == "s3" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_dataset_source=s3"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_endpoint=$INPUT_S3_ENDPOINT"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_bucket=$INPUT_S3_BUCKET"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_source=$INPUT_S3_SOURCE"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_destination=$INPUT_S3_DESTINATION"
+            if [[ -n "$INPUT_S3_QUERY_SOURCE" ]]; then
+              EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_query_source=$INPUT_S3_QUERY_SOURCE"
+              if [[ -n "$INPUT_S3_QUERY_DESTINATION" ]]; then
+                EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_query_destination=$INPUT_S3_QUERY_DESTINATION"
+              fi
+            fi
+          fi
+
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+            ydb/tests/stress/compare_index_performance/tests \
+            --test-param compare_duration="$INPUT_DURATION" \
+            --test-param compare_build_preset="$INPUT_BUILD_PRESET" \
+            --test-param compare_ref="$INPUT_REF" \
+            --test-param compare_targets="$INPUT_TARGETS" \
+            --test-param compare_workload="$INPUT_WORKLOAD" \
+            --test-param compare_index_type="$INPUT_INDEX_TYPE" \
+            --test-param compare_rows="$INPUT_ROWS" \
+            --test-param compare_iterations="$INPUT_ITERATIONS" \
+            --test-param compare_warmup="$INPUT_WARMUP" \
+            --test-param compare_threads="$INPUT_THREADS" \
+            --test-param compare_main_config="$INPUT_MAIN_CONFIG" \
+            --test-param compare_current_config="$INPUT_CURRENT_CONFIG" \
+            --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
+            --test-param compare_current_sha="$INPUT_CURRENT_SHA" \
+            $EXTRA_PARAMS 2>&1 | tee ya_make.log; exit "${PIPESTATUS[0]}"
+
+      - name: Post results to job summary
+        if: always()
+        run: |
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          # `test-results` and the files under it are ya-build symlinks, so find
+          # must follow symlinks (-L) — otherwise it never descends into them.
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          if [[ -n "$REPORTS" ]]; then
+            for r in $REPORTS; do
+              cat "$r" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            done
+          else
+            echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
+            if [[ -f ya_make.log ]]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "<details><summary>Build/test log (last 50 lines)</summary>" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -50 ya_make.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - name: Post results to pull request
+        if: always() && inputs.pull_number != ''
+        env:
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pip install PyGithub
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "### Index performance comparison"
+            echo ""
+            if [[ -n "$REPORTS" ]]; then
+              for r in $REPORTS; do
+                cat "$r"
+                echo ""
+              done
+            else
+              echo "No report generated."
+              if [[ -f ya_make.log ]]; then
+                echo ""
+                echo "<details><summary>Build/test log (last 50 lines)</summary>"
+                echo ""
+                echo '```'
+                tail -50 ya_make.log
+                echo '```'
+                echo "</details>"
+              fi
+            fi
+            echo "[Workflow run](${run_url})"
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
+
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: ydb/tests/stress/compare_index_performance/tests/test-results/**/testing_out_stuff/
+          retention-days: 30

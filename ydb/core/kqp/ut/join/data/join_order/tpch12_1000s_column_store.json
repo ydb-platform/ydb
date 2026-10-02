@@ -1,0 +1,27 @@
+{
+  "op_name":"HashShuffle",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"TableFullScan",
+              "table":"orders"
+            },
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
+                  }
+                ]
+            }
+          ]
+      }
+    ]
+}
+

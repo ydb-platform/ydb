@@ -28,7 +28,7 @@ namespace NLastGetopt {
      *            the special string " -- " will be treated as end of named
      *            options: all options after it will be parsed as free args
      *       if PERMUTE is choosen, arguments will be rearranged in correct order,
-     *       if RETURN_IN_ORDER is choosen, all free args will be ommited (TODO: looks very strange)
+     *       if RETURN_IN_ORDER is choosen, all free args will be omitted (TODO: looks very strange)
      *   - Using '+' as a prefix instead '--' for long names
      *   - Using "-" as a prefix for both short and long names
      *   - Allowing unknown options
@@ -49,7 +49,7 @@ namespace NLastGetopt {
         bool AllowSingleDashForLong_ = false;                      //
         bool AllowPlusForLong_ = false;                            // using '+' instead '--' for long options
 
-        //Allows unknwon options:
+        //Allows unknown options:
         bool AllowUnknownCharOptions_ = false;
         bool AllowUnknownLongOptions_ = false;
 
@@ -60,6 +60,8 @@ namespace NLastGetopt {
         ui32 FreeArgsMin_; // minimal number of free args
         ui32 FreeArgsMax_; // maximal number of free args
 
+        TVector<const TOpt*> ExclusiveWithFreeArgs_;
+
         TMap<ui32, TFreeArgSpec> FreeArgSpecs_; // mapping [free arg position] -> [free arg specification]
         TFreeArgSpec TrailingArgSpec_;          // spec for the trailing argument (when arguments are unlimited)
         TString DefaultFreeArgTitle_ = "ARG"; // title that's used for free args without a title
@@ -69,6 +71,9 @@ namespace NLastGetopt {
         TString CustomUsage;        // user defined usage string
 
         TVector<std::pair<TString, TString>> Sections;  // additional help entries to print after usage
+        bool ShowDefaultValuesForNoArgumentOptions_ = true;
+        bool ShowFreeArgTitlesInErrors_ = false;
+        bool ShowExceptionTypeInUsageErrors_ = true;
 
     public:
         /**
@@ -78,7 +83,7 @@ namespace NLastGetopt {
 
         /**
          * Constructs TOpts from string as in getopt(3) and
-         * additionally adds help option (for '?') and svn-verstion option (for 'V')
+         * additionally adds help option (for '?') and svn-version option (for 'V')
          */
         static TOpts Default(const TStringBuf& optstring = TStringBuf()) {
             TOpts opts(optstring);
@@ -92,7 +97,7 @@ namespace NLastGetopt {
          * Throws TConfException if validation failed.
          * Check consist of:
          *    -not intersecting of names
-         *    -compability of settings, that responsable for freeArgs parsing
+         *    -compatibility of settings, that responsible for freeArgs parsing
          */
         void Validate() const;
 
@@ -217,6 +222,15 @@ namespace NLastGetopt {
         TOpt& GetOption(const TStringBuf& name) {
             return GetLongOption(name);
         }
+
+        /// @}
+
+        /**
+         * Search for the option with given short name
+         * @param c        short name for search
+         * @return         ref on result (throw exception if not found)
+         */
+        /// @{
 
         const TOpt& GetOption(char c) const {
             return GetCharOption(c);
@@ -398,15 +412,39 @@ namespace NLastGetopt {
          * Note: don't use this on options with default values. If option with default value wasn't specified,
          * parser will run handlers for default value, thus triggering a false-positive exclusivity check.
          */
-        template <typename T1, typename T2>
-        void MutuallyExclusive(T1&& opt1, T2&& opt2) {
-            MutuallyExclusiveOpt(GetOption(std::forward<T1>(opt1)), GetOption(std::forward<T2>(opt2)));
+        template <typename Opt1, typename Opt2>
+        void MutuallyExclusive(Opt1&& name1, Opt2&& name2) {
+            TOpt& opt1 = GetOption(name1);
+            TOpt& opt2 = GetOption(name2);
+            MutuallyExclusiveOpt(opt1, opt2);
+        }
+
+        template <typename Opt1, typename... OtherOpts>
+        void MutuallyExclusive(Opt1&& name1, OtherOpts&& ...otherNames) {
+            TOpt& opt1 = GetOption(name1);
+            std::array<std::string_view, sizeof...(OtherOpts)> otherNamesArr{otherNames...};
+            for (const auto& otherName: otherNamesArr) {
+                TOpt& otherOpt = GetOption(otherName);
+                MutuallyExclusiveOpt(opt1, otherOpt);
+            }
+            MutuallyExclusive(std::forward<OtherOpts>(otherNames)...);
         }
 
         /**
          * Like `MutuallyExclusive`, but accepts `TOpt`s instead of option names.
          */
         void MutuallyExclusiveOpt(TOpt& opt1, TOpt& opt2);
+
+        /**
+         * Indicate that an explicitly specified option can't appear together with free arguments.
+         * Default values do not trigger this check.
+         */
+        template <typename Opt>
+        void MutuallyExclusiveWithFreeArgs(Opt&& name) {
+            TOpt& opt = GetOption(name);
+            ExclusiveWithFreeArgs_.push_back(&opt);
+            opt.IfPresentDisableCompletionForFreeArgs();
+        }
 
         /**
          * @return index of option
@@ -418,7 +456,7 @@ namespace NLastGetopt {
         /**
          * Replace help string with given
          *
-         * @param decr        new help string
+         * @param descr     new help string
          */
         void SetCmdLineDescr(const TString& descr) {
             CustomCmdLineDescr = descr;
@@ -431,6 +469,13 @@ namespace NLastGetopt {
          */
         void SetCustomUsage(const TString& usage) {
             CustomUsage = usage;
+        }
+
+        /**
+         * Hide default values for options that take no arguments.
+         */
+        void HideDefaultValuesForNoArgumentOptions() {
+            ShowDefaultValuesForNoArgumentOptions_ = false;
         }
 
         /**
@@ -450,6 +495,24 @@ namespace NLastGetopt {
         }
 
         /**
+         * Add section with examples.
+         *
+         * @param examples text of this section
+         */
+        void SetExamples(std::string_view examples) {
+            SetExamples(TString(examples));
+        }
+
+        /**
+         * Add section with examples.
+         *
+         * @param examples text of this section
+         */
+        void SetExamples(const char* examples) {
+            SetExamples(TString(examples));
+        }
+
+        /**
          * Set minimal number of free args
          *
          * @param min        new value
@@ -464,6 +527,29 @@ namespace NLastGetopt {
          */
         ui32 GetFreeArgsMin() const {
             return FreeArgsMin_;
+        }
+
+        /**
+         * Name missing positional arguments in usage errors.
+         */
+        void ShowFreeArgTitlesInErrors() {
+            ShowFreeArgTitlesInErrors_ = true;
+        }
+
+        /**
+         * Hide the exception type prefix in usage error messages.
+         */
+        void HideExceptionTypeInUsageErrors() {
+            ShowExceptionTypeInUsageErrors_ = false;
+        }
+
+        /**
+         * Enable concise help and informative usage errors.
+         */
+        void EnableUserFriendlyUsage() {
+            HideDefaultValuesForNoArgumentOptions();
+            ShowFreeArgTitlesInErrors();
+            HideExceptionTypeInUsageErrors();
         }
 
         /**
@@ -488,6 +574,13 @@ namespace NLastGetopt {
          */
         const TMap<ui32, TFreeArgSpec>& GetFreeArgSpecs() const {
             return FreeArgSpecs_;
+        }
+
+        /**
+         * Get index from where trailing arguments start
+         */
+        ui32 GetTrailingArgsIndex() const {
+            return FreeArgSpecs_.empty() ? 0 : FreeArgSpecs_.rbegin()->first + 1;
         }
 
         /**
@@ -529,7 +622,7 @@ namespace NLastGetopt {
 
         /**
          * Legacy, don't use. Same as `SetTrailingArgTitle`.
-         * Older versions of lastgetopt didn't have destinction between default title and title
+         * Older versions of lastgetopt didn't have distinction between default title and title
          * for the trailing argument.
          */
         void SetFreeArgDefaultTitle(const TString& title, const TString& help = TString()) {

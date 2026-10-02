@@ -1,19 +1,23 @@
 #include "lz4io.h"
-
-#include <util/generic/scope.h>
-#include <util/generic/size_literals.h>
+#include "output_queue_impl.h"
 
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/lz4/lz4hc.h>
 
-#include <yql/essentials/utils/yql_panic.h>
-#include <yql/essentials/utils/exceptions.h>
+#include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
+
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include "output_queue_impl.h"
+#include <ydb/core/util/exceptions.h>
 
-namespace NYql {
+#include <yql/essentials/utils/yql_panic.h>
 
-namespace NLz4 {
+#define LZ4F_STATIC_LINKING_ONLY
+#include <contrib/libs/lz4/lz4frame.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NLz4 {
 
 namespace {
 
@@ -42,6 +46,12 @@ ui32 ReadLE32(const void* s) {
     return value32;
 }
 
+enum class EStreamType {
+    Unknown = 0,
+    Frame,
+    Legacy
+};
+
 EStreamType CheckMagic(const void* data) {
     switch (ReadLE32(data)) {
         case Lz4ioMagicNumber:
@@ -55,16 +65,33 @@ EStreamType CheckMagic(const void* data) {
 
 EStreamType CheckMagic(NDB::ReadBuffer& input) {
     char data[4u];
-    YQL_ENSURE_CODELINE(input.read(data, sizeof(data)) == sizeof(data), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer too small.");
+    Y_ENSURE_CODELINE(input.read(data, sizeof(data)) == sizeof(data), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer too small.");
     return CheckMagic(data);
 }
 
-}
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    size_t DecompressFrame();
+    size_t DecompressLegacy();
+
+    NDB::ReadBuffer& Source;
+    const EStreamType StreamType;
+    std::vector<char> InBuffer, OutBuffer;
+
+    LZ4F_decompressionContext_t Ctx;
+    LZ4F_errorCode_t NextToLoad;
+    size_t Pos, Remaining;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source(source), StreamType(CheckMagic(Source)), Pos(0ULL), Remaining(0ULL)
 {
-    YQL_ENSURE_CODELINE(StreamType != EStreamType::Unknown, NYql::NDqProto::StatusIds::BAD_REQUEST, "Wrong magic.");
+    Y_ENSURE_CODELINE(StreamType != EStreamType::Unknown, NYql::NDqProto::StatusIds::BAD_REQUEST, "Wrong magic.");
     if (StreamType == EStreamType::Frame) {
         const auto errorCode = LZ4F_createDecompressionContext(&Ctx, LZ4F_VERSION);
         YQL_ENSURE(!LZ4F_isError(errorCode), "Can't create LZ4F context resource: " << LZ4F_getErrorName(errorCode));
@@ -77,7 +104,7 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
         WriteLE32(InBuffer.data(), Lz4ioMagicNumber);
 
         NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &outSize, InBuffer.data(), &inSize, nullptr, 0ULL, nullptr);
-        YQL_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Header error: " << LZ4F_getErrorName(NextToLoad));
+        Y_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Header error: " << LZ4F_getErrorName(NextToLoad));
     }
 }
 
@@ -122,7 +149,7 @@ size_t TReadBuffer::DecompressFrame() {
         if (Pos >= Remaining) {
             for (auto toRead = NextToLoad; toRead > 0U;) {
                 const auto sizeCheck = Source.read(InBuffer.data() + NextToLoad - toRead, toRead);
-                YQL_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
+                Y_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
                 toRead -= sizeCheck;
             }
 
@@ -134,7 +161,7 @@ size_t TReadBuffer::DecompressFrame() {
         while (Pos < Remaining || (decodedBytes == OutBuffer.size())) {
             decodedBytes = OutBuffer.size();
             NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
-            YQL_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompression error: " << LZ4F_getErrorName(NextToLoad));
+            Y_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompression error: " << LZ4F_getErrorName(NextToLoad));
             Pos += Remaining;
 
             if (decodedBytes)
@@ -155,25 +182,23 @@ size_t TReadBuffer::DecompressLegacy() {
     unsigned int blockSize = 0U;
 
     if (const auto sizeCheck = Source.read(InBuffer.data(), 4U)) {
-        YQL_ENSURE_CODELINE(sizeCheck == 4U, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access block size.");
+        Y_ENSURE_CODELINE(sizeCheck == 4U, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access block size.");
         blockSize = ReadLE32(InBuffer.data());
-        YQL_ENSURE_CODELINE(blockSize <= LZ4_COMPRESSBOUND(LegacyBlockSize), NYql::NDqProto::StatusIds::BAD_REQUEST, "Block size out of bounds.");
+        Y_ENSURE_CODELINE(blockSize <= LZ4_COMPRESSBOUND(LegacyBlockSize), NYql::NDqProto::StatusIds::BAD_REQUEST, "Block size out of bounds.");
     } else
         return 0ULL;
 
     for (auto toRead = blockSize; toRead > 0U;) {
         const auto sizeCheck = Source.read(InBuffer.data() + blockSize - toRead, toRead);
-        YQL_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
+        Y_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
         toRead -= sizeCheck;
     }
 
     const auto decodeSize = LZ4_decompress_safe(InBuffer.data(), OutBuffer.data(), (int)blockSize, LegacyBlockSize);
 
-    YQL_ENSURE_CODELINE(decodeSize >= 0, NYql::NDqProto::StatusIds::BAD_REQUEST, "Corrupted input detected.");
+    Y_ENSURE_CODELINE(decodeSize >= 0, NYql::NDqProto::StatusIds::BAD_REQUEST, "Corrupted input detected.");
     return size_t(decodeSize);
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -195,8 +220,9 @@ public:
     }
 
     ~TCompressor() {
-        if (LZ4F_errorCode_t const errorCode = LZ4F_freeCompressionContext(Ctx); LZ4F_isError(errorCode))
+        if (LZ4F_errorCode_t const errorCode = LZ4F_freeCompressionContext(Ctx); LZ4F_isError(errorCode)) {
             Cerr << "Error: can't free LZ4F context resource: " << LZ4F_getErrorName(errorCode);
+        }
     }
 
 private:
@@ -269,12 +295,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZ4HC_CLEVEL_DEFAULT));
 }
 
-}
-
-}
+} // namespace NYql::NLz4

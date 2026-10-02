@@ -2,13 +2,17 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/base/fulltext.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <cstdlib>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -103,19 +107,6 @@ void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TType
     }
 }
 
-void ValidateColumnsType(const TStreamExprType* streamType, const TKikimrTableMetadata& tableMeta) {
-    YQL_ENSURE(streamType);
-    auto rowType = streamType->GetItemType()->Cast<TStructExprType>();
-
-    for (auto* member : rowType->GetItems()) {
-        auto columnData = tableMeta.Columns.FindPtr(member->GetName());
-        YQL_ENSURE(columnData);
-        auto columnDataType = columnData->TypeInfo.GetTypeId();
-        YQL_ENSURE(columnDataType != 0);
-        ValidateColumnType(member->GetItemType(), columnDataType);
-    }
-}
-
 void ValidateRangeBoundType(const TTupleExprType* keyTupleType, const TKikimrTableMetadata& tableMeta) {
     YQL_ENSURE(keyTupleType);
     YQL_ENSURE(keyTupleType->GetSize() == tableMeta.KeyColumnNames.size() + 1);
@@ -197,7 +188,7 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
     if (settings.ItemsLimit) {
         keyRange.ItemsLimit = MkqlBuildExpr(*settings.ItemsLimit, buildCtx);
     }
-    keyRange.Reverse = settings.Reverse;
+    keyRange.Reverse = settings.IsReverse();
 
     return keyRange;
 }
@@ -210,13 +201,13 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     TKqpKeyRanges ranges = {
         .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx),
         .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(),
-        .Reverse = settings.Reverse,
+        .Reverse = settings.IsReverse(),
     };
 
     return ranges;
 }
 
-} // namespace
+} // anonymous namespace
 
 const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& table) const {
     auto& tableData = TablesData_->ExistingTable(Cluster_, table.Path());
@@ -333,86 +324,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpLookupTable::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpLookupTable lookupTable(&node);
-            const auto& tableMeta = ctx.GetTableMeta(lookupTable.Table());
-            auto lookupKeys = MkqlBuildExpr(lookupTable.LookupKeys().Ref(), buildCtx);
-
-            auto keysType = lookupTable.LookupKeys().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(keysType, tableMeta);
-
-            TVector<TStringBuf> keyColumns(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            auto result = ctx.PgmBuilder().KqpLookupTable(MakeTableId(lookupTable.Table()), lookupKeys,
-                GetKqpColumns(tableMeta, keyColumns, false),
-                GetKqpColumns(tableMeta, lookupTable.Columns(), true));
-
-            return result;
-        });
-
-    compiler->AddCallable(TKqpUpsertRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpUpsertRows upsertRows(&node);
-
-            auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
-
-            const auto& tableMeta = ctx.GetTableMeta(upsertRows.Table());
-
-            auto rows = MkqlBuildExpr(upsertRows.Input().Ref(), buildCtx);
-
-            auto rowsType = upsertRows.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(rowsType, tableMeta);
-
-            auto rowType = rowsType->GetItemType()->Cast<TStructExprType>();
-            YQL_ENSURE(rowType->GetItems().size() == upsertRows.Columns().Size());
-
-            THashSet<TStringBuf> keySet(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            THashSet<TStringBuf> upsertSet;
-            for (const auto& column : upsertRows.Columns()) {
-                if (keySet.contains(column)) {
-                    keySet.erase(column);
-                } else {
-                    upsertSet.insert(column);
-                }
-            }
-
-            YQL_ENSURE(keySet.empty());
-            YQL_ENSURE(tableMeta.KeyColumnNames.size() + upsertSet.size() == upsertRows.Columns().Size());
-            TVector<TStringBuf> upsertColumns(upsertSet.begin(), upsertSet.end());
-
-            auto result = ctx.PgmBuilder().KqpUpsertRows(MakeTableId(upsertRows.Table()), rows,
-                GetKqpColumns(tableMeta, upsertColumns, false), settings.IsUpdate);
-
-            return result;
-        });
-
-    compiler->AddCallable(TKqpDeleteRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpDeleteRows deleteRows(&node);
-
-            const auto& tableMeta = ctx.GetTableMeta(deleteRows.Table());
-
-            auto rowsType = deleteRows.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(rowsType, tableMeta);
-
-            const auto tableId = MakeTableId(deleteRows.Table());
-            const auto rows = MkqlBuildExpr(deleteRows.Input().Ref(), buildCtx);
-
-            return ctx.PgmBuilder().KqpDeleteRows(tableId, rows);
-        });
-
-    compiler->AddCallable(TKqpEffects::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            std::vector<TRuntimeNode> args;
-            args.reserve(node.ChildrenSize());
-            node.ForEachChild([&](const TExprNode& child){
-                args.emplace_back(MkqlBuildExpr(child, buildCtx));
-            });
-
-            auto result = ctx.PgmBuilder().KqpEffects(args);
-            return result;
-        });
-
     compiler->AddCallable(TKqpEnsure::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpEnsure ensure(&node);
@@ -435,11 +346,387 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             auto input = MkqlBuildExpr(indexLookupJoin.Input().Ref(), buildCtx);
 
-            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
+            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel,
+                ctx.StreamLookupJoinCookieVersion());
+        });
+
+    compiler->AddCallable(
+        TDqBlockHashJoinCore::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() >= 8 && node.ChildrenSize() <= 11, "Invalid number of arguments for BlockHashJoinCore");
+
+            // Compile input streams
+            auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
+            auto rightInput = MkqlBuildExpr(*node.Child(1), buildCtx);
+
+            // Get join kind from atom
+            auto joinKindNode = node.Child(2);
+            YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
+            auto joinKindStr = joinKindNode->Content();
+
+            NMiniKQL::EJoinKind joinKind;
+            if (joinKindStr == "Inner") {
+                joinKind = NMiniKQL::EJoinKind::Inner;
+            } else if (joinKindStr == "Left") {
+                joinKind = NMiniKQL::EJoinKind::Left;
+            } else if (joinKindStr == "LeftSemi") {
+                joinKind = NMiniKQL::EJoinKind::LeftSemi;
+            } else if (joinKindStr == "LeftOnly") {
+                joinKind = NMiniKQL::EJoinKind::LeftOnly;
+            } else if (joinKindStr == "Cross") {
+                joinKind = NMiniKQL::EJoinKind::Cross;
+            } else {
+                YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
+            }
+
+            // Extract key column indices from tuple literals
+            auto extractColumnIndices = [](const TExprNode* tupleNode) -> TVector<ui32> {
+                YQL_ENSURE(tupleNode->IsList(), "Expected tuple of atoms");
+                TVector<ui32> indices;
+                for (const auto& child : tupleNode->Children()) {
+                    YQL_ENSURE(child->IsAtom(), "Expected atom in key columns");
+                    indices.push_back(FromString<ui32>(child->Content()));
+                }
+                return indices;
+            };
+            auto leftKeyColumns = extractColumnIndices(node.Child(3));
+            auto rightKeyColumns = extractColumnIndices(node.Child(4));
+
+            // Get return type from node annotation
+            TStringStream errorStream;
+            auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
+            YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
+
+            auto graceJoinRenames = [&]{
+                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
+                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
+                };
+                TDqUserRenames renames{};
+                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
+                    renames.emplace_back(index, EJoinSide::kLeft);
+                }
+                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
+                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
+                        renames.emplace_back(index, EJoinSide::kRight);
+                    }
+                }
+                return TGraceJoinRenames::FromDq(renames);
+            }();
+
+
+            NMiniKQL::TBlockHashJoinSettings settings;
+            for (const auto& setting : node.Child(7)->Children()) {
+                const auto name = setting->Child(0)->Content();
+                if (name == "BuildSide") {
+                    if (setting->Child(1)->Content() == "Left") {
+                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
+                } else if (name == NMiniKQL::EqualNullsSettingName) {
+                    const auto& value = *setting->Child(1);
+                    YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
+                    const ui32 keyIndex = FromString<ui32>(value.Head().Content());
+                    YQL_ENSURE(keyIndex < leftKeyColumns.size(), "EqualNulls key index is out of range");
+                    settings.EqualNullsKeys.push_back(keyIndex);
+                }
+            }
+
+            auto IsEmptyLambda = [](const TExprNode::TPtr input) -> bool {
+                auto lambda = TCoLambda(input);
+                return !!TMaybeNode<TCoVoid>(lambda.Body().Ptr());
+            };
+
+            NMiniKQL::TDqProgramBuilder::TJoinFilterLambda leftFilter;
+            if (node.ChildrenSize() > 8U && !IsEmptyLambda(node.ChildPtr(8U))) {
+                leftFilter = [&](TRuntimeNode::TList leftInputs) {
+                    return MkqlBuildLambda(*node.Child(8U), buildCtx, leftInputs);
+                };
+            }
+
+            NMiniKQL::TDqProgramBuilder::TJoinFilterLambda rightFilter;
+            if (node.ChildrenSize() > 9U && !IsEmptyLambda(node.ChildPtr(9U))) {
+                rightFilter = [&](TRuntimeNode::TList rightInputs) {
+                    return MkqlBuildLambda(*node.Child(9U), buildCtx, rightInputs);
+                };
+            }
+
+            NMiniKQL::TDqProgramBuilder::TJoinCommonFilterLambda commonFilter;
+            if (node.ChildrenSize() > 10U && !IsEmptyLambda(node.ChildPtr(10U))) {
+                commonFilter = [&](TRuntimeNode::TList leftInputs, TRuntimeNode::TList rightInputs) {
+                    leftInputs.insert(leftInputs.end(), rightInputs.begin(), rightInputs.end());
+                    return MkqlBuildLambda(*node.Child(10U), buildCtx, leftInputs);
+                };
+            }
+
+            return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns, graceJoinRenames.Left,
+                                                    graceJoinRenames.Right, returnType, settings, leftFilter, rightFilter, commonFilter);
+        });
+
+    compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+        TDqPhyHashCombine hc(&node);
+        const auto flow = MkqlBuildExpr(*node.Child(0U), buildCtx);
+        i64 memLimit = 0LL;
+        const bool isAggregate = !TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+        memLimit = std::abs(memLimit);
+        const auto keyExtractor = [&](TRuntimeNode::TList items) {
+            return MkqlBuildWideLambda(*node.Child(2U), buildCtx, items);
+        };
+        const auto init = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            return MkqlBuildWideLambda(*node.Child(3U), buildCtx, keys);
+        };
+        const auto update = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(4U), buildCtx, keys);
+        };
+        const auto finish = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
+        };
+        if (isAggregate) {
+            const auto initLambda = node.Child(3U);
+            const bool isStatePersistable = initLambda->GetTypeAnn()->IsPersistable();
+            return ctx.PgmBuilder().DqHashAggregate(flow, isStatePersistable, keyExtractor, init, update, finish);
+        } else {
+            return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+        }
+    });
+
+    compiler->AddCallable(TDqPhyWatermarkGenerator::CallableName(), [kqpCtx = std::ref(ctx)](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto& pgmBuilder = kqpCtx.get().PgmBuilder();
+
+        TDqPhyWatermarkGenerator wg(&node);
+
+        const auto input = MkqlBuildExpr(*wg.Input().Raw(), ctx);
+
+        const auto watermarkExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.WatermarkExtractor().Raw(), ctx, {item});
+        };
+
+        const auto partitionKeyExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.PartitionKeyExtractor().Raw(), ctx, {item});
+        };
+
+        const auto writeTimeExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.WriteTimeExtractor().Raw(), ctx, {item});
+        };
+
+        std::vector<std::pair<std::string, std::string>> watermarkSettings;
+        watermarkSettings.reserve(wg.WatermarkSettings().Size());
+        for (const auto& nameValue : wg.WatermarkSettings()) {
+            if (std::string_view name  = nameValue.Name().Value();
+                "FederatedClusters" == name) {
+                const auto valueList = nameValue.Value().Cast<TCoAtomList>();
+
+                TStringBuilder valueBuilder;
+                for (bool first = true; const auto& value : valueList) {
+                    if (!std::exchange(first, false)) {
+                        valueBuilder << ',';
+                    }
+                    valueBuilder << value.Value();
+                }
+                const TString value = valueBuilder;
+
+                watermarkSettings.emplace_back(name, value);
+            } else {
+                std::string_view value = nameValue.Value().Cast<TCoAtom>().Value();
+                watermarkSettings.emplace_back(name, value);
+            }
+        }
+
+        const auto partitionKeys = pgmBuilder.NewVoid();
+
+        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, writeTimeExtractor, watermarkSettings, partitionKeys);
+    });
+
+    compiler->AddCallable("FulltextAnalyze",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
+
+            auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
+            auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
+
+            auto modeNode = node.Child(2);
+            YQL_ENSURE(modeNode->IsAtom(), "FulltextAnalyze mode should be an atom");
+            ui32 modeValue = FromString<ui32>(modeNode->Content());
+            auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
+
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
+        });
+
+    compiler->AddCallable("KqpStreamEnumerate",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 1, "KqpStreamEnumerate should have 1 argument");
+            auto input = MkqlBuildExpr(*node.Child(0), buildCtx);
+            return ctx.PgmBuilder().KqpStreamEnumerate(input);
+        });
+
+    compiler->AddCallable(TKqpStreamingAggregation::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 4, "KqpStreamingAggregation expects 4 args: input, keys, handlers, settings");
+
+            auto inputFlow = MkqlBuildExpr(*node.Child(TKqpStreamingAggregation::idx_Input), buildCtx);
+            const auto* keysList = node.Child(TKqpStreamingAggregation::idx_Keys);
+            const auto* handlersList = node.Child(TKqpStreamingAggregation::idx_Handlers);
+            const auto* settingsList = node.Child(TKqpStreamingAggregation::idx_Settings);
+
+            TString stateTablePath;
+            for (const auto& setting : settingsList->Children()) {
+                if (setting->ChildrenSize() >= 1 && setting->Child(0)->IsAtom() && setting->Child(0)->Content() == "state_table_path") {
+                    if (setting->ChildrenSize() >= 2 && setting->Child(1)->IsAtom()) {
+                        stateTablePath = TString(setting->Child(1)->Content());
+                    }
+                    break;
+                }
+            }
+            auto stateTablePathArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
+
+            const auto stateName = [](const TExprNode& handler) {
+                const auto& names = handler.Head();
+                return names.IsAtom() ? names.Content() : names.Head().Content();
+            };
+
+            auto keyExtractor = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(keysList->ChildrenSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(item, keyAtom->Content()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            const auto projectItem = [&](TRuntimeNode item, const TExprNode& trait) {
+                const auto* const rowType = trait.Child(TCoAggregationTraits::idx_ItemType)->GetTypeAnn()
+                    ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (IsSameAnnotation(*rowType, GetSeqItemType(*node.Head().GetTypeAnn()))) {
+                    return item;
+                }
+
+                // A handler can use the whole argument as state, so extra input columns must not leak into it.
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(rowType->GetSize());
+                for (const auto* member : rowType->GetItems()) {
+                    members.emplace_back(member->GetName(), ctx.PgmBuilder().Member(item, member->GetName()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto initLambda = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (ui32 i = 0; i < handlersList->ChildrenSize(); ++i) {
+                    const auto* handler = handlersList->Child(i);
+                    const auto& trait = *handler->Child(1);
+                    const auto& init = *trait.Child(TCoAggregationTraits::idx_InitHandler);
+                    TRuntimeNode::TList args = {projectItem(item, trait)};
+                    if (init.Head().ChildrenSize() == 2) {
+                        args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
+                    }
+                    auto initCall = MkqlBuildLambda(init, buildCtx, args);
+                    members.emplace_back(stateName(*handler), initCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto updateLambda = [&](TRuntimeNode state, TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (ui32 i = 0; i < handlersList->ChildrenSize(); ++i) {
+                    const auto* handler = handlersList->Child(i);
+                    const auto colName = stateName(*handler);
+                    const auto& trait = *handler->Child(1);
+                    auto prev = ctx.PgmBuilder().Member(state, colName);
+                    const auto& update = *trait.Child(TCoAggregationTraits::idx_UpdateHandler);
+                    TRuntimeNode::TList args = {projectItem(item, trait), prev};
+                    if (update.Head().ChildrenSize() == 3) {
+                        args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
+                    }
+                    auto updateCall = MkqlBuildLambda(update, buildCtx, args);
+                    members.emplace_back(colName, updateCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto finishLambda = [&](TRuntimeNode key, TRuntimeNode state) -> TRuntimeNode {
+                const auto* resultType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(resultType->GetSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    if (resultType->FindItemType(keyAtom->Content())) {
+                        members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(key, keyAtom->Content()));
+                    }
+                }
+
+                TRuntimeNode::TList finishes;
+                for (const auto& handler : handlersList->Children()) {
+                    const auto& names = handler->Head();
+                    const auto& trait = *handler->Child(TCoAggregateTuple::idx_Trait);
+                    const auto& finish = *trait.Child(TCoAggregationTraits::idx_FinishHandler);
+                    auto value = MkqlBuildLambda(finish, buildCtx, {ctx.PgmBuilder().Member(state, stateName(*handler))});
+                    const TTypeAnnotationNode* finishType = finish.GetTypeAnn();
+                    bool used = false;
+
+                    if (names.IsAtom()) {
+                        if (resultType->FindItemType(names.Content())) {
+                            if (!keysList->ChildrenSize()) {
+                                const auto& defaultValue = *trait.Child(TCoAggregationTraits::idx_DefVal);
+                                if (!defaultValue.IsCallable("Null")) {
+                                    value = ctx.PgmBuilder().Coalesce(value, MkqlBuildExpr(defaultValue, buildCtx));
+                                } else if (!finishType->IsOptionalOrNull()) {
+                                    value = ctx.PgmBuilder().NewOptional(value);
+                                }
+                            }
+                            members.emplace_back(names.Content(), value);
+                            used = true;
+                        }
+                    } else {
+                        const bool optional = finishType->GetKind() == ETypeAnnotationKind::Optional;
+                        const auto* tupleType = (optional ? finishType->Cast<TOptionalExprType>()->GetItemType() : finishType)->Cast<TTupleExprType>();
+                        for (TExprNode::TListType::size_type i = 0; i < names.ChildrenSize(); ++i) {
+                            const auto name = names.Child(i)->Content();
+                            if (resultType->FindItemType(name)) {
+                                auto element = ctx.PgmBuilder().Nth(value, i);
+                                if (!keysList->ChildrenSize() && !optional && !tupleType->GetItems()[i]->IsOptionalOrNull()) {
+                                    element = ctx.PgmBuilder().NewOptional(element);
+                                }
+                                members.emplace_back(name, element);
+                                used = true;
+                            }
+                        }
+                    }
+
+                    if (!used && finish.HasSideEffects()) {
+                        finishes.push_back(value);
+                    }
+                }
+
+                auto result = ctx.PgmBuilder().NewStruct(members);
+                if (finishes.empty()) {
+                    return result;
+                }
+
+                finishes.push_back(result);
+                return ctx.PgmBuilder().Seq(finishes, result.GetStaticType());
+            };
+
+            const auto stateLambda = [&](ui32 handlerIndex) {
+                return [&, handlerIndex](TRuntimeNode state) {
+                    TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.reserve(handlersList->ChildrenSize());
+                    for (const auto& handler : handlersList->Children()) {
+                        const auto name = stateName(*handler);
+                        const auto& trait = *handler->Child(TCoAggregateTuple::idx_Trait);
+                        members.emplace_back(name, MkqlBuildLambda(*trait.Child(handlerIndex), buildCtx,
+                            {ctx.PgmBuilder().Member(state, name)}));
+                    }
+                    return ctx.PgmBuilder().NewStruct(members);
+                };
+            };
+
+            return ctx.PgmBuilder().KqpStreamingAggregation(inputFlow, keyExtractor, initLambda, updateLambda, finishLambda,
+                stateTablePathArg, stateLambda(TCoAggregationTraits::idx_SaveHandler), stateLambda(TCoAggregationTraits::idx_LoadHandler));
         });
 
     return compiler;
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

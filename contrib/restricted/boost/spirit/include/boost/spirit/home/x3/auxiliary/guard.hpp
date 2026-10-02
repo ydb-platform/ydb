@@ -1,5 +1,7 @@
 /*=============================================================================
     Copyright (c) 2001-2014 Joel de Guzman
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -8,7 +10,8 @@
 #define BOOST_SPIRIT_X3_GUARD_FERBRUARY_02_2013_0649PM
 
 #include <boost/spirit/home/x3/support/context.hpp>
-#include <boost/spirit/home/x3/directive/expect.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
+#include <boost/spirit/home/x3/core/parser.hpp>
 
 namespace boost { namespace spirit { namespace x3
 {
@@ -17,7 +20,7 @@ namespace boost { namespace spirit { namespace x3
         fail
       , retry
       , accept
-      , rethrow
+      , rethrow // see BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE for alternative behaviors
     };
 
     template <typename Subject, typename Handler>
@@ -36,30 +39,48 @@ namespace boost { namespace spirit { namespace x3
         {
             for (;;)
             {
+                Iterator i = first;
+
+            #if BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
                 try
+            #endif
                 {
-                    Iterator i = first;
-                    bool r = this->subject.parse(i, last, context, rcontext, attr);
-                    if (r)
+                    if (this->subject.parse(i, last, context, rcontext, attr))
+                    {
                         first = i;
-                    return r;
+                        return true;
+                    }
                 }
-                catch (expectation_failure<Iterator> const& x)
-                {
+
+            #if BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
+                catch (expectation_failure<Iterator> const& x) {
+            #else
+                if (has_expectation_failure(context)) {
+                    auto& x = get_expectation_failure(context);
+            #endif
+                    // X3 developer note: don't forget to sync this implementation with x3::detail::rule_parser
                     switch (handler(first, last, x, context))
                     {
                         case error_handler_result::fail:
+                            clear_expectation_failure(context);
                             return false;
+
                         case error_handler_result::retry:
                             continue;
+
                         case error_handler_result::accept:
                             return true;
+
                         case error_handler_result::rethrow:
+                        #if BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
                             throw;
+                        #else
+                            return false; // TODO: design decision required
+                        #endif
                     }
                 }
+                return false;
             }
-            return false;
         }
 
         Handler handler;

@@ -32,6 +32,21 @@ const EPDiskStatus = {
     6: "TO_BE_REMOVED",
 };
 
+const EMaintenanceStatus = {
+    0: "NOT_SET",
+    1: "NO_REQUEST",
+    2: "LONG_TERM_MAINTENANCE_PLANNED",
+    3: "NO_NEW_VDISKS",
+};
+
+const EMaintenanceStatusColor = {
+    0: "neutral", // NOT_SET
+    1: "green",   // NO_REQUEST
+    2: "neutral", // LONG_TERM_MAINTENANCE_PLANNED
+    3: "yellow",  // NO_NEW_VDISKS
+};
+
+
 const PDiskHeaders = [
     "PDiskId",
     "State",
@@ -39,6 +54,8 @@ const PDiskHeaders = [
     "StateCounter",
     "Status",
     "DesiredStatus",
+    "MaintenanceStatus",
+    "DesiredMaintenanceStatus",
     "ChangingAllowed",
     "LastStatusChange",
     "StatusChangeFailed",
@@ -91,24 +108,26 @@ class CmsSentinelState {
         }
     }
 
-    renderPVEntry(entry, newData) {
-        var table = entry.table;
-        var headers = entry.header;
-        var data = entry.data;
+    renderPVEntry(tableEntry, newData, prefix = '') {
+        var table = tableEntry.table;
+        var headers = tableEntry.header;
+        var data = tableEntry.data;
         for (var entry in newData) {
-            if (!data.hasOwnProperty(entry)) {
-                var row = this.addPVEntry(table, headers[0], entry, newData[entry]);
-                data[entry] = {
+            if (typeof newData[entry]  === 'object' && newData[entry] !== null) {
+                this.renderPVEntry(tableEntry, newData[entry], prefix + entry + ".");
+            } else if (!data.hasOwnProperty(prefix + entry)) {
+                var row = this.addPVEntry(table, headers[0], prefix + entry, newData[entry]);
+                data[prefix + entry] = {
                     row: row,
                     data: newData[entry],
                 };
             } else {
                 this.updatePVEntry(
                     table,
-                    data[entry].row,
+                    data[prefix + entry].row,
                     newData[entry],
-                    data[entry].data);
-                data[entry].data = newData[entry];
+                    data[prefix + entry].data);
+                data[prefix + entry].data = newData[entry];
             }
         }
     }
@@ -131,6 +150,16 @@ class CmsSentinelState {
         return { "value": arg === undefined ? "nil" : arg + ":" + EPDiskStatus[arg], "class": arg === 1 ? "green" : (arg === undefined ? undefined : "red") };
     }
 
+    maintenanceStatus(arg) {
+        if (arg === undefined) {
+            return { "value": "nil" };
+        }
+        return {
+            "value": arg + ":" + EMaintenanceStatus[arg],
+            "class": EMaintenanceStatusColor[arg] ?? "red",
+        };
+    }
+
     bool(arg) {
         return { "value": arg === true ? "+" : "-" };
     }
@@ -149,6 +178,8 @@ class CmsSentinelState {
             "PrevStatusChangeAttempts": this.id.bind(this),
             "LastStatusChange": this.id.bind(this),
             "IgnoreReason": this.id.bind(this),
+            "MaintenanceStatus": this.maintenanceStatus.bind(this),
+            "DesiredMaintenanceStatus": this.maintenanceStatus.bind(this),
         };
     }
 

@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   ffi64.c - Copyright (c) 2011, 2018  Anthony Green
+   ffi64.c - Copyright (c) 2011, 2018, 2022  Anthony Green
              Copyright (c) 2013  The Written Word, Inc.
              Copyright (c) 2008, 2010  Red Hat, Inc.
              Copyright (c) 2002, 2007  Bo Thorsen <bo@suse.de>
@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <tramp.h>
 #include "internal64.h"
 
 #ifdef __x86_64__
@@ -100,6 +101,20 @@ enum x86_64_reg_class
 #define MAX_CLASSES 4
 
 #define SSE_CLASS_P(X)	((X) >= X86_64_SSE_CLASS && X <= X86_64_SSEUP_CLASS)
+
+/* On most x86-64 targets `long double` is the 80-bit x87 type: classified
+   X87/X87UP, passed in memory, returned in st(0).  But some targets (notably
+   x86_64 Android, and anything built with -mlong-double-128) make `long double`
+   the IEEE binary128 quad type, which the psABI passes and returns in SSE
+   registers exactly like __float128 (class SSE/SSEUP -> one %xmm register).
+   Detect that at compile time and classify long double accordingly.  A mantissa
+   of 113 bits uniquely identifies binary128 (x87 extended is 64).  */
+#if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE \
+    && defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ == 113
+# define FFI_LONGDOUBLE_BINARY128 1
+#else
+# define FFI_LONGDOUBLE_BINARY128 0
+#endif
 
 /* x86-64 register passing implementation.  See x86-64 ABI for details.  Goal
    of this code is to classify each 8bytes of incoming argument by the register
@@ -170,6 +185,8 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
     case FFI_TYPE_SINT32:
     case FFI_TYPE_UINT64:
     case FFI_TYPE_SINT64:
+    case FFI_TYPE_UINT128:
+    case FFI_TYPE_SINT128:
     case FFI_TYPE_POINTER:
     do_integer:
       {
@@ -210,14 +227,21 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
       return 1;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+      /* IEEE binary128: one %xmm register, like __float128.  */
+      classes[0] = X86_64_SSE_CLASS;
+      classes[1] = X86_64_SSEUP_CLASS;
+#else
       classes[0] = X86_64_X87_CLASS;
       classes[1] = X86_64_X87UP_CLASS;
+#endif
       return 2;
 #endif
     case FFI_TYPE_STRUCT:
       {
 	const size_t UNITS_PER_WORD = 8;
-	size_t words = (type->size + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
+        size_t words = (type->size + byte_offset + UNITS_PER_WORD - 1)
+                       / UNITS_PER_WORD;
 	ffi_type **ptr;
 	unsigned int i;
 	enum x86_64_reg_class subclasses[MAX_CLASSES];
@@ -241,14 +265,15 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	/* Merge the fields of structure.  */
 	for (ptr = type->elements; *ptr != NULL; ptr++)
 	  {
-	    size_t num;
+	    size_t num, pos;
 
 	    byte_offset = FFI_ALIGN (byte_offset, (*ptr)->alignment);
 
 	    num = classify_argument (*ptr, subclasses, byte_offset % 8);
 	    if (num == 0)
 	      return 0;
-	    for (i = 0; i < num; i++)
+            pos = byte_offset / 8;
+            for (i = 0; i < num && (i + pos) < words; i++)
 	      {
 		size_t pos = byte_offset / 8;
 		classes[i + pos] =
@@ -319,6 +344,10 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	  case FFI_TYPE_SINT64:
 	    goto do_integer;
 
+	  case FFI_TYPE_SINT128:
+	  case FFI_TYPE_UINT128:
+	    return 0;
+
 	  case FFI_TYPE_FLOAT:
 	    classes[0] = X86_64_SSE_CLASS;
 	    if (byte_offset % 8)
@@ -332,8 +361,13 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	    return 2;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
 	  case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+	    /* _Complex binary128 is 32 bytes -> passed/returned in memory.  */
+	    return 0;
+#else
 	    classes[0] = X86_64_COMPLEX_X87_CLASS;
 	    return 1;
+#endif
 #endif
 	  }
       }
@@ -442,6 +476,10 @@ ffi_prep_cif_machdep (ffi_cif *cif)
     case FFI_TYPE_SINT64:
       flags = UNIX64_RET_INT64;
       break;
+    case FFI_TYPE_UINT128:
+    case FFI_TYPE_SINT128:
+      flags = UNIX64_RET_ST_RAX_RDX | (16 << UNIX64_SIZE_SHIFT);
+      break;
     case FFI_TYPE_POINTER:
       flags = (sizeof(void *) == 4 ? UNIX64_RET_UINT32 : UNIX64_RET_INT64);
       break;
@@ -453,7 +491,11 @@ ffi_prep_cif_machdep (ffi_cif *cif)
       break;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+      flags = UNIX64_RET_XMM128;	/* returned in %xmm0 (16 bytes) */
+#else
       flags = UNIX64_RET_X87;
+#endif
       break;
 #endif
     case FFI_TYPE_STRUCT:
@@ -511,9 +553,20 @@ ffi_prep_cif_machdep (ffi_cif *cif)
 	  break;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
 	case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+	  /* _Complex binary128 (32 bytes) is returned in memory.  */
+	  gprcount++;
+	  flags = UNIX64_RET_VOID | UNIX64_FLAG_RET_IN_MEM;
+#else
 	  flags = UNIX64_RET_X87_2;
+#endif
 	  break;
 #endif
+	case FFI_TYPE_SINT128:
+	case FFI_TYPE_UINT128:
+	  gprcount++;
+	  flags = UNIX64_RET_VOID | UNIX64_FLAG_RET_IN_MEM;
+	  break;
 	default:
 	  return FFI_BAD_TYPEDEF;
 	}
@@ -554,6 +607,9 @@ ffi_prep_cif_machdep (ffi_cif *cif)
   return FFI_OK;
 }
 
+/* n.b. ffi_call_unix64 will steal the alloca'd `stack` variable here for use
+   _as its own stack_ - so we need to compile this function without ASAN */
+FFI_ASAN_NO_SANITIZE
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
@@ -578,6 +634,9 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	flags = UNIX64_RET_VOID;
     }
 
+  arg_types = cif->arg_types;
+  avn = cif->nargs;
+
   /* Allocate the space for the arguments, plus 4 words of temp space.  */
   stack = alloca (sizeof (struct register_args) + cif->bytes + 4*8);
   reg_args = (struct register_args *) stack;
@@ -591,9 +650,6 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
      first integer argument.  */
   if (flags & UNIX64_FLAG_RET_IN_MEM)
     reg_args->gpr[gprcount++] = (unsigned long) rvalue;
-
-  avn = cif->nargs;
-  arg_types = cif->arg_types;
 
   for (i = 0; i < avn; ++i)
     {
@@ -610,11 +666,12 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	  if (align < 8)
 	    align = 8;
 
-	  /* Pass this argument in memory.  */
-	  argp = (void *) FFI_ALIGN (argp, align);
-	  memcpy (argp, avalue[i], size);
-	  argp += size;
-	}
+          /* Pass this argument in memory.  */
+          argp = (void *) FFI_ALIGN (argp, align);
+          memcpy (argp, avalue[i], size);
+
+          argp += size;
+        }
       else
 	{
 	  /* The argument is passed entirely in registers.  */
@@ -626,7 +683,13 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      switch (classes[j])
 		{
 		case X86_64_NO_CLASS:
+		  break;
 		case X86_64_SSEUP_CLASS:
+		  /* The upper 8 bytes of the same %xmm register written by
+		     the preceding SSE class (e.g. the high half of a
+		     binary128 long double).  */
+		  memcpy ((char *) &reg_args->sse[ssecount - 1] + 8, a,
+			  size < 8 ? size : 8);
 		  break;
 		case X86_64_INTEGER_CLASS:
 		case X86_64_INTEGERSI_CLASS:
@@ -647,7 +710,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 		      break;
 		    default:
 		      reg_args->gpr[gprcount] = 0;
-		      memcpy (&reg_args->gpr[gprcount], a, size);
+		      memcpy (&reg_args->gpr[gprcount], a, size <= 8 ? size : 8);
 		    }
 		  gprcount++;
 		  break;
@@ -678,6 +741,24 @@ ffi_call_efi64(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue);
 void
 ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 {
+  ffi_type **arg_types = cif->arg_types;
+  int i, nargs = cif->nargs;
+  const int max_reg_struct_size = cif->abi == FFI_GNUW64 ? 8 : 16;
+
+  /* If we have any large structure arguments, make a copy so we are passing
+     by value.  */
+  for (i = 0; i < nargs; i++)
+    {
+      ffi_type *at = arg_types[i];
+      int size = at->size;
+      if (at->type == FFI_TYPE_STRUCT && size > max_reg_struct_size)
+        {
+          char *argcopy = alloca (size);
+          memcpy (argcopy, avalue[i], size);
+          avalue[i] = argcopy;
+        }
+    }
+
 #ifndef __ILP32__
   if (cif->abi == FFI_EFI64 || cif->abi == FFI_GNUW64)
     {
@@ -687,6 +768,8 @@ ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 #endif
   ffi_call_int (cif, fn, rvalue, avalue, NULL);
 }
+
+#ifdef FFI_GO_CLOSURES
 
 #ifndef __ILP32__
 extern void
@@ -708,9 +791,14 @@ ffi_call_go (ffi_cif *cif, void (*fn)(void), void *rvalue,
   ffi_call_int (cif, fn, rvalue, avalue, closure);
 }
 
+#endif /* FFI_GO_CLOSURES */
 
 extern void ffi_closure_unix64(void) FFI_HIDDEN;
 extern void ffi_closure_unix64_sse(void) FFI_HIDDEN;
+#if defined(FFI_EXEC_STATIC_TRAMP)
+extern void ffi_closure_unix64_alt(void) FFI_HIDDEN;
+extern void ffi_closure_unix64_sse_alt(void) FFI_HIDDEN;
+#endif
 
 #ifndef __ILP32__
 extern ffi_status
@@ -728,13 +816,15 @@ ffi_prep_closure_loc (ffi_closure* closure,
 		      void *user_data,
 		      void *codeloc)
 {
-  static const unsigned char trampoline[16] = {
-    /* leaq  -0x7(%rip),%r10   # 0x0  */
-    0x4c, 0x8d, 0x15, 0xf9, 0xff, 0xff, 0xff,
-    /* jmpq  *0x3(%rip)        # 0x10 */
-    0xff, 0x25, 0x03, 0x00, 0x00, 0x00,
-    /* nopl  (%rax) */
-    0x0f, 0x1f, 0x00
+  static const unsigned char trampoline[24] = {
+    /* endbr64 */
+    0xf3, 0x0f, 0x1e, 0xfa,
+    /* leaq  -0xb(%rip),%r10   # 0x0  */
+    0x4c, 0x8d, 0x15, 0xf5, 0xff, 0xff, 0xff,
+    /* jmpq  *0x7(%rip)        # 0x18 */
+    0xff, 0x25, 0x07, 0x00, 0x00, 0x00,
+    /* nopl  0(%rax) */
+    0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00
   };
   void (*dest)(void);
   char *tramp = closure->tramp;
@@ -751,9 +841,26 @@ ffi_prep_closure_loc (ffi_closure* closure,
   else
     dest = ffi_closure_unix64;
 
-  memcpy (tramp, trampoline, sizeof(trampoline));
-  *(UINT64 *)(tramp + 16) = (uintptr_t)dest;
+#if defined(FFI_EXEC_STATIC_TRAMP)
+  if (ffi_tramp_is_present(closure))
+    {
+      /* Initialize the static trampoline's parameters. */
+      if (dest == ffi_closure_unix64_sse)
+        dest = ffi_closure_unix64_sse_alt;
+      else
+        dest = ffi_closure_unix64_alt;
+      ffi_tramp_set_parms (closure->ftramp, dest, closure);
+      goto out;
+    }
+#endif
 
+  /* Initialize the dynamic trampoline. */
+  memcpy (tramp, trampoline, sizeof(trampoline));
+  *(UINT64 *)(tramp + sizeof (trampoline)) = (uintptr_t)dest;
+
+#if defined(FFI_EXEC_STATIC_TRAMP)
+out:
+#endif
   closure->cif = cif;
   closure->fun = fun;
   closure->user_data = user_data;
@@ -839,7 +946,12 @@ ffi_closure_unix64_inner(ffi_cif *cif,
 	  avalue[i] = a;
 	  for (j = 0; j < n; j++, a += 8)
 	    {
-	      if (SSE_CLASS_P (classes[j]))
+	      if (classes[j] == X86_64_SSEUP_CLASS)
+		/* The high half of the same %xmm register as the preceding
+		   SSE class (e.g. the upper bits of a binary128 long double);
+		   it does not consume another register.  */
+		memcpy (a, (char *) &reg_args->sse[ssecount - 1] + 8, 8);
+	      else if (SSE_CLASS_P (classes[j]))
 		memcpy (a, &reg_args->sse[ssecount++], 8);
 	      else
 		memcpy (a, &reg_args->gpr[gprcount++], 8);
@@ -853,6 +965,8 @@ ffi_closure_unix64_inner(ffi_cif *cif,
   /* Tell assembly how to perform return type promotions.  */
   return flags;
 }
+
+#ifdef FFI_GO_CLOSURES
 
 extern void ffi_go_closure_unix64(void) FFI_HIDDEN;
 extern void ffi_go_closure_unix64_sse(void) FFI_HIDDEN;
@@ -882,5 +996,19 @@ ffi_prep_go_closure (ffi_go_closure* closure, ffi_cif* cif,
 
   return FFI_OK;
 }
+
+#endif /* FFI_GO_CLOSURES */
+
+#if defined(FFI_EXEC_STATIC_TRAMP)
+void *
+ffi_tramp_arch (size_t *tramp_size, size_t *map_size)
+{
+  extern void *trampoline_code_table;
+
+  *map_size = UNIX64_TRAMP_MAP_SIZE;
+  *tramp_size = UNIX64_TRAMP_SIZE;
+  return &trampoline_code_table;
+}
+#endif
 
 #endif /* __x86_64__ */

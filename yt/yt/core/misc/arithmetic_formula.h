@@ -1,11 +1,12 @@
 #pragma once
 
-#include "property.h"
 #include "public.h"
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT {
 
@@ -30,9 +31,9 @@ public:
     // for non-default-constructible T)
     TArithmeticFormula();
     TArithmeticFormula(const TArithmeticFormula& other);
-    TArithmeticFormula(TArithmeticFormula&& other);
+    TArithmeticFormula(TArithmeticFormula&& other) noexcept;
     TArithmeticFormula& operator=(const TArithmeticFormula& other);
-    TArithmeticFormula& operator=(TArithmeticFormula&& other);
+    TArithmeticFormula& operator=(TArithmeticFormula&& other) noexcept;
     ~TArithmeticFormula();
 
     bool operator==(const TArithmeticFormula& other) const;
@@ -106,9 +107,9 @@ class TBooleanFormula
 public:
     TBooleanFormula();
     TBooleanFormula(const TBooleanFormula& other);
-    TBooleanFormula(TBooleanFormula&& other);
+    TBooleanFormula(TBooleanFormula&& other) noexcept;
     TBooleanFormula& operator=(const TBooleanFormula& other);
-    TBooleanFormula& operator=(TBooleanFormula&& other);
+    TBooleanFormula& operator=(TBooleanFormula&& other) noexcept;
     ~TBooleanFormula();
 
     bool operator==(const TBooleanFormula& other) const;
@@ -162,9 +163,9 @@ class TTimeFormula
 public:
     TTimeFormula();
     TTimeFormula(const TTimeFormula& other);
-    TTimeFormula(TTimeFormula&& other);
+    TTimeFormula(TTimeFormula&& other) noexcept;
     TTimeFormula& operator=(const TTimeFormula& other);
-    TTimeFormula& operator=(TTimeFormula&& other);
+    TTimeFormula& operator=(TTimeFormula&& other) noexcept;
     ~TTimeFormula();
 
     bool operator==(const TTimeFormula& other) const;

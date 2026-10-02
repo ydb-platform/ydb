@@ -1,12 +1,18 @@
 #include "load_actor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     void TLoadActor::RegisterTransition(TKey& key, ::NTestShard::TStateServer::EEntityState from,
             ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev,
             NWilson::TTraceId traceId) {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS14, "RegisterTransition", (TabletId, TabletId), (Key, key.first), (From, from),
-            (To, to));
+        YDB_LOG_DEBUG("RegisterTransition",
+            {"marker", "TS14"},
+            {"tabletId", TabletId},
+            {"key", key.first},
+            {"from", from},
+            {"to", to});
 
         // some sanity checks
         Y_VERIFY_S(key.second.ConfirmedState == key.second.PendingState, "key# " << key.first
@@ -21,13 +27,15 @@ namespace NKikimr::NTestShard {
         Y_ABORT_UNLESS(from != ::NTestShard::TStateServer::DELETED);
         Y_ABORT_UNLESS(to != ::NTestShard::TStateServer::ABSENT);
 
+        if (from == ::NTestShard::TStateServer::CONFIRMED) { // key was confirmed, unconfirm it
+            MakeUnconfirmed(key);
+        }
+        if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
+            BytesOfData += key.second.Len;
+        }
+
         if (!Settings.HasStorageServerHost()) {
-            if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
-                BytesOfData += key.second.Len;
-            }
-            if (from == ::NTestShard::TStateServer::CONFIRMED) {
-                MakeUnconfirmed(key);
-            } else if (to == ::NTestShard::TStateServer::CONFIRMED) {
+            if (to == ::NTestShard::TStateServer::CONFIRMED) {
                 MakeConfirmed(key);
             }
             if (to == ::NTestShard::TStateServer::DELETED) {
@@ -67,7 +75,9 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Handle(TEvStateServerWriteResult::TPtr ev) {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS15, "received TEvStateServerWriteResult", (TabletId, TabletId));
+        YDB_LOG_DEBUG("Received TEvStateServerWriteResult",
+            {"marker", "TS15"},
+            {"tabletId", TabletId});
 
         // check response
         auto& r = ev->Get()->Record;
@@ -79,6 +89,9 @@ namespace NKikimr::NTestShard {
                 Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
             case ::NTestShard::TStateServer::RACE:
+                YDB_LOG_ERROR("Received RACE in TEvStateServerWriteResult",
+                    {"marker", "TS35"},
+                    {"tabletId", TabletId});
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
                 return;
@@ -94,15 +107,9 @@ namespace NKikimr::NTestShard {
 
         // account data bytes if confirming written key
         Y_ABORT_UNLESS(key.second.ConfirmedState != key.second.PendingState);
-        if (key.second.ConfirmedState == ::NTestShard::TStateServer::WRITE_PENDING &&
-                key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
-            BytesOfData += key.second.Len;
-        }
 
         // switch to correct state
-        if (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
-            MakeUnconfirmed(key);
-        } else if (key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
+        if (key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
             MakeConfirmed(key);
         }
         key.second.ConfirmedState = key.second.PendingState;

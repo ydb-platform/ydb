@@ -16,17 +16,6 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonItem::TYsonItem(const TYsonItem& other)
-{
-    memcpy(this, &other, sizeof(*this));
-}
-
-TYsonItem& TYsonItem::operator =(const TYsonItem& other)
-{
-    memcpy(this, &other, sizeof(*this));
-    return *this;
-}
-
 TYsonItem TYsonItem::Simple(EYsonItemType type)
 {
     TYsonItem result;
@@ -672,7 +661,7 @@ typename TVisitor::TResult TYsonPullParser::NextImpl(TVisitor* visitor)
                             value = FromString<double>(valueBuffer);
                         } catch (const std::exception& ex) {
                             THROW_ERROR CreateLiteralError(ETokenType::Double, valueBuffer.begin(), valueBuffer.size())
-                                << ex;
+                                .With(ex);
                         }
                         SyntaxChecker_.OnSimpleNonstring(EYsonItemType::DoubleValue);
                         return visitor->OnDouble(value);
@@ -682,7 +671,7 @@ typename TVisitor::TResult TYsonPullParser::NextImpl(TVisitor* visitor)
                             value = FromString<i64>(valueBuffer);
                         } catch (const std::exception& ex) {
                             THROW_ERROR CreateLiteralError(ETokenType::Int64, valueBuffer.begin(), valueBuffer.size())
-                                << ex;
+                                .With(ex);
                         }
                         SyntaxChecker_.OnSimpleNonstring(EYsonItemType::Int64Value);
                         return visitor->OnInt64(value);
@@ -692,7 +681,7 @@ typename TVisitor::TResult TYsonPullParser::NextImpl(TVisitor* visitor)
                             value = FromString<ui64>(valueBuffer.SubStr(0, valueBuffer.size() - 1));
                         } catch (const std::exception& ex) {
                             THROW_ERROR CreateLiteralError(ETokenType::Uint64, valueBuffer.begin(), valueBuffer.size())
-                                << ex;
+                                .With(ex);
                         }
                         SyntaxChecker_.OnSimpleNonstring(EYsonItemType::Uint64Value);
                         return visitor->OnUint64(value);

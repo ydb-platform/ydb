@@ -1,10 +1,82 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <utility>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
+
+namespace {
+
+using TFamilyKey = std::pair<TString, ui32>;
+
+TFamilyKey FamilyKey(const TUserTable& table, ui32 id) {
+    if (const auto it = table.Families.find(id); it != table.Families.end()) {
+        const auto name = it->second.GetName();
+        // GetName() returns "default" for every unnamed family.
+        return name == "default" && id != 0 ? TFamilyKey{"", id} : TFamilyKey{name, 0};
+    }
+
+    Y_ENSURE(id == 0, "Unknown column family: " << id);
+    return {"default", 0};
+}
+
+struct TFamilySettings {
+    NTable::NPage::ECodec Codec = NTable::NPage::ECodec::Plain;
+    NTable::NPage::ECacheMode CacheMode = NTable::NPage::ECacheMode::Regular;
+    TString DataPoolKind;
+
+    bool operator==(const TFamilySettings&) const = default;
+};
+
+TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
+    TMap<TFamilyKey, TFamilySettings> result;
+    result.emplace(TFamilyKey{"default", 0}, TFamilySettings{});
+
+    for (const auto& [id, family] : table.Families) {
+        const auto key = FamilyKey(table, id);
+        const auto& data = family.StorageConfig.GetData();
+        const TFamilySettings settings{
+            .Codec = family.Codec,
+            .CacheMode = family.CacheMode,
+            .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
+        };
+
+        if (key == TFamilyKey{"default", 0}) {
+            result[key] = settings;
+        } else {
+            Y_ENSURE(result.emplace(key, settings).second, "Duplicate column family: " << key.first);
+        }
+    }
+
+    return result;
+}
+
+bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable) {
+    if (FamilySettings(oldTable) != FamilySettings(newTable)) {
+        return true;
+    }
+
+    for (const auto& [id, column] : newTable.Columns) {
+        auto it = oldTable.Columns.find(id);
+        if (it == oldTable.Columns.end()) {
+            continue;
+        }
+
+        if (FamilyKey(oldTable, it->second.Family) != FamilyKey(newTable, column.Family)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -25,31 +97,40 @@ public:
         Y_UNUSED(ctx);
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        // Only applicable when ALTER TABLE is in the transaction
+        // AlterMoveShadow is only applicable when AlterTable or PrepareIndexValidation is in the transaction
         auto& schemeTx = tx->GetSchemeTx();
-        if (!schemeTx.HasAlterTable())
+        bool shadowDisabled = false;
+        ui64 tableId = 0;
+        if (schemeTx.HasAlterTable()) {
+            // Only applicable when ALTER TABLE has disabled ShadowData
+            const auto& alter = schemeTx.GetAlterTable();
+            shadowDisabled = (
+                alter.HasPartitionConfig() &&
+                alter.GetPartitionConfig().HasShadowData() &&
+                !alter.GetPartitionConfig().GetShadowData());
+            tableId = alter.GetId_Deprecated();
+            if (alter.HasPathId()) {
+                auto& pathId = alter.GetPathId();
+                Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+                tableId = pathId.GetLocalId();
+            }
+        } else if (schemeTx.HasPrepareIndexValidation()) {
+            const auto& snap = schemeTx.GetPrepareIndexValidation();
+            shadowDisabled = true;
+            tableId = snap.GetIndexId().GetLocalId();
+            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetIndexId().GetOwnerId());
+        } else {
             return EExecutionStatus::Executed;
+        }
 
-        // Only applicable when ALTER TABLE has disabled ShadowData
-        const auto& alter = schemeTx.GetAlterTable();
-        const bool shadowDisabled = (
-            alter.HasPartitionConfig() &&
-            alter.GetPartitionConfig().HasShadowData() &&
-            !alter.GetPartitionConfig().GetShadowData());
+        // Only applicable when tx has disabled ShadowData
         if (!shadowDisabled)
             return EExecutionStatus::Executed;
 
-        ui64 tableId = alter.GetId_Deprecated();
-        if (alter.HasPathId()) {
-            auto& pathId = alter.GetPathId();
-            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
-            tableId = pathId.GetLocalId();
-        }
-
         // Only applicable when table has ShadowData enabled
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& table = *DataShard.GetUserTables().at(tableId);
         const ui32 localTid = table.LocalTid;
         const ui32 shadowTid = table.ShadowTid;
@@ -66,7 +147,7 @@ public:
             return EExecutionStatus::Continue;
         }
 
-        Y_ABORT_UNLESS(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
+        Y_ENSURE(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
         {
             auto& snapshot = op->InputSnapshots()[0];
             txc.Env.MoveSnapshot(*snapshot, /* src */ shadowTid, /* dst */ localTid);
@@ -129,7 +210,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                                           const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasAlterTable())
@@ -138,36 +219,54 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto& alterTableTx = schemeTx.GetAlterTable();
 
     const auto version = alterTableTx.GetTableSchemaVersion();
-    Y_ABORT_UNLESS(version);
+    Y_ENSURE(version);
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to ALTER TABLE at " << DataShard.TabletID()
-               << " version " << version);
+    YDB_LOG_INFO_CTX(ctx, "TAlterTableUnit::Execute: trying to alter table",
+        {"tabletId", DataShard.TabletID()},
+        {"version", version});
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
         auto& pathId = alterTableTx.GetPathId();
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
         tableId.LocalPathId = pathId.GetLocalId();
     }
 
-    TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    auto oldInfo = DataShard.FindUserTable(tableId);
+    auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
-    DataShard.AddUserTable(tableId, info, &locksDb);
+    DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
-    if (info->NeedSchemaSnapshots()) {
+    if (newInfo->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
+
+    bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo);
+    if (alterTableTx.DropColumnsSize()) {
+        schemaChanged = true;
+    } else {
+        for (const auto& [tag, column] : newInfo->Columns) {
+            if (!oldInfo->Columns.contains(tag)) {
+                schemaChanged = true;
+                break;
+            }
+        }
+    }
+
+    if (schemaChanged) {
+        PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    return EExecutionStatus::ExecutedNoMoreRestarts;
+    return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TAlterTableUnit::Complete(TOperation::TPtr,
+void TAlterTableUnit::Complete(TOperation::TPtr op,
                                const TActorContext &)
 {
+    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
@@ -178,3 +277,6 @@ THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

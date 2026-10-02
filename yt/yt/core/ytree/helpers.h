@@ -16,7 +16,7 @@ namespace NYT::NYTree {
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Pretty slow.
-bool operator == (const IAttributeDictionary& lhs, const IAttributeDictionary& rhs);
+bool operator==(const IAttributeDictionary& lhs, const IAttributeDictionary& rhs);
 
 //! Creates attributes dictionary in memory.
 IAttributeDictionaryPtr CreateEphemeralAttributes(std::optional<int> ysonNestingLevelLimit = std::nullopt);
@@ -34,6 +34,7 @@ void Serialize(const IAttributeDictionary& attributes, NYson::IYsonConsumer* con
 //! Protobuf conversion methods.
 void ToProto(NProto::TAttributeDictionary* protoAttributes, const IAttributeDictionary& attributes);
 IAttributeDictionaryPtr FromProto(const NProto::TAttributeDictionary& protoAttributes);
+IAttributeDictionaryPtr FromProto(NProto::TAttributeDictionary&& protoAttributes);
 
 //! By-ptr binary serializer.
 //! Supports TIntrusivePtr only.
@@ -47,7 +48,16 @@ struct TAttributeDictionarySerializer
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateYTreeKey(IAttributeDictionary::TKeyView key);
+void ValidateYTreeKey(
+    IAttributeDictionary::TKeyView key,
+    int maxLength = std::numeric_limits<int>::max());
+
+void ValidateYTreeChildCount(
+    TYPathBuf path,
+    int childCount,
+    int maxChildCount);
+
+[[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path);
 
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth);
 

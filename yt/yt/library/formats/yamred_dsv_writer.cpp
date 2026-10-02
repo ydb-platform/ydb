@@ -46,8 +46,8 @@ public:
             }
         } catch (const std::exception& ex) {
             auto error = TError("Failed to add columns to name table for YAMRed DSV format")
-                << ex;
-            RegisterError(error);
+                .With(ex);
+            SetError(error);
         }
 
         UpdateEscapedColumnNames();
@@ -60,7 +60,7 @@ private:
 
     std::vector<int> KeyColumnIds_;
     std::vector<int> SubkeyColumnIds_;
-    std::vector<TString> EscapedColumnNames_;
+    std::vector<std::string> EscapedColumnNames_;
 
     // In lenval mode key, subkey and value are first written into
     // this buffer in order to calculate their length.
@@ -115,9 +115,9 @@ private:
                     RowValues_[id] = nullptr;
             }
             WriteYamrValue();
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteYamrKey(const std::vector<int>& columnIds)
@@ -241,7 +241,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamredDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format").With(ex);
     }
 }
 

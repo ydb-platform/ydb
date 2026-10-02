@@ -36,6 +36,7 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestRefCountedPtrsInHashSet);
     UNIT_TEST(TestSharedPtrDowncast);
     UNIT_TEST(TestStdCompatibility);
+    UNIT_TEST(TestGetRef);
     UNIT_TEST_SUITE_END();
 
 private:
@@ -91,6 +92,7 @@ private:
     void TestRefCountedPtrsInHashSet();
     void TestSharedPtrDowncast();
     void TestStdCompatibility();
+    void TestGetRef();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TPointerTest);
@@ -186,6 +188,168 @@ void TPointerTest::TestHolderPtrMoveAssignmentInheritance() {
     THolder<TBase> basePtr;
     basePtr = THolder<TDerived>(new TDerived);
 }
+
+Y_UNIT_TEST_SUITE(THolderUniquePtrTest) {
+    Y_UNIT_TEST(ConstructionAndAssignment) {
+        UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+        {
+            auto source = std::make_unique<A>();
+            auto* raw = source.get();
+            THolder<A> holder{std::move(source)};
+            UNIT_ASSERT(!source);
+            UNIT_ASSERT(holder.Get() == raw);
+
+            std::unique_ptr<A> destination = static_cast<std::unique_ptr<A>>(std::move(holder));
+            UNIT_ASSERT(!holder);
+            UNIT_ASSERT(destination.get() == raw);
+
+            holder = MakeHolder<A>();
+            UNIT_ASSERT_VALUES_EQUAL(cnt, 2);
+            UNIT_ASSERT(&(holder = std::move(destination)) == &holder);
+            UNIT_ASSERT(!destination);
+            UNIT_ASSERT(holder.Get() == raw);
+            UNIT_ASSERT_VALUES_EQUAL(cnt, 1);
+
+            destination = std::make_unique<A>();
+            UNIT_ASSERT_VALUES_EQUAL(cnt, 2);
+            destination = static_cast<std::unique_ptr<A>>(std::move(holder));
+            UNIT_ASSERT(!holder);
+            UNIT_ASSERT(destination.get() == raw);
+            UNIT_ASSERT_VALUES_EQUAL(cnt, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+    }
+
+    Y_UNIT_TEST(EmptyPointers) {
+        std::unique_ptr<int> source;
+        THolder<int> holder{std::move(source)};
+        UNIT_ASSERT(!holder);
+        std::unique_ptr<int> destination = static_cast<std::unique_ptr<int>>(std::move(holder));
+        UNIT_ASSERT(!destination);
+
+        holder = MakeHolder<int>(42);
+        holder = std::move(source);
+        UNIT_ASSERT(!holder);
+        destination = std::make_unique<int>(42);
+        destination = static_cast<std::unique_ptr<int>>(std::move(holder));
+        UNIT_ASSERT(!destination);
+    }
+
+    Y_UNIT_TEST(InheritanceAndConst) {
+        auto source = std::make_unique<TDerived>();
+        auto* raw = source.get();
+        THolder<TBase> base{std::move(source)};
+        UNIT_ASSERT(!source);
+        UNIT_ASSERT(base.Get() == raw);
+
+        source = std::make_unique<TDerived>();
+        raw = source.get();
+        base = std::move(source);
+        UNIT_ASSERT(!source);
+        UNIT_ASSERT(base.Get() == raw);
+
+        auto derived = MakeHolder<TDerived>();
+        raw = derived.Get();
+        std::unique_ptr<TBase> destination = static_cast<std::unique_ptr<TBase>>(std::move(derived));
+        UNIT_ASSERT(!derived);
+        UNIT_ASSERT(destination.get() == raw);
+
+        derived = MakeHolder<TDerived>();
+        raw = derived.Get();
+        destination = static_cast<std::unique_ptr<TBase>>(std::move(derived));
+        UNIT_ASSERT(!derived);
+        UNIT_ASSERT(destination.get() == raw);
+
+        THolder<const int> constHolder{std::make_unique<int>(42)};
+        UNIT_ASSERT_VALUES_EQUAL(*constHolder, 42);
+        constHolder = std::make_unique<int>(43);
+        UNIT_ASSERT_VALUES_EQUAL(*constHolder, 43);
+        std::unique_ptr<const int> constPtr = static_cast<std::unique_ptr<const int>>(MakeHolder<int>(44));
+        UNIT_ASSERT_VALUES_EQUAL(*constPtr, 44);
+        constPtr = static_cast<std::unique_ptr<const int>>(MakeHolder<int>(45));
+        UNIT_ASSERT_VALUES_EQUAL(*constPtr, 45);
+    }
+
+    Y_UNIT_TEST(FunctionArguments) {
+        auto acceptHolder = [](THolder<int> ptr) { return *ptr; };
+        auto acceptUnique = [](std::unique_ptr<int> ptr) { return *ptr; };
+        // both directions require an explicit cast
+        UNIT_ASSERT_VALUES_EQUAL(acceptHolder(THolder<int>{std::make_unique<int>(42)}), 42);
+        UNIT_ASSERT_VALUES_EQUAL(acceptUnique(static_cast<std::unique_ptr<int>>(MakeHolder<int>(43))), 43);
+    }
+
+    Y_UNIT_TEST(StdStyleMethods) {
+        {
+            THolder<int> holder = MakeHolder<int>(42);
+            UNIT_ASSERT_VALUES_EQUAL(*holder.get(), 42);
+
+            int* raw = holder.release();
+            UNIT_ASSERT_VALUES_EQUAL(*raw, 42);
+            UNIT_ASSERT(!holder);
+            delete raw;
+
+            holder.reset(new int(43));
+            UNIT_ASSERT_VALUES_EQUAL(*holder, 43);
+
+            holder.reset();
+            UNIT_ASSERT(!holder);
+
+            holder.reset(new int(44));
+            holder.reset(nullptr);
+            UNIT_ASSERT(!holder);
+        }
+        {
+            // reset() must destroy the old object
+            auto destroyed = 0;
+            struct TCounter {
+                int* Count_;
+                TCounter(int* count)
+                    : Count_(count)
+                {
+                }
+                ~TCounter() {
+                    ++*Count_;
+                }
+            };
+            THolder<TCounter> holder = MakeHolder<TCounter>(&destroyed);
+            holder.reset(new TCounter(&destroyed));
+            UNIT_ASSERT_VALUES_EQUAL(destroyed, 1);
+            holder.reset();
+            UNIT_ASSERT_VALUES_EQUAL(destroyed, 2);
+        }
+    }
+
+    Y_UNIT_TEST(ConversionConstraints) {
+        static_assert(std::is_nothrow_constructible_v<THolder<int>, std::unique_ptr<int>&&>);
+        static_assert(!std::is_convertible_v<std::unique_ptr<int>&&, THolder<int>>);
+        static_assert(std::is_nothrow_assignable_v<THolder<int>&, std::unique_ptr<int>&&>);
+        static_assert(std::is_nothrow_constructible_v<std::unique_ptr<int>, THolder<int>&&>);
+        static_assert(!std::is_convertible_v<THolder<int>&&, std::unique_ptr<int>>);
+        // assignment is not available: it would require an implicit conversion
+        static_assert(!std::is_assignable_v<std::unique_ptr<int>&, THolder<int>&&>);
+        static_assert(!std::is_constructible_v<THolder<int>, std::unique_ptr<int>&>);
+        static_assert(!std::is_assignable_v<THolder<int>&, std::unique_ptr<int>&>);
+        static_assert(!std::is_constructible_v<std::unique_ptr<int>, THolder<int>&>);
+        static_assert(!std::is_assignable_v<std::unique_ptr<int>&, THolder<int>&>);
+        static_assert(!std::is_constructible_v<THolder<int>, const std::unique_ptr<int>&&>);
+        static_assert(!std::is_constructible_v<std::unique_ptr<int>, const THolder<int>&&>);
+        static_assert(!std::is_constructible_v<THolder<TDerived>, std::unique_ptr<TBase>&&>);
+        static_assert(!std::is_assignable_v<THolder<TDerived>&, std::unique_ptr<TBase>&&>);
+        static_assert(!std::is_convertible_v<THolder<TBase>&&, std::unique_ptr<TDerived>>);
+        static_assert(!std::is_constructible_v<THolder<int>, std::unique_ptr<const int>&&>);
+        static_assert(!std::is_convertible_v<THolder<const int>&&, std::unique_ptr<int>>);
+        static_assert(!std::is_constructible_v<THolder<int>, std::unique_ptr<int[]>&&>);
+        static_assert(!std::is_convertible_v<THolder<int>&&, std::unique_ptr<int[]>>);
+        static_assert(!std::is_constructible_v<THolder<int, TDeleteArray>, std::unique_ptr<int>&&>);
+        static_assert(!std::is_convertible_v<THolder<int, TDeleteArray>&&, std::unique_ptr<int>>);
+        static_assert(!std::is_constructible_v<THolder<int, TNoAction>, std::unique_ptr<int>&&>);
+        static_assert(!std::is_convertible_v<THolder<int, TNoAction>&&, std::unique_ptr<int>>);
+        using TCustomUnique = std::unique_ptr<int, void (*)(int*)>;
+        static_assert(!std::is_constructible_v<THolder<int>, TCustomUnique&&>);
+        static_assert(!std::is_assignable_v<THolder<int>&, TCustomUnique&&>);
+        static_assert(!std::is_convertible_v<THolder<int>&&, TCustomUnique>);
+    }
+} // Y_UNIT_TEST_SUITE(THolderUniquePtrTest)
 
 void TPointerTest::TestMakeHolder() {
     {
@@ -960,5 +1124,32 @@ void TPointerTest::TestStdCompatibility() {
         TIntrusivePtr<TOp> ptr;
         UNIT_ASSERT_TYPES_EQUAL(decltype(ptr)::element_type, TOp);
         UNIT_ASSERT_VALUES_EQUAL(ptr.get(), ptr.Get());
+    }
+}
+
+void TPointerTest::TestGetRef() {
+    {
+        TSimpleSharedPtr<int> ptr = MakeSimpleShared<int>(5);
+        UNIT_ASSERT_TYPES_EQUAL(decltype(ptr.GetRef()), int&);
+        UNIT_ASSERT_VALUES_EQUAL(ptr.GetRef(), 5);
+        ptr.GetRef() += 5;
+        UNIT_ASSERT_VALUES_EQUAL(ptr.GetRef(), 10);
+    }
+    {
+        THolder<const int> ptr = MakeHolder<int>(5);
+        UNIT_ASSERT_TYPES_EQUAL(decltype(ptr.GetRef()), const int&);
+        UNIT_ASSERT_VALUES_EQUAL(ptr.GetRef(), 5);
+    }
+    {
+        THolder<const int> ptr;
+        UNIT_ASSERT_EXCEPTION(ptr.GetRef(), yexception);
+    }
+
+    {
+        THolder<void, TNoAction> ptr((void*)10);
+        UNIT_ASSERT_TYPES_EQUAL(decltype(ptr.GetRef()), void);
+        ptr.GetRef();
+        ptr = {};
+        UNIT_ASSERT_EXCEPTION(ptr.GetRef(), yexception);
     }
 }

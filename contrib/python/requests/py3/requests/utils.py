@@ -38,9 +38,7 @@ from .compat import (
     getproxies,
     getproxies_environment,
     integer_types,
-)
-from .compat import parse_http_list as _parse_list_header
-from .compat import (
+    is_urllib3_1,
     proxy_bypass,
     proxy_bypass_environment,
     quote,
@@ -49,6 +47,7 @@ from .compat import (
     urlparse,
     urlunparse,
 )
+from .compat import parse_http_list as _parse_list_header
 from .cookies import cookiejar_from_dict
 from .exceptions import (
     FileModeWarning,
@@ -60,6 +59,7 @@ from .structures import CaseInsensitiveDict
 
 NETRC_FILES = (".netrc", "_netrc")
 
+# Certificate is extracted by certifi when needed.
 DEFAULT_CA_BUNDLE_PATH = certs.where()
 
 DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -136,7 +136,9 @@ def super_len(o):
     total_length = None
     current_position = 0
 
-    if isinstance(o, str):
+    if not is_urllib3_1 and isinstance(o, str):
+        # urllib3 2.x+ treats all strings as utf-8 instead
+        # of latin-1 (iso-8859-1) like http.client.
         o = o.encode("utf-8")
 
     if hasattr(o, "__len__"):
@@ -216,14 +218,7 @@ def get_netrc_auth(url, raise_errors=False):
         netrc_path = None
 
         for f in netrc_locations:
-            try:
-                loc = os.path.expanduser(f)
-            except KeyError:
-                # os.path.expanduser can fail when $HOME is undefined and
-                # getpwuid fails. See https://bugs.python.org/issue20164 &
-                # https://github.com/psf/requests/issues/1846
-                return
-
+            loc = os.path.expanduser(f)
             if os.path.exists(loc):
                 netrc_path = loc
                 break
@@ -233,17 +228,11 @@ def get_netrc_auth(url, raise_errors=False):
             return
 
         ri = urlparse(url)
-
-        # Strip port numbers from netloc. This weird `if...encode`` dance is
-        # used for Python 3.2, which doesn't support unicode literals.
-        splitstr = b":"
-        if isinstance(url, str):
-            splitstr = splitstr.decode("ascii")
-        host = ri.netloc.split(splitstr)[0]
+        host = ri.hostname
 
         try:
             _netrc = netrc(netrc_path).authenticators(host)
-            if _netrc:
+            if _netrc and any(_netrc):
                 # Return with login / password
                 login_i = 0 if _netrc[0] else 1
                 return (_netrc[login_i], _netrc[2])
@@ -293,12 +282,13 @@ def extract_zipped_paths(path):
         return path
 
     # we have a valid zip archive and a valid member of that archive
-    tmp = tempfile.gettempdir()
-    extracted_path = os.path.join(tmp, member.split("/")[-1])
-    if not os.path.exists(extracted_path):
-        # use read + write to avoid the creating nested folders, we only want the file, avoids mkdir racing condition
-        with atomic_open(extracted_path) as file_handler:
-            file_handler.write(zip_file.read(member))
+    suffix = os.path.splitext(member.split("/")[-1])[-1]
+    fd, extracted_path = tempfile.mkstemp(suffix=suffix)
+    try:
+        os.write(fd, zip_file.read(member))
+    finally:
+        os.close(fd)
+
     return extracted_path
 
 
@@ -512,26 +502,23 @@ def get_encodings_from_content(content):
 
 
 def _parse_content_type_header(header):
-    """Returns content type and parameters from given header
+    """Returns content type and parameters from given header.
 
     :param header: string
     :return: tuple containing content type and dictionary of
-         parameters
+         parameters.
     """
 
     tokens = header.split(";")
     content_type, params = tokens[0].strip(), tokens[1:]
     params_dict = {}
-    items_to_strip = "\"' "
+    strip_chars = "\"' "
 
     for param in params:
         param = param.strip()
-        if param:
-            key, value = param, True
-            index_of_equals = param.find("=")
-            if index_of_equals != -1:
-                key = param[:index_of_equals].strip(items_to_strip)
-                value = param[index_of_equals + 1 :].strip(items_to_strip)
+        if param and (idx := param.find("=")) != -1:
+            key = param[:idx].strip(strip_chars)
+            value = param[idx + 1 :].strip(strip_chars)
             params_dict[key.lower()] = value
     return content_type, params_dict
 

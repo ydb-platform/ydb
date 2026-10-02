@@ -1,8 +1,8 @@
 #pragma once
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/maybe.h>
 
 namespace NKikimrSchemeOp {
     class TModifyScheme;
@@ -21,6 +21,7 @@ struct TAuditLogFragment {
     TString LoginUser;
     TString LoginGroup;
     TString LoginMember;
+    TVector<TString> LoginUserChange;
 };
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);

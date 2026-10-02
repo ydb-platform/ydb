@@ -36,7 +36,7 @@ bool HasInvalidUnmergedDataWeight(const TDataStatistics& statistics)
     return statistics.has_unmerged_data_weight() && statistics.unmerged_data_weight() == -1;
 }
 
-TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics& operator+=(TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     lhs.set_uncompressed_data_size(lhs.uncompressed_data_size() + rhs.uncompressed_data_size());
     lhs.set_compressed_data_size(lhs.compressed_data_size() + rhs.compressed_data_size());
@@ -68,14 +68,14 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics operator + (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator+(const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
     return result;
 }
 
-bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs)
+bool operator==(const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     return
         lhs.uncompressed_data_size() == rhs.uncompressed_data_size() &&

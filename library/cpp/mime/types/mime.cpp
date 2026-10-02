@@ -78,7 +78,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_ARCHIVE, "application/x-archive\0application/x-tar\0application/x-ustar\0application/x-gtar\0application/x-bzip2\0application/x-rar\0", "tar\0rar\0bzip2\0"},
     {MIME_EXE, "application/exe\0application/octet-stream\0application/x-dosexec\0application/x-msdownload\0", "exe\0"},
     {MIME_ODG, "application/vnd.oasis.opendocument.graphics\0", "odg\0"},
-    {MIME_GZIP, "application/x-gzip\0", "gz\0gzip\0"},
+    {MIME_GZIP, "application/x-gzip\0application/gzip\0", "gz\0gzip\0"},
     {MIME_XLSX, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\0", "xlsx\0"},
     {MIME_PPTX, "application/vnd.openxmlformats-officedocument.presentationml.presentation\0", "pptx\0"},
     {MIME_JAVASCRIPT, "application/javascript\0text/javascript\0", "js\0"},
@@ -103,6 +103,8 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_CSV, "text/csv\0", "csv\0"},
     {MIME_VIDEO_MP4, "video/mp4\0", "mp4\0"},
     {MIME_VIDEO_AVI, "video/x-msvideo\0", "avi\0"},
+    {MIME_IMAGE_AVIF, "image/avif\0", "avif\0"},
+    {MIME_IMAGE_HEIC, "image/heic\0image/heif\0", "heic\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records
@@ -258,4 +260,6 @@ const char* MimeNames[MIME_MAX] = {
     "csv",     // MIME_CSV             // 48
     "mp4",     // MIME_VIDEO_MP4       // 49
     "avi",     // MIME_VIDEO_AVI       // 50
+    "avif",    // MIME_IMAGE_AVIF      // 51
+    "heic",    // MIME_IMAGE_HEIC      // 52
 };

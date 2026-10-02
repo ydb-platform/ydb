@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {
     return type.GetProto();
@@ -124,6 +124,8 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
         return NImport::EImportProgress::TransferData;
     case Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES:
         return NImport::EImportProgress::BuildIndexes;
+    case Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS:
+        return NImport::EImportProgress::CreateChangefeeds;
     case Ydb::Import::ImportProgress::PROGRESS_DONE:
         return NImport::EImportProgress::Done;
     case Ydb::Import::ImportProgress::PROGRESS_CANCELLATION:
@@ -133,6 +135,45 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     default:
         return NImport::EImportProgress::Unknown;
     }
+}
+
+Ydb::Import::ImportFromS3Settings::IndexPopulationMode TProtoAccessor::GetProto(NImport::EIndexPopulationMode value) {
+    switch (value) {
+    case NImport::EIndexPopulationMode::Build:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
+    case NImport::EIndexPopulationMode::Import:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
+    case NImport::EIndexPopulationMode::Auto:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO;
+    default:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED;
+    }
+}
+
+NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value) {
+    switch (value) {
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED:
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
+        return NImport::EIndexPopulationMode::Build;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        return NImport::EIndexPopulationMode::Import;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
+        return NImport::EIndexPopulationMode::Auto;
+    default:
+        return NImport::EIndexPopulationMode::Unknown;
+    }
+}
+
+NExport::TYdbDumpFormat TProtoAccessor::FromProto(const Ydb::Export::YdbDumpFormat&) {
+    return NExport::TYdbDumpFormat();
+}
+
+NExport::TParquetFormat TProtoAccessor::FromProto(const Ydb::Export::ParquetFormat& value) {
+    NExport::TParquetFormat result;
+    if (value.row_group_size()) {
+        result.RowGroupSize(value.row_group_size());
+    }
+    return result;
 }
 
 } // namespace NYdb

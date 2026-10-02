@@ -1,5 +1,8 @@
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
+
 namespace NKikimr::NStorage {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -101,7 +104,7 @@ namespace NKikimr::NStorage {
                     return "sudden group ErasureSpecies change";
                 } else if (group.RingsSize() != currentGroup.RingsSize()) {
                     return "sudden group geometry change";
-                } else if (group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
+                } else if (group.RingsSize() && group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
                     return "sudden group geometry change";
                 }
                 groupInfo.erase(it);
@@ -130,7 +133,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed) {
-        if (current.GetGeneration() + 1 != proposed.GetGeneration()) {
+        if (proposed.GetGeneration() <= current.GetGeneration()) {
             return TStringBuilder() << "invalid proposed config generation current# " << current.GetGeneration()
                 << " proposed# " << proposed.GetGeneration();
         }
@@ -192,6 +195,13 @@ namespace NKikimr::NStorage {
             }
 
             const ui32 pdiskId = pdisk.GetPDiskID();
+            if (pdisk.HasPDiskConfig()) {
+                const TString context = TStringBuilder() << "pdisk NodeID# " << nodeId << " PDiskID# " << pdiskId;
+                if (auto error = ::NKikimr::ValidatePDiskConfig(pdisk.GetPDiskConfig(), context)) {
+                    return error;
+                }
+            }
+
             if (const auto [_, inserted] = pdisksById.emplace(std::make_tuple(nodeId, pdiskId), pdisk.GetPDiskGuid()); !inserted) {
                 return "duplicate NodeID:PDiskID for pdisk";
             }
@@ -268,22 +278,35 @@ namespace NKikimr::NStorage {
         }
 
         // now process groups
-        THashSet<ui32> groups;
+        THashMap<TGroupId, const NKikimrBlobStorage::TGroupInfo*> groupMap;
+        for (const auto& group : config.GetGroups()) {
+            const auto [it, inserted] = groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+            if (!inserted) {
+                return "duplicate GroupID";
+            }
+        }
         for (const auto& group : config.GetGroups()) {
             if (!group.HasGroupID()) {
                 return "GroupID field missing";
             } else if (!group.HasGroupGeneration()) {
                 return "GroupGeneration field missing";
+            } else if (group.HasBridgeGroupState()) {
+                // TODO(alexvru): validate number of piles and so on
+                for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
+                    const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    if (const auto it = groupMap.find(refGroupId); it == groupMap.end()) {
+                        return "missing referenced group";
+                    } else if (it->second->GetGroupGeneration() != pile.GetGroupGeneration()) {
+                        return "incorrect referenced group generation";
+                    }
+                }
+                continue;
             } else if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }
 
             const ui32 groupId = group.GetGroupID();
             const ui32 groupGen = group.GetGroupGeneration();
-
-            if (const auto [_, inserted] = groups.emplace(groupId); !inserted) {
-                return "duplicate GroupID";
-            }
 
             const auto e = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies());
             const TBlobStorageGroupType gtype(e);
@@ -360,6 +383,13 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfig(const NKikimrConfig::TBlobStorageConfig& config, const THashSet<ui32>& nodeIds) {
         if (config.HasServiceSet()) {
             if (auto error = ValidateConfig(config.GetServiceSet(), nodeIds)) {
+                return error;
+            }
+        }
+
+        if (config.HasInferPDiskSlotCountSettings()) {
+            if (auto error = ValidateInferPDiskSlotCountSettings(
+                    config.GetInferPDiskSlotCountSettings(), "BlobStorageConfig.InferPDiskSlotCountSettings")) {
                 return error;
             }
         }

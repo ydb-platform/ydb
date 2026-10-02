@@ -76,22 +76,24 @@ public:
                 return TStatus::Ok;
             }
 
-            Statistics_["DqAnalyzerOn"]++;
+            if (!State_->TypeCtx->DqCaptured) {
+                Statistics_["DqAnalyzerOn"]++;
 
-            bool good = true;
-            TNodeSet visited;
-            Scan(*input, ctx, good, visited);
+                bool good = true;
+                TNodeSet visited;
+                Scan(*input, ctx, good, visited);
 
-            if (good) {
-                Statistics_["DqAnalyzerOk"]++;
-            } else {
-                Statistics_["DqAnalyzerFail"] ++;
-            }
+                if (good) {
+                    Statistics_["DqAnalyzerOk"]++;
+                } else {
+                    Statistics_["DqAnalyzerFail"] ++;
+                }
 
-            if (!good) {
-                YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
-                State_->AbortHidden();
-                return TStatus::Ok;
+                if (!good) {
+                    YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
+                    State_->AbortHidden();
+                    return TStatus::Ok;
+                }
             }
         }
 
@@ -101,7 +103,8 @@ public:
             .WatermarksMode = State_->Settings->WatermarksMode.Get(),
             .WatermarksGranularityMs = State_->Settings->WatermarksGranularityMs.Get(),
             .WatermarksLateArrivalDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
-            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get()
+            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get(),
+            .WatermarksIdleTimeoutMs = State_->Settings->WatermarksIdleTimeoutMs.Get(),
         };
         IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, wrSettings);
         if (input != output) {
@@ -110,6 +113,7 @@ public:
             State_->TypeCtx->DqCaptured = true;
             // TODO: drop this after implementing DQS ConstraintTransformer
             State_->TypeCtx->ExpectedConstraints.clear();
+            State_->IsFullCaptureReady = false;
         }
         return status;
     }
@@ -125,12 +129,52 @@ private:
         ctx.IssueManager.RaiseIssue(info);
     }
 
+    bool CheckNodeWithDataSource(const TExprNode& node, TExprContext& ctx) const {
+        auto dataSourceName = node.Child(1)->Child(0)->Content();
+        if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
+            auto dataSource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
+            YQL_ENSURE(dataSource);
+            if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
+                bool pragmas = dqIntegration->CheckPragmas(node, ctx, /*skipIssues*/false);
+                bool canRead = pragmas && dqIntegration->CanRead(node, ctx, /*skipIssues*/ false);
+
+                if (!pragmas || !canRead) {
+                    if (!pragmas) {
+                        State_->TypeCtx->PureResultDataSource.clear();
+                        std::erase_if(State_->TypeCtx->AvailablePureResultDataSources,
+                            [&](const auto& name) { return name == DqProviderName; });
+                    }
+                    return false;
+                }
+            } else {
+                AddInfo(ctx, TStringBuilder() << "source '" << dataSourceName << "' is not supported by DQ");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool CheckNodeWithDataSink(const TExprNode& node, TExprContext& ctx) const {
+        auto dataSinkName = node.Child(1)->Child(0)->Content();
+        auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
+        YQL_ENSURE(dataSink);
+        if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
+            if (auto canWrite = dqIntegration->CanWrite(node, ctx)) {
+                if (!canWrite.GetRef()) {
+                    return false;
+                } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {
+                    AddInfo(ctx, TStringBuilder() << "'insert' support is disabled. Use PRAGMA dq.EnableInsert to explicitly enable it");
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     void Scan(const TExprNode& node, TExprContext& ctx, bool& good, TNodeSet& visited) const {
         if (!visited.insert(&node).second) {
             return;
         }
-
-        TExprBase expr(&node);
 
         if (TCoCommit::Match(&node)) {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
@@ -148,60 +192,49 @@ private:
                 AddInfo(ctx, TStringBuilder() << "sink '" << datasink.Cast().Value() << "' is not supported by DQ");
                 good = false;
             }
-        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {
+        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(TExprBase(&node))) {
             AddInfo(ctx, TStringBuilder() << "unsupported join column");
             good = false;
         } else if (node.ChildrenSize() > 1 && TCoDataSource::Match(node.Child(1))) {
-            auto dataSourceName = node.Child(1)->Child(0)->Content();
-            if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
-                auto datasource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
-                YQL_ENSURE(datasource);
-                auto dqIntegration = (*datasource)->GetDqIntegration();
-                if (dqIntegration) {
-                    bool pragmas = dqIntegration->CheckPragmas(node, ctx, false);
-                    bool canRead = pragmas && dqIntegration->CanRead(node, ctx, /*skipIssues = */ false);
-
-                    if (!pragmas || !canRead) {
-                        good = false;
-                        if (!pragmas) {
-                            State_->TypeCtx->PureResultDataSource.clear();
-                            std::erase_if(State_->TypeCtx->AvailablePureResultDataSources,
-                                          [&](const auto& name) { return name == DqProviderName; });
-                        }
-                    }
-                } else {
-                    AddInfo(ctx, TStringBuilder() << "source '" << dataSourceName << "' is not supported by DQ");
-                    good = false;
-                }
+            if (!CheckNodeWithDataSource(node, ctx)) {
+                good = false;
             }
-
             if (good) {
-                Scan(node.Head(), ctx,good, visited);
+                Scan(node.Head(), ctx, good, visited);
             }
         } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
             && !TCoCommit::Match(&node)
             && node.ChildrenSize() > 1
             && TCoDataSink::Match(node.Child(1))) {
-            auto dataSinkName = node.Child(1)->Child(0)->Content();
-            auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
-            YQL_ENSURE(dataSink);
-            if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
-                if (auto canWrite = dqIntegration->CanWrite(node, ctx)) {
-                    if (!canWrite.GetRef()) {
-                        good = false;
-                    } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {
-                        AddInfo(ctx, TStringBuilder() << "'insert' support is disabled. Use PRAGMA dq.EnableInsert to explicitly enable it");
-                        good = false;
-                    }
-                }
+            if (!CheckNodeWithDataSink(node, ctx)) {
+                good = false;
             }
             if (good) {
                 for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                     Scan(*node.Child(i), ctx, good, visited);
                 }
             }
-        }
-        else if (TCoScriptUdf::Match(&node)) {
+        } else if ((TCoRight::Match(&node) || TCoLeft::Match(&node)) && node.Head().ChildrenSize() > 1 && TCoDataSink::Match(node.Head().Child(1))) {
+            const auto& write = node.Head();
+            if (visited.insert(&write).second) {
+                if (!CheckNodeWithDataSink(write, ctx)) {
+                    good = false;
+                }
+                for (size_t i = 0; i != write.ChildrenSize() && good; ++i) {
+                    Scan(*write.Child(i), ctx, good, visited);
+                }
+            }
+        } else if (TCoScriptUdf::Match(&node)) {
+            if (node.ChildrenSize() > 4) {
+                for (const auto& setting: node.Child(4)->Children()) {
+                    YQL_ENSURE(setting->Head().IsAtom());
+                    if (setting->Head().Content() == "layers") {
+                        AddInfo(ctx, TStringBuilder() << "Cannot execute udf " << node.Head().Content() << " with layers in DQ");
+                        good = false;
+                    }
+                }
+            }
+
             if (good && TCoScriptUdf::Match(&node) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node.Head().Content()))) {
                 AddInfo(ctx, TStringBuilder() << "system python udf");
                 good = false;
@@ -211,8 +244,15 @@ private:
                     Scan(*node.Child(i), ctx, good, visited);
                 }
             }
-        }
-        else {
+        } else if (TCoUdf::Match(&node) && node.ChildrenSize() == 8) {
+            for (const auto& setting: node.Child(7)->Children()) {
+                YQL_ENSURE(setting->Head().IsAtom());
+                if (setting->Head().Content() == "layers") {
+                    AddInfo(ctx, TStringBuilder() << "Cannot execute udf " << node.Head().Content() << " with layers in DQ");
+                    good = false;
+                }
+            }
+        } else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 Scan(*node.Child(i), ctx, good, visited);
             }

@@ -11,6 +11,6 @@ def pytest_generate_tests(metafunc):
     return pytest_generate_tests_for_part(metafunc, current_part, part_count, DATA_PATH, template='.yqls')
 
 
-@pytest.mark.parametrize('what', ['Results', 'Debug', 'RunOnOpt', 'LLVM'])
+@pytest.mark.parametrize('what', ['Results', 'Debug', 'RunOnOpt', 'LLVM', 'PartialTypeCheck'])
 def test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     return run_test(suite, case, cfg, tmpdir, what, yql_http_file_server)

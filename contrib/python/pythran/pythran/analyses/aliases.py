@@ -14,6 +14,7 @@ import gast as ast
 from copy import deepcopy
 from itertools import product
 import io
+import numpy as np
 
 
 IntrinsicAliases = dict()
@@ -71,7 +72,7 @@ for module in MODULES.values():
     save_intrinsic_alias(module)
 
 
-class Aliases(ModuleAnalysis):
+class Aliases(ModuleAnalysis[GlobalDeclarations]):
     '''
     Gather aliasing informations across nodes
 
@@ -81,10 +82,11 @@ class Aliases(ModuleAnalysis):
 
     RetId = '@'
 
+    ResultType = dict
+
     def __init__(self):
-        self.result = dict()
+        super().__init__()
         self.aliases = None
-        super(Aliases, self).__init__(GlobalDeclarations)
 
     @staticmethod
     def dump(result, filter=None):
@@ -287,7 +289,10 @@ class Aliases(ModuleAnalysis):
                 for ra in func.return_alias(args_combination):
                     if isinstance(ra, ast.Subscript):
                         if isinstance(ra.value, ContainerOf):
-                            return_aliases.update(ra.value.containees)
+                            if np.isnan(ra.value.index) or (isnum(ra.slice) and
+                                                            ra.slice.value ==
+                                                            ra.value.index):
+                                return_aliases.update(ra.value.containees)
                             continue
                     return_aliases.add(ra)
             return return_aliases
@@ -420,6 +425,21 @@ class Aliases(ModuleAnalysis):
         >>> Aliases.dump(result, filter=ast.Subscript)
         [a, b][c] => ['a', 'b']
 
+        Also work in case of a dict:
+
+        >>> module = ast.parse('def foo(a, b, c): return {a:b}[c]')
+        >>> result = pm.gather(Aliases, module)
+        >>> Aliases.dump(result, filter=ast.Subscript)
+        {a: b}[c] => ['b']
+
+        Even when built in several statements:
+        >>> module = ast.parse('def foo(a, b, c): d = {} ; d[a] = b; return d[c]')
+        >>> result = pm.gather(Aliases, module)
+        >>> Aliases.dump(result, filter=ast.Subscript)
+        d[a] => ['b']
+        d[c] => ['b']
+
+
         Moreover, in case of a tuple indexed by a constant value, we can
         further refine the aliasing information:
 
@@ -473,7 +493,7 @@ class Aliases(ModuleAnalysis):
 
     def visit_Name(self, node):
         if node.id not in self.aliases:
-            raise UnboundIdentifierError
+            raise UnboundIdentifierError(node.id)
         return self.add(node, self.aliases[node.id])
 
     def visit_Tuple(self, node):
@@ -661,10 +681,33 @@ class Aliases(ModuleAnalysis):
                         a_id = alias.id
                         self.aliases[a_id] = self.aliases[a_id].union((t,))
                 self.add(t, self.aliases[t.id])
+            elif isinstance(t, ast.Subscript):
+                def wrap(t, aliases):
+                    if isinstance(t, ast.Subscript):
+                        alias, wrapped = wrap(t.value, aliases)
+                        if isnum(t.slice):
+                            return alias, {ContainerOf(wrapped, t.slice.value)}
+                        elif isinstance(t.slice, ast.Slice):
+                            return alias, wrapped
+                        else:
+                            return alias, {ContainerOf(wrapped)}
+                    elif isinstance(t, ast.Name):
+                        return t, aliases
+                    else:
+                        raise NotImplementedError
+                try:
+                    alias, wrapped = wrap(t, value_aliases)
+                    self.aliases[alias.id] = self.aliases[alias.id].union(wrapped)
+                except NotImplementedError:
+                    ...
+                self.visit(t)
+                self.add(t, value_aliases)
             else:
                 self.visit(t)
 
-    visit_AnnAssign = visit_Assign
+    def visit_AnnAssign(self, node):
+        self.visit_Assign(node)
+        self.visit(node.annotation)
 
     def visit_For(self, node):
         '''

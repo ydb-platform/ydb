@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPatch>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPatch>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TPatchQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPatch> {
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
@@ -18,7 +19,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TPatchQuery(*this, std::move(ev));
+        return new TPatchQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

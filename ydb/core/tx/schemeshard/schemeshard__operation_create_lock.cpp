@@ -1,33 +1,28 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateLock TPropose"
-            << " opId# " << OperationId << " ";
-    }
-
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -40,8 +35,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
@@ -92,13 +88,18 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    virtual const char* Name() const override final { return "TCreateLock"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
+        const TTxId lockTxId = op.HasLockTxId()
+            ? TTxId(op.GetLockTxId())
+            : OperationId.GetTxId();
 
-        LOG_N("TCreateLock Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << op.GetName());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", workingDir + "/" + op.GetName()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -158,13 +159,12 @@ public:
         const auto pathId = tablePath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        if (tablePath.LockedBy() == OperationId.GetTxId()) {
+        if (tablePath.LockedBy() == lockTxId) {
             result->SetError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already locked by this operation"
                 << ", path: " << tablePath.PathString());
             return result;
         }
-
         TString errStr;
         if (!context.SS->CheckLocks(pathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
@@ -177,7 +177,7 @@ public:
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);
-        context.DbChanges.PersistLongLock(pathId, OperationId.GetTxId());
+        context.DbChanges.PersistLongLock(pathId, lockTxId);
         context.DbChanges.PersistTxState(OperationId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -194,7 +194,7 @@ public:
             context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->LockedPaths[pathId] = OperationId.GetTxId();
+        context.SS->LockedPaths[pathId] = lockTxId;
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
 
         context.OnComplete.ActivateTx(OperationId);
@@ -203,16 +203,17 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateLock AbortPropose"
-            << ": opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateLock AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLock AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -229,3 +230,5 @@ ISubOperation::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

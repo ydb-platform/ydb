@@ -13,9 +13,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetCommitHash()
+std::string GetCommitHash()
 {
-    TString commit = GetProgramHash();
+    std::string commit = GetProgramHash();
     if (commit.empty()) {
         commit = GetProgramCommitId();
     }
@@ -23,7 +23,7 @@ TString GetCommitHash()
     return commit;
 }
 
-TString TruncateCommitHash(TString commit)
+std::string TruncateCommitHash(std::string commit)
 {
     constexpr int CommitHashPrefixLength = 16;
 
@@ -33,7 +33,7 @@ TString TruncateCommitHash(TString commit)
     // When Hermes looks at such horrors it goes crazy.
     // Here are some hacks to help Hermes keep its sanity.
     if (commit == "-1") {
-        commit = TString(CommitHashPrefixLength, '0');
+        commit = std::string(CommitHashPrefixLength, '0');
     } else {
         commit = commit.substr(0, CommitHashPrefixLength);
     }
@@ -56,7 +56,44 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     out << "-asan";
 #endif
 
-    TString commit;
+#if defined(_lsan_enabled_)
+    out << "-lsan";
+#endif
+
+#if defined(_msan_enabled_)
+    out << "-msan";
+#endif
+
+#if defined(_tsan_enabled_)
+    out << "-tsan";
+#endif
+
+#if defined(_ubsan_enabled_)
+    out << "-ubsan";
+#endif
+
+// Future-proofing. The check for YT_ROPSAN_ENABLE_PTR_TAGGING is technically
+// redundant as it follows from access or serialization checks.
+#if defined(YT_ROPSAN_ENABLE_ACCESS_CHECK) || \
+    defined(YT_ROPSAN_ENABLE_SERIALIZATION_CHECK) || \
+    defined(YT_ROPSAN_ENABLE_LEAK_DETECTION) || \
+    defined(YT_ROPSAN_ENABLE_PTR_TAGGING)
+    out << "-ropsan";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_ACCESS_CHECK)
+    out << "A";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_SERIALIZATION_CHECK)
+    out << "S";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_LEAK_DETECTION)
+    out << "L";
+#endif
+
+    std::string commit;
     int svnRevision = GetProgramSvnRevision();
     if (svnRevision <= 0) {
         commit = GetCommitHash();
@@ -65,7 +102,7 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
         commit = "r" + ToString(svnRevision);
     }
 
-    TString buildUser = GetProgramBuildUser();
+    std::string buildUser = GetProgramBuildUser();
     if (buildUser == "Unknown user") {
         buildUser = "distbuild";
     }
@@ -76,14 +113,14 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     }
 }
 
-TString CreateBranchCommitVersion(TStringBuf branch)
+std::string CreateBranchCommitVersion(TStringBuf branch)
 {
     TStringStream out;
     OutputCreateBranchCommitVersion(branch, out);
     return out.Str();
 }
 
-TString CreateYTVersion(int major, int minor, int patch, TStringBuf branch)
+std::string CreateYTVersion(int major, int minor, int patch, TStringBuf branch)
 {
     TStringStream out;
     out << major << "." << minor << "." << patch << "-";
@@ -91,70 +128,58 @@ TString CreateYTVersion(int major, int minor, int patch, TStringBuf branch)
     return out.Str();
 }
 
-TString GetYaHostName()
+std::string GetYaHostName()
 {
     return GetProgramBuildHost();
 }
 
-TString GetYaBuildDate()
+std::string GetYaBuildDate()
 {
     return GetProgramBuildDate();
 }
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString BuildRpcUserAgent() noexcept
+const std::string& GetRpcUserAgent()
 {
-    // Fill user agent from build information.
-    // For trunk:
-    // - yt-cpp/r<revision>
-    // For YT release branch.
-    // - yt-cpp/<YT version string>
-    // For arbitrary branch different from trunk:
-    // - yt-cpp/<branch>~<commit>
-    // For local build from detached head or arc sync'ed state:
-    // - yt-cpp/local~<commit>
+    static const auto result = [&] {
+        // Fill user agent from build information.
+        // For trunk:
+        // - yt-cpp/r<revision>
+        // For YT release branch.
+        // - yt-cpp/<YT version string>
+        // For arbitrary branch different from trunk:
+        // - yt-cpp/<branch>~<commit>
+        // For local build from detached head or arc sync'ed state:
+        // - yt-cpp/local~<commit>
 
-    TString branch(GetBranch());
-    TStringStream out;
+        std::string branch(GetBranch());
+        TStringStream out;
 
-    out << "yt-cpp/";
+        out << "yt-cpp/";
 
-    if (branch == "trunk") {
-        int svnRevision = GetProgramSvnRevision();
-        out << "trunk~r" << svnRevision;
-    } else if (branch.StartsWith("releases/yt")) {
-        // Simply re-use YT version string. It looks like the following:
-        // 20.3.7547269-stable-ya~bb57c034bfb47caa.
-        TString ytVersion(GetVersion());
-        out << ytVersion;
-    } else {
-        auto commit = GetCommitHash();
-        auto truncatedCommit = TruncateCommitHash(commit);
+        if (branch == "trunk") {
+            int svnRevision = GetProgramSvnRevision();
+            out << "trunk~r" << svnRevision;
+        } else if (branch.starts_with("releases/yt")) {
+            // Simply re-use YT version string. It looks like the following:
+            // 20.3.7547269-stable-ya~bb57c034bfb47caa.
+            std::string ytVersion(GetVersion());
+            out << ytVersion;
+        } else {
+            auto commit = GetCommitHash();
+            auto truncatedCommit = TruncateCommitHash(commit);
 
-        // In detached head arc state branch seems to coincide with commit hash.
-        // Let's use that in order to distinguish detached head from regular branch state.
-        if (branch == commit) {
-            branch = "local";
+            // In detached head arc state branch seems to coincide with commit hash.
+            // Let's use that in order to distinguish detached head from regular branch state.
+            if (branch == commit) {
+                branch = "local";
+            }
+
+            out << branch << "~" << truncatedCommit;
         }
 
-        out << branch << "~" << truncatedCommit;
-    }
-
-    return out.Str();
-}
-
-const TString CachedUserAgent = BuildRpcUserAgent();
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
-
-const TString& GetRpcUserAgent()
-{
-    return CachedUserAgent;
+        return out.Str();
+    }();
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

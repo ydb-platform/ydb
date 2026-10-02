@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(Struct___init____doc__,
 "Struct(format)\n"
@@ -93,10 +94,6 @@ Struct_unpack(PyStructObject *self, PyObject *arg)
     if (PyObject_GetBuffer(arg, &buffer, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("unpack", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
     return_value = Struct_unpack_impl(self, &buffer);
 
 exit:
@@ -117,7 +114,8 @@ PyDoc_STRVAR(Struct_unpack_from__doc__,
 "Values are unpacked according to the format string Struct.format.\n"
 "\n"
 "The buffer\'s size in bytes, starting at position offset, must be\n"
-"at least Struct.size.\n"
+"at least Struct.size.  A negative offset counts from the end of the\n"
+"buffer.\n"
 "\n"
 "See help(struct) for more on format strings.");
 
@@ -167,10 +165,6 @@ Struct_unpack_from(PyStructObject *self, PyObject *const *args, Py_ssize_t nargs
         goto exit;
     }
     if (PyObject_GetBuffer(args[0], &buffer, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("unpack_from", "argument 'buffer'", "contiguous buffer", args[0]);
         goto exit;
     }
     if (!noptargs) {
@@ -299,10 +293,6 @@ unpack(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     if (PyObject_GetBuffer(args[1], &buffer, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("unpack", "argument 2", "contiguous buffer", args[1]);
-        goto exit;
-    }
     return_value = unpack_impl(module, s_object, &buffer);
 
 exit:
@@ -323,6 +313,7 @@ PyDoc_STRVAR(unpack_from__doc__,
 "Return a tuple containing values unpacked according to the format string.\n"
 "\n"
 "The buffer\'s size, minus offset, must be at least calcsize(format).\n"
+"A negative offset counts from the end of the buffer.\n"
 "\n"
 "See help(struct) for more on format strings.");
 
@@ -376,10 +367,6 @@ unpack_from(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject 
         goto exit;
     }
     if (PyObject_GetBuffer(args[1], &buffer, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("unpack_from", "argument 'buffer'", "contiguous buffer", args[1]);
         goto exit;
     }
     if (!noptargs) {
@@ -451,4 +438,4 @@ exit:
 
     return return_value;
 }
-/*[clinic end generated code: output=eca7df0e75f8919d input=a9049054013a1b77]*/
+/*[clinic end generated code: output=d74ae26e398819db input=a9049054013a1b77]*/

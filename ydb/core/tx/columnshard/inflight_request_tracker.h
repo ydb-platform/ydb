@@ -5,6 +5,7 @@
 #include "counters/req_tracer.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/snapshot_holders.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
@@ -18,16 +19,21 @@ class TSnapshotLiveInfo {
 private:
     const NOlap::TSnapshot Snapshot;
     std::optional<TInstant> LastRequestFinishedInstant;
-    THashSet<ui32> Requests;
+    THashMap<ui32, std::optional<TInternalPathId>> Requests;
     YDB_READONLY(bool, IsLock, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
-        : Snapshot(snapshot) {
+        : Snapshot(snapshot)
+    {
     }
 
 public:
-    void AddRequest(const ui32 cookie) {
-        AFL_VERIFY(Requests.emplace(cookie).second);
+    void AddRequest(const ui32 cookie, const std::optional<TInternalPathId> pathId) {
+        AFL_VERIFY(Requests.emplace(cookie, pathId).second);
+    }
+
+    const THashMap<ui32, std::optional<TInternalPathId>>& GetRequests() const {
+        return Requests;
     }
 
     [[nodiscard]] bool DelRequest(const ui32 cookie, const TInstant now) {
@@ -93,12 +99,30 @@ private:
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 
 public:
-    std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
+    std::optional<NOlap::TSnapshot> GetOldestLiveSnapshot() const {
         if (SnapshotsLive.empty()) {
             return std::nullopt;
         } else {
             return SnapshotsLive.begin()->first;
         }
+    }
+
+    std::vector<NOlap::TSnapshot> GetLiveSnapshots(const NOlap::TSnapshot until) const {
+        std::vector<NOlap::TSnapshot> result;
+        for (auto&& [snapshot, _] : SnapshotsLive) {
+            if (snapshot >= until) {
+                break;
+            }
+
+            result.push_back(snapshot);
+        }
+        return result;
+    }
+
+    NOlap::TLocalActiveSnapshots GetActiveSnapshots(const NOlap::TSnapshot until) const;
+
+    bool HasLiveSnapshot(const NOlap::TSnapshot& snapshot) const {
+        return SnapshotsLive.contains(snapshot);
     }
 
     bool LoadFromDatabase(NTable::TDatabase& db);
@@ -108,12 +132,14 @@ public:
 
     // Returns a unique cookie associated with this request
     [[nodiscard]] ui64 AddInFlightRequest(
-        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
+        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index, const std::optional<TInternalPathId> pathId);
+
     void AddScanActorId(const ui64 cookie, const NActors::TActorId& actorId) {
         AFL_VERIFY(ActorIds.emplace(cookie, actorId).second);
     }
 
-    [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
+    [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(
+        ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
 
     NOlap::TSelectInfo::TStats GetSelectStatsDelta() {
         auto delta = SelectStatsDelta;
@@ -127,14 +153,15 @@ public:
         }
     }
 
-    TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
+    TInFlightReadsTracker(
+        const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
         : Counters(counters)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 
 private:
-    void AddToInFlightRequest(
-        const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
+    void AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 };
 
 }   // namespace NKikimr::NColumnShard

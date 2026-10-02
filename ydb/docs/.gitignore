@@ -1,1 +1,27 @@
 **/*.tar.gz
+
+
+# START Ruler Generated Files
+/.agents/skills
+/.aider.conf.yml
+/.aider.conf.yml.bak
+/.claude/skills
+/.cline/rules
+/.cline/rules.bak
+/.codex/config.toml
+/.codex/config.toml.bak
+/.cursor/rules
+/.cursor/rules.bak
+/.cursor/skills
+/.github/copilot-instructions.md
+/.github/copilot-instructions.md.bak
+/.idea/ai.xml
+/.idea/ai.xml.bak
+/.mcp.json
+/.mcp.json.bak
+/.windsurf/rules
+/.windsurf/rules.bak
+/.windsurf/skills
+/AGENTS.md
+/AGENTS.md.bak
+# END Ruler Generated Files

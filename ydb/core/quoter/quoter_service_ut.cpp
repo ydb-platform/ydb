@@ -5,9 +5,12 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -112,6 +115,87 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
     }
 
+    // Send a scheme operation and wait for it to be accepted (ExecInProgress).
+    // Use SimulateSleep after calling this to give schemeshard time to complete.
+    void SendSchemeOpAndWaitAccepted(TTestActorRuntime* runtime, THolder<TEvTxUserProxy::TEvProposeTransaction> propose, const TString& opName) {
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTxProxyID(), sender, propose.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+        auto status = static_cast<TEvTxUserProxy::TResultStatus::EStatus>(event->Record.GetStatus());
+        UNIT_ASSERT_C(status == TEvTxUserProxy::TResultStatus::ExecComplete
+            || status == TEvTxUserProxy::TResultStatus::ExecInProgress,
+            opName << " failed with status: " << event->Record.GetStatus());
+    }
+
+    // Async helper: initialize root scheme storage pools (equivalent of TClient::InitRootScheme)
+    void InitRootSchemeAsync(TTestActorRuntime* runtime) {
+        auto propose = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = propose->Record.MutableTransaction()->MutableModifyScheme();
+        tx->SetWorkingDir("/");
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
+        auto* op = tx->MutableSubDomain();
+        op->SetName(Tests::TestDomainName);
+        auto* pool = op->AddStoragePools();
+        pool->SetKind("test");
+        pool->SetName(TStringBuilder() << "/" << Tests::TestDomainName << ":test");
+
+        SendSchemeOpAndWaitAccepted(runtime, std::move(propose), "InitRootScheme");
+        runtime->SimulateSleep(TDuration::MilliSeconds(500));
+    }
+
+    // Async helper: create Kesus node via tx proxy
+    void CreateKesusAsync(TTestActorRuntime* runtime) {
+        auto propose = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = propose->Record.MutableTransaction()->MutableModifyScheme();
+        tx->SetWorkingDir(TStringBuilder() << "/" << Tests::TestDomainName);
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
+        tx->MutableKesus()->SetName("KesusQuoter");
+
+        SendSchemeOpAndWaitAccepted(runtime, std::move(propose), "CreateKesus");
+        runtime->SimulateSleep(TDuration::MilliSeconds(500));
+    }
+
+    // Async helper: get Kesus tablet ID via scheme cache
+    ui64 GetKesusTabletIdAsync(TTestActorRuntime* runtime) {
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter");
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+
+        runtime->Send(new IEventHandle(MakeSchemeCacheID(), sender,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(handle);
+        auto* result = handle->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+        auto& resultEntry = result->Request->ResultSet.at(0);
+        UNIT_ASSERT_C(resultEntry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok,
+            "Navigate failed: " << static_cast<int>(resultEntry.Status));
+        UNIT_ASSERT(resultEntry.KesusInfo);
+        return resultEntry.KesusInfo->Description.GetKesusTabletId();
+    }
+
+    // Async helper: create resource on Kesus tablet
+    void CreateKesusResourceAsync(TTestActorRuntime* runtime, double rate, const TString& resourcePath = "/Res") {
+        const ui64 tabletId = GetKesusTabletIdAsync(runtime);
+
+        TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
+        request->Record.MutableResource()->SetResourcePath(resourcePath);
+        request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(rate);
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
+        const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+    }
+
 #if defined(OPTIMIZED)
 #error "Macro conflict."
 #endif
@@ -136,45 +220,18 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         KesusResource,
     };
 
-    void CreateKesus(TServer& server) {
-        Tests::TClient client(server.GetSettings());
-        client.InitRootScheme();
-        const NMsgBusProxy::EResponseStatus status = client.CreateKesus(Tests::TestDomainName, "KesusQuoter");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-    }
-
-    void CreateKesusResource(TServer& server, double rate) {
-        Tests::TClient client(server.GetSettings());
-        TTestActorRuntime* const runtime = server.GetRuntime();
-
-        // request
-        TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
-        request->Record.MutableResource()->SetResourcePath("/Res");
-        request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(rate);
-
-        // Get tablet id
-        TAutoPtr<NMsgBusProxy::TBusResponse> resp = client.Ls(TStringBuilder() << Tests::TestDomainName << "/KesusQuoter");
-        UNIT_ASSERT_EQUAL(resp->Record.GetStatusCode(), NKikimrIssues::TStatusIds::SUCCESS);
-        const auto& pathDesc = resp->Record.GetPathDescription();
-        UNIT_ASSERT(pathDesc.HasKesus());
-        const ui64 tabletId = pathDesc.GetKesus().GetKesusTabletId();
-
-        TActorId sender = runtime->AllocateEdgeActor();
-        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
-
-        TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
-        const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Tests that quoter service can serve resource allocation requests at high rates.
+    // Tests that quoter service rate-limits correctly at the configured rate.
+    // Uses simulated time (UseRealThreads=false) for deterministic results.
     void SpeedTest(ESpeedTestResourceType resType) {
         TPortManager portManager;
         TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
         TServer server = TServer(serverSettings, true);
 
         TTestActorRuntime* runtime = server.GetRuntime();
+
+        // Raise the scheduled events limit for the full server simulation
+        runtime->SetScheduledLimit(1'000'000);
 
         const TActorId serviceId = MakeQuoterServiceID();
         const TActorId serviceActorId = runtime->Register(CreateQuoterService());
@@ -185,67 +242,76 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         constexpr TDuration testDuration = TDuration::Seconds(2);
         constexpr TDuration waitDuration = TDuration::MilliSeconds(150);
         constexpr ui32 rate = 2000;
-
-        constexpr double secondsForTest = static_cast<double>(testDuration.MicroSeconds()) / 1000000.0;
-        constexpr double secondsForWait = static_cast<double>(waitDuration.MicroSeconds()) / 1000000.0;
         constexpr double doubleRate = static_cast<double>(rate);
 
+        TString database;
         TString quoter;
         TString resource;
         if (resType == ESpeedTestResourceType::KesusResource) {
-            CreateKesus(server);
-            CreateKesusResource(server, doubleRate);
+            // Initialize root scheme (storage pools needed for Kesus tablet)
+            InitRootSchemeAsync(runtime);
+            CreateKesusAsync(runtime);
+            CreateKesusResourceAsync(runtime, doubleRate);
+            database = TStringBuilder() << "/" << Tests::TestDomainName;
             quoter = TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter";
             resource = "Res";
+
+            // Let Kesus allocate initial quota to the proxy
+            runtime->SimulateSleep(TDuration::Seconds(2));
         }
 
         const TEvQuota::TResourceLeaf resLeaf = resType == ESpeedTestResourceType::StaticTaggedRateResource ?
             TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(42, rate), 1) :
-            TEvQuota::TResourceLeaf(quoter, resource, 1);
+            TEvQuota::TResourceLeaf(database, quoter, resource, 1);
+
+        // Send requests in batches over simulated time, with 2x oversubscription
+        constexpr TDuration step = TDuration::MilliSeconds(100);
+        constexpr size_t numSteps = testDuration / step; // 20
+        const size_t requestsPerStep = static_cast<size_t>(doubleRate * step.SecondsFloat() * 2); // 400
 
         for (size_t iteration = 0; iteration < 2; ++iteration) {
-            const TInstant start = TInstant::Now();
             size_t sent = 0;
-            while (TInstant::Now() - start < testDuration) {
-                runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
-                                               new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { resLeaf }, waitDuration), 0, 0));
-                ++sent;
-                if ((sent & 3) != 0) {
-                    Sleep(TDuration::MicroSeconds(1));
+            for (size_t s = 0; s < numSteps; ++s) {
+                for (size_t i = 0; i < requestsPerStep; ++i) {
+                    runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                        new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { resLeaf }, waitDuration), 0, 0));
+                    ++sent;
                 }
+                // Advance simulated time and process quoter ticks, Kesus allocations, etc.
+                runtime->SimulateSleep(step);
             }
             Cerr << "Requests sent: " << sent << Endl;
 
-            if (static_cast<double>(sent) > secondsForTest * doubleRate * 7.0) { // check if we have slow machine
-                TAutoPtr<IEventHandle> ev;
-                int ok = 0;
-                int deadline = 0;
-                for (size_t i = 0; i < sent; ++i) {
-                    TEvQuota::TEvClearance* reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(ev);
-                    if (reply->Result == TEvQuota::TEvClearance::EResult::Success) {
-                        ++ok;
-                    } else if (reply->Result == TEvQuota::TEvClearance::EResult::Deadline) {
-                        ++deadline;
-                    } else {
-                        UNIT_ASSERT(false);
-                    }
-                }
+            // Advance past the last deadline window so all remaining requests resolve
+            runtime->SimulateSleep(waitDuration + TDuration::MilliSeconds(10));
 
-                Cerr << "OK: " << ok << Endl;
-                Cerr << "Deadline: " << deadline << Endl;
-                const double expectedSuccesses = (secondsForTest + secondsForWait) * doubleRate;
-                Cerr << "Expected OK's: " << expectedSuccesses << Endl;
-                const double maxDeviation = expectedSuccesses * 0.2;
-                UNIT_ASSERT_DOUBLES_EQUAL_C(static_cast<double>(ok), expectedSuccesses, maxDeviation,
-                                            "ok: " << ok << ", deadline: " << deadline << ", sent: " << sent << ", expectedSuccesses: " << expectedSuccesses
-                                            << ", secondsForTest: " << secondsForTest << ", secondsForWait: " << secondsForWait);
-            } else {
-                Cerr << "Too few requests sent" << Endl;
-                break; // Else we would receive TEvClearance from previous test iteration.
+            // Collect all responses
+            TAutoPtr<IEventHandle> ev;
+            int ok = 0;
+            int deadline = 0;
+            for (size_t i = 0; i < sent; ++i) {
+                TEvQuota::TEvClearance* reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(ev);
+                if (reply->Result == TEvQuota::TEvClearance::EResult::Success) {
+                    ++ok;
+                } else if (reply->Result == TEvQuota::TEvClearance::EResult::Deadline) {
+                    ++deadline;
+                } else {
+                    UNIT_ASSERT(false);
+                }
             }
 
+            Cerr << "OK: " << ok << Endl;
+            Cerr << "Deadline: " << deadline << Endl;
+            const double expectedSuccesses = (testDuration.SecondsFloat() + waitDuration.SecondsFloat()) * doubleRate;
+            Cerr << "Expected OK's: " << expectedSuccesses << Endl;
+            const double maxDeviation = expectedSuccesses * 0.15;
+            UNIT_ASSERT_DOUBLES_EQUAL_C(static_cast<double>(ok), expectedSuccesses, maxDeviation,
+                                        "ok: " << ok << ", deadline: " << deadline << ", sent: " << sent
+                                        << ", expectedSuccesses: " << expectedSuccesses);
+
             if (iteration == 0) {
-                Sleep(TDuration::MilliSeconds(300)); // Make a pause to check that algorithm will consider it.
+                // Simulate a pause to check that the algorithm handles idle periods correctly
+                runtime->SimulateSleep(TDuration::MilliSeconds(300));
             }
         }
     }
@@ -339,6 +405,417 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
     }
 
+    Y_UNIT_TEST(CleanupDoesNotCloseKesusResourceBeforeOneHour) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatchEvents = [&]() {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 10.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatchEvents();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        ui32 proxySessions = 0;
+        ui32 proxyCloseSessions = 0;
+        ui64 requestCookie = 1;
+        auto proxySessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    ++proxySessions;
+                }
+            });
+        auto proxyCloseObserver = runtime->AddObserver<TEvQuota::TEvProxyCloseSession>(
+            [&](TEvQuota::TEvProxyCloseSession::TPtr&) {
+                ++proxyCloseSessions;
+            });
+
+        auto requestQuota = [&] {
+            const ui64 cookie = requestCookie++;
+            runtime->Send(new IEventHandle(
+                MakeQuoterServiceID(),
+                sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf}, TDuration::Max()),
+                0,
+                cookie));
+            runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender},
+                [cookie](const auto& ev) {
+                    return ev->Cookie == cookie;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        };
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        runtime->AdvanceCurrentTime(TDuration::Minutes(59));
+        dispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+    }
+
+    Y_UNIT_TEST(CleanupClosesAndReopensIdleKesusResource) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatchEvents = [&]() {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 10.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatchEvents();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        ui32 proxySessions = 0;
+        ui32 proxyCloseSessions = 0;
+        ui64 requestCookie = 1;
+        auto proxySessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    ++proxySessions;
+                }
+            });
+        auto proxyCloseObserver = runtime->AddObserver<TEvQuota::TEvProxyCloseSession>(
+            [&](TEvQuota::TEvProxyCloseSession::TPtr&) {
+                ++proxyCloseSessions;
+            });
+
+        auto requestQuota = [&] {
+            const ui64 cookie = requestCookie++;
+            runtime->Send(new IEventHandle(
+                MakeQuoterServiceID(),
+                sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf}, TDuration::Max()),
+                0,
+                cookie));
+            runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender},
+                [cookie](const auto& ev) {
+                    return ev->Cookie == cookie;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        };
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 0);
+
+        runtime->AdvanceCurrentTime(TDuration::Hours(1) + TDuration::Minutes(2));
+        dispatchEvents();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 1);
+
+        requestQuota();
+        UNIT_ASSERT_VALUES_EQUAL(proxySessions, 2);
+        UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 1);
+    }
+
+    // The request deadline must be accounted only from the moment the resource
+    // session is established, not from the request arrival: the (possibly slow)
+    // session setup time must not count against the deadline.
+    Y_UNIT_TEST(DeadlineCountsFromSessionEstablished) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatch = [&] {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 1000.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatch();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        // Intercept the resource session together with the proxy updates that
+        // carry the initial quota, so they can be replayed later, after a delay
+        // that is longer than the request deadline. The updates are needed too:
+        // after the session the service has no balance until an update arrives,
+        // and the next real update is only sent on the proxy's 100ms tick, which
+        // is well past the 1ms deadline.
+        THolder<IEventHandle> heldSession;
+        TVector<THolder<IEventHandle>> heldUpdates;
+        bool replaying = false;
+        auto sessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (replaying || heldSession) {
+                    return;
+                }
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    heldSession.Reset(ev.Release());
+                }
+            });
+        auto updateObserver = runtime->AddObserver<TEvQuota::TEvProxyUpdate>(
+            [&](TEvQuota::TEvProxyUpdate::TPtr& ev) {
+                if (replaying) {
+                    return;
+                }
+                heldUpdates.emplace_back(ev.Release());
+            });
+
+        // Request with a 1ms deadline that has to start a new session.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::MilliSeconds(1)), 0, 1));
+
+        // Let the session be established and the initial quota update be produced
+        // (and intercepted). This takes far longer than the 1ms deadline.
+        runtime->WaitFor("resource session and initial quota update",
+            [&] { return heldSession && !heldUpdates.empty(); });
+
+        // Sleep well past the deadline while the session is still not delivered.
+        runtime->AdvanceCurrentTime(TDuration::MilliSeconds(10));
+
+        // Deliver the session (and the quota) now: the deadline must be counted
+        // from this moment, so the request must succeed.
+        replaying = true;
+        runtime->Send(heldSession.Release());
+        for (auto& update : heldUpdates) {
+            runtime->Send(update.Release());
+        }
+
+        auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+            {sender},
+            [](const auto& ev) { return ev->Cookie == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+    }
+
+    // If the quoter resolve hangs (no answer ever comes), the cleanup must
+    // eventually cancel the waiting request instead of leaving it stuck.
+    Y_UNIT_TEST(CancelsHangingQuoterResolve) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatch = [&] {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 1000.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatch();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        // Drop the quoter path resolve answer so the quoter never gets resolved.
+        THolder<IEventHandle> heldNavigate;
+        auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                if (!heldNavigate && ev->Recipient == serviceActorId) {
+                    heldNavigate.Reset(ev.Release());
+                }
+            });
+
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::Max()), 0, 1));
+
+        // The quoter resolve is now hung.
+        runtime->WaitFor("intercepted quoter resolve", [&] { return (bool)heldNavigate; });
+
+        // Advance past the hang threshold (CleanupPeriod) so cleanup cancels it.
+        runtime->AdvanceCurrentTime(TDuration::Minutes(2));
+        dispatch();
+
+        auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+            {sender},
+            [](const auto& ev) { return ev->Cookie == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
+
+        // A late resolve answer after cleanup must be ignored, not crash.
+        // Remove the observer first so the re-sent answer is delivered.
+        observer.Remove();
+        runtime->Send(heldNavigate.Release());
+        dispatch();
+
+        // The dropped quoter was fully cleaned up, so a new request must
+        // re-resolve it from scratch and succeed.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::Max()), 0, 2));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        }
+    }
+
+    // If the resource resolve hangs (the session answer never comes), the cleanup
+    // must cancel the waiting request, and a late session must not crash the
+    // service (the resolve entry is already gone).
+    Y_UNIT_TEST(CancelsHangingResourceResolve) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatch = [&] {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 1000.0, "/Res");
+        CreateKesusResourceAsync(runtime, 1000.0, "/Res2");
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatch();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TString database = TStringBuilder() << "/" << Tests::TestDomainName;
+        const TString quoter = TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter";
+
+        // Establish "Res" first so the quoter stays alive after the hung "Res2"
+        // resolve is cancelled (this is what lets us exercise the late-session
+        // path with the quoter still present).
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And,
+                {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 1));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const auto& ev) { return ev->Cookie == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        }
+
+        // Drop the "Res2" session answer so its resource resolve hangs.
+        THolder<IEventHandle> heldSession;
+        auto observer = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (!heldSession && ev->Get()->Resource == "Res2") {
+                    heldSession.Reset(ev.Release());
+                }
+            });
+
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And,
+                {TEvQuota::TResourceLeaf(database, quoter, "Res2", 1)}, TDuration::Max()), 0, 2));
+
+        // The "Res2" resource resolve is now hung.
+        runtime->WaitFor("intercepted resource resolve", [&] { return (bool)heldSession; });
+
+        // Advance past the hang threshold (CleanupPeriod) so cleanup cancels it.
+        runtime->AdvanceCurrentTime(TDuration::Minutes(2));
+        dispatch();
+
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
+        }
+
+        // A late session after cleanup must not crash: the resolve entry is gone,
+        // but the session is established on the proxy, so the service registers
+        // the resource to stay consistent with it. Remove the observer first so
+        // the re-sent session is delivered.
+        observer.Remove();
+        runtime->Send(heldSession.Release());
+        dispatch();
+
+        // Sanity: the quoter still serves requests for the established resource.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And,
+                {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 3));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const auto& ev) { return ev->Cookie == 3; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        }
+
+        // A new request for "Res2" must succeed via the resource registered from
+        // the late session.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And,
+                {TEvQuota::TResourceLeaf(database, quoter, "Res2", 1)}, TDuration::Max()), 0, 4));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const auto& ev) { return ev->Cookie == 4; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        }
+    }
 }
 
 }

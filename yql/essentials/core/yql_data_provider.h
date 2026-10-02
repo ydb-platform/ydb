@@ -2,6 +2,7 @@
 
 #include "yql_graph_transformer.h"
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/layers/layers.h>
 
 #include <yql/essentials/public/udf/udf_validate.h>
 
@@ -13,15 +14,14 @@
 #include <util/generic/string.h>
 
 #include <functional>
+#include <utility>
 
 class IRandomProvider;
 class ITimeProvider;
 
-namespace NKikimr  {
-    namespace NMiniKQL {
-        class IFunctionRegistry;
-    }
-}
+namespace NKikimr::NMiniKQL {
+class IFunctionRegistry;
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -33,18 +33,19 @@ struct TPinInfo {
     bool HideInBasicPlan;
 
     TPinInfo(const TExprNode* dataSource, const TExprNode* dataSink,
-        const TExprNode* key, const TString& displayName, bool hideInBasicPlan)
+             const TExprNode* key, TString displayName, bool hideInBasicPlan)
         : DataSource(dataSource)
         , DataSink(dataSink)
         , Key(key)
-        , DisplayName(displayName)
+        , DisplayName(std::move(displayName))
         , HideInBasicPlan(hideInBasicPlan)
-    {}
+    {
+    }
 };
 
 class IPlanFormatter {
 public:
-    virtual ~IPlanFormatter() {}
+    virtual ~IPlanFormatter() = default;
 
     virtual bool HasCustomPlan(const TExprNode& node) = 0;
 
@@ -61,6 +62,9 @@ public:
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
+    // returns display name for a link between two operation nodes in the basic plan graph
+    // (empty string means no name should be shown)
+    virtual TString GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) = 0;
     // returns false if provider schemas aren't supported
     virtual bool WriteSchemaHeader(NYson::TYsonWriter& writer) = 0;
     virtual void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) = 0;
@@ -70,14 +74,13 @@ class ITrackableNodeProcessor {
 public:
     virtual ~ITrackableNodeProcessor() = default;
 
-    struct TExprNodeAndId
-    {
+    struct TExprNodeAndId {
         TExprNode::TPtr Node;
         TString Id;
     };
 
-    virtual void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) = 0;
-    virtual void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
+    virtual void GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) = 0;
+    virtual void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
     virtual IGraphTransformer& GetCleanupTransformer() = 0;
 };
 
@@ -88,9 +91,9 @@ class IYtflowOptimization;
 
 class IOptimizationContext;
 
-class IDataProvider : public TThrRefBase {
+class IDataProvider: public TThrRefBase {
 public:
-    virtual ~IDataProvider() {}
+    ~IDataProvider() override = default;
 
     virtual TStringBuf GetName() const = 0;
 
@@ -115,6 +118,8 @@ public:
     virtual IGraphTransformer& GetConfigurationTransformer() = 0;
     virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0;
     virtual const THashMap<TString, TString>* GetClusterTokens() = 0;
+    virtual TMaybe<TString> ResolveClusterToken(const TString& cluster) = 0;
+    virtual const THashSet<TString>& GetValidClusters() = 0;
     virtual void AddCluster(const TString& name, const THashMap<TString, TString>& properties) = 0;
 
     //-- discovery & rewrite
@@ -161,7 +166,8 @@ public:
     virtual void LeaveEvaluation(ui64 id) = 0;
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
-        IOptimizationContext& optCtx) = 0;
+                                         IOptimizationContext& optCtx) = 0;
+    virtual void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) = 0;
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
@@ -190,6 +196,12 @@ public:
     // ytflow
     virtual IYtflowIntegration* GetYtflowIntegration() = 0;
     virtual IYtflowOptimization* GetYtflowOptimization() = 0;
+
+    // layers
+    virtual NLayers::ILayersIntegrationPtr GetLayersIntegration() const = 0;
+
+    // query capture
+    virtual bool IsFullCaptureReady() = 0;
 };
 
 struct IPipelineConfigurator;
@@ -198,7 +210,6 @@ struct TResultProviderConfig;
 struct TYqlOperationOptions;
 struct TOperationProgress;
 class TGatewaysConfig;
-
 
 using TOperationProgressWriter = std::function<void(const TOperationProgress&)>;
 
@@ -219,30 +230,35 @@ struct TDataProviderInfo {
     bool SupportsHidden = false;
 
     std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
-        ESourceSyntax syntax)> RemoteClusterProvider;
+                                  ESourceSyntax syntax)>
+        RemoteClusterProvider;
 
     std::function<TFutureStatus(const TString& cluster, ESourceSyntax sourceSyntax, const TString& sourceCode,
-        TExprContext& ctx)> RemoteValidate;
+                                TExprContext& ctx)>
+        RemoteValidate;
 
     std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
-        const IPipelineConfigurator* pipelineConf,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        TExprNode::TPtr& root, TExprContext& ctx,
-        TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan)> RemoteOptimize;
+                                ESourceSyntax sourceSyntax, const TString& sourceCode,
+                                const IPipelineConfigurator* pipelineConf,
+                                TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+                                TExprNode::TPtr& root, TExprContext& ctx,
+                                TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan)>
+        RemoteOptimize;
 
     std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
-        const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat,
-        const IPipelineConfigurator* pipelineConf,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        TExprNode::TPtr& root, TExprContext& ctx,
-        TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan, TMaybe<TString>& externalDiagnostics,
-        TIntrusivePtr<TResultProviderConfig> resultProviderConfig)> RemoteRun;
+                                ESourceSyntax sourceSyntax, const TString& sourceCode,
+                                const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat,
+                                const IPipelineConfigurator* pipelineConf,
+                                TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+                                TExprNode::TPtr& root, TExprContext& ctx,
+                                TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan, TMaybe<TString>& externalDiagnostics,
+                                TIntrusivePtr<TResultProviderConfig> resultProviderConfig)>
+        RemoteRun;
 
     std::function<NThreading::TFuture<void>(const TString& sessionId, const TString& username,
-        const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-        TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)> OpenSession;
+                                            const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
+                                            TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)>
+        OpenSession;
 
     std::function<bool()> HasActiveProcesses;
 

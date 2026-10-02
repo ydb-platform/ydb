@@ -13,6 +13,7 @@ namespace NYT::NPhoenix {
 namespace NDetail {
 
 struct TSerializer;
+struct TUniverseLoadSchedule;
 
 class TContextBase
 { };
@@ -54,20 +55,27 @@ class TLoadContext
     , public TStreamLoadContext
 {
 public:
-    using TStreamLoadContext::TStreamLoadContext;
+    explicit TLoadContext(IInputStream* input);
+    explicit TLoadContext(IZeroCopyInput* input);
     ~TLoadContext();
+
+    //! Types whose schemas in #schema differ from native ones become compat-loaded.
+    //! Must be called before loading any Phoenix types.
+    void SetSchema(const TUniverseSchemaPtr& schema);
+
+    //! Null unless some type needs compat loading.
+    NDetail::TUniverseLoadSchedule* GetLoadSchedule();
 
 private:
     friend struct NDetail::TSerializer;
 
+    std::unique_ptr<NDetail::TUniverseLoadSchedule> LoadSchedule_;
+
     THashMap<TObjectId, void*> IdToPtr_;
-    std::vector<std::function<void()>> Deletors_;
+    std::vector<std::function<void()>> Deleters_;
 
     void RegisterObject(TObjectId id, void* basePtr);
     void* GetObject(TObjectId id) const;
-
-    template <class T>
-    void RegisterConstructedObject(T* ptr);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

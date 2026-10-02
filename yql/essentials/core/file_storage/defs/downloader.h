@@ -9,12 +9,18 @@
 
 #include <tuple>
 
+namespace NYql {
+class TDownloadLimiter;
+} // namespace NYql
+
 namespace NYql::NFS {
 
-struct IDownloader : public TThrRefBase {
+class IDownloader: public TThrRefBase {
+public:
     virtual bool Accept(const THttpURL& url) = 0;
-    virtual std::tuple<TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& etag, const TString& lastModified) = 0;
+    virtual std::tuple<TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& etag, const TString& lastModified, TDownloadLimiter limiter) = 0;
 };
+
 using IDownloaderPtr = TIntrusivePtr<IDownloader>;
 
-} // NYql
+} // namespace NYql::NFS

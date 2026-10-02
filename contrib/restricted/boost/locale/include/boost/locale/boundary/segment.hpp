@@ -340,7 +340,7 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef segment<std::string::const_iterator> ssegment;   ///< convenience typedef
     typedef segment<std::wstring::const_iterator> wssegment; ///< convenience typedef
-#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#ifdef __cpp_lib_char8_t
     typedef segment<std::u8string::const_iterator> u8ssegment; ///< convenience typedef
 #endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T

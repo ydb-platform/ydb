@@ -23,51 +23,53 @@ namespace NYql {
 using namespace NKikimr;
 
 class TYtDqTaskTransform {
+    using TPartitionParams = THashMap<TString, NYT::TRichYPath>;
+
 public:
-    TYtDqTaskTransform(THashMap<TString, TString> taskParams, const NMiniKQL::IFunctionRegistry& functionRegistry)
+    TYtDqTaskTransform(THashMap<TString, TString> taskParams, TVector<TString> readRanges, const NMiniKQL::IFunctionRegistry& functionRegistry, bool enableReadRanges)
         : TaskParams(std::move(taskParams))
+        , ReadRanges(std::move(readRanges))
         , FunctionRegistry(functionRegistry)
+        , EnableReadRanges(enableReadRanges)
     {
     }
 
     NMiniKQL::TCallableVisitFunc operator()(NMiniKQL::TInternName name) {
-        if (TaskParams.contains("yt") && (name == "DqYtRead" || name == "DqYtBlockRead")) {
+        bool hasReadRanges = EnableReadRanges && !ReadRanges.empty();
+        if ((hasReadRanges || TaskParams.contains("yt")) && (name == "DqYtRead" || name == "DqYtBlockRead")) {
             return [this](NMiniKQL::TCallable& callable, const NMiniKQL::TTypeEnvironment& env) {
                 using namespace NMiniKQL;
 
                 TProgramBuilder pgmBuilder(env, FunctionRegistry);
 
-                YQL_ENSURE(callable.GetInputsCount() == 8 || callable.GetInputsCount() == 9, "Expected 8 or 9 arguments.");
+                YQL_ENSURE(callable.GetInputsCount() == 10, "Expected 10 arguments.");
+                const bool hasPartitionRanges = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<bool>();
 
                 TCallableBuilder callableBuilder(env, callable.GetType()->GetName(), callable.GetType()->GetReturnType(), false);
-                callableBuilder.Add(callable.GetInput(0));
-                callableBuilder.Add(callable.GetInput(1));
-                callableBuilder.Add(callable.GetInput(2));
-                callableBuilder.Add(callable.GetInput(3));
+                for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                    if (i != 4 || !hasPartitionRanges) {
+                        callableBuilder.Add(callable.GetInput(i));
+                        continue;
+                    }
 
-                if (callable.GetInputsCount() == 8U)
-                    callableBuilder.Add(callable.GetInput(4));
-                else {
-                    auto params = NYT::NodeFromYsonString(TaskParams.Value("yt", TString())).AsMap();
+                    auto params = GetPartitionParams();
 
                     TVector<TRuntimeNode> newGrpList;
                     TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(4));
                     for (ui32 grp = 0; grp < groupList->GetItemsCount(); ++grp) {
                         TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[grp]);
                         TVector<TRuntimeNode> newTableList;
-                        for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
-                            TString paramsKey = TStringBuilder() << grp << "/" << i;
+                        for (ui32 tbl = 0; tbl < tableList->GetItemsCount(); ++tbl) {
+                            TString paramsKey = TStringBuilder() << grp << "/" << tbl;
 
-                            TTupleLiteral* tableTuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+                            TTupleLiteral* tableTuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[tbl]);
                             YQL_ENSURE(tableTuple->GetValuesCount() == 4);
 
                             NYT::TRichYPath richYPath;
                             NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tableTuple->GetValue(1))->AsValue().AsStringRef())));
 
-                            if (params.contains(paramsKey)) {
-                                NYT::TRichYPath ranges;
-                                NYT::Deserialize(ranges, params[paramsKey]);
-                                richYPath.MutableRanges() = ranges.GetRanges();
+                            if (const auto it = params.find(paramsKey); it != params.end()) {
+                                richYPath.MutableRanges() = it->second.GetRanges();
                             } else {
                                 richYPath.MutableRanges().ConstructInPlace();
                             }
@@ -83,9 +85,6 @@ public:
                     }
                     callableBuilder.Add(pgmBuilder.NewList(newGrpList.front().GetStaticType(), newGrpList));
                 }
-                callableBuilder.Add(callable.GetInput(5));
-                callableBuilder.Add(callable.GetInput(6));
-                callableBuilder.Add(callable.GetInput(7));
                 return TRuntimeNode(callableBuilder.Build(), false);
             };
         }
@@ -96,7 +95,7 @@ public:
 
                 TProgramBuilder pgmBuilder(env, FunctionRegistry);
 
-                YQL_ENSURE(callable.GetInputsCount() == 6, "Expected six arguments.");
+                YQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 arguments.");
 
                 TCallableBuilder callableBuilder(env, callable.GetType()->GetName(), callable.GetType()->GetReturnType(), false);
                 callableBuilder.Add(callable.GetInput(0));
@@ -108,8 +107,9 @@ public:
                 richYPath.TransactionId(GetGuid(TaskParams.Value("yt.write.tx", TString())));
                 callableBuilder.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(richYPath))));
 
-                callableBuilder.Add(callable.GetInput(4));
-                callableBuilder.Add(callable.GetInput(5));
+                for (ui32 i = 4; i < callable.GetInputsCount(); ++i) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
 
                 return TRuntimeNode(callableBuilder.Build(), false);
             };
@@ -119,13 +119,49 @@ public:
     }
 
 private:
-    THashMap<TString, TString> TaskParams;
+    TPartitionParams GetPartitionParams() const {
+        TPartitionParams result;
+        if (!EnableReadRanges || ReadRanges.empty()) {
+            FillPartitionParams(result, NYT::NodeFromYsonString(TaskParams.Value("yt", TString())).AsMap());
+            return result;
+        }
+
+        for (const auto& partition : ReadRanges) {
+            FillPartitionParams(result, NYT::NodeFromYsonString(partition).AsMap());
+        }
+
+        return result;
+    }
+
+    static void FillPartitionParams(TPartitionParams& partitionParams, const NYT::TNode::TMapType& partitionMap) {
+        for (const auto& [key, value] : partitionMap) {
+            NYT::TRichYPath newRichPath;
+            NYT::Deserialize(newRichPath, value);
+
+            const auto [it, inserted] = partitionParams.emplace(key, newRichPath);
+            if (inserted) {
+                continue;
+            }
+
+            auto& ranges = it->second.MutableRanges();
+            YQL_ENSURE(ranges, "Found intersecting read ranges, current range already cover up all table");
+
+            const auto& newRanges = newRichPath.GetRanges();
+            YQL_ENSURE(newRanges, "Found intersecting read ranges, new range cover up all table when another range exists");
+            ranges->insert(ranges->end(), newRanges->begin(), newRanges->end());
+        }
+    }
+
+private:
+    const THashMap<TString, TString> TaskParams;
+    const TVector<TString> ReadRanges;
     const NMiniKQL::IFunctionRegistry& FunctionRegistry;
+    const bool EnableReadRanges;
 };
 
-TTaskTransformFactory CreateYtDqTaskTransformFactory() {
-    return [] (const THashMap<TString, TString>& taskParams, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) -> NKikimr::NMiniKQL::TCallableVisitFuncProvider {
-        return TYtDqTaskTransform(taskParams, *funcRegistry);
+TTaskTransformFactory CreateYtDqTaskTransformFactory(bool enableReadRanges) {
+    return [enableReadRanges] (const TTaskTransformArguments& args, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) -> NKikimr::NMiniKQL::TCallableVisitFuncProvider {
+        return TYtDqTaskTransform(args.TaskParams, args.ReadRanges, *funcRegistry, enableReadRanges);
     };
 }
 

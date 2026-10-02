@@ -23,15 +23,27 @@
 
 На каждый запрос клиент должен выставить транспортный таймаут. Данное значение позволяет определить количество времени, которое клиент готов ждать ответа от сервера. Если за данное время сервер не ответил, то клиенту будет возвращена транспортная ошибка c кодом ``DeadlineExceeded``. Важно выставить такое значение клиентского таймаута чтоб при нормальной работе приложения и сети транспортные таймауты не срабатывали.
 
+{% note tip %}
+
+Лучше выставлять транспортный таймаут с запасом относительно времени (измеренного во время нагрузочного тестирования или тестирования на отказ) ответа на запрос.
+
+Например, можно использовать удвоенное значение 99-го перцентиля времени ответа. Иными словами, таймаут должен равняться $2 × P99$
+
+Время ответа для конкретного запроса нужно измерять в коде клиента (не стоит использовать метрики времени ответа, которые предоставляет сервер, или данные из статистики запроса).
+
+{% endnote %}
+
 ## Применение таймаутов {#usage}
 
-Всегда рекомендуется устанавливать и таймаут на операцию и транспортный таймаут. Значение транспортного таймаута следует делать на 50-100 миллисекунд больше чем значение таймаута на операцию, чтобы оставался некоторый запас времени, за который клиент сможет получить серверную ошибку c кодом ``Timeout``.
+### TableService {#usage-tableservice}
+
+Всегда рекомендуется устанавливать и таймаут на операцию, и транспортный таймаут. Значение транспортного таймаута следует делать на 50-100 миллисекунд больше, чем значение таймаута на операцию, чтобы оставался некоторый запас времени, за который клиент сможет получить серверную ошибку c кодом ``Timeout``.
 
 Пример использования таймаутов:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
-- Python
+* Python
 
   ```python
   import ydb
@@ -50,7 +62,7 @@
 
 {% if oss == true %}
 
-- C++
+* C++
 
   ```cpp
   #include <ydb/public/sdk/cpp/client/ydb.h>
@@ -74,24 +86,108 @@
 
 {% endif %}
 
-- Go
+* Go
 
   ```go
   import (
     "context"
+    "time"
 
     ydb "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
 
   func executeInTx(ctx context.Context, s table.Session, query string) {
-  ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
+  ctx, cancel := context.WithTimeout(ctx, time.Millisecond*500) // transport timeout
   defer cancel()
-  ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
-  ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
+  ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout
+  ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*400) // cancel after timeout
   tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
   _, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
   }
+  ```
+
+{% endlist %}
+
+### QueryService {#usage-queryservice}
+
+QueryService использует исключительно клиентские таймауты (дедлайны). Значение по умолчанию не задано, поэтому время выполнения запроса не ограничено.
+
+Рекомендуется всегда явно устанавливать таймаут, чтобы не ждать ответов на запросы, которые уже не нужны. Это также позволяет избежать бесконечного ожидания ответа от сервера в условиях нестабильной сети. Для своевременного обнаружения разрывов соединения рекомендуется дополнительно настраивать параметры gRPC KeepAlive.
+
+{% list tabs group=lang %}
+
+* Python
+
+  ```python
+  import ydb
+  
+  settings = (
+      ydb.BaseRequestSettings()
+      .with_timeout(5)
+  )
+  
+  for result_set in session.execute(query, settings=settings):
+      ...
+  
+  # Or via pool with retry
+  result_sets = pool.execute_with_retries(query, settings=settings)
+  ```
+
+{% if oss == true %}
+
+* C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+  
+  auto settings = NYdb::NQuery::TExecuteQuerySettings()
+      .Deadline(TDeadline::AfterDuration(std::chrono::seconds(5)));
+  
+  auto result = session.ExecuteQuery(
+      query,
+      NYdb::NQuery::TTxControl::NoTx(),
+      {},
+      settings
+  ).GetValueSync();
+  ```
+
+{% endif %}
+
+* Go
+
+  ```go
+  import (
+      "context"
+      "time"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
+  
+  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+  defer cancel()
+  
+  err := db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
+      res, err := s.Query(ctx, `SELECT 1`)
+      return err
+  }, query.WithIdempotent())
+  ```
+
+* Java
+
+  ```java
+  import tech.ydb.query.settings.ExecuteQuerySettings;
+  import java.time.Duration;
+  
+  ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+      .withRequestTimeout(Duration.ofSeconds(5))
+      .build();
+  
+  session.createQuery(query, TxMode.NONE, Params.empty(), settings)
+      .execute(part -> {
+          ResultSetReader rs = part.getResultSetReader();
+          // ...
+      }).join();
+  
   ```
 
 {% endlist %}

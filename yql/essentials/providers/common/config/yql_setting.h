@@ -7,56 +7,62 @@
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
-template <typename TType, bool RUNTIME = true>
+enum class EConfSettingType {
+    Static,
+    StaticPerCluster,
+    Dynamic,
+};
+
+template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynamic>
 class TConfSetting {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value) {
-        PerClusterValue[ALL_CLUSTERS] = value;
-    }
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
 
     bool IsRuntime() const {
-        return RUNTIME;
+        return SettingType == EConfSettingType::Dynamic;
+    }
+
+    bool IsPerCluster() const {
+        return SettingType == EConfSettingType::Dynamic || SettingType == EConfSettingType::StaticPerCluster;
     }
 
     TType& operator[](const TString& cluster) {
         if (ALL_CLUSTERS == cluster) {
-            PerClusterValue.clear();
+            PerClusterValue_.clear();
         }
-        return PerClusterValue[cluster];
+        return PerClusterValue_[cluster];
     }
-    TConfSetting& operator =(const TType& value) {
-        PerClusterValue.clear();
-        PerClusterValue[ALL_CLUSTERS] = value;
+    TConfSetting& operator=(const TType& value) {
+        PerClusterValue_.clear();
+        PerClusterValue_[ALL_CLUSTERS] = value;
         return *this;
     }
-    TConfSetting& operator =(const TConfSetting&) = default;
-    TConfSetting& operator =(TConfSetting&&) = default;
+    TConfSetting& operator=(const TConfSetting&) = default;
+    TConfSetting& operator=(TConfSetting&&) = default;
 
     template <typename TFunc>
     void UpdateAll(TFunc func) {
-        PerClusterValue[ALL_CLUSTERS]; // insert record for all clusters if it is not present
-        for (auto& it: PerClusterValue) {
+        PerClusterValue_[ALL_CLUSTERS]; // insert record for all clusters if it is not present
+        for (auto& it : PerClusterValue_) {
             func(it.first, it.second);
         }
     }
 
     TMaybe<TType> Get(const TString& cluster) const {
-        if (!PerClusterValue.empty()) {
-            auto it = PerClusterValue.find(cluster);
-            if (it != PerClusterValue.end()) {
+        if (!PerClusterValue_.empty()) {
+            auto it = PerClusterValue_.find(cluster);
+            if (it != PerClusterValue_.end()) {
                 return MakeMaybe(it->second);
             }
-            it = PerClusterValue.find(ALL_CLUSTERS);
-            if (it != PerClusterValue.end()) {
+            it = PerClusterValue_.find(ALL_CLUSTERS);
+            if (it != PerClusterValue_.end()) {
                 return MakeMaybe(it->second);
             }
         }
@@ -64,29 +70,25 @@ public:
     }
 
     void Clear() {
-        PerClusterValue.clear();
+        PerClusterValue_.clear();
     }
 
     void Clear(const TString& cluster) {
         if (ALL_CLUSTERS == cluster) {
-            PerClusterValue.clear();
+            PerClusterValue_.clear();
         } else {
-            PerClusterValue.erase(cluster);
+            PerClusterValue_.erase(cluster);
         }
     }
 
 private:
-    NSorted::TSimpleMap<TString, TType> PerClusterValue; // Uses special '$all' key for all clusters
+    NSorted::TSimpleMap<TString, TType> PerClusterValue_; // Uses special '$all' key for all clusters
 };
 
 template <typename TType>
-class TConfSetting<TType, false> {
+class TConfSetting<TType, EConfSettingType::Static> {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value)
-        : Value(value)
-    {
-    }
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
@@ -95,35 +97,38 @@ public:
         return false;
     }
 
+    bool IsPerCluster() const {
+        return false;
+    }
+
     TType& operator[](const TString& cluster) {
         if (cluster != ALL_CLUSTERS) {
-            ythrow yexception() << "Static setting cannot be set for specific cluster";
+            ythrow yexception() << "Global static setting cannot be set for specific cluster";
         }
-        Value.ConstructInPlace();
-        return Value.GetRef();
+        Value_.ConstructInPlace();
+        return Value_.GetRef();
     }
-    TConfSetting& operator =(const TType& value) {
-        Value = value;
+    TConfSetting& operator=(const TType& value) {
+        Value_ = value;
         return *this;
     }
-    TConfSetting& operator =(const TConfSetting&) = default;
-    TConfSetting& operator =(TConfSetting&&) = default;
+    TConfSetting& operator=(const TConfSetting&) = default;
+    TConfSetting& operator=(TConfSetting&&) = default;
 
     TMaybe<TType> Get() const {
-        return Value;
+        return Value_;
     }
 
     void Clear() {
-        Value.Clear();
+        Value_.Clear();
     }
 
     void Clear(const TString&) {
-        Value.Clear();
+        Value_.Clear();
     }
 
 private:
-    TMaybe<TType> Value;
+    TMaybe<TType> Value_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

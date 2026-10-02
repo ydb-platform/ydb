@@ -72,15 +72,21 @@ private:
             UnderlyingHandler_->HandleAcknowledgement();
         }
 
-        void HandleResponse(TSharedRefArray message, const std::string& address) override
+        void HandleResponse(
+            TSharedRefArray message,
+            const std::string& address,
+            NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override
         {
-            UnderlyingHandler_->HandleResponse(std::move(message), address);
+            UnderlyingHandler_->HandleResponse(
+                std::move(message),
+                address,
+                std::move(attachmentsTransfer));
             Owner_->OnRequestCompleted();
         }
 
-        void HandleError(TError error) override
+        void HandleError(TError error, const std::string& address) override
         {
-            UnderlyingHandler_->HandleError(std::move(error));
+            UnderlyingHandler_->HandleError(std::move(error), address);
             Owner_->OnRequestCompleted();
         }
 

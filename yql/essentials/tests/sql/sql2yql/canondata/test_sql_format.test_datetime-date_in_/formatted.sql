@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST('1970-01-01' AS date),
     CAST(CAST('1970-01-01' AS date) AS string)
@@ -135,6 +134,36 @@ SELECT
 ;
 
 SELECT
+    CAST('-P49672DT23H59M59.999999S' AS interval),
+    CAST(CAST('-P49672DT23H59M59.999999S' AS interval) AS string)
+;
+
+SELECT
     CAST('P49673D' AS interval),
     CAST(CAST('P49673D' AS interval) AS string)
+;
+
+SELECT
+    CAST('-P49673D' AS interval),
+    CAST(CAST('-P49673D' AS interval) AS string)
+;
+
+SELECT
+    CAST('PT4291747199S' AS interval),
+    CAST(CAST('PT4291747199S' AS interval) AS string)
+;
+
+SELECT
+    CAST('-PT4291747199S' AS interval),
+    CAST(CAST('-PT4291747199S' AS interval) AS string)
+;
+
+SELECT
+    CAST('PT4291747200S' AS interval),
+    CAST(CAST('PT4291747200S' AS interval) AS string)
+;
+
+SELECT
+    CAST('-PT4291747200S' AS interval),
+    CAST(CAST('-PT4291747200S' AS interval) AS string)
 ;

@@ -26,18 +26,14 @@ ui64 TKqpQueryStats::GetWorkerCpuTimeUs() const {
     return WorkerCpuTimeUs;
 }
 
-constexpr size_t QUERY_TEXT_LIMIT = 4096;
+constexpr size_t QUERY_TEXT_LIMIT = 10240;
 
 template <typename T>
 void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
-        return;
-    }
-
     auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
     collectEv->Database = database;
 
@@ -82,6 +78,10 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
         break;
     }
     stats.SetType(strType);
+
+    if (traceId) {
+        stats.SetTraceId(traceId);
+    }
 
     if (!queryStats || queryStats->GetExecutions().empty()) {
         ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
@@ -145,27 +145,69 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
 
     stats.SetRequestUnits(requestUnits);
 
+    if constexpr (std::is_same_v<T, TKqpQueryStats>) {
+        stats.SetLocksBrokenAsBreaker(queryStats->LocksBrokenAsBreaker);
+        stats.SetLocksBrokenAsVictim(queryStats->LocksBrokenAsVictim);
+    }
+
     ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
 }
 
 void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
     CollectQueryStatsImpl(
         ctx, queryStats, queryDuration, queryText, userSID,
-        parametersSize, database, type, requestUnits);
+        parametersSize, database, type, requestUnits, traceId);
 }
 
 void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStats,
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits)
+    const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
     CollectQueryStatsImpl(
         ctx, queryStats, queryDuration, queryText, userSID,
-        parametersSize, database, type, requestUnits);
+        parametersSize, database, type, requestUnits, traceId);
+}
+
+// Attribute LocksBrokenAsVictim to the original query that acquired the locks
+void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
+    const TString& victimQueryText, const TString& database)
+{
+    if (locksBrokenAsVictim == 0 || victimQueryText.empty()) {
+        return;
+    }
+
+    auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
+    collectEv->Database = database;
+
+    auto& stats = collectEv->QueryStats;
+
+    auto nodeId = ctx.SelfID.NodeId();
+    stats.SetNodeId(nodeId);
+    stats.SetEndTimeMs(TInstant::Now().MilliSeconds());
+    // Set minimal duration to indicate this is a stats update
+    stats.SetDurationMs(0);
+
+    // Hash on full text (before truncation) to match the original stats entry
+    stats.SetQueryTextHash(MurmurHash<ui64>(victimQueryText.data(), victimQueryText.size()));
+    if (victimQueryText.size() > QUERY_TEXT_LIMIT) {
+        auto limitedText = victimQueryText.substr(0, QUERY_TEXT_LIMIT);
+        stats.SetQueryText(limitedText);
+    } else {
+        stats.SetQueryText(victimQueryText);
+    }
+
+    // Set query type to match the original query (victim queries are typically DML)
+    stats.SetType("data");
+
+    // Only set the victim stats - this is a minimal stats update
+    stats.SetLocksBrokenAsVictim(locksBrokenAsVictim);
+
+    ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
 }
 
 template <typename T>

@@ -25,6 +25,8 @@
 #include <util/stream/file.h>
 #include <util/string/util.h>
 #include <util/system/datetime.h>
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
 
 // This class sets SIGPROF handler and captures instruction pointer in it.
 class TExecutionSampler : TNonCopyable {
@@ -89,7 +91,7 @@ public:
         stats.SavedSamples = Samples;
         stats.DroppedSamples = AtomicGet(DroppedSamples);
         stats.SearchSkipCount = SearchSkipCount;
-        AtomicUnlock(&WriteFlag);
+        WriteFlag.Release();
 
         Sort(hits.begin(), hits.end(), TCompareFirst());
 
@@ -99,7 +101,7 @@ public:
     void ResetStats() {
         WaitForWriteFlag();
         Clear();
-        AtomicUnlock(&WriteFlag);
+        WriteFlag.Release();
     }
 
 private:
@@ -116,7 +118,6 @@ private:
     TExecutionSampler()
         : Started(false)
         , Ips(SZ)
-        , WriteFlag(0)
         , DroppedSamples(0)
         , Samples(0)
         , UniqueSamples(0)
@@ -146,7 +147,7 @@ private:
     void WaitForWriteFlag() {
         // Wait for write flag to be reset
         ui32 delay = 100;
-        while (!AtomicTryLock(&WriteFlag)) {
+        while (!WriteFlag.TryAcquire()) {
             usleep(delay);
             delay += delay;
             delay = Min(delay, (ui32)5000);
@@ -157,9 +158,8 @@ private:
         // Check if the handler on another thread is in the process of adding a sample
         // If this is the case, we just drop the current sample as this should happen
         // rarely.
-        if (AtomicTryLock(&WriteFlag)) {
+        if (TTryGuard guard(WriteFlag); guard.WasAcquired()) {
             AddSample(rip);
-            AtomicUnlock(&WriteFlag);
         } else {
             AtomicIncrement(DroppedSamples);
         }
@@ -243,7 +243,7 @@ private:
 
     void
     Clear() {
-        Y_ASSERT(WriteFlag == 1);
+        Y_ASSERT(WriteFlag.IsLocked());
 
         for (size_t i = 0; i < SZ; ++i) {
             Ips[i] = std::make_pair((void*)nullptr, (size_t)0);
@@ -262,7 +262,7 @@ private:
         Ips; // The hash table storing addresses and their hitcounts
 
     // TODO: on a big multiproc cache line false sharing by the flag and count might become an issue
-    TAtomic WriteFlag;      // Is used to syncronize access to the hash table
+    TSpinLock WriteFlag;    // Is used to syncronize access to the hash table
     TAtomic DroppedSamples; // "dropped sample" count will show how many times
                             // a sample was dropped either because of write conflict
                             // or because of the hash table had become too filled up

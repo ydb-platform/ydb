@@ -9,11 +9,11 @@ namespace NDq {
 
 class TDqTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContextBase {
 public:
-    TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& WakeUpCallback_, TErrorCallback&& ErrorCallback_);
+    TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override;
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override;
-  
+
     TWakeUpCallback GetWakeupCallback() const override;
     TErrorCallback GetErrorCallback() const override;
     TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const override;

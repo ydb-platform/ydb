@@ -1,4 +1,5 @@
 """Discover and run std-library "unittest" style tests."""
+
 import sys
 import traceback
 import types
@@ -14,7 +15,6 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 import _pytest._code
-import pytest
 from _pytest.compat import getimfunc
 from _pytest.compat import is_async_function
 from _pytest.config import hookimpl
@@ -30,9 +30,12 @@ from _pytest.python import Function
 from _pytest.python import Module
 from _pytest.runner import CallInfo
 from _pytest.scope import Scope
+import pytest
+
 
 if TYPE_CHECKING:
     import unittest
+
     import twisted.trial.unittest
 
     _SysExcInfoType = Union[
@@ -200,10 +203,10 @@ class TestCaseFunction(Function):
         assert self.parent is not None
         self._testcase = self.parent.obj(self.name)  # type: ignore[attr-defined]
         self._obj = getattr(self._testcase, self.name)
-        if hasattr(self, "_request"):
-            self._request._fillfixtures()
+        super().setup()
 
     def teardown(self) -> None:
+        super().teardown()
         if self._explicit_tearDown is not None:
             self._explicit_tearDown()
             self._explicit_tearDown = None
@@ -217,7 +220,9 @@ class TestCaseFunction(Function):
         # Unwrap potential exception info (see twisted trial support below).
         rawexcinfo = getattr(rawexcinfo, "_rawexcinfo", rawexcinfo)
         try:
-            excinfo = _pytest._code.ExceptionInfo[BaseException].from_exc_info(rawexcinfo)  # type: ignore[arg-type]
+            excinfo = _pytest._code.ExceptionInfo[BaseException].from_exc_info(
+                rawexcinfo  # type: ignore[arg-type]
+            )
             # Invoke the attributes to trigger storing the traceback
             # trial causes some issue there.
             excinfo.value
@@ -362,9 +367,7 @@ def pytest_runtest_makereport(item: Item, call: CallInfo[None]) -> None:
     # handled internally, and doesn't reach here.
     unittest = sys.modules.get("unittest")
     if (
-        unittest
-        and call.excinfo
-        and isinstance(call.excinfo.value, unittest.SkipTest)  # type: ignore[attr-defined]
+        unittest and call.excinfo and isinstance(call.excinfo.value, unittest.SkipTest)  # type: ignore[attr-defined]
     ):
         excinfo = call.excinfo
         call2 = CallInfo[None].from_call(
@@ -376,8 +379,8 @@ def pytest_runtest_makereport(item: Item, call: CallInfo[None]) -> None:
 # Twisted trial support.
 
 
-@hookimpl(hookwrapper=True)
-def pytest_runtest_protocol(item: Item) -> Generator[None, None, None]:
+@hookimpl(wrapper=True)
+def pytest_runtest_protocol(item: Item) -> Generator[None, object, object]:
     if isinstance(item, TestCaseFunction) and "twisted.trial.unittest" in sys.modules:
         ut: Any = sys.modules["twisted.python.failure"]
         Failure__init__ = ut.Failure.__init__
@@ -400,17 +403,20 @@ def pytest_runtest_protocol(item: Item) -> Generator[None, None, None]:
                 Failure__init__(self, exc_value, exc_type, exc_tb)
 
         ut.Failure.__init__ = excstore
-        yield
-        ut.Failure.__init__ = Failure__init__
+        try:
+            res = yield
+        finally:
+            ut.Failure.__init__ = Failure__init__
     else:
-        yield
+        res = yield
+    return res
 
 
 def check_testcase_implements_trial_reporter(done: List[int] = []) -> None:
     if done:
         return
-    from zope.interface import classImplements
     from twisted.trial.itrial import IReporter
+    from zope.interface import classImplements
 
     classImplements(TestCaseFunction, IReporter)
     done.append(1)

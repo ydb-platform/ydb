@@ -2,9 +2,17 @@
 
 #include "defs.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+
 namespace NKikimr {
 
     class TTestEnv : TNonCopyable {
+        static TFeatureFlags MakeFeatureFlags(bool enableHeapAllocator) {
+            TFeatureFlags flags;
+            flags.SetEnableVDiskHeapAllocator(enableHeapAllocator);
+            return flags;
+        }
+
         std::unique_ptr<TTestActorSystem> Runtime;
         ::NMonitoring::TDynamicCounterPtr Counters;
         TIntrusivePtr<TVDiskConfig> VDiskConfig;
@@ -17,6 +25,7 @@ namespace NKikimr {
         const TActorId PDiskServiceId = MakeBlobStoragePDiskID(NodeId, PDiskId);
         const TVDiskID VDiskId{GroupId, 1, 0, 0, 0};
         const TActorId VDiskServiceId = MakeBlobStorageVDiskID(NodeId, PDiskId, VSlotId);
+        const ui32 MaxResponseSize;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<TPDiskMockState> PDiskMockState;
         std::unordered_map<NKikimrBlobStorage::EVDiskQueueId, TActorId> QueueIds;
@@ -66,9 +75,12 @@ namespace NKikimr {
         };
 
     public:
-        TTestEnv(TIntrusivePtr<TPDiskMockState> state = nullptr)
-            : Runtime(std::make_unique<TTestActorSystem>(1))
+        TTestEnv(TIntrusivePtr<TPDiskMockState> state = nullptr, bool enableHeapAllocator = false,
+                ui32 maxResponseSize = 0)
+            : Runtime(std::make_unique<TTestActorSystem>(
+                1, NLog::PRI_ERROR, nullptr, MakeFeatureFlags(enableHeapAllocator)))
             , Counters(new ::NMonitoring::TDynamicCounters)
+            , MaxResponseSize(maxResponseSize)
             , AllVDiskKinds(new TAllVDiskKinds)
             , PDiskMockState(state ? state : new TPDiskMockState(NodeId, PDiskId, PDiskGuid, (ui64)10 << 40))
         {
@@ -88,14 +100,52 @@ namespace NKikimr {
             return Runtime.get();
         }
 
+        const TActorId& GetVDiskServiceId() const {
+            return VDiskServiceId;
+        }
+
         TIntrusivePtr<TPDiskMockState> GetPDiskMockState() {
             return PDiskMockState;
+        }
+
+        ::NMonitoring::TDynamicCounterPtr GetCounters() {
+            return Counters;
+        }
+
+        void SetSpaceReportPeriodSeconds(ui64 seconds) {
+            VDiskConfig->SpaceReportPeriodSeconds = seconds;
+        }
+
+        void Compact(bool freshOnly = false) {
+            Compact(EHullDbType::LogoBlobs, freshOnly);
+        }
+
+        void Compact(EHullDbType db, bool freshOnly = false) {
+            const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
+            TEvCompactVDisk* ev = TEvCompactVDisk::Create(
+                db,
+                freshOnly ? TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL,
+                true);
+            Runtime->Send(new IEventHandle(VDiskServiceId, edge, ev), NodeId);
+            auto res = Runtime->WaitForEdgeActorEvent({edge});
+            Runtime->DestroyActor(edge);
+            Y_VERIFY(res->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
+        }
+
+        NKikimrBlobStorage::TEvVBlockResult Block(ui64 tabletId, ui32 generation) {
+            return ExecuteQuery<TEvBlobStorage::TEvVBlockResult>(
+                std::make_unique<TEvBlobStorage::TEvVBlock>(
+                    tabletId,
+                    generation,
+                    VDiskId,
+                    TInstant::Max()),
+                NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
         }
 
         NKikimrBlobStorage::TEvVPutResult Put(const TLogoBlobID& id, TString buffer,
                 NKikimrBlobStorage::EPutHandleClass prio = NKikimrBlobStorage::EPutHandleClass::TabletLog) {
             return ExecuteQuery<TEvBlobStorage::TEvVPutResult>(std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(buffer),
-                VDiskId, false, nullptr, TInstant::Max(), prio), GetQueueId(prio));
+                VDiskId, false, nullptr, TInstant::Max(), prio, false), GetQueueId(prio));
         }
 
         NKikimrBlobStorage::TEvVGetResult Get(const TLogoBlobID& id,
@@ -111,6 +161,14 @@ namespace NKikimr {
                 }
             }
             return r;
+        }
+
+        NKikimrBlobStorage::TEvVGetResult GetIndex(const TLogoBlobID& id,
+                NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
+            auto query = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(VDiskId, TInstant::Max(), prio,
+                TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {id.FullID()});
+            return ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
+                GetQueueId(prio));
         }
 
         NKikimrBlobStorage::TEvVCollectGarbageResult Collect(ui64 tabletId, ui32 gen, ui32 counter,
@@ -129,10 +187,10 @@ namespace NKikimr {
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
-            
+
             auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
             vdiskTypes->Add(std::move(perfConfig));
-            
+
             Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);
@@ -175,6 +233,12 @@ namespace NKikimr {
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
             VDiskConfig->UseCostTracker = false;
+            if (MaxResponseSize) {
+                VDiskConfig->MaxResponseSize = MaxResponseSize;
+            }
+            // Periodic background scans make otherwise unrelated VDisk tests
+            // time-dependent. SpaceReport tests trigger a cold refresh explicitly.
+            VDiskConfig->SpaceReportPeriodSeconds = 0;
 
             // create and register actor
             std::unique_ptr<IActor> vdisk(NKikimr::CreateVDisk(VDiskConfig, Info, Counters->GetSubgroup("subsystem", "vdisk")));

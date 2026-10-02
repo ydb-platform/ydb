@@ -7,7 +7,7 @@
 #include <util/datetime/cputimer.h>
 #include <util/system/hostname.h>
 #include <util/stream/buffer.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 
 
 using namespace NYql;

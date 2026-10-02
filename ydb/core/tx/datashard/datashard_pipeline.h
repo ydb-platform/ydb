@@ -12,6 +12,13 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_exec_seat.h>
 
+#include <ydb/core/util/intrusive_heap.h>
+#include <ydb/library/actors/async/async.h>
+
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -115,7 +122,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -141,7 +148,7 @@ public:
     bool AssignPlanInterval(TOperation::TPtr op);
     ui64 OutdatedReadSetStep() const;
     ui64 OutdatedCleanupStep() const;
-    ui64 AllowedDataStep() const { return Max(LastPlannedTx.Step + 1, TAppData::TimeProvider->Now().MilliSeconds()); }
+    ui64 AllowedDataStep() const;
     ui64 AllowedSchemaStep() const { return LastPlannedTx.Step + 1; }
     ui64 VacantSchemaStep() const { return KeepSchemaStep + 1; }
 
@@ -150,7 +157,7 @@ public:
     TStepOrder GetUtmostCompleteTx() const { return UtmostCompleteTx; }
 
     ui64 GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const;
-    ui64 GetDataTxCompleteLag(ui64 timecastStep) const;
+    ui64 GetTxCompleteLag(ui64 timecastStep) const;
     ui64 GetScanTxCompleteLag(ui64 timecastStep) const;
 
     // schema ops
@@ -165,6 +172,7 @@ public:
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
     bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }
+    bool HasPrepareIndexValidation() const { return SchemaTx && SchemaTx->IsPrepareIndexValidation(); }
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
@@ -172,8 +180,9 @@ public:
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
-    bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
+    bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
+    bool HasTruncate() const { return SchemaTx && SchemaTx->IsTruncate(); }
 
     ui64 CurrentSchemaTxId() const {
         if (SchemaTx)
@@ -186,7 +195,7 @@ public:
     }
 
     void SetSchemaOp(TSchemaOperation * op) {
-        Y_ABORT_UNLESS(!SchemaTx || SchemaTx->TxId == op->TxId);
+        Y_ENSURE(!SchemaTx || SchemaTx->TxId == op->TxId);
         SchemaTx = op;
     }
 
@@ -265,20 +274,23 @@ public:
     TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan);
+                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan,
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     NWilson::TSpan &&operationSpan);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
-                     const TActorContext &ctx);
+                     const TActorContext &ctx,
+                     TIntrusivePtr<NACLib::TUserContext> userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
-            const TActorContext &ctx)
+            const TActorContext &ctx,
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
     {
-        return tx->RestoreTxData(Self, txc, ctx);
+        return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }
 
     ERestoreDataStatus RestoreWriteTx(
@@ -372,6 +384,19 @@ public:
     void RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
     bool HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
 
+    /**
+     * Returns the number of coroutines currently waiting for snapshots
+     */
+    size_t WaitingCoroutinesCount() const { return WaitingCoroutines.Size(); }
+
+    /**
+     * Waits until the specified snapshot is potentially readable. This means that a read
+     * operation at this snapshot will be allowed to enter the pipeline and that the dependency
+     * tracker has all the info about planned writes at or below the snapshot. Note that this
+     * does *not* mean that all relevant changes are already executed against the localdb.
+     */
+    async<void> WaitForSnapshot(const TRowVersion& snapshot);
+
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge() const;
 
@@ -454,7 +479,7 @@ private:
             if (!res.second)
                 res.first->Counter += 1;
             auto res2 = TxIdMap.emplace(txId, res.first);
-            Y_VERIFY_S(res2.second, "Unexpected duplicate immediate tx " << txId
+            Y_ENSURE(res2.second, "Unexpected duplicate immediate tx " << txId
                     << " committing at " << version);
             res.first->TxCounter += 1;
         }
@@ -467,11 +492,11 @@ private:
 
         inline void Remove(ui64 txId, TRowVersion version) {
             auto it = TxIdMap.find(txId);
-            Y_VERIFY_S(it != TxIdMap.end(), "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(it != TxIdMap.end(), "Removing immediate tx " << txId << " " << version
                     << " does not match a previous Add");
-            Y_VERIFY_S(TRowVersion(it->second->Step, it->second->TxId) == version, "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(TRowVersion(it->second->Step, it->second->TxId) == version, "Removing immediate tx " << txId << " " << version
                     << " does not match a previous Add " << TRowVersion(it->second->Step, it->second->TxId));
-            Y_VERIFY_S(it->second->TxCounter > 0, "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(it->second->TxCounter > 0, "Removing immediate tx " << txId << " " << version
                     << " with a mismatching TxCounter");
             --it->second->TxCounter;
             if (--it->second->Counter == 0)
@@ -481,10 +506,10 @@ private:
 
         inline void Remove(TRowVersion version) {
             auto it = ItemsSet.find(version);
-            Y_VERIFY_S(it != ItemsSet.end(), "Removing version " << version
+            Y_ENSURE(it != ItemsSet.end(), "Removing version " << version
                     << " does not match a previous Add");
             if (--it->Counter == 0) {
-                Y_VERIFY_S(it->TxCounter == 0, "Removing version " << version
+                Y_ENSURE(it->TxCounter == 0, "Removing version " << version
                     << " while TxCounter has active references, possible Add/Remove mismatch");
                 ItemsSet.erase(it);
             }
@@ -563,6 +588,42 @@ private:
 
     TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
     THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
+
+    class TWaitingCoroutine {
+    public:
+        struct THeapIndex {
+            size_t& operator()(TWaitingCoroutine& c) const {
+                return c.HeapIndex;
+            }
+        };
+
+        struct TCompare {
+            bool operator()(const TWaitingCoroutine& a, const TWaitingCoroutine& b) const {
+                return a.Snapshot < b.Snapshot;
+            }
+        };
+
+    public:
+        virtual void Resume() = 0;
+
+    protected:
+        TWaitingCoroutine(const TRowVersion& snapshot)
+            : Snapshot(snapshot)
+        {}
+
+        ~TWaitingCoroutine() = default;
+
+    public:
+        const TRowVersion Snapshot;
+
+    protected:
+        size_t HeapIndex = -1;
+    };
+
+    class TWaitForSnapshotAwaiter;
+
+    using TWaitingCoroutines = TIntrusiveHeap<TWaitingCoroutine, TWaitingCoroutine::THeapIndex, TWaitingCoroutine::TCompare>;
+    TWaitingCoroutines WaitingCoroutines;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);

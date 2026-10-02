@@ -1,6 +1,5 @@
-#include "storage_service.h"
-
 #include "storage_proxy.h"
+#include "storage_service.h"
 
 namespace NFq {
 
@@ -9,12 +8,14 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
-    const NConfig::TCheckpointCoordinatorConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
+    const TCheckpointStorageSettings& config,
+    const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    NYdb::TDriver driver,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    TCheckpointProviderIntegrations checkpointProviderIntegrations)
 {
-    return NewStorageProxy(config, commonConfig, credentialsProviderFactory, yqSharedResources);
+    return NewStorageProxy(config, idsPrefix, credentialsProviderFactory, std::move(driver), counters, std::move(checkpointProviderIntegrations));
 }
 
 } // namespace NFq

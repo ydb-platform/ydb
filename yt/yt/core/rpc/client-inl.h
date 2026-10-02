@@ -37,6 +37,8 @@ void IClientRequest::RequireServerFeature(E featureId)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TRequestMessage, class TResponse>
 TTypedClientRequest<TRequestMessage, TResponse>::TTypedClientRequest(
     IChannelPtr channel,
@@ -78,6 +80,19 @@ TFuture<typename TResponse::TResult> TTypedClientRequest<TRequestMessage, TRespo
         }));
     }
     return promise.ToFuture();
+}
+
+template <class TRequestMessage, class TResponse>
+TTypedClientRequest<TRequestMessage, TResponse>::TTypedClientRequest(
+    const TTypedClientRequest& other)
+    : TClientRequest(other)
+    , TRequestMessage(other)
+{ }
+
+template <class TRequestMessage, class TResponse>
+IClientRequestPtr TTypedClientRequest<TRequestMessage, TResponse>::Clone() const
+{
+    return New<TTypedClientRequest>(*this);
 }
 
 template <class TRequestMessage, class TResponse>
@@ -152,6 +167,8 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetMemoryUsageTracker(DefaultMemoryUsageTracker_);
     request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
+    request->SetRequestHeavy(methodDescriptor.RequestHeavy);
+    request->SetResponseHeavy(methodDescriptor.ResponseHeavy);
 
     if (methodDescriptor.StreamingEnabled) {
         request->ClientAttachmentsStreamingParameters() =

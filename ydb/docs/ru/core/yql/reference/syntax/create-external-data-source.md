@@ -5,31 +5,33 @@
 Вызов `CREATE EXTERNAL DATA SOURCE` создает [внешний источник данных](../../../concepts/datamodel/external_data_source.md).
 
 ```yql
-CREATE EXTERNAL DATA SOURCE external_data_source WITH (
+CREATE [OR REPLACE] EXTERNAL DATA SOURCE [IF NOT EXISTS] external_data_source WITH (
   SOURCE_TYPE="source_type",
   LOCATION="ip_address_or_fqdn:port",
   USE_TLS="use_tls",
   AUTH_METHOD="auth_method",
   LOGIN="login",
-  PASSWORD_SECRET_NAME="password_secret_name"
+  PASSWORD_SECRET_PATH="password_secret_path"
 )
 ```
 
 Где:
 
+* `OR REPLACE` - если внешний источник данных с таким именем уже существует, он будет заменён новым определением; версия объекта при этом увеличивается.
+* `IF NOT EXISTS` - не выводить ошибку, если внешний источник данных с таким именем уже существует; существующий объект останется без изменений.
 * `external_data_source` - название внешнего источника данных.
 * `source_type` - тип внешнего источника данных. Возможные значения: [`ClickHouse`](#clickhouse), [`PostgreSQL`](#postgresql), [`ObjectStorage`](#object_storage).
 * `ip_address_or_fqdn:port` - полный сетевой адрес внешнего источника данных, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN.
 * `use_tls` - флаг, указывающий требование подключения через безопасное соединение (TLS). Возможные значения: `TRUE`, `FALSE`.
 * `auth_method` - способ аутентификации во внешнем источника данных. Для внешних источников типов `ClickHouse`, `PostgreSQL` поддерживается только тип аутентификации `BASIC`. Для внешнего источника `ObjectStorage` в данный момент поддерживает только тип аутентификации `NONE`.
 * `login` - логин, используемый для подключения к внешнему источнику данных.
-* `password_secret_name` - имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль для подключения к внешнему источнику данных.
+* `password_secret_path` - [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к внешнему источнику данных.
 
 При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ydb-full-name}}.
 
 ## Пример
 
-Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и именем секрета `test_secret`:
+Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и секретом `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
@@ -38,7 +40,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   USE_TLS="TRUE",
   AUTH_METHOD="BASIC",
   LOGIN="admin",
-  PASSWORD_SECRET_NAME="test_secret"
+  PASSWORD_SECRET_PATH="test_secret"
 )
 ```
 
@@ -51,13 +53,13 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 - В поле `USE_TLS` флаг, указывающий требование подключения к кластеру ClickHouse через безопасное соединение (TLS).
 - В поле `AUTH_METHOD` значение `BASIC`.
 - В поле `LOGIN` логин, используемый для подключения к кластеру ClickHouse.
-- В поле `PASSWORD_SECRET_NAME` имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль для подключения к кластеру ClickHouse.
+- В поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру ClickHouse.
 
 При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ ydb-full-name }}.
 
 ### Пример
 
-Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и именем секрета `test_secret`:
+Запрос ниже создает внешний источник с именем `TestDataSource` к кластеру ClickHouse c IP-адресом `192.168.1.1` и портом `8443`, логином `admin` и секретом `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
@@ -66,7 +68,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   USE_TLS="TRUE",
   AUTH_METHOD="BASIC",
   LOGIN="admin",
-  PASSWORD_SECRET_NAME="test_secret"
+  PASSWORD_SECRET_PATH="test_secret"
 )
 ```
 
@@ -79,13 +81,13 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 - в поле `USE_TLS` флаг, указывающий требование подключения к кластеру PostgreSQL через безопасное соединение (TLS);
 - в поле `AUTH_METHOD` значение `BASIC`;
 - в поле `LOGIN` логин, используемый для подключения к кластеру PostgreSQL;
-- в поле `PASSWORD_SECRET_NAME` имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль для подключения к кластеру PostgreSQL.
+- в поле `PASSWORD_SECRET_PATH` [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к кластеру PostgreSQL.
 
 В данный момент подключение к кластеру PostgreSQL всегда выполняется про стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP. При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ydb-full-name}}.
 
 ### Пример
 
-Запрос ниже создает внешний источник с именем `TestDataSource`, ведущий на кластер PostgreSQL c IP-адресом `192.168.1.2` и портом `5432`, логином `admin` и именем секрета `test_secret`:
+Запрос ниже создает внешний источник с именем `TestDataSource`, ведущий на кластер PostgreSQL c IP-адресом `192.168.1.1` и портом `5432`, логином `admin` и секретом `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
@@ -94,7 +96,7 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   USE_TLS="TRUE",
   AUTH_METHOD="BASIC",
   LOGIN="admin",
-  PASSWORD_SECRET_NAME="test_secret"
+  PASSWORD_SECRET_PATH="test_secret"
 )
 ```
 

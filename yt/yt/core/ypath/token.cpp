@@ -1,5 +1,7 @@
 #include "token.h"
 
+#include "tokenizer.h"
+
 #include <yt/yt/core/misc/error.h>
 
 #include <library/cpp/yt/string/guid.h>
@@ -55,19 +57,19 @@ std::optional<int> TryAdjustListIndex(int index, int count)
     return adjustedIndex;
 }
 
-TString ToYPathLiteral(TStringBuf value)
+std::string ToYPathLiteral(TStringBuf value)
 {
     TStringBuilder builder;
     AppendYPathLiteral(&builder, value);
     return builder.Flush();
 }
 
-TString ToYPathLiteral(i64 value)
+std::string ToYPathLiteral(i64 value)
 {
     return ToString(value);
 }
 
-TString ToYPathLiteral(TGuid value)
+std::string ToYPathLiteral(TGuid value)
 {
     return ToString(value);
 }
@@ -97,6 +99,32 @@ void AppendYPathLiteral(TStringBuilderBase* builder, i64 value)
 bool IsSpecialCharacter(char ch)
 {
     return ch == '\\' || ch == '/' || ch == '@' || ch == '*' || ch == '&' || ch == '[' || ch == '{';
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TYPath> TryEscapeNonAsciiYPathLiterals(const TYPath& unparsedYPath)
+{
+    // Fast path.
+    if (unparsedYPath.empty()) {
+        return {unparsedYPath};
+    }
+
+    try {
+        TTokenizer tokenizer(unparsedYPath);
+        TStringBuilder builder;
+        while (tokenizer.Advance() != ETokenType::EndOfStream) {
+            if (tokenizer.GetType() == ETokenType::Literal) {
+                AppendYPathLiteral(&builder, tokenizer.GetLiteralValue());
+            } else {
+                builder.AppendString(tokenizer.GetToken());
+            }
+        }
+
+        return {builder.Flush()};
+    } catch (const std::exception& e) {
+        return e;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -60,6 +60,7 @@ class SafelyCleanupDisks(AbstractSafeEraseDataOnDisk):
     def _erase_data(self):
         try:
             node_id = random.choice(list(self._node_ids))
+            self._cluster.nodes[node_id].ssh_command('sudo systemctl stop kikimr.service')
             self._cluster.nodes[node_id].kill_process_and_daemon()
             self._cluster.nodes[node_id].cleanup_disks()
             self._cluster.nodes[node_id].start()

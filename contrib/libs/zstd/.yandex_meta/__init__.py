@@ -33,20 +33,6 @@ def post_install(self):
     with self.yamakes["programs/zstd"] as zstd:
         zstd.CFLAGS.remove("-DXXH_NAMESPACE=ZSTD_")
 
-    # Update version stored in python binding
-    # (we have to update two different files for py2 and py3 correspondingly)
-    version_as_number = self.version.replace(".", "0")
-    fileutil.re_sub_file(
-        f"{self.ctx.arc}/contrib/python/zstandard/py2/zstd.c",
-        r"(ZSTD_VERSION_NUMBER != )[0-9]+( \|\| ZSTD_versionNumber\(\) != )[0-9]+",
-        r"\g<1>{v}\g<2>{v}".format(v=version_as_number),
-    )
-    fileutil.re_sub_file(
-        f"{self.ctx.arc}/contrib/python/zstandard/py3/c-ext/backend_c.c",
-        r"unsigned our_hardcoded_version = [0-9]+;",
-        rf"unsigned our_hardcoded_version = {version_as_number};",
-    )
-
 
 zstd = CMakeNinjaNixProject(
     owners=["g:cpp-contrib"],

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "async_frame_cache.h"
 #include "event.h"
 #include "thread_context.h"
 #include "execution_stats.h"
@@ -75,10 +76,12 @@ namespace NActors {
         void GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy);
         void GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats);
 
+        // Safe from any thread; adds this worker's idle coroutine frames to stats.
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const;
+
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
 
-        void SubscribeToPreemption(TActorId actorId);
         ui32 GetOverwrittenEventsPerMailbox() const;
         void SetOverwrittenEventsPerMailbox(ui32 value);
         ui64 GetOverwrittenTimePerMailboxTs() const;
@@ -87,9 +90,9 @@ namespace NActors {
     protected:
         void ProcessExecutorPool();
 
-        TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution);
+        TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs);
 
-        void UpdateThreadStats();
+        TExecutorThreadStats* UpdateThreadStats();
 
     public:
         TActorSystem* const ActorSystem;
@@ -103,6 +106,14 @@ namespace NActors {
     protected:
         // Pool-specific
         TStackVec<TExecutorThreadStats, DefaultPoolCountForExecutorThread> Stats;
+        // Published for off-thread collectors. Stats is fully initialized before
+        // threads start and never moves; ExecutionStats remains executor-owned.
+        std::atomic<TExecutorThreadStats*> CurrentStats = nullptr;
+
+        // Coroutine frame cache bound to this worker thread for the whole
+        // ThreadProc, including pool switches. Owned here (rather than on the
+        // thread stack) so off-thread collectors can sample it through the pools.
+        alignas(64) TAsyncFrameCache AsyncFrameCache;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;
@@ -110,9 +121,9 @@ namespace NActors {
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific
-        mutable TThreadContext ThreadCtx;
-        mutable TExecutionStats ExecutionStats;
-        ui64 RevolvingReadCounter = 0;
+        alignas(64) mutable TThreadContext ThreadCtx;
+        alignas(64) mutable TExecutionStats ExecutionStats;
+        alignas(64) ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;

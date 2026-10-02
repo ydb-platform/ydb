@@ -33,6 +33,8 @@ namespace NYT {
 
     struct TStartTransactionOptions;
 
+    struct TCommitTransactionOptions;
+
     struct TLockOptions;
 
     template <class TDerived>
@@ -221,6 +223,10 @@ namespace NYT {
 
     using IFileWriterPtr = ::TIntrusivePtr<IFileWriter>;
 
+    class IFileFragmentWriter;
+
+    using IFileFragmentWriterPtr = ::TIntrusivePtr<IFileFragmentWriter>;
+
     class IBlobTableReader;
     using IBlobTableReaderPtr = ::TIntrusivePtr<IBlobTableReader>;
 
@@ -249,6 +255,12 @@ namespace NYT {
 
     template <class T>
     using TTableWriterPtr = ::TIntrusivePtr<TTableWriter<T>>;
+
+    template <class T>
+    class ITableFragmentWriter;
+
+    template <class T>
+    using ITableFragmentWriterPtr = ::TIntrusivePtr<ITableFragmentWriter<T>>;
 
     struct TYaMRRow;
 
@@ -397,6 +409,21 @@ namespace NYT {
     struct TRetryConfig;
     class IRetryConfigProvider;
     using IRetryConfigProviderPtr = ::TIntrusivePtr<IRetryConfigProvider>;
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // distributed_session.h
+    ////////////////////////////////////////////////////////////////////////////////
+
+    struct TDistributedWriteTableSessionWithCookies;
+    struct TDistributedWriteFileSessionWithCookies;
+
+    struct TStartDistributedWriteTableOptions;
+    struct TPingDistributedWriteTableOptions;
+    struct TFinishDistributedWriteTableOptions;
+
+    struct TStartDistributedWriteFileOptions;
+    struct TPingDistributedWriteFileOptions;
+    struct TFinishDistributedWriteFileOptions;
 
     ////////////////////////////////////////////////////////////////////////////////
     // raw_batch_request.h

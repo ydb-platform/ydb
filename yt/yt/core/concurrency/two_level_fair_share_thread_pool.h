@@ -11,7 +11,7 @@ namespace NYT::NConcurrency {
 struct IPoolWeightProvider
     : public virtual TRefCounted
 {
-    virtual double GetWeight(const TString& poolName) = 0;
+    virtual double GetWeight(const std::string& poolName) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IPoolWeightProvider)
@@ -26,8 +26,10 @@ struct ITwoLevelFairShareThreadPool
     virtual void SetPollingPeriod(TDuration pollingPeriod) = 0;
 
     virtual IInvokerPtr GetInvoker(
-        const TString& poolName,
+        const std::string& poolName,
         const TFairShareThreadPoolTag& tag) = 0;
+
+    virtual void SetWeightProvider(IPoolWeightProviderPtr weightProvider) = 0;
 
     virtual void Shutdown() = 0;
 
@@ -54,8 +56,9 @@ struct TNewTwoLevelFairShareThreadPoolOptions
 
 ITwoLevelFairShareThreadPoolPtr CreateTwoLevelFairShareThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
+    const std::string& threadNamePrefix,
     const TNewTwoLevelFairShareThreadPoolOptions& options = {});
 
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function Math::Floor instead to avoid performance overhead
+    	select SimplePg::floor(1.2345)
+	                 ^

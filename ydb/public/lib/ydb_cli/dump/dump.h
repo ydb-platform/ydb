@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 
@@ -12,7 +12,7 @@ class TLog;
 
 namespace NYdb {
 
-inline namespace V3 {
+inline namespace Dev {
     class TDriver;
 }
 
@@ -99,8 +99,12 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, RestoreIndexes, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreChangefeeds, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreACL, true);
+    FLUENT_SETTING_DEFAULT(bool, ReplaceSysACL, false);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
+    FLUENT_SETTING_DEFAULT(bool, Replace, false);
+    // only makes sense when used together with the replace option
+    FLUENT_SETTING_DEFAULT(bool, VerifyExistence, false);
 
     FLUENT_SETTING_DEFAULT(ui64, MemLimit, 32_MB);
     FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, 0);
@@ -109,6 +113,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui32, MaxInFlight, 0);
     FLUENT_SETTING_DEFAULT(TRateLimiterSettings, RateLimiterSettings, {});
+    FLUENT_SETTING_DEFAULT(ui32, MaxRetries, 10);
 
 }; // TRestoreSettings
 

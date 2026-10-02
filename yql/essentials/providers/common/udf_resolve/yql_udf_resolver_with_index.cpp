@@ -16,49 +16,52 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-class TUdfResolverWithIndex : public IUdfResolver {
-    class TResourceFile : public TThrRefBase {
+class TUdfResolverWithIndex: public IUdfResolver {
+    class TResourceFile: public TThrRefBase {
     public:
-        typedef TIntrusivePtr<TResourceFile> TPtr;
+        using TPtr = TIntrusivePtr<TResourceFile>;
 
-    public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
-            : Link_(std::move(link))
+            : Link(std::move(link))
         {
-            Import_.FileAlias = alias;
-            Import_.Block = &Block_;
-            Import_.Modules = MakeMaybe(modules);
+            Import.FileAlias = alias;
+            Import.Block = &Block;
+            Import.Modules = MakeMaybe(modules);
 
-            Block_.Type = EUserDataType::PATH;
-            Block_.Data = Link_->GetPath();
-            Block_.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.Type = EUserDataType::PATH;
+            Block.Data = Link->GetPath();
+            Block.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.FrozenFile = Link;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
             // assume package name has no bad symbols for file name
-            TString basename =  link->GetPath().Basename();
+            TString basename = link->GetPath().Basename();
             TString alias = basename.StartsWith("lib") ? basename : ("lib_" + packageName + "_udf.so");
             alias.to_lower();
             return MakeIntrusive<TResourceFile>(std::move(alias), TVector<TString>(modules.begin(), modules.end()), std::move(link));
         }
 
-    public:
-        TFileLinkPtr Link_;
-        TUserDataBlock Block_;
-        TImport Import_;
+        TFileLinkPtr Link;
+        TUserDataBlock Block;
+        TImport Import;
     };
 
 public:
-    TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage)
-        : UdfIndex_(udfIndex)
-        , Fallback_(fallback)
-        , FileStorage_(fileStorage)
+    TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage,
+                          IUrlPreprocessing::TPtr urlPreprocessing, TTokenResolver tokenResolver)
+        : UdfIndex_(std::move(udfIndex))
+        , Fallback_(std::move(fallback))
+        , FileStorage_(std::move(fileStorage))
+        , UrlPreprocessing_(std::move(urlPreprocessing))
+        , TokenResolver_(std::move(tokenResolver))
     {
         Y_ENSURE(UdfIndex_);
         Y_ENSURE(FileStorage_);
@@ -67,19 +70,20 @@ public:
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
-        with_lock(Lock_) {
+        with_lock (Lock_) {
             TString moduleNameStr(moduleName);
             if (!UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
                 return Nothing();
             }
 
             auto file = DownloadFileWithModule(moduleNameStr);
-            return MakeMaybe<TFilePathWithMd5>(file->Link_->GetPath(), file->Link_->GetMd5());
+            return MakeMaybe<TFilePathWithMd5>(file->Link->GetPath(), file->Link->GetMd5());
         }
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
-        with_lock(Lock_) {
+    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
+                      TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        with_lock (Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
             TVector<TFunction*> fallbackFunctions;
@@ -105,12 +109,12 @@ public:
 
             fallbackImports.insert(fallbackImports.end(), additionalImports.begin(), additionalImports.end());
 
-            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx) && !hasErrors;
+            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel, storage) && !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
-        return Fallback_->LoadRichMetadata(imports);
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        return Fallback_->LoadRichMetadata(imports, logLevel, storage);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const override {
@@ -122,9 +126,14 @@ public:
         return Fallback_->ContainsModule(moduleName);
     }
 
+    bool IsPartial() const override {
+        return Fallback_->IsPartial();
+    }
+
 private:
     bool LoadFunctionMetadata(TFunction& function, TExprContext& ctx, TFunction*& fallbackFunction, TImport*& additionalImport) const {
-        TStringBuf moduleName, funcName;
+        TStringBuf moduleName;
+        TStringBuf funcName;
         if (!SplitUdfName(function.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
             ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Incorrect format of function name: " << function.Name));
             return false;
@@ -170,7 +179,7 @@ private:
             return false;
         }
 
-        additionalImport = &file->Import_;
+        additionalImport = &file->Import;
 
         if (info.IsTypeAwareness) {
             function.Name = info.Name;
@@ -203,6 +212,9 @@ private:
         function.NormalizedUserType = std::get<0>(ctx.SingletonTypeCache);
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
+        function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 
@@ -232,34 +244,60 @@ private:
             return it->second;
         }
 
-        // token is empty for urls for now
-        // assumption: file path is frozen already, no need to put into file storage
         const TDownloadLink& downloadLink = resource->Link;
-        TFileLinkPtr link = downloadLink.IsUrl ? FileStorage_->PutUrl(downloadLink.Path, {}) : CreateFakeFileLink(downloadLink.Path, downloadLink.Md5);
+        TFileLinkPtr link;
+        if (downloadLink.IsUrl) {
+            TString url = downloadLink.Path;
+            TString alias;
+            if (UrlPreprocessing_) {
+                std::tie(url, alias) = UrlPreprocessing_->Preprocess(url);
+            }
+
+            TString token;
+            if (TokenResolver_) {
+                token = TokenResolver_(url, alias);
+            }
+
+            link = FileStorage_->PutUrl(url, token);
+        } else {
+            // assumption: file path is frozen already, no need to put into file storage
+            link = CreateFakeFileLink(downloadLink.Path, downloadLink.Md5);
+        }
         TResourceFile::TPtr file = TResourceFile::Create(canonizedModuleName, resource->Modules, link);
         for (auto& d : resource->Modules) {
             auto p = DownloadedFiles_.emplace(d, file);
             if (!p.second) {
                 // should not happen because UdfIndex handles conflicts
-                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
+                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link->GetPath();
             }
         }
 
         return file;
     }
 
-private:
     mutable TMutex Lock_;
     const TUdfIndex::TPtr UdfIndex_;
     const IUdfResolver::TPtr Fallback_;
     const TFileStoragePtr FileStorage_;
+    const IUrlPreprocessing::TPtr UrlPreprocessing_;
+    const TTokenResolver TokenResolver_;
     // module -> downloaded resource file
     mutable TMap<TString, TResourceFile::TPtr> DownloadedFiles_;
 };
 
-IUdfResolver::TPtr CreateUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage) {
-    return new TUdfResolverWithIndex(udfIndex, fallback, fileStorage);
+IUdfResolver::TPtr CreateUdfResolverWithIndex(
+    TUdfIndex::TPtr udfIndex,
+    IUdfResolver::TPtr fallback,
+    TFileStoragePtr fileStorage,
+    IUrlPreprocessing::TPtr urlPreprocessing,
+    TTokenResolver tokenResolver)
+{
+    return new TUdfResolverWithIndex(
+        std::move(udfIndex),
+        std::move(fallback),
+        std::move(fileStorage),
+        std::move(urlPreprocessing),
+        std::move(tokenResolver));
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

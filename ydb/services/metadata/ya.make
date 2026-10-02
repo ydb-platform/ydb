@@ -14,5 +14,6 @@ END()
 
 RECURSE(
     initializer
+    optimization
     secret
 )

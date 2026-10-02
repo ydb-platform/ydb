@@ -1,11 +1,15 @@
 #pragma once
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include "ddisk_info.h"
 #include <ydb/core/viewer/yaml/yaml.h>
+
+#include <algorithm>
 
 namespace NKikimr::NViewer {
 
 using namespace NActors;
+using namespace NNodeWhiteboard;
 
 class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
@@ -23,7 +27,6 @@ class TPDiskInfo : public TViewerPipeClient {
 protected:
     using TThis = TPDiskInfo;
     using TBase = TViewerPipeClient;
-    ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
@@ -35,6 +38,7 @@ protected:
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
+    bool IncludeDDisks = false;
 
 public:
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -42,9 +46,15 @@ public:
     {}
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
-        PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
+        IncludeDDisks = FromStringWithDefault<bool>(Params.Get("include_ddisks"), false);
+        TString pDiskId = Params.Get("pdisk_id");
+        if (pDiskId.Contains('-')) {
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), 0);
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), Max<ui32>());
+        } else {
+            NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
+            PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
+        }
 
         if (PDiskId == Max<ui32>()) {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"), "BadRequest");
@@ -56,16 +66,13 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 3);
+        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 3);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
-
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
         SendBSCRequest();
 
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -82,16 +89,21 @@ public:
         }
     }
 
-    void SendWhiteboardRequest() {
+    void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
+        auto pdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest();
+        pdiskRequest->Record.AddFieldsRequired(-1);
+        pdiskRequest->Record.SetIncludeDDiskState(IncludeDDisks);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest,
+            pdiskRequest,
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, // we only need it once because we are sending to the same node
             NodeId);
+        auto vdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest();
+        vdiskRequest->Record.AddFieldsRequired(-1);
         WhiteboardVDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest,
+            vdiskRequest,
             0,
             NodeId);
     }
@@ -103,7 +115,7 @@ public:
 
     bool RetryRequest() {
         if (Retries) {
-            if (++ActualRetries <= Retries) {
+            if (++ActualRetries < Retries) {
                 TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
@@ -173,11 +185,8 @@ public:
     }
 
     void HandleRetry() {
-        SendWhiteboardRequest();
-    }
-
-    void HandleTimeout() {
-        TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT("text/plain", "Timeout receiving response"), "Timeout");
+        SendWhiteboardRequests();
+        TBase::RequestDone(2); // complete previous requests
     }
 
     void PassAway() override {
@@ -185,10 +194,24 @@ public:
         TBase::PassAway();
     }
 
+    void HandleTimeout() {
+        ReplyAndPassAway(); // try to respond with what we have
+    }
+
     void ReplyAndPassAway() override {
         NKikimrViewer::TPDiskInfo proto;
         bool hasPDisk = false;
         bool hasVDisk = false;
+        THashMap<ui32, NKikimrWhiteboard::TDDiskStateInfo> ddisks;
+        if (IncludeDDisks && WhiteboardPDisk) {
+            for (const auto& sample : WhiteboardPDisk->Record.GetDDiskStateInfo()) {
+                if (sample.GetPDiskId() == PDiskId) {
+                    auto& ddisk = ddisks[sample.GetDDiskSlotId()];
+                    ddisk.CopyFrom(sample);
+                    ddisk.SetHasWhiteboardData(true);
+                }
+            }
+        }
         if (WhiteboardPDisk && WhiteboardPDisk->Record.PDiskStateInfoSize() > 0) {
             for (const auto& pdisk : WhiteboardPDisk->Record.GetPDiskStateInfo()) {
                 if (pdisk.GetPDiskId() == PDiskId) {
@@ -222,6 +245,16 @@ public:
         if (SysViewVSlots && SysViewVSlots->Record.EntriesSize() > 0) {
             for (const auto& vdisk : SysViewVSlots->Record.GetEntries()) {
                 proto.MutableBSC()->AddVDisks()->CopyFrom(vdisk);
+                if (IncludeDDisks && vdisk.GetInfo().GetDDisk()) {
+                    auto& ddisk = ddisks[vdisk.GetKey().GetVSlotId()];
+                    ddisk.SetPDiskId(PDiskId);
+                    ddisk.SetDDiskSlotId(vdisk.GetKey().GetVSlotId());
+                    ddisk.SetGroupId(vdisk.GetInfo().GetGroupId());
+                    if (!ddisk.HasHasWhiteboardData()) {
+                        ddisk.SetHasWhiteboardData(false);
+                    }
+                    continue;
+                }
                 if (!hasVDisk) {
                     const auto& bscInfo(vdisk.GetInfo());
                     auto& vdiskInfo(*proto.MutableWhiteboard()->AddVDisks());
@@ -236,11 +269,17 @@ public:
                 }
             }
         }
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, proto, {
-            .EnumAsNumbers = false,
-        });
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        for (auto& [slotId, ddisk] : ddisks) {
+            FillDDiskIdentity(ddisk, NodeId);
+            proto.MutableWhiteboard()->AddDDisks()->Swap(&ddisk);
+        }
+        if (IncludeDDisks) {
+            auto* resultDDisks = proto.MutableWhiteboard()->MutableDDisks();
+            std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
+                return a.GetDDiskSlotId() < b.GetDDiskSlotId();
+            });
+        }
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(proto));
     }
 
     static YAML::Node GetSwagger() {
@@ -251,20 +290,17 @@ public:
             summary: Gets PDisk info
             description: Gets PDisk information from Whiteboard and BSC
             parameters:
-            - name: node_id
-              in: query
-              description: node identifier
-              type: integer
             - name: pdisk_id
               in: query
               description: pdisk identifier
               required: true
-              type: integer
-            - name: timeout
+              type: string
+            - name: include_ddisks
               in: query
-              description: timeout in ms
+              description: Return DDisks separately instead of legacy VDisk fallback entries
               required: false
-              type: integer
+              type: boolean
+              default: false
             responses:
               200:
                 description: OK

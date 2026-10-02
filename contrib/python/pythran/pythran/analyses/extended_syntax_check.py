@@ -26,7 +26,7 @@ def is_global(node):
             is_global_constant(node))
 
 
-class ExtendedSyntaxCheck(ModuleAnalysis):
+class ExtendedSyntaxCheck(ModuleAnalysis[StrictAliases, ArgumentEffects]):
     """
     Perform advanced syntax checking, based on strict aliases analysis:
     - is there a function redefinition?
@@ -34,12 +34,11 @@ class ExtendedSyntaxCheck(ModuleAnalysis):
     - is there an operation that updates a global variable?
     """
 
+    ResultType = type(None)
     def __init__(self):
-        self.result = None
-        self.update = False
+        super().__init__()
         self.inassert = False
         self.functions = set()
-        ModuleAnalysis.__init__(self, StrictAliases, ArgumentEffects)
 
     def check_global_with_side_effect(self, node, arg):
         if not isinstance(arg, ast.Call):

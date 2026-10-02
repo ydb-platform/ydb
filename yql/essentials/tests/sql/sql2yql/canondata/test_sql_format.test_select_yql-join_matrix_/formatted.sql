@@ -1,0 +1,259 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+-- cross
+SELECT
+    'COMMA',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+, (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+);
+
+-- inner
+SELECT
+    'JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- inner
+SELECT
+    'INNER JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+INNER JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- cross
+SELECT
+    'CROSS JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+CROSS JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+);
+
+-- left
+SELECT
+    'LEFT JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+LEFT JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- left
+SELECT
+    'LEFT OUTER JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+LEFT OUTER JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- unsupported
+-- SELECT 'LEFT ONLY JOIN', x.a, x.b FROM (VALUES (1, 2)) AS x (a, b) LEFT ONLY JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;
+-- unsupported
+-- SELECT 'LEFT SEMI JOIN', x.a, x.b FROM (VALUES (1, 2)) AS x (a, b) LEFT SEMI JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;
+-- right
+SELECT
+    'RIGHT JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+RIGHT JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- right
+SELECT
+    'RIGHT OUTER JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+RIGHT OUTER JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- unsupported
+-- SELECT 'RIGHT ONLY JOIN', y.a, y.b FROM (VALUES (1, 2)) AS x (a, b) RIGHT ONLY JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;
+-- unsupported
+-- SELECT 'RIGHT SEMI JOIN', y.a, y.b FROM (VALUES (1, 2)) AS x (a, b) RIGHT SEMI JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;
+-- full
+SELECT
+    'FULL JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+FULL JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+
+-- full
+SELECT
+    'FULL OUTER JOIN',
+    x.a,
+    x.b,
+    y.a,
+    y.b
+FROM (
+    VALUES
+        (1, 2)
+) AS x (
+    a,
+    b
+)
+FULL OUTER JOIN (
+    VALUES
+        (1, 2)
+) AS y (
+    a,
+    b
+)
+ON
+    x.a == y.a
+;
+-- unsupported
+-- SELECT 'EXCLUSION JOIN', x.a, x.b, y.a, y.b FROM (VALUES (1, 2)) AS x (a, b) EXCLUSION JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;
+
+-- unsupported
+-- SELECT 'EXCLUSION OUTER JOIN', x.a, x.b, y.a, y.b FROM (VALUES (1, 2)) AS x (a, b) EXCLUSION OUTER JOIN (VALUES (1, 2)) AS y (a, b) ON x.a = y.a;

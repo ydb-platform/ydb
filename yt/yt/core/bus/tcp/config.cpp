@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/net/address.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NYTree;
 
@@ -33,7 +33,7 @@ void TMultiplexingBandConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TTcpDispatcherConfig::Register(TRegistrar registrar)
+void TDispatcherConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Default(8);
@@ -57,8 +57,8 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
         .Default(false);
 }
 
-TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
-    const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const
+TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(
+    const TDispatcherDynamicConfigPtr& dynamicConfig) const
 {
     auto mergedConfig = CloneYsonStruct(MakeStrong(this));
     UpdateYsonStructField(mergedConfig->ThreadPoolSize, dynamicConfig->ThreadPoolSize);
@@ -73,7 +73,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
+void TDispatcherDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Optional()
@@ -157,12 +157,6 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(EEncryptionMode::Optional);
     registrar.Parameter("verification_mode", &TThis::VerificationMode)
         .Default(EVerificationMode::None);
-    registrar.Parameter("ca", &TThis::CA)
-        .Default();
-    registrar.Parameter("cert_chain", &TThis::CertificateChain)
-        .Default();
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Default();
     registrar.Parameter("cipher_list", &TThis::CipherList)
         .Default();
     registrar.Parameter("load_certs_from_bus_certs_directory", &TThis::LoadCertsFromBusCertsDirectory)
@@ -175,7 +169,7 @@ void TBusConfig::Register(TRegistrar registrar)
 
 void TBusDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("need_reject_connection_due_memory_overcommit", &TThis::NeedRejectConnectionDueMemoryOvercommit)
+    registrar.Parameter("reject_connection_on_memory_overcommit", &TThis::RejectConnectionOnMemoryOvercommit)
         .Default(false);
 }
 
@@ -214,4 +208,4 @@ void TBusClientDynamicConfig::Register(TRegistrar /*registrar*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

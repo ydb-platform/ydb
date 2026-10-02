@@ -8,10 +8,13 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 #include <util/network/socket.h>
+#include <util/generic/queue.h>
+#include <util/system/spinlock.h>
 
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/openssl/io/stream.h>
+#include <library/cpp/threading/cancellation/cancellation_token.h>
 
 class TNetworkAddress;
 class IOutputStream;
@@ -49,19 +52,27 @@ public:
     TKeepAliveHttpClient(const TString& host,
                          ui32 port,
                          TDuration socketTimeout = TDuration::Seconds(5),
-                         TDuration connectTimeout = TDuration::Seconds(30));
+                         TDuration connectTimeout = TDuration::Seconds(30),
+                         bool useKeepAlive = true,
+                         bool useConnectionPool = false,
+                         bool strictContentLength = false);
+
+    TKeepAliveHttpClient(TKeepAliveHttpClient&&) = default;
+    ~TKeepAliveHttpClient();
 
     THttpCode DoGet(const TStringBuf relativeUrl,
                     IOutputStream* output = nullptr,
                     const THeaders& headers = THeaders(),
-                    THttpHeaders* outHeaders = nullptr);
+                    THttpHeaders* outHeaders = nullptr,
+                    NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // builds post request from headers and body
     THttpCode DoPost(const TStringBuf relativeUrl,
                      const TStringBuf body,
                      IOutputStream* output = nullptr,
                      const THeaders& headers = THeaders(),
-                     THttpHeaders* outHeaders = nullptr);
+                     THttpHeaders* outHeaders = nullptr,
+                     NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // builds request with any HTTP method from headers and body
     THttpCode DoRequest(const TStringBuf method,
@@ -69,12 +80,14 @@ public:
                         const TStringBuf body,
                         IOutputStream* output = nullptr,
                         const THeaders& inHeaders = THeaders(),
-                        THttpHeaders* outHeaders = nullptr);
+                        THttpHeaders* outHeaders = nullptr,
+                        NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // requires already well-formed request
     THttpCode DoRequestRaw(const TStringBuf raw,
                            IOutputStream* output = nullptr,
-                           THttpHeaders* outHeaders = nullptr);
+                           THttpHeaders* outHeaders = nullptr,
+                           NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     void DisableVerificationForHttps();
     void SetClientCertificate(const TOpenSslClientIO::TOptions::TClientCert& options);
@@ -93,13 +106,18 @@ private:
     template <class T>
     THttpCode DoRequestReliable(const T& raw,
                                 IOutputStream* output,
-                                THttpHeaders* outHeaders);
+                                THttpHeaders* outHeaders,
+                                NThreading::TCancellationToken cancellation,
+                                bool responseBodyExpected = true);
+
+    // False for HEAD, whose answer announces Content-Length but carries no body.
+    static bool ResponseBodyExpected(TStringBuf method);
 
     TVector<IOutputStream::TPart> FormRequest(TStringBuf method, const TStringBuf relativeUrl,
                                               TStringBuf body,
                                               const THeaders& headers, TStringBuf contentLength) const;
 
-    THttpCode ReadAndTransferHttp(THttpInput& input, IOutputStream* output, THttpHeaders* outHeaders) const;
+    THttpCode ReadAndTransferHttp(THttpInput& input, IOutputStream* output, THttpHeaders* outHeaders, bool responseBodyExpected) const;
 
     bool CreateNewConnectionIfNeeded(); // Returns true if now we have a new connection.
 
@@ -111,7 +129,13 @@ private:
     const ui32 Port;
     const TDuration SocketTimeout;
     const TDuration ConnectTimeout;
+    const bool UseKeepAlive;
+    const bool UseConnectionPool;
+    const bool StrictContentLength;
     const bool IsHttps;
+
+    static TSpinLock ConnectionQuarantineMutex;
+    static TQueue<THolder<NPrivate::THttpConnection>> ConnectionQuarantine;
 
     THolder<NPrivate::THttpConnection> Connection;
     bool IsClosingRequired;
@@ -152,6 +176,9 @@ protected:
     const ui32 Port;
     const TDuration SocketTimeout;
     const TDuration ConnectTimeout;
+    const bool UseKeepAlive = true;
+    const bool UseConnectionPool = false;
+    const bool StrictContentLength = false;
     bool HttpsVerification = false;
 
 public:
@@ -166,15 +193,20 @@ public:
 
     void EnableVerificationForHttps();
 
-    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders()) const;
+    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // builds post request from headers and body
-    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders()) const;
+    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // requires already well-formed post request
-    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output) const;
+    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     virtual ~TSimpleHttpClient();
+
+protected:
+    // 304 and 204 carry no body even when Content-Length is set, so reading one for the
+    // error message would hide the status code behind a read failure.
+    static TString ReadDiagnosticBody(THttpInput& input, unsigned statusCode);
 
 private:
     TKeepAliveHttpClient CreateClient() const;
@@ -209,7 +241,9 @@ namespace NPrivate {
                         TDuration connTimeout,
                         bool isHttps,
                         const TMaybe<TOpenSslClientIO::TOptions::TClientCert>& clientCert,
-                        const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert);
+                        const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert,
+                        bool keepAlive = true,
+                        bool strictContentLength = false);
 
         bool IsOk() const {
             return IsNotSocketClosedByOtherSide(Socket);
@@ -218,13 +252,18 @@ namespace NPrivate {
         template <typename TContainer>
         void Write(const TContainer& request) {
             HttpOut->Write(request.data(), request.size());
-            HttpIn = Ssl ? MakeHolder<THttpInput>(Ssl.Get())
-                         : MakeHolder<THttpInput>(&SocketIn);
+            const THttpInput::TOptions inOptions{.StrictContentLength = StrictContentLength};
+            HttpIn = Ssl ? MakeHolder<THttpInput>(Ssl.Get(), inOptions)
+                         : MakeHolder<THttpInput>(&SocketIn, inOptions);
             HttpOut->Flush();
         }
 
         THttpInput* GetHttpInput() {
             return HttpIn.Get();
+        }
+
+        void Shutdown() {
+            Socket.ShutDown(SHUT_RDWR);
         }
 
     private:
@@ -237,6 +276,7 @@ namespace NPrivate {
                                ui32 port);
 
     private:
+        const bool StrictContentLength;
         TNetworkAddress Addr;
         TSocket Socket;
         TSocketInput SocketIn;
@@ -250,30 +290,64 @@ namespace NPrivate {
 template <class T>
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T& raw,
                                                                         IOutputStream* output,
-                                                                        THttpHeaders* outHeaders) {
+                                                                        THttpHeaders* outHeaders,
+                                                                        NThreading::TCancellationToken cancellation,
+                                                                        bool responseBodyExpected) {
+
     for (int i = 0; i < 2; ++i) {
         const bool haveNewConnection = CreateNewConnectionIfNeeded();
         const bool couldRetry = !haveNewConnection && i == 0; // Actually old connection could be already closed by server,
                                                               // so we should try one more time in this case.
+        TAtomicSharedPtr<TManualEvent> cancellationEndEvent = MakeAtomicShared<TManualEvent>();
+        auto cancelSub = cancellation.Future().Subscribe([this, cancellationEndEvent](auto&) {
+            if (cancellationEndEvent.RefCount() > 1) {
+                if (Connection && Connection->IsOk()) {
+                    Connection->Shutdown();
+                }
+                cancellationEndEvent->Signal();
+            }
+        });
+
         try {
             Connection->Write(raw);
 
-            THttpCode code = ReadAndTransferHttp(*Connection->GetHttpInput(), output, outHeaders);
+            THttpCode code = ReadAndTransferHttp(*Connection->GetHttpInput(), output, outHeaders, responseBodyExpected);
             if (!Connection->GetHttpInput()->IsKeepAlive()) {
                 IsClosingRequired = true;
             }
             return code;
         } catch (const TSystemError& e) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent->WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             if (!couldRetry || e.Status() != EPIPE) {
                 throw;
             }
+        } catch (const THttpTruncatedBodyException&) {
+            // Must precede THttpReadException: part of the body already reached `output`,
+            // so a retry would append a second copy instead of reporting the failure.
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent->WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
+            Connection.Reset();
+            throw;
         } catch (const THttpReadException&) { // Actually old connection is already closed by server
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent->WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             if (!couldRetry) {
                 throw;
             }
         } catch (const std::exception&) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent->WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             throw;
         }

@@ -31,13 +31,17 @@ namespace NKikimr {
             // ... or run a actor
             std::unique_ptr<IActor> ActorActivity;
             bool RunInBatchPool = false;
+            // ... and possibly enter full recovery mode
+            bool EnterFullRecovery = false;
             // ... or/and finish working
             bool Die = false;
 
-            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev) {
+            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev,
+                    bool enterFullRecovery = false) {
                 TSjOutcome outcome;
                 outcome.To = to;
                 outcome.Ev = std::move(ev);
+                outcome.EnterFullRecovery = enterFullRecovery;
                 return outcome;
             }
 
@@ -114,11 +118,16 @@ namespace NKikimr {
             // When Type=EFullRecover we store state here
             ////////////////////////////////////////////////////////////////////////
             struct TFullRecoverInfo {
+                TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol protocol)
+                    : Protocol(protocol)
+                {}
+
                 NKikimrBlobStorage::ESyncFullStage Stage = NKikimrBlobStorage::LogoBlobs;
                 TKeyLogoBlob LogoBlobFrom = TKeyLogoBlob::First();
                 TKeyBlock BlockTabletFrom = TKeyBlock::First();
                 TKeyBarrier BarrierFrom = TKeyBarrier::First();
                 ui64 VSyncFullMsgsReceived = 0;
+                NKikimrBlobStorage::EFullSyncProtocol Protocol;
             };
 
         public:
@@ -132,6 +141,7 @@ namespace NKikimr {
                     EJobType type,
                     const TVDiskID &vdisk,
                     const TActorId &service,
+                    const TActorId &sstWriterId,
                     const NSyncer::TPeerSyncState &peerState,
                     const std::shared_ptr<TSjCtx> &ctx);
             void Output(IOutputStream &str) const;
@@ -140,6 +150,7 @@ namespace NKikimr {
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId);
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr &ev, const TActorId &parentId);
             TSjOutcome Handle(TEvLocalSyncDataResult::TPtr &ev);
+            TSjOutcome Handle(TEvFullSyncFinished::TPtr &ev);
             TSjOutcome Terminate(ESyncStatus status);
 
             bool NeedCommit() const {
@@ -181,6 +192,9 @@ namespace NKikimr {
         public:
             const TVDiskID VDiskId;
             const TActorId ServiceId;
+            // full sync sst writer for a new scheme
+            const TActorId SstWriterId;
+
         private:
             // job type
             EJobType Type = EJustSync;
@@ -203,6 +217,8 @@ namespace NKikimr {
             std::shared_ptr<TSjCtx> Ctx;
             // Sublog
             TSublog<> Sublog;
+            // do we enter full recovery mode now
+            bool EnterFullRecovery = false;
         };
 
     } // NSyncer

@@ -1,16 +1,23 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blob_depot/agent/agent.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
 
 TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
-    return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+    YDB_LOG_DEBUG("StartErrorProxy",
+        {"marker", "NW10"},
+        {"groupId", groupId});
+    return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
+        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
 
 #define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
@@ -19,8 +26,6 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
-
     std::unique_ptr<IActor> proxy;
     TActorSystem *as = TActivationContext::ActorSystem();
 
@@ -29,6 +34,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     auto getCounters = [&](const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
+
+    YDB_LOG_DEBUG("StartLocalProxy",
+        {"marker", "NW12"},
+        {"groupId", groupId},
+        {"hasGroupInfo", static_cast<bool>(group.Info)},
+        {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
 
     if (EnableProxyMock) {
         // create mock proxy
@@ -43,6 +54,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     Y_ABORT("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
 
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
@@ -51,6 +63,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .Controls = TBlobStorageProxyControlWrappers{
                                 .EnablePutBatching = EnablePutBatching,
                                 .EnableVPatch = EnableVPatch,
+                                .LongRequestThresholdMs = LongRequestThresholdMs,
+                                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                                .DormantTimeoutMinutes = TControlWrapper(0, 0, 1'000'000),
+                                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
+                                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -66,6 +84,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
@@ -74,6 +94,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         .Controls = TBlobStorageProxyControlWrappers{
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
+                            .LongRequestThresholdMs = LongRequestThresholdMs,
+                            .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                            .DormantTimeoutMinutes = DormantTimeoutMinutes,
+                            .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
+                            .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                            .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                             ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -89,19 +115,47 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             .Controls = TBlobStorageProxyControlWrappers{
                 .EnablePutBatching = EnablePutBatching,
                 .EnableVPatch = EnableVPatch,
+                .LongRequestThresholdMs = LongRequestThresholdMs,
+                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                .DormantTimeoutMinutes = DormantTimeoutMinutes,
+                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
+                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
             }
         }));
+
+        Y_DEBUG_ABORT_UNLESS(!EjectedGroups.contains(groupId));
     }
 
-    group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
-    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+    // subscribe for group information changes through distconf cache
+    Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
+
+    auto id = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+
+    // determine if we want to inject BS errors
+    if (Cfg->BlobStorageConfig->GetServiceSet().HasFailureInjectionConfig()) {
+        auto const& fiConfig = Cfg->BlobStorageConfig->GetServiceSet().GetFailureInjectionConfig();
+        if (fiConfig.GetFailureProbability() > 0) {
+            const auto gid = TGroupId::FromValue(groupId);
+            if (IsDynamicGroup(gid) || fiConfig.GetIncludeStaticGroups()) {
+                id = as->Register(
+                    CreateBlobStorageGroupFailureInjectingActor(id, gid, fiConfig),
+                    TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+            }
+        }
+    }
+
+    group.ProxyId = id;
+    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), id);
 }
 
 void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW40, "StartVirtualGroupProxy", (GroupId, groupId));
+    YDB_LOG_DEBUG("StartVirtualGroupProxy",
+        {"marker", "NW40"},
+        {"groupId", groupId});
 
     TActorSystem *as = TActivationContext::ActorSystem();
     TGroupRecord& group = Groups[groupId];
@@ -112,19 +166,16 @@ void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
 }
 
-void TNodeWarden::StartStaticProxies() {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.HasServiceSet());
-    for (const auto& group : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
-        StartLocalProxy(group.GetGroupID());
-    }
-}
-
 void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
 
     const bool noGroup = EjectedGroups.count(id);
-    STLOG(PRI_DEBUG, BS_NODE, NW46, "HandleForwarded", (GroupId, id), (EnableProxyMock, EnableProxyMock), (NoGroup, noGroup));
+    YDB_LOG_DEBUG("HandleForwarded",
+        {"marker", "NW46"},
+        {"groupId", id},
+        {"enableProxyMock", EnableProxyMock},
+        {"noGroup", noGroup});
 
     if (id == Max<ui32>()) {
         // invalid group; proxy for this group is created at start
@@ -195,6 +246,77 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
     if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.ProxyId) {
         TActivationContext::Send(ev->Forward(WhiteboardId));
     }
+}
+
+void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
+    auto& msg = *ev->Get();
+    ui32 groupId;
+    if (msg.Key.StartsWith("G") && TryIntFromString<16>(msg.Key.substr(1), groupId) && msg.GenerationValue) {
+        auto& [generation, value] = *msg.GenerationValue;
+        NKikimrBlobStorage::TGroupInfo groupInfo;
+        const bool success = groupInfo.ParseFromString(value);
+        Y_DEBUG_ABORT_UNLESS(success);
+        if (success) {
+            Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
+            ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
+        }
+    }
+}
+
+void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
+    auto common = std::make_shared<TInterpileRequest::TCommonPart>(*ev);
+    auto& msg = *ev->Get();
+    const auto groupId = TGroupId::FromProto(&msg.Record, &NKikimrBlobStorage::TEvInterpilePut::GetGroupId);
+    const ui32 groupGeneration = msg.Record.GetGroupGeneration();
+    for (size_t index = 0; index < msg.Record.ItemsSize(); ++index) {
+        const ui64 cookie = NextInterpileRequestCookie++;
+        InterpileRequests.try_emplace(cookie, common, index);
+
+        auto& item = msg.Record.GetItems(index);
+        auto traceId = item.HasTraceId()
+            ? NWilson::TTraceId(item.GetTraceId())
+            : NWilson::TTraceId();
+        auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+            .BlobId = LogoBlobIDFromLogoBlobID(item.GetBlobId()),
+            .Buffer = TRope(msg.GetPayload(index)),
+            .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
+            .HandleClass = msg.Record.GetHandleClass(),
+            .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .DataKind = item.GetDataKind(),
+            .IssueKeepFlag = item.GetIssueKeepFlag(),
+            .IgnoreBlock = item.GetIgnoreBlock(),
+            .AlreadyEncrypted = item.GetAlreadyEncrypted(),
+            .ReduceInterpileTraffic = false,
+            .IsZeroEntry = item.GetIsZeroEntry(),
+        });
+        ev->ForceGroupGeneration = groupGeneration;
+        SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
+        ++common->RepliesRemaining;
+    }
+}
+
+void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
+    auto it = InterpileRequests.find(ev->Cookie);
+    Y_ABORT_UNLESS(it != InterpileRequests.end());
+    auto& common = *it->second.CommonPart;
+    auto *item = common.Result.MutableItems(it->second.Index);
+    auto& msg = *ev->Get();
+    item->SetStatus(msg.Status);
+    if (msg.ErrorReason) {
+        item->SetErrorReason(msg.ErrorReason);
+    }
+    if (!--common.RepliesRemaining) {
+        auto ev = std::make_unique<TEvInterpilePutResult>();
+        common.Result.Swap(&ev->Record);
+        auto h = std::make_unique<IEventHandle>(common.Sender, SelfId(), ev.release(), 0, common.Cookie);
+        if (common.InterconnectSessionId) {
+            h->Rewrite(TEvInterconnect::EvForward, common.InterconnectSessionId);
+        }
+        TActivationContext::Send(h.release());
+    }
+    InterpileRequests.erase(it);
 }
 
 #undef ADD_CONTROLS_FOR_DEVICE_TYPES

@@ -49,9 +49,9 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::TxStatus);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
+            Y_ENSURE(got == ECodec::Plain && got.Version == 0);
 
-            Y_ABORT_UNLESS(sizeof(THeader) <= got.Page.size(),
+            Y_ENSURE(sizeof(THeader) <= got.Page.size(),
                     "NPage::TTxStatusPage header is out of page bounds");
 
             const THeader* header = TDeref<THeader>::At(got.Page.data(), 0);
@@ -61,7 +61,7 @@ namespace NPage {
                     sizeof(TCommittedItem) * header->CommittedCount +
                     sizeof(TRemovedItem) * header->RemovedCount);
 
-            Y_ABORT_UNLESS(expectedSize <= got.Page.size(),
+            Y_ENSURE(expectedSize <= got.Page.size(),
                     "NPage::TTxStatusPage items are out of page bounds");
 
             const TCommittedItem* ptrCommitted = TDeref<TCommittedItem>::At(header + 1, 0);
@@ -131,7 +131,7 @@ namespace NPage {
             }
         }
 
-        TSharedData Finish() noexcept {
+        TSharedData Finish() {
             if (CommittedItems.empty() && RemovedItems.empty()) {
                 return { };
             }
@@ -165,7 +165,7 @@ namespace NPage {
             out.Put(CommittedItems);
             out.Put(RemovedItems);
 
-            Y_ABORT_UNLESS(*out == buf.mutable_end());
+            Y_ENSURE(*out == buf.mutable_end());
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             CommittedItems.clear();

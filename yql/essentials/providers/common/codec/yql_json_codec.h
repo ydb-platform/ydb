@@ -6,9 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <library/cpp/enumbitset/enumbitset.h>
 
-namespace NYql {
-namespace NCommon {
-namespace NJsonCodec {
+namespace NYql::NCommon::NJsonCodec {
 
 using namespace NKikimr;
 
@@ -25,31 +23,30 @@ using TValueConvertPolicy = TEnumBitSet<EValueConvertPolicy, EValueConvertPolicy
 
 class DefaultPolicy {
 public:
-    static DefaultPolicy& getInstance() {
-        static DefaultPolicy instance;
-        return instance;
+    static DefaultPolicy& GetInstance() {
+        static DefaultPolicy Instance;
+        return Instance;
     }
 
 private:
-    DefaultPolicy() {}
+    DefaultPolicy() = default;
 
 public:
-    DefaultPolicy(DefaultPolicy &) = delete;
-    void operator=(const DefaultPolicy &) = delete;
+    DefaultPolicy(DefaultPolicy&) = delete;
+    void operator=(const DefaultPolicy&) = delete;
 
     TValueConvertPolicy CloudFunction() const {
-        return CloudFunctionPolicy;
+        return CloudFunctionPolicy_;
     }
 
     TValueConvertPolicy Export() const {
-        return ExportPolicy;
+        return ExportPolicy_;
     }
 
 private:
-    TValueConvertPolicy CloudFunctionPolicy = TValueConvertPolicy{NUMBER_AS_STRING, BOOL_AS_STRING};
-    TValueConvertPolicy ExportPolicy = TValueConvertPolicy{DISALLOW_NaN};
+    TValueConvertPolicy CloudFunctionPolicy_ = TValueConvertPolicy{NUMBER_AS_STRING, BOOL_AS_STRING};
+    TValueConvertPolicy ExportPolicy_ = TValueConvertPolicy{DISALLOW_NaN};
 };
-
 
 NJson::TJsonWriterConfig MakeJsonConfig();
 
@@ -57,6 +54,4 @@ void WriteValueToJson(NJson::TJsonWriter& writer, const NUdf::TUnboxedValuePod& 
                       NMiniKQL::TType* type, TValueConvertPolicy convertPolicy = {});
 
 NUdf::TUnboxedValue ReadJsonValue(NJson::TJsonValue& json, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory);
-} // NJsonCodec
-} // NCommon
-} // NYql
+} // namespace NYql::NCommon::NJsonCodec

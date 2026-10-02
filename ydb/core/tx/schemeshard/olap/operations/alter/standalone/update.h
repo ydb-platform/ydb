@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/common/update.h>
 #include <ydb/core/tx/schemeshard/olap/schema/update.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/update.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
@@ -12,6 +13,7 @@ private:
     using TBase = ISSEntityUpdate;
     std::optional<TOlapSchemaUpdate> AlterSchema;
     std::optional<TOlapTTLUpdate> AlterTTL;
+    std::optional<TOlapMultiColumnStatisticsUpdate> AlterMultiColumnStatistics;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
 
@@ -24,6 +26,10 @@ private:
     }
 
     virtual std::set<ui64> DoGetShardIds() const override {
+        if (!AlterSchema && !AlterTTL) {
+            // Statistics-only alter: SchemeShard-local state change, no shard schema transaction.
+            return {};
+        }
         return TargetStandalone->GetTableInfoVerified().GetShardIdsSet();
     }
 

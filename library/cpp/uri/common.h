@@ -366,7 +366,9 @@ namespace NUri {
             NewFeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureFragmentToHashBang | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
 
             // FeaturesRobot is deprecated, use NewFeaturesRecommended: ROBOTQUALITY-718
-            FeaturesRobot = FeaturesRecommended
+            FeaturesRobot = NewFeaturesRecommended,
+
+            FeaturesDefaultOrSchemeKnown = 0 | FeaturesDefault | FeatureSchemeKnown
         };
     };
 

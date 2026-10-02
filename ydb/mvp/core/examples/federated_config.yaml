@@ -1,0 +1,25 @@
+generic:
+  access_service_type: "nebius_v1"
+
+  auth:
+    # Path to file with tokens for service authorization and token exchange endpoint.
+    token_file: ydb/mvp/core/examples/token_file.pb.txt
+
+    tokens:
+      oauth2_exchange:
+        # Token name for service authorization.
+        - name: "federated-token"
+          # IAM token exchange endpoint (gRPC).
+          token_endpoint: "grpcs://tokens.net:443"
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange"
+          requested_token_type: "urn:ietf:params:oauth:token-type:access_token"
+          # Subject of exchange request (service account identifier).
+          subject_credentials:
+            type: FIXED
+            token_type: "urn:nebius:params:oauth:token-type:subject_identifier"
+            token: "service-account-id"
+          # Actor of exchange request (JWT from mounted file).
+          actor_credentials:
+            type: FIXED
+            token_type: "urn:ietf:params:oauth:token-type:jwt"
+            token_file: "/var/run/secrets/tokens/jwt"

@@ -1,0 +1,602 @@
+syntax = "proto3";
+
+package nebius;
+
+import "google/protobuf/descriptor.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "AnnotationsProto";
+option java_package = "ai.nebius";
+
+extend google.protobuf.FileOptions {
+  // Marks the file as unstable, indicating that it may change in a non-backward compatible way in the future.
+  // Changes to files marked with this option are ignored by the breaking change detector.
+  // DEPRECATED - unstable_until annotation should be used instead.
+  bool unstable = 50001 [deprecated = true];
+  // Marks the file as unstable until specified date (format: YYYY-MM-DD).
+  // Unstable indicates that it may change in a non-backward compatible way in the future.
+  // Changes to files marked with this option are ignored by the breaking change detector until specified date.
+  string unstable_until = 50002;
+}
+
+extend google.protobuf.ServiceOptions {
+  // Specifies the domain prefix for the service endpoint.
+  // For example, `option (api_service_name) = "compute";` makes the service
+  // accessible at `compute.api.nebius.cloud:443`.
+  // @exclude
+  // @exclude Private base domains: https://docs.nebius.dev/en/api-gateway
+  // @exclude
+  // @exclude If omitted or empty:
+  // @exclude - The API gateway does not route requests to the service.
+  // @exclude - No api tools (e.g., GoSDK, CLI, TF) are generated.
+  string api_service_name = 1191 [(field_visibility) = PUBLIC];
+
+  // Contains additional information about the planned deprecation of a service.
+  // Used along with `option deprecated = true`.
+  DeprecationDetails service_deprecation_details = 1194 [(field_visibility) = PUBLIC];
+
+  // By default, all services are PRIVATE, i.e. not available to the public users.
+  // Use `option (service_visibility) = PUBLIC;` if you need to expose the service
+  // to the public users via public API gateway. All methods will be exposed as well.
+  // It can be changed with the method_visibility option.
+  Visibility service_visibility = 50001;
+
+  // service_terraform specifies service-specific settings for Terraform
+  // provider generation. See `ServiceTerraformSettings` for more details.
+  ServiceTerraformSettings service_terraform = 50002;
+
+  // service_cli specifies service-specific settings for CLI generation.
+  // See `ServiceCLISettings` for more details.
+  ServiceCLISettings service_cli = 50003;
+
+  // @exclude 50004 is used for audit in `nebius/audit/annotations.proto`
+
+  // service_go_sdk specifies service-specific settings for Go SDK generation.
+  // See `ServiceGoSDKSettings` for more details.
+  ServiceGoSDKSettings service_go_sdk = 50005;
+}
+
+extend google.protobuf.MethodOptions {
+  // Contains additional information about the planned deprecation of a method.
+  // Used along with `option deprecated = true`.
+  DeprecationDetails method_deprecation_details = 1194 [(field_visibility) = PUBLIC];
+
+  // All methods are PRIVATE inside a private service. You can not change it.
+  // By default, a method is PUBLIC inside a public service.
+  // Use `{ option (method_visibility) = PRIVATE; }` to change it.
+  Visibility method_visibility = 50001;
+
+  // @exclude 50002 is used for audit in `nebius/audit/annotations.proto`
+
+  // Defines custom region routing rules for a method.
+  //
+  // By default, the API Gateway searches for the NID in the following proto message fields (in order):
+  //  - `id`
+  //  - `parent_id`
+  //  - `metadata.id`
+  //  - `metadata.parent_id`
+  //
+  // If a valid NID is found, the request is routed to the associated region by routing code.
+  // Otherwise, the request is routed to the local region.
+  // These default rules generally cover most use cases.
+  //
+  // To customize the routing behavior, use the `region_routing` option:
+  //  - To specify a custom field path(s) for the NID, use the `nid` field.
+  //  - To return an INVALID_ARGUMENT error instead of forwarding to the local region, set `strict` to `true`.
+  //  - To completely disable region routing, set `disabled` to `true`.
+  //
+  // Examples:
+  //
+  //    service MyService {
+  //      rpc DefaultRouting(Request) returns (Response);
+  //      rpc CustomRoutingField(Request) returns (Response) {
+  //        option (region_routing).nid = "path.to.resource_id";
+  //      };
+  //      rpc SeveralFieldsToSearch(Request) returns (Response) {
+  //        option (region_routing).nid = "path.to.resource_id";
+  //        option (region_routing).nid = "path.to.parent_id";
+  //        option (region_routing).strict = true;
+  //      };
+  //      rpc DisabledRouting(Request) returns (Response) {
+  //        option (region_routing).disabled = true;
+  //      };
+  //    }
+  RegionRouting region_routing = 50003 [(field_visibility) = PUBLIC]; // TODO: should be private https://nebius.atlassian.net/browse/PUBLICAPI-404
+
+  // The method_terraform specifies whether to generate Terraform
+  // data sources or additional getters for this method.
+  // See `MethodTerraformSettings` for more details.
+  MethodTerraformSettings method_terraform = 50004;
+
+  // The method_cli specifies whether to generate CLI for this method.
+  // See `MethodCLISettings` for more details.
+  MethodCLISettings method_cli = 50005;
+
+  // method_go_sdk specifies method-specific settings for Go SDK generation.
+  // See `MethodGoSDKSettings` for more details.
+  MethodGoSDKSettings method_go_sdk = 50006;
+}
+
+extend google.protobuf.MessageOptions {
+  repeated ResourceBehavior resource_behavior = 1191 [(field_visibility) = PUBLIC];
+
+  // Contains additional information about the planned deprecation of a message.
+  // Used along with `option deprecated = true`.
+  DeprecationDetails message_deprecation_details = 1194 [(field_visibility) = PUBLIC];
+
+  // Tree shaking is used to determine default visibility of a message.
+  // It is PUBLIC if a public item depends on it, for example is returned by a public method.
+  // Use `option (message_visibility) = PUBLIC;` if you want to override the result of tree shaking.
+  // NOTE: tree shaking takes into account only .proto files inside the current directory.
+  // Visibility message_visibility = 50001; // Conflicts with other options by its number
+
+  // Marker extension for resource specifications. Resource type is equal to according NID type, e.g. "serviceaccount" or "project"
+  // string resource = 50002; // Conflicts with other options by its number
+
+  // @exclude 50003 is used for audit in `nebius/audit/annotations.proto`
+}
+
+extend google.protobuf.FieldOptions {
+  // Field behavior describes how the field behaves on input or output.
+  repeated FieldBehavior field_behavior = 1191 [(field_visibility) = PUBLIC];
+
+  // Sensitive field is masked/removed from the message while logging, storing in DB and
+  // on all others persistent layers (except specialized storage like PDS).
+  bool sensitive = 1192 [(field_visibility) = PUBLIC];
+
+  // Credentials field is masked access tokens/jwt/session from the message while logging, storing in DB and
+  // on all others persistent layers
+  bool credentials = 1193 [(field_visibility) = PUBLIC];
+
+  // Contains additional information about the planned deprecation of a field.
+  // Used along with `[deprecated = true]`.
+  DeprecationDetails field_deprecation_details = 1194 [(field_visibility) = PUBLIC];
+
+  // All fields are PUBLIC by default.
+  // Use `[(field_visibility) = PRIVATE]` to change it.
+  Visibility field_visibility = 50001;
+
+  // Field terraform settings for the annotated field.
+  FieldTerraformSettings field_terraform = 50002;
+
+  // Field CLI settings for the annotated field.
+  FieldCLISettings field_cli = 50003;
+}
+
+extend google.protobuf.OneofOptions {
+  // Field behavior describes how oneof behaves on input or output.
+  repeated FieldBehavior oneof_behavior = 1191 [(field_visibility) = PUBLIC];
+}
+
+extend google.protobuf.EnumOptions {
+  // Tree shaking is used to determine default visibility of an enum.
+  // It is PUBLIC if a public item depends on it, for example the enum is used in a public message.
+  // Use `option (enum_visibility) = PUBLIC;` if you want to override the result of tree shaking.
+  // NOTE: tree shaking takes into account only .proto files inside the current directory.
+  Visibility enum_visibility = 50001;
+}
+
+extend google.protobuf.EnumValueOptions {
+  // Contains additional information about the planned deprecation of enum value.
+  // Used along with `[deprecated = true]`.
+  DeprecationDetails enum_value_deprecation_details = 1194 [(field_visibility) = PUBLIC];
+}
+
+enum Visibility {
+  // Default visibility depends on the item type annotated with this option.
+  VISIBILITY_UNSPECIFIED = 0;
+
+  // The item is not exposed to the public users.
+  PRIVATE = 1;
+
+  // The item is exposed to the public users.
+  PUBLIC = 2;
+}
+
+// TerraformGeneration lists all the options for generating Terraform code from
+// the service.
+enum TerraformGeneration {
+  // Default — use default behavior.
+  // * For private terraform provider TF_DEFAULT = TF_DISABLE
+  // * For public terraform provider TF_DEFAULT = Private TerraformGeneration
+  TF_DEFAULT = 0;
+
+  // Don't generate.
+  TF_DISABLE = 1;
+
+  // Generate only DataSource. Requires to adhere to API Guidelines in structure
+  // and implement Get method as per specification. Otherwise build will fail.
+  // If the module implements full resource specification, it won't generate
+  // full resource.
+  TF_DATASOURCE = 2;
+
+  // Generate both DataSource and Resource. Requires to adhere to API Guidelines
+  // in structure and implement Get, Create, Update and Delete methods as per
+  // specification. Otherwise build will fail.
+  TF_FULL = 3;
+
+  // Generate both DataSource and Resource, but mark all the resource as
+  // recreate on change. Requires to adhere to API Guidelines in structure and
+  // implement Get, Create, and Delete methods as per specification.
+  // Otherwise build will fail.
+  // The Update method is not required for this service and will not be used
+  // even if it exists.
+  TF_IMMUTABLE = 4;
+}
+
+message ServiceTerraformSettings {
+  // service_terraform.generation specifies whether to generate Terraform
+  // resources or data sources from this service specification.
+  // By default it is set to `TF_DISABLE` and won't generate anything.
+  // If you want your service to be generated, add this annotation and specify
+  // how you want it to be generated — data source only, both with resource or
+  // both with resource that will be recreated on any change.
+  TerraformGeneration generation = 1;
+
+  // service_terraform.generation_public specifies whether to generate public
+  // Terraform resources or data sources from this service specification.
+  // By default it is the same as `service_terraform.generation`.
+  // If you want your service to be generated differently in public scope
+  // (eg. only data source in public, but full in private), you can set this
+  // option.
+  // Obviously, the resource has to be public itself with all the necessary
+  // methods not marked private.
+  TerraformGeneration generation_public = 2;
+}
+
+message MethodTerraformSettings {
+
+  // Creates a terraform data source from the annotated method with the name
+  // suffix equal to the string passed into. The data source will appear in the
+  // private provider, and in the public provider if the method itself is public.
+  //
+  // The method being annotated must meet the following criteria:
+  //  - It must be a true function
+  //    - No side effects
+  //    - Reproducibility and availability to be cached (at least temporarily)
+  //  - Intersection between fields by their name between request and response
+  //    must be the same by type and semantics, and must be returned as is
+  //    - `field_behavior` and other annotations are respected
+  //      - for input fields, both exclusive and intersected, input message
+  //        annotations and documentation are used
+  //      - for output fields that are not present in input, output annotations
+  //        and documentation are used, with automatic `computed`
+  //      - by default all input fields are optional unless marked otherwise
+  //
+  // The name of the created data source will consist of package name with
+  // underscores in place of dots, then underscore, then the content of the string:
+  // `method.package_name.replace(".", "_") + "_" + method.method_terraform.datasource`.
+  // One service may contain several datasources with different names, but each
+  // data source name must be unique in the whole package.
+  //
+  // The service itself may or may not be a terraform data source or resource,
+  // the created data source from the method will be separate.
+  //
+  // Examples:
+  //
+  // Service annotation:
+  //
+  //    package nebius.example.v1alpha1;
+  //
+  //    service MyService {
+  //      rpc GetFooFromRequest(Request) returns (Response) {
+  //        option (method_terraform).datasource = "foo";
+  //      };
+  //    }
+  //
+  //    message Request { // example
+  //      string request_contents = 1 [(buf.validate.field).required = true];
+  //    }
+  //    message Response { // example
+  //      string response_contents = 1;
+  //    }
+  //
+  // Resulting terraform data source usage:
+  //
+  //    data "nebius_example_v1alpha1_foo" "foo" {
+  //      request_contents = "your request contents"
+  //    }
+  //
+  //    output "foo_contents" {
+  //      value = data.nebius_example_v1alpha1_foo.foo.response_contents
+  //    }
+  //
+  string datasource = 1;
+
+  // Adds an additonal way to retrieve the data source generated from the
+  // service.
+  //
+  // The method must:
+  //  - return the same Instance object, as `Get` and `GetByName`
+  //  - be a true function (without side effects and reproducible)
+  //
+  // The contents of the string will be used as the name of the field for the
+  // data source retrieval.
+  //
+  // Examples:
+  //
+  // Service annotation:
+  //
+  //    package nebius.example.v1alpha1;
+  //
+  //    service InstanceService {
+  //      option (service_visibility) = PUBLIC;
+  //      option (service_terraform) = TF_DATASOURCE;
+  //
+  //      rpc Get(GetInstanceRequest) returns (Instance);
+  //      rpc GetByName(common.v1.GetByNameRequest) returns (Instance);
+  //      rpc GetBySomeAlias(GetBySomeAliasRequest) returns (Instance) {
+  //        option (method_terraform).additional_getter = "by_some_alias";
+  //      };
+  //    }
+  //
+  //    message GetBySomeAliasRequest {
+  //      string some_alias = 1 [(buf.validate.field).required = true];
+  //    }
+  //
+  // Resulting terraform data source usage:
+  //
+  //    data "nebius_example_v1alpha1_instance" "foo" {
+  //      by_some_alias = {
+  //        some_alias = "your alias"
+  //      }
+  //    }
+  //
+  //    output "foo_id" {
+  //      value = data.nebius_example_v1alpha1_instance.foo.metadata.id
+  //    }
+  //
+  string additional_getter = 2;
+
+  // Creates a terraform ephemeral resource from the annotated method with the
+  // name suffix equal to the string passed into. The resource will appear in the
+  // private provider, and in the public provider if the method itself is public.
+  //
+  // The method being annotated must meet the same criteria as for the `datasource`.
+  // The name of the created ephemeral resource is constructed in the same way as
+  // for the data source.
+  //
+  // The service itself may or may not be a terraform data source or resource,
+  // the created data source from the method will be separate. You can also
+  // annotate the `Get` method, creating the ephemeral resource variant of the
+  // original service as a data source.
+  //
+  // Examples:
+  //
+  // Service annotation:
+  //
+  //    package nebius.example.v1alpha1;
+  //
+  //    service MyService {
+  //      rpc GetSecret(Request) returns (Response) {
+  //        option (method_terraform).ephemeral_resource = "foo";
+  //      };
+  //    }
+  //
+  //    message Request { // example
+  //      string secret_id = 1 [(buf.validate.field).required = true];
+  //    }
+  //    message Response { // example
+  //      string secret = 1 [sensitive = true];
+  //    }
+  //
+  // Resulting terraform data source usage:
+  //
+  //    ephemeral "nebius_example_v1alpha1_foo" "foo" {
+  //      secret_id = "my-secret-id"
+  //    }
+  //
+  //    provider "kubernetes" { // example of ephemeral usage
+  //      ...
+  //      token = ephemeral.nebius_example_v1alpha1_foo.foo.secret
+  //    }
+  //
+  string ephemeral_resource = 4;
+
+  // Combined with `datasource`, `ephemeral_resource` or `additional_getter`,
+  // this option will prevent generation of the annotated unit in the public
+  // provider, even if everything else is marked public.
+  bool only_private = 3;
+}
+
+message FieldTerraformSettings {
+  // If true, the field will be marked as write-only in the terraform provider,
+  // despite not being sensitive or INPUT_ONLY.
+  // If false, the field will not be marked as write-only, despite being
+  // sensitive and INPUT_ONLY.
+  // By default, field is marked as write-only if it is sensitive and INPUT_ONLY.
+  optional bool write_only = 1;
+}
+
+message ServiceCLISettings {
+  // If true, the service will not be generated in the CLI.
+  bool disable = 1;
+
+  // If true, the service will not be generated in the public CLI.
+  bool disable_public = 2;
+
+  // If is set, the service will be generated with the specified name in the CLI.
+  // If not set, the service will be generated with the name equal to the service
+  // name in the proto file.
+  string name = 3;
+
+  // If is set, the service will be generated with the specified aliases in the CLI.
+  repeated string alias = 4;
+}
+
+message MethodCLISettings {
+  // If true, the method will not be generated in the CLI.
+  bool disable = 1;
+
+  // If true, the method will not be generated in the public CLI.
+  bool disable_public = 2;
+
+  // If is set, the method will be generated with the specified name in the CLI.
+  // If not set, the method will be generated with the name equal to the method
+  // name in the proto file.
+  // Renaming methods won't affect their function. For example, a renamed
+  // `get` method will still be used to get instances, and a method renamed to
+  // `get` won't function as one.
+  string name = 3;
+
+  // If is set, the method will be generated with the specified aliases in the CLI.
+  // As with names, aliases won't affect the method's function.
+  repeated string alias = 4;
+
+  message FlagAlias {
+    string alias = 1;
+    string flag = 2;
+  }
+
+  // Any set flag alias will be changed to the specified name in the CLI.
+  // For example, if the method has a flag `--instance-id`, and the alias is
+  // `{ alias: "id", flag: "instance-id"}`, then the CLI will generate a flag `--id` that will
+  // act as `--instance-id`.
+  //
+  // **NOTE**: Aliases override all the flags, including global ones, and are not checked for conflicts.
+  // If an alias will shadow a flag, there will be no error, but undefined behavior may occur.
+  //
+  // The matching is done in one pass to prevent alias loops.
+  repeated FlagAlias flags_aliases = 5;
+
+  message FlagShortcut {
+
+    // must be a single character
+    string shortcut = 1;
+
+    string flag = 2;
+  }
+
+  // If a flag shortcut is set, the CLI will generate a flag with the
+  // specified shortcut. For example, if the method has a flag `--instance-id`,
+  // and the shortcut is `{ shortcut: "i", flag: "instance-id"}`, then the CLI will generate a flag
+  // `-i` that will act as `--instance-id`.
+  //
+  // You can't map a shortcut to a global flag or some special flag like `--parent-id`.
+  // Shortcuts in use are checked for conflicts with other shortcuts and flags.
+  // Shortcut must be a single character.
+  repeated FlagShortcut flags_shortcuts = 6;
+}
+
+message FieldCLISettings {
+  // If true, the field will not be generated in the CLI.
+  bool disable = 1;
+
+  // If true, the field will not be generated in the public CLI.
+  bool disable_public = 2;
+}
+
+message ServiceGoSDKSettings {
+  // If true, the service will not be generated in the Go SDK.
+  bool disable = 1;
+
+  // If true, the service will not be generated in the public Go SDK.
+  bool disable_public = 2;
+
+  // If is set, the service will be generated with the specified name in the Go SDK.
+  // If not set, the service will be generated with the name equal to the service
+  // name in the proto file.
+  string name = 3;
+}
+
+message MethodGoSDKSettings {
+  // If true, the method will not be generated in the Go SDK.
+  bool disable = 1;
+
+  // If true, the method will not be generated in the public Go SDK.
+  bool disable_public = 2;
+
+  // If is set, the method will be generated with the specified name in the Go SDK.
+  // If not set, the method will be generated with the name equal to the method
+  // name in the proto file.
+  //
+  // Renaming methods won't affect construction of the other tools, eg. renamed
+  // `Get` method will still be used to get instances in the CLI and Terraform
+  // provider. As well, some other method, renamed to `Get` won't function as one.
+  string name = 3;
+}
+
+enum ResourceBehavior {
+  // The behavior of the resource is unspecified.
+  // Avoid using this default value.
+  RESOURCE_BEHAVIOR_UNSPECIFIED = 0;
+
+  // Indicates that the resource can be moved to another parent, typically an
+  // IAM container, though not necessarily limited to this.
+  // This behavior suggests that the `metadata.parent_id` attribute could be modified.
+  MOVABLE = 1;
+
+  // Indicates that the resource name can be unspecified or does not follow
+  // uniqueness requirement within parent_id and resource type.
+  UNNAMED = 2;
+
+  // Indicates that the resource is named, and the name cannot be changed after
+  // it is created. It is strongly recommended to do srvices with renaming
+  // capability, as the guidelines suggest.
+  IMMUTABLE_NAME = 3;
+}
+
+message RegionRouting {
+  // A list of fields to extract the NID from, in order of priority.
+  // The API Gateway will check each field in sequence and use the first valid NID it finds.
+  // This overrides the default NID lookup order: `id`, `parent_id`, `metadata.id`, `metadata.parent_id`.
+  // If the field contains a non-empty list of strings, all NIDs in the array must be valid and have the same routing code.
+  repeated string nid = 1;
+
+  // If true, region routing is disabled for the method.
+  // When this is set, requests will not be forwarded to a different region, even if an NID is present.
+  bool disabled = 2;
+
+  // In strict mode, the API Gateway returns an INVALID_ARGUMENT error to the user when a routing error occurs,
+  // rather than forwarding the request to the local region.
+  bool strict = 3;
+}
+
+enum FieldBehavior {
+  FIELD_BEHAVIOR_UNSPECIFIED = 0;
+
+  // This indicates that the field can't be changed during a resource update.
+  // Changing the field value will cause an `INVALID_ARGUMENT` error.
+  // Resource recreate requires a change of the field value.
+  IMMUTABLE = 2;
+
+  // Indicates field is a resource ID, so it MUST be present on a resource
+  // update, but MUST NOT be set on create.
+  // Otherwise, RPC will fail with the `INVALID_ARGUMENT` error
+  IDENTIFIER = 3;
+
+  // Indicates field is not present in output.
+  INPUT_ONLY = 4;
+
+  // Indicates field can't be set on create or changed on update.
+  // Otherwise, RPC will fail with the `INVALID_ARGUMENT` error
+  OUTPUT_ONLY = 5;
+
+  // Indicates that an empty message and a null have different semantics.
+  // Usually, that field is a feature spec message: its empty message enables
+  // that feature, and null disables it. Such a message is different from `bool`
+  // because it already has some feature parameters, or they can be added later
+  // in a backward-compatible way.
+  // IMPORTANT: if the message itself is recursive, this behavior is forced.
+  MEANINGFUL_EMPTY_VALUE = 6;
+
+  // Indicates that an empty (default) value will be filled by the server.
+  // Usually, that field is a feature spec value, which by default is computed.
+  // Values marked with this annotation won't raise error if they are not set
+  // and the returned value is not equal to protobuf default.
+  //
+  // IMPORTANT:
+  // Updating this value from explicit to default may not lead to Update call in
+  // some tools (eg Terraform).
+  // Compound values (messages, lists and maps) may result in unpredictable
+  // updates (see examples in guidelines).
+  NON_EMPTY_DEFAULT = 7;
+}
+
+message DeprecationDetails {
+  // The date when this method, service, message or field will stop working (format: YYYY-MM-DD)
+  string effective_at = 1;
+
+  // A description to help users understand the reason for deprecation and suggest alternatives
+  string description = 2;
+}

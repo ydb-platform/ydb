@@ -1,0 +1,66 @@
+Memory sanitizer does not handle assembly code well and may generate false
+positives. libjpeg-turbo readme suggests to disable SIMD extensions at all when
+running it with sanitizers. We do not do this, but disable only some SIMD
+routines that cause problems with our tests.
+For more info see:
+* https://st.yandex-team.ru/CV-219
+* https://st.yandex-team.ru/DEVTOOLSSUPPORT-728
+* https://github.com/google/sanitizers/issues/192
+* https://github.com/libjpeg-turbo/libjpeg-turbo#memory-debugger-pitfalls
+* http://clang.llvm.org/docs/MemorySanitizer.html#handling-external-code
+
+--- b/src/jinclude.h
++++ a/src/jinclude.h
+@@ -130,6 +130,10 @@
+ #endif /* _WIN32 */
+ 
+ #endif /* NO_PUTENV */
++ 
++#ifdef WITH_SANITIZER
++#  define malloc(sz) calloc((sz), 1)
++#endif
+
+
+ #endif /* JINCLUDE_H */
+--- b/simd/x86_64/jsimd.c
++++ a/simd/x86_64/jsimd.c
+@@ -116,6 +116,9 @@ jsimd_can_ycc_rgb(void)
+ {
+   init_simd();
+
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
+   /* The code is optimised for these values only */
+   if (BITS_IN_JSAMPLE != 8)
+     return 0;
+@@ -997,6 +999,9 @@ jsimd_can_huff_encode_one_block(void)
+ {
+   init_simd();
+
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
+   if (DCTSIZE != 8)
+     return 0;
+   if (sizeof(JCOEF) != 2)
+@@ -1023,6 +1027,9 @@ jsimd_can_encode_mcu_AC_first_prepare(void)
+ {
+   init_simd();
+
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
+   if (DCTSIZE != 8)
+     return 0;
+   if (sizeof(JCOEF) != 2)
+@@ -1047,6 +1053,9 @@ jsimd_can_encode_mcu_AC_refine_prepare(void)
+ {
+   init_simd();
+
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
+   if (DCTSIZE != 8)
+     return 0;
+   if (sizeof(JCOEF) != 2)

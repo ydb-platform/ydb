@@ -1,10 +1,26 @@
 ====================Public-Domain====================
+## Public Domain
+
+
+====================Public-Domain====================
 ** The "printf" code that follows dates from the 1980's.  It is in
 ** the public domain.
 
 
 ====================Public-Domain====================
 ** The author disclaims copyright to this source code.
+
+
+====================Public-Domain====================
+Because SQLite is in the public domain, we do not normally accept pull
+
+
+====================Public-Domain====================
+The SQLite source code is in the public domain.  See
+
+
+====================Public-Domain====================
+then no longer be fully in the public domain.
 
 
 ====================blessing====================

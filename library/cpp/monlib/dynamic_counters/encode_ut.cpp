@@ -8,6 +8,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/buffer.h>
+#include <util/generic/yexception.h>
 #include <util/stream/buffer.h>
 
 namespace NMonitoring {
@@ -220,6 +221,36 @@ namespace NMonitoring {
             }
 
             AssertResult(samples);
+        }
+
+        Y_UNIT_TEST(InvalidUtf8) {
+            TDynamicCounterPtr rootGroup1(new TDynamicCounters());
+            rootGroup1->GetNamedCounter("invalid\x80Utf8Name", "validUtf8");
+
+            {
+                TString result;
+                TStringOutput out(result);
+                auto encoder = CreateEncoder(&out, EFormat::JSON);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(
+                    rootGroup1->Accept(TString(), TString(), *encoder),
+                    yexception,
+                    "label name is not valid UTF-8 string: 'invalid\\x80Utf8Name'"
+                );
+            }
+
+            TDynamicCounterPtr rootGroup2(new TDynamicCounters());
+            rootGroup2->GetNamedCounter("validUtf8Name", "invalid\x80Utf8");
+
+            {
+                TString result;
+                TStringOutput out(result);
+                auto encoder = CreateEncoder(&out, EFormat::JSON);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(
+                    rootGroup2->Accept(TString(), TString(), *encoder),
+                    yexception,
+                    "label value is not valid UTF-8 string, name: 'validUtf8Name', value: 'invalid\\x80Utf8'"
+                );
+            }
         }
     }
 

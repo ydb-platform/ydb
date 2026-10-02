@@ -235,6 +235,7 @@ hashoidvector(PG_FUNCTION_ARGS)
 {
 	oidvector  *key = (oidvector *) PG_GETARG_POINTER(0);
 
+	check_valid_oidvector(key);
 	return hash_any((unsigned char *) key->values, key->dim1 * sizeof(Oid));
 }
 
@@ -243,6 +244,7 @@ hashoidvectorextended(PG_FUNCTION_ARGS)
 {
 	oidvector  *key = (oidvector *) PG_GETARG_POINTER(0);
 
+	check_valid_oidvector(key);
 	return hash_any_extended((unsigned char *) key->values,
 							 key->dim1 * sizeof(Oid),
 							 PG_GETARG_INT64(1));
@@ -300,7 +302,9 @@ hashtext(PG_FUNCTION_ARGS)
 		buf = palloc(bsize + 1);
 
 		rsize = pg_strnxfrm(buf, bsize + 1, keydata, keylen, mylocale);
-		if (rsize != bsize)
+
+		/* the second call may return a smaller value than the first */
+		if (rsize > bsize)
 			elog(ERROR, "pg_strnxfrm() returned unexpected result");
 
 		/*
@@ -354,7 +358,9 @@ hashtextextended(PG_FUNCTION_ARGS)
 		buf = palloc(bsize + 1);
 
 		rsize = pg_strnxfrm(buf, bsize + 1, keydata, keylen, mylocale);
-		if (rsize != bsize)
+
+		/* the second call may return a smaller value than the first */
+		if (rsize > bsize)
 			elog(ERROR, "pg_strnxfrm() returned unexpected result");
 
 		/*

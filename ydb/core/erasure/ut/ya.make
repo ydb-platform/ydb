@@ -3,12 +3,7 @@ UNITTEST_FOR(ydb/core/erasure)
 FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/digest/crc32c

@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include <yql/essentials/public/issue/yql_issue_utils.h>
 #include <regex>
 #include <re2/re2.h>
 
@@ -24,6 +25,7 @@ EYdbComputeAuth GetIamAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::SERVICE_ACCOUNT;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -37,6 +39,7 @@ EYdbComputeAuth GetBasicAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::MDB_BASIC;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -141,6 +144,9 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kLogging: {
         return GetServiceAccountId(setting.logging().auth());
     }
+    case FederatedQuery::ConnectionSetting::kIceberg: {
+        return GetServiceAccountId(setting.iceberg().warehouse_auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -178,6 +184,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.mysql_cluster().login();
         case FederatedQuery::ConnectionSetting::kLogging:
             return {};
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return {};
     }
 }
 
@@ -202,6 +210,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().password();
         case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
+        case FederatedQuery::ConnectionSetting::kIceberg:
             return {};
     }
 }
@@ -228,6 +238,9 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.mysql_cluster().auth());
         case FederatedQuery::ConnectionSetting::kLogging:
             return GetIamAuthMethod(setting.logging().auth());
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return GetIamAuthMethod(setting.iceberg().warehouse_auth());
+
     }
 }
 
@@ -251,8 +264,37 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().mysql_cluster().auth();
     case FederatedQuery::ConnectionSetting::kLogging:
         return connection.content().setting().logging().auth();
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        return connection.content().setting().iceberg().warehouse_auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
+    }
+}
+
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting) {
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        return setting.mutable_object_storage()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        return setting.mutable_ydb_database()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        return setting.mutable_clickhouse_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        return setting.mutable_data_streams()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        return setting.mutable_monitoring()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        return setting.mutable_postgresql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        return setting.mutable_greenplum_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        return setting.mutable_mysql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kLogging:
+        return setting.mutable_logging()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        return setting.mutable_iceberg()->mutable_warehouse_auth();
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        return nullptr;
     }
 }
 
@@ -271,6 +313,57 @@ NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TStrin
         newIssues.emplace_back(*remover.Run(issue));
     }
     return NYql::TIssues(newIssues);
+}
+
+NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels, ui32 keepTailLevels) {
+    const auto options = NYql::TTruncateIssueOpts()
+        .SetMaxLevels(maxLevels)
+        .SetKeepTailLevels(keepTailLevels);
+
+    NYql::TIssues result;
+    result.Reserve(issues.Size());
+    for (const auto& issue : issues) {
+        result.AddIssue(NYql::TruncateIssueLevels(issue, options));
+    }
+    return result;
+}
+
+bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
+    if (!maxDepth) {
+        return false;
+    }
+    --maxDepth;
+
+    const auto* descriptor = message.GetDescriptor();
+    const auto* reflection = message.GetReflection();
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+        const auto* field = descriptor->field(i);
+        if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
+
+        if (field->is_repeated()) {
+            for (int j = 0; j < reflection->FieldSize(message, field); ++j) {
+                if (!CheckNestingDepth(reflection->GetRepeatedMessage(message, field, j), maxDepth)) {
+                    return false;
+                }
+            }
+        } else if (reflection->HasField(message, field) && !CheckNestingDepth(reflection->GetMessage(message, field), maxDepth)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth) {
+    NYql::TIssues issues;
+    for (const auto& column : columns) {
+        if (!CheckNestingDepth(column.type(), maxNestingDepth)) {
+            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' larger than allowed limit " << maxNestingDepth));
+        }
+    }
+    return issues;
 }
 
 } // namespace NFq

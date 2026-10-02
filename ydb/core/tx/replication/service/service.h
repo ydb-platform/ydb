@@ -3,9 +3,13 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 #include <ydb/core/tx/replication/common/worker_id.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
+#include <google/protobuf/timestamp.pb.h>
 
 namespace NKikimr::NReplication {
 
@@ -22,6 +26,8 @@ struct TEvService {
         EvGetTxId,
         EvTxIdResult,
         EvHeartbeat,
+        EvSchemaChangeReport,
+        EvSchemaChangeResult,
 
         EvEnd,
     };
@@ -75,6 +81,22 @@ struct TEvService {
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
+
+        template <typename TContainer>
+        explicit TEvWorkerStatus(const TWorkerId& id, TInstant startTime, TContainer&& statsValues) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
+            auto& stats = *Record.MutableStats();
+            if (startTime) {
+                stats.MutableStartTime()->CopyFrom(NProtoInterop::CastToProto(startTime));
+            }
+            for (auto& [k, v] : statsValues) {
+                auto& val = *stats.AddValues();
+                val.SetKey(k);
+                val.SetValue(v);
+            }
+        }
     };
 
     struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
@@ -108,6 +130,14 @@ struct TEvService {
         explicit TEvHeartbeat(const TRowVersion& version) {
             version.ToProto(Record.MutableVersion());
         }
+    };
+
+    struct TEvSchemaChangeReport: public TEventPB<TEvSchemaChangeReport, NKikimrReplication::TEvSchemaChangeReport, EvSchemaChangeReport> {
+        TEvSchemaChangeReport() = default;
+    };
+
+    struct TEvSchemaChangeResult: public TEventPB<TEvSchemaChangeResult, NKikimrReplication::TEvSchemaChangeResult, EvSchemaChangeResult> {
+        TEvSchemaChangeResult() = default;
     };
 };
 

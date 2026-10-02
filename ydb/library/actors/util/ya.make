@@ -4,12 +4,15 @@ SRCS(
     affinity.cpp
     affinity.h
     cpu_load_log.h
+    cpu_topology.cpp
+    cpu_topology.h
     cpumask.h
     datetime.h
     defs.h
     funnel_queue.h
     futex.h
     intrinsics.h
+    intrusive_funnel_queue.h
     local_process_key.h
     named_tuple.h
     queue_chunk.h
@@ -18,6 +21,8 @@ SRCS(
     memory_track.h
     memory_tracker.cpp
     memory_tracker.h
+    mutex_guarded_deterministic_random_provider.cpp
+    mutex_guarded_deterministic_random_provider.h
     recentwnd.h
     rope.cpp
     rope.h
@@ -40,7 +45,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/deprecated/atomic
 )
 
@@ -48,4 +53,8 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+)
+
+RECURSE(
+    benchmark
 )

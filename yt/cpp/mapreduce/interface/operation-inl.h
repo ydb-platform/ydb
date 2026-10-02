@@ -4,11 +4,10 @@
 #error "Direct inclusion of this file is not allowed, use operation.h"
 #include "operation.h"
 #endif
-#undef OPERATION_INL_H_
 
 #include "errors.h"
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
 #include <util/system/type_name.h>
 

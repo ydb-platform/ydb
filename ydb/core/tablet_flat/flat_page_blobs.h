@@ -4,6 +4,7 @@
 #include "flat_sausage_gut.h"
 #include "flat_sausage_solid.h"
 #include "util_deref.h"
+#include "util_fmt_abort.h"
 #include <array>
 
 namespace NKikimr {
@@ -35,16 +36,17 @@ namespace NPage {
             : Raw(std::move(raw))
             , Label_(label)
         {
-            Y_ABORT_UNLESS(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
+            Y_ENSURE(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
             auto got = NPage::TLabelWrapper().Read(Raw, EPage::Globs);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 1);
+            Y_ENSURE(got == ECodec::Plain && got.Version == 1);
 
             Header = TDeref<THeader>::At(got.Page.data(), 0);
 
-            if (Header->Skip > got.Page.size())
-                Y_ABORT("NPage::TExtBlobs header is out of its blob");
+            if (Header->Skip > got.Page.size()) {
+                Y_TABLET_ERROR("NPage::TExtBlobs header is out of its blob");
+            }
 
             auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip);
 
@@ -88,6 +90,10 @@ namespace NPage {
             return { size, { page, 0 }, { page, size } };
         }
 
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
+            return Bounds(location.Offset.AsPageIndex());
+        }
+
         NPageCollection::TGlobId Glob(ui32 page) const noexcept override
         {
             return page < Array.size() ? Array[page] : Empty;
@@ -96,6 +102,15 @@ namespace NPage {
         bool Verify(ui32 page, TArrayRef<const char> data) const noexcept override
         {
             return data && data.size() == Array.at(page).Bytes();
+        }
+
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
+            return data && data.size() == location.Size;
+        }
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Glob(pageId).Bytes(), NTable::NPage::EPage::Opaque);
         }
 
         size_t BackingSize() const noexcept override

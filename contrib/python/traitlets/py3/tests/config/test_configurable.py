@@ -37,7 +37,7 @@ class MyConfigurable(Configurable):
 
 mc_help = """MyConfigurable(Configurable) options
 ------------------------------------
---MyConfigurable.a=<Integer>
+--MyConfigurable.a=<Int>
     The integer a.
     Default: 1
 --MyConfigurable.b=<Float>
@@ -46,16 +46,12 @@ mc_help = """MyConfigurable(Configurable) options
 
 mc_help_inst = """MyConfigurable(Configurable) options
 ------------------------------------
---MyConfigurable.a=<Integer>
+--MyConfigurable.a=<Int>
     The integer a.
     Current: 5
 --MyConfigurable.b=<Float>
     The integer b.
     Current: 4.0"""
-
-# On Python 3, the Integer trait is a synonym for Int
-mc_help = mc_help.replace("<Integer>", "<Int>")
-mc_help_inst = mc_help_inst.replace("<Integer>", "<Int>")
 
 
 class Foo(Configurable):
@@ -194,7 +190,7 @@ class TestConfigurable(TestCase):
 
     def test_generated_config_enum_comments(self):
         class MyConf(Configurable):
-            an_enum = Enum("Choice1 choice2".split(), help="Many choices.").tag(config=True)
+            an_enum = Enum(["Choice1", "choice2"], help="Many choices.").tag(config=True)
 
         help_str = "Many choices."
         enum_choices_str = "Choices: any of ['Choice1', 'choice2']"
@@ -223,7 +219,7 @@ class TestConfigurable(TestCase):
 
         class MyConf2(Configurable):
             an_enum = Enum(
-                "Choice1 choice2".split(),
+                ["Choice1", "choice2"],
                 allow_none=True,
                 default_value="choice2",
                 help="Many choices.",
@@ -256,7 +252,7 @@ class TestConfigurable(TestCase):
 
         class MyConf3(Configurable):
             an_enum = CaselessStrEnum(
-                "Choice1 choice2".split(),
+                ["Choice1", "choice2"],
                 allow_none=True,
                 default_value="choice2",
                 help="Many choices.",
@@ -284,7 +280,7 @@ class TestConfigurable(TestCase):
 
         class MyConf4(Configurable):
             an_enum = FuzzyEnum(
-                "Choice1 choice2".split(),
+                ["Choice1", "choice2"],
                 allow_none=True,
                 default_value="choice2",
                 help="Many choices.",

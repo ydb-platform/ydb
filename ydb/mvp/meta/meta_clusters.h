@@ -1,4 +1,10 @@
 #pragma once
+#include "meta_versions.h"
+
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydb_impl.h>
+#include <ydb/mvp/core/merger.h>
+
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
@@ -9,8 +15,8 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -18,14 +24,10 @@
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydb_impl.h>
-#include "meta_versions.h"
-#include <ydb/mvp/core/merger.h>
 
 namespace NMVP {
 

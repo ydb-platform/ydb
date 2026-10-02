@@ -21,141 +21,33 @@
 //  template<class F> int lw_thread_create( lw_thread_t & th, F f );
 //  void lw_thread_join( lw_thread_t th );
 
-
-#include <boost/config.hpp>
-#include <memory>
-#include <cerrno>
-
-#if defined( BOOST_HAS_PTHREADS )
-
-#include <pthread.h>
+#include <thread>
+#include <exception>
 
 namespace boost
 {
 namespace detail
 {
 
-typedef ::pthread_t lw_thread_t;
+using lw_thread_t = std::thread*;
 
-inline int lw_thread_create_( lw_thread_t* thread, const pthread_attr_t* attr, void* (*start_routine)( void* ), void* arg )
+template<class F> int lw_thread_create( lw_thread_t& th, F f )
 {
-    return ::pthread_create( thread, attr, start_routine, arg );
-}
-
-inline void lw_thread_join( lw_thread_t th )
-{
-    ::pthread_join( th, 0 );
-}
-
-} // namespace detail
-} // namespace boost
-
-#else // defined( BOOST_HAS_PTHREADS )
-
-#include <windows.h>
-#include <process.h>
-
-namespace boost
-{
-namespace detail
-{
-
-typedef HANDLE lw_thread_t;
-
-inline int lw_thread_create_( lw_thread_t * thread, void const *, unsigned (__stdcall * start_routine) (void*), void* arg )
-{
-    HANDLE h = (HANDLE)_beginthreadex( 0, 0, start_routine, arg, 0, 0 );
-
-    if( h != 0 )
+    try
     {
-        *thread = h;
+        th = new std::thread( f );
         return 0;
     }
-    else
+    catch( std::exception const& )
     {
-        return EAGAIN;
+        return -1;
     }
 }
 
-inline void lw_thread_join( lw_thread_t thread )
+void lw_thread_join( lw_thread_t th )
 {
-    ::WaitForSingleObject( thread, INFINITE );
-    ::CloseHandle( thread );
-}
-
-} // namespace detail
-} // namespace boost
-
-#endif // defined( BOOST_HAS_PTHREADS )
-
-
-namespace boost
-{
-namespace detail
-{
-
-class lw_abstract_thread
-{
-public:
-
-    virtual ~lw_abstract_thread() {}
-    virtual void run() = 0;
-};
-
-#if defined( BOOST_HAS_PTHREADS )
-
-extern "C" void * lw_thread_routine( void * pv )
-{
-    std::unique_ptr<lw_abstract_thread> pt( static_cast<lw_abstract_thread *>( pv ) );
-
-    pt->run();
-
-    return 0;
-}
-
-#else
-
-unsigned __stdcall lw_thread_routine( void * pv )
-{
-    std::unique_ptr<lw_abstract_thread> pt( static_cast<lw_abstract_thread *>( pv ) );
-
-    pt->run();
-
-    return 0;
-}
-
-#endif
-
-template<class F> class lw_thread_impl: public lw_abstract_thread
-{
-public:
-
-    explicit lw_thread_impl( F f ): f_( f )
-    {
-    }
-
-    void run()
-    {
-        f_();
-    }
-
-private:
-
-    F f_;
-};
-
-template<class F> int lw_thread_create( lw_thread_t & th, F f )
-{
-    std::unique_ptr<lw_abstract_thread> p( new lw_thread_impl<F>( f ) );
-
-    int r = lw_thread_create_( &th, 0, lw_thread_routine, p.get() );
-
-    if( r == 0 )
-    {
-        p.release();
-    }
-
-    return r;
+    th->join();
+    delete th;
 }
 
 } // namespace detail

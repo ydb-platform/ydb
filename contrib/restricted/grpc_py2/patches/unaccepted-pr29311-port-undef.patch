@@ -1,0 +1,62 @@
+diff --git a/src/compiler/cpp_generator.cc b/src/compiler/cpp_generator.cc
+index b63ee5c..9a9f51c 100644
+--- a/src/compiler/cpp_generator.cc
++++ b/src/compiler/cpp_generator.cc
+@@ -169,6 +169,9 @@ TString GetHeaderIncludes(grpc_generator::File* file,
+     std::vector<TString> headers(headers_strs, array_end(headers_strs));
+     PrintIncludes(printer.get(), headers, params.use_system_headers,
+                   params.grpc_search_path);
++    // port_def.inc must be included after all other includes.
++    std::vector<TString> wrapHeadersTop = {"google/protobuf/port_def.inc"};
++    PrintIncludes(printer.get(), wrapHeadersTop, params.use_system_headers, "");
+     printer->Print(vars, "\n");
+
+     vars["message_header_ext"] = params.message_header_extension.empty()
+@@ -1778,7 +1781,7 @@ TString GetHeaderServices(grpc_generator::File* file,
+ }
+
+ TString GetHeaderEpilogue(grpc_generator::File* file,
+-                              const Parameters& /*params*/) {
++                              const Parameters& params) {
+   TString output;
+   {
+     // Scope the output stream so it closes and finalizes output to the string.
+@@ -1799,6 +1802,8 @@ TString GetHeaderEpilogue(grpc_generator::File* file,
+     }
+
+     printer->Print(vars, "\n");
++    std::vector<TString> wrapHeadersBottom = {"google/protobuf/port_undef.inc"};
++    PrintIncludes(printer.get(), wrapHeadersBottom, params.use_system_headers, "");
+     printer->Print(vars, "#endif  // GRPC_$filename_identifier$__INCLUDED\n");
+
+     printer->Print(file->GetTrailingComments("//").c_str());
+@@ -1858,6 +1863,9 @@ TString GetSourceIncludes(grpc_generator::File* file,
+     std::vector<TString> headers(headers_strs, array_end(headers_strs));
+     PrintIncludes(printer.get(), headers, params.use_system_headers,
+                   params.grpc_search_path);
++    // port_def.inc must be included after all other includes.
++    std::vector<TString> wrapHeadersTop = {"google/protobuf/port_def.inc"};
++    PrintIncludes(printer.get(), wrapHeadersTop, params.use_system_headers, "");
+
+     if (!file->package().empty()) {
+       std::vector<TString> parts = file->package_parts();
+--- a/src/compiler/cpp_generator.cc
++++ b/src/compiler/cpp_generator.cc
+@@ -2323,7 +2323,7 @@ TString GetSourceServices(grpc_generator::File* file,
+ }
+
+ TString GetSourceEpilogue(grpc_generator::File* file,
+-                              const Parameters& /*params*/) {
++                              const Parameters& params) {
+   TString temp;
+
+   if (!file->package().empty()) {
+@@ -2336,6 +2336,8 @@ TString GetSourceEpilogue(grpc_generator::File* file,
+     }
+     temp.append("\n");
+   }
++  std::vector<TString> wrapHeadersBottom = {"google/protobuf/port_undef.inc"};
++  PrintIncludes(file->CreatePrinter(&temp).get(), wrapHeadersBottom, params.use_system_headers, "");
+
+   return temp;
+ }

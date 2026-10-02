@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_ABI_VERSION(
     2
-    37
+    46
     0
 )
 
@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/string_utils/quote
     library/cpp/string_utils/url
     library/cpp/tld

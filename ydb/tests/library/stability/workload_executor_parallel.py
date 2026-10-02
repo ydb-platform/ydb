@@ -1,0 +1,491 @@
+from typing import Optional
+import warnings
+import allure
+import logging
+import time as time_module
+import pytest
+
+from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
+from ydb.tests.library.stability.build_report import create_parallel_allure_report
+from ydb.tests.library.stability.utils.collect_errors import AgentErrorsCollector, WardenResults
+from ydb.tests.library.stability.utils.upload_results import RunConfigInfo, safe_upload_results, test_event_report
+from ydb.tests.library.stability.utils.summary_writer import SummaryWriter
+from ydb.tests.library.stability.utils.utils import external_param_is_true, get_external_param
+from ydb.tests.library.stability.deploy import StressUtilDeployer
+from ydb.tests.library.stability.run_stress import StressRunExecutor
+
+
+class ParallelWorkloadTestBase:
+    """
+    Base class for workload tests with common functionality
+    """
+
+    # Attributes that can be overridden in child classes
+    binaries_deploy_path: str = (
+        "/tmp/stress_binaries/"  # Path for deploying binary files
+    )
+    timeout: float = 1800.0  # Default timeout
+    cluster_path: str = str(
+        get_external_param(
+            "cluster_path",
+            ""))  # Path to cluster
+    yaml_config: str = str(
+        get_external_param(
+            "yaml-config",
+            ""))  # Path to yaml configuration
+    event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
+    ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
+    ydb_database = get_external_param('ydb-db', '/Root/db1').lstrip('/')
+    static_location = get_external_param('nemesis-static-location', None)
+
+    @pytest.fixture(autouse=True, scope="session")
+    def binary_deployer(self):
+        binaries_deploy_path: str = (
+            "/tmp/stress_binaries/"
+        )
+        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location=self.static_location)
+        yield deployer
+        teardown_log: list[str] = []
+        deployer._manage_nemesis(False, [], 'teardown', teardown_log)
+        deployer._stop_nemesis_services(teardown_log)
+        if teardown_log:
+            allure.attach(
+                "\n".join(teardown_log),
+                "Nemesis Teardown Summary",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+
+    @pytest.fixture(autouse=True, scope="session")
+    def stress_executor(self, binary_deployer: StressUtilDeployer) -> StressRunExecutor:
+        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode, self.ydb_database, binary_deployer.nodes)
+
+    def execute_parallel_workloads_test(
+        self,
+        stress_executor: StressRunExecutor,
+        stress_deployer: StressUtilDeployer,
+        workload_params: dict[str, dict],
+        duration_value: float = None,
+        nemesis_enabled: bool = False,
+        nodes_percentage: Optional[int] = None,
+    ) -> None:
+        """
+        Executes full workload test cycle with three phases:
+        1. Preparation (deploy binaries to nodes)
+        2. Execution (run workloads in parallel)
+        3. Results collection and diagnostics
+
+        Args:
+            stress_executor: Stress test executor instance
+            stress_deployer: Stress test deployer instance
+            workload_params: Dictionary of workload configurations
+            duration_value: Execution time in seconds (None uses self.timeout)
+            nemesis_enabled: Whether to start nemesis after 15 seconds
+            nodes_percentage: Percentage of nodes to use (1-100)
+
+        Returns:
+            None (results are processed internally and reported via Allure)
+
+        Raises:
+            ValueError: If nodes_percentage is invalid
+        """
+
+        if duration_value is None:
+            duration_value = self.timeout
+
+        # Validate nodes percentage
+        if nodes_percentage and (nodes_percentage < 1 or nodes_percentage > 100):
+            raise ValueError(
+                f"nodes_percentage must be between 1 and 100, got: {nodes_percentage}"
+            )
+
+        additional_stats = RunConfigInfo()
+        additional_stats.nemesis_enabled = nemesis_enabled
+        additional_stats.nodes_percentage = nodes_percentage
+        additional_stats.test_start_time = int(time_module.time())
+        additional_stats.duration = duration_value
+        additional_stats.all_hosts = stress_deployer.hosts
+        additional_stats.stress_util_names = list(workload_params.keys())
+        errors_collector = AgentErrorsCollector(additional_stats.all_hosts, stress_deployer.nodes)
+        summary_writer = SummaryWriter()
+
+        try:
+            # Publish TestInit record
+            with allure.step("Initialize test"):
+                test_event_report('TestInit', workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+
+            # THEN execute cluster health check
+            with allure.step("Pre-workload cluster verification"):
+                errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+
+            logging.info("=== Starting environment preparation ===")
+
+            # PHASE 1: PREPARATION (deploy binaries to nodes)
+            preparation_result = stress_deployer.prepare_stress_execution(workload_params, nodes_percentage)
+
+            logging.debug(f"Deploy finished with {preparation_result}")
+
+            # PRE-NEMESIS: one-time data import and other setup steps
+            stress_executor.run_pre_nemesis_commands(workload_params, preparation_result['deployed_nodes'])
+
+            # PHASE 2: EXECUTION (run workloads in parallel)
+            execution_result = stress_executor.execute_stress_runs(
+                stress_deployer,
+                workload_params,
+                duration_value,
+                preparation_result,
+                nemesis_enabled,
+            )
+            logging.debug(f"Execution finished with {execution_result}")
+            logging.debug(f"Additional stats {additional_stats}")
+
+            if stress_deployer.nemesis_started:
+                recoverability_result = self.stop_nemesis_and_check_recoverability(
+                    stress_executor,
+                    stress_deployer,
+                    workload_params,
+                    preparation_result)
+                execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+
+            # POST-NEMESIS: one-time cleanup steps
+            stress_executor.run_post_nemesis_commands(workload_params, preparation_result['deployed_nodes'])
+
+            # PHASE 3: RESULTS (collect diagnostics and finalize)
+            self._finalize_workload_results(
+                stress_deployer,
+                errors_collector,
+                execution_result,
+                preparation_result['deployed_nodes'],
+                additional_stats,
+                summary_writer,
+            )
+        except BaseException as exc:
+            # Record failure status + exception details into summary directory.
+            # pytest.fail uses pytest.fail.Exception (a subclass of BaseException
+            # in some pytest versions), so use BaseException to capture it.
+            summary_writer.write_exception(exc)
+            # pytest.fail produces an exception whose name contains 'Failed';
+            # treat it as 'failed', everything else as 'broken'.
+            exc_name = type(exc).__name__.lower()
+            status = 'failed' if 'failed' in exc_name or 'fail' in exc_name else 'broken'
+            summary_writer.write_status(status, message=str(exc))
+            raise
+        else:
+            summary_writer.write_status('passed')
+
+        logging.info("=== Workload test completed ===")
+        # logging.debug(f"Execution final result {final_result}")
+
+    def _finalize_workload_results(
+        self,
+        stress_deployer: StressUtilDeployer,
+        errors_collector: AgentErrorsCollector,
+        execution_result: dict,
+        preparation_result: dict[str, StressUtilDeployResult],
+        run_config: RunConfigInfo,
+        summary_writer: SummaryWriter = None,
+    ):
+        """
+        PHASE 3: Finalizing results and diagnostics
+
+        Args:
+            execution_result: Execution results
+            additional_stats: Additional statistics
+            duration_value: Execution time in seconds
+            use_chunks: Whether to use iteration splitting (deprecated parameter)
+
+        Returns:
+            Final execution result
+        """
+
+        with allure.step("Phase 3: Finalize results and diagnostics"):
+            overall_result: StressUtilTestResults = execution_result["overall_result"]
+            successful_runs = execution_result["successful_runs"]
+            total_runs = execution_result["total_runs"]
+
+            if overall_result.recoverability_result is None:
+                errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
+
+            # Final processing with diagnostics (prepares data for upload)
+            overall_result.workload_start_time = execution_result["workload_start_time"]
+            node_errors, warden_results = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
+
+            # Persist collected errors into summary directory (if configured)
+            if summary_writer is not None and summary_writer.enabled:
+                try:
+                    summary_writer.write_node_errors(node_errors)
+                    workload_errors = []
+                    if overall_result.errors:
+                        for err in overall_result.errors:
+                            if "coredump" not in err.lower() and "oom" not in err.lower():
+                                workload_errors.append(err)
+                    summary_writer.write_workload_errors(workload_errors)
+                    summary_writer.write_warden_results(warden_results)
+                except Exception as e:
+                    logging.warning(f"Failed to write summary: {e}")
+
+            # Separate step for uploading results (AFTER all data preparation)
+            safe_upload_results(overall_result, run_config, node_errors)  # noqa: warden_results not uploaded yet
+
+            # Final status processing (may throw exception, but results are already uploaded)
+            # Use node_errors saved from diagnostics
+            self._handle_final_status(
+                errors_collector,
+                overall_result,
+                preparation_result,
+                node_errors,
+                warden_results,
+                summary_writer=summary_writer,
+            )
+
+            logging.info(
+                f"Final result: successful_runs={successful_runs} / {total_runs}"
+            )
+            return overall_result
+
+    def process_workload_result_with_diagnostics(
+        self,
+        errors_collector: AgentErrorsCollector,
+        result: StressUtilTestResults,
+    ) -> tuple[list, any]:
+        """
+        Processes workload result with diagnostic information from nemesis orchestrator.
+
+        Uses the nemesis orchestrator warden API to collect safety/liveness check
+        results instead of direct SSH-based log parsing.
+
+        Args:
+            errors_collector: AgentErrorsCollector instance for orchestrator-based diagnostics
+            result: Workload execution results
+
+        Returns:
+            Tuple containing:
+            - node_errors: List of node error objects
+            - warden_results: Full WardenResults from orchestrator
+
+        Note:
+            - Collects node diagnostics via orchestrator warden checks
+            - Collects coredumps via SSH (breakpad)
+            - Generates Allure report with detailed information including warden checks table
+        """
+        with allure.step("Process workload result"):
+            node_errors = []
+            warden_results = WardenResults()
+
+            # Check node status and collect errors via orchestrator
+            try:
+                end_time = time_module.time()
+                diagnostics_start_time = result.start_time
+                node_errors, warden_results = errors_collector.check_nodes_diagnostics_with_timing(
+                    result, diagnostics_start_time, end_time
+                )
+            except Exception as e:
+                logging.error(f"Error getting nodes state: {e}")
+                node_errors = []
+                warden_results = WardenResults()
+                warden_results.error_message = f"Failed to collect diagnostics: {e}"
+
+            # Calculate execution time
+            end_time = time_module.time()
+
+            # Prepare error lists for upload
+            node_error_messages = []
+            workload_error_messages = []
+
+            # Collect node errors with details
+            for node_error in node_errors:
+                if node_error.core_hashes:
+                    for core_id, core_hash, core_version in node_error.core_hashes:
+                        node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
+                if node_error.was_oom:
+                    node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                if node_error.verifies:
+                    node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                    node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
+
+            # Collect workload errors (not related to nodes)
+            if result.errors:
+                for err in result.errors:
+                    if "coredump" not in err.lower() and "oom" not in err.lower():
+                        workload_error_messages.append(err)
+
+            # Generate allure report with warden results
+            create_parallel_allure_report(result, node_errors, warden_results)
+
+            return node_errors, warden_results
+
+    def _handle_final_status(
+        self,
+        errors_collector: AgentErrorsCollector,
+        result: StressUtilTestResults,
+        preparation_result: dict[str, StressUtilDeployResult],
+        node_errors: list,
+        warden_results: WardenResults = None,
+        summary_writer: SummaryWriter = None,
+    ) -> None:
+        """
+        Handles final test status (fail, broken, etc.)
+
+        Args:
+            result: Test results object
+            node_errors: List of node errors
+            warden_results: Full warden check results from the nemesis orchestrator,
+                including cluster-wide safety/liveness checks that are not tied to
+                a particular host.
+
+        Raises:
+            pytest.fail: If nodes have coredumps/OOMs/VERIFY/SAN errors, or any
+                warden check reported a violation or error.
+            Exception: If workload errors occurred.
+        """
+        nodes_with_issues = len(node_errors)
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err.lower() and "oom" not in err.lower():
+                    workload_errors.append(err)
+
+        # Collect warden check failures (violations + errors). These include
+        # cluster-wide checks (e.g. AllPDisksAreInValidState, LivenessChecks)
+        # that are reported via the orchestrator only and never appear in
+        # node_errors, so without explicit handling here the test silently
+        # passes despite failing cluster checks.
+        warden_violations: list[str] = []
+        warden_errors: list[str] = []
+        if warden_results is not None:
+            for name, check in warden_results.checks.items():
+                if check.is_ok():
+                    continue
+                # Per-host issues (OOM, VERIFY, sanitizer) are already
+                # reflected in node_errors via affected_hosts; do not
+                # double-fail on the same data.
+                name_lower = name.lower()
+                is_per_host_check = (
+                    'grepdmesg' in name_lower
+                    or 'grep_dmesg' in name_lower
+                    or ('verify' in name_lower and 'failed' in name_lower)
+                    or 'sanitizer' in name_lower
+                )
+                if is_per_host_check:
+                    continue
+                violations_count = len(check.violations)
+                affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
+                summary = f"{name} [{check.status}] violations={violations_count} hosts={affected}"
+                if check.is_violation():
+                    warden_violations.append(summary)
+                else:
+                    warden_errors.append(summary)
+
+            # If the orchestrator polling itself did not succeed, treat it as a
+            # broken test rather than passing silently.
+            if not warden_results.poll_success and warden_results.error_message:
+                warden_errors.append(f"warden_polling: {warden_results.error_message}")
+
+        # --- Switch: if cluster_log=all, always attach logs ---
+        cluster_log_mode = get_external_param('cluster_log', 'default')
+        if (cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors
+                or warden_violations or warden_errors):
+            summary_dir_for_logs = (
+                summary_writer.test_dir
+                if summary_writer is not None and summary_writer.enabled
+                else None
+            )
+            try:
+                errors_collector.attach_nemesis_logs(
+                    result.start_time, summary_dir=summary_dir_for_logs
+                )
+            except Exception as e:
+                logging.warning(f"Failed to attach nemesis logs: {e}")
+            try:
+                errors_collector.attach_kikimr_logs(
+                    result.start_time, "kikimr", summary_dir=summary_dir_for_logs
+                )
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
+
+        # --- FAIL TEST IF CORES, OOM, VERIFY, SAN errors, or warden violations ---
+        if nodes_with_issues > 0 or warden_violations:
+            fail_parts = []
+            if nodes_with_issues > 0:
+                fail_parts.append(
+                    f"{nodes_with_issues} node issue(s) (coredump/OOM/VERIFY/SAN)"
+                )
+            if warden_violations:
+                fail_parts.append(
+                    f"{len(warden_violations)} cluster warden violation(s): "
+                    + "; ".join(warden_violations)
+                )
+            pytest.fail("Test failed: " + "; ".join(fail_parts))
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS OR WARDEN INFRA ERRORS ---
+        if workload_errors or warden_errors:
+            messages = []
+            if workload_errors:
+                messages.append("workload errors: " + "; ".join(workload_errors))
+            if warden_errors:
+                messages.append("warden check errors: " + "; ".join(warden_errors))
+            raise Exception("Test marked as broken due to: " + " | ".join(messages))
+
+        # In diagnostic mode don't fail due to coredump/OOM warnings
+        if not result.is_all_success() and result.error_message:
+            # Create detailed error message with context
+            error_details = []
+            error_details.append("TEST EXECUTION FAILED: ")
+            error_details.append(f"Main error: {result.error_message}")
+            if result.stress_util_runs:
+                error_details.append("\nExecution details:")
+                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
+                failed_iterations = []
+                successful_iterations = []
+                for workload_name, workload_run_info in result.stress_util_runs.items():
+                    if workload_run_info.get_successful_runs() == 0:
+                        failed_iterations.append({
+                            'iteration': workload_name,
+                            'error': "All runs on all nodes have failed",
+                        })
+                    else:
+                        successful_iterations.append({
+                            'iteration': workload_name,
+                        })
+                if failed_iterations:
+                    error_details.append(f"\nFAILED RUNS ({len(failed_iterations)}):")
+                    for fail_info in failed_iterations:
+                        error_details.append(f"  - Stress util {fail_info['iteration']}: {fail_info['error']}")
+                if successful_iterations:
+                    error_details.append(f"\nSuccessful runs: ({len(successful_iterations)}):")
+                    for success_info in successful_iterations:
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK")
+            error_details.append("\nRUN STATISTICS:")
+            error_details.append(f"  Total runs: {result.get_total_runs()}")
+            error_details.append(f"  Successful runs: {result.get_successful_runs()}")
+            error_details.append(f"  Failed runs: {result.get_total_runs() - result.get_successful_runs()}")
+            error_details.append(f"  Success rate: {(result.get_successful_runs() / result.get_total_runs()):.1%}")
+            error_details.append("\nDEPLOYMENT INFO:")
+            for stress_name, deploy_info in preparation_result.items():
+                error_details.append(f"  {stress_name}:")
+                for host_info in deploy_info.hosts:
+                    error_details.append(f"    {host_info}")
+            detailed_error_message = "\n".join(error_details)
+            exc = pytest.fail.Exception(detailed_error_message)
+            raise exc
+        if result.get_successful_runs() == 0:
+            exc = pytest.fail.Exception("All workloads have failed")
+            raise exc
+        if result.recoverability_result and result.recoverability_result.get_successful_runs() == 0:
+            with pytest.warns(RuntimeWarning):
+                warnings.warn("All workloads have failed in recovery steps", RuntimeWarning)
+
+    def stop_nemesis_and_check_recoverability(self,
+                                              stress_executor: StressRunExecutor,
+                                              stress_deployer: StressUtilDeployer,
+                                              workload_params: dict[str, dict],
+                                              preparation_result: dict[str, StressUtilDeployResult]) -> dict:
+        with allure.step("Phase 2.5: Stop nemesis and check recoverability"):
+            stress_deployer._manage_nemesis(False, workload_params.keys(), 'RecoverabilityCheck')
+            recoverability_execution_result = stress_executor.execute_stress_runs(
+                stress_deployer,
+                workload_params,
+                1200,
+                preparation_result,
+                False
+            )
+        return recoverability_execution_result

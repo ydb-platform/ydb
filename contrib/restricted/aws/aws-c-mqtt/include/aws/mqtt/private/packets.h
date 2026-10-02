@@ -220,6 +220,9 @@ AWS_MQTT_API
 int aws_mqtt_packet_publish_decode(struct aws_byte_cursor *cur, struct aws_mqtt_packet_publish *packet);
 
 AWS_MQTT_API
+void aws_mqtt_packet_publish_set_dup(struct aws_mqtt_packet_publish *packet);
+
+AWS_MQTT_API
 bool aws_mqtt_packet_publish_get_dup(const struct aws_mqtt_packet_publish *packet);
 
 AWS_MQTT_API

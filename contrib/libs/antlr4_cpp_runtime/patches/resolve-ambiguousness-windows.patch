@@ -1,0 +1,41 @@
+--- a/src/misc/IntervalSet.cpp	(index)
++++ b/src/misc/IntervalSet.cpp	(working tree)
+@@ -260,9 +260,6 @@ IntervalSet IntervalSet::And(const IntervalSet &other) const {
+   return intersection;
+ }
+
+-bool IntervalSet::contains(size_t el) const {
+-  return contains(symbolToNumeric(el));
+-}
+
+ bool IntervalSet::contains(ssize_t el) const {
+   if (_intervals.empty() || el < _intervals.front().a || el > _intervals.back().b) {
+@@ -481,10 +477,6 @@ ssize_t IntervalSet::get(size_t i) const {
+   return -1;
+ }
+
+-void IntervalSet::remove(size_t el) {
+-  remove(symbolToNumeric(el));
+-}
+-
+ void IntervalSet::remove(ssize_t el) {
+   for (size_t i = 0; i < _intervals.size(); ++i) {
+     Interval &interval = _intervals[i];
+--- a/src/misc/IntervalSet.h	(index)
++++ b/src/misc/IntervalSet.h	(working tree)
+@@ -113,7 +113,6 @@ namespace misc {
+     IntervalSet And(const IntervalSet &other) const;
+
+     /// Is el in any range of this set?
+-    bool contains(size_t el) const; // For mapping of e.g. Token::EOF to -1 etc.
+     bool contains(ssize_t el) const;
+
+     /// return true if this set has no members
+@@ -173,7 +172,6 @@ namespace misc {
+     /// don't bother to implement if you're not doing that for a new
+     /// ANTLR code gen target.
+     ssize_t get(size_t i) const;
+-    void remove(size_t el); // For mapping of e.g. Token::EOF to -1 etc.
+     void remove(ssize_t el);
+
+   private:

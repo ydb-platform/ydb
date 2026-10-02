@@ -5,8 +5,8 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/key.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/tx/scheme_board/events.h>
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -20,20 +20,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace Ydb;
 
-// unused?
-// struct TCommitCookie {
-//     ui64 AssignId;
-//     ui64 Cookie;
-// };
-
 struct TLocalResponseBase {
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
-};
-
-
-struct TAlterTopicResponse : public TLocalResponseBase {
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
 };
 
 struct TEvPQProxy {
@@ -89,7 +78,9 @@ struct TEvPQProxy {
         EvReadingStarted,
         EvReadingFinished,
         EvAlterTopicResponse,
-        EvEnd
+        EvParentCommitedToFinish,
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
 
@@ -123,34 +114,6 @@ struct TEvPQProxy {
         { }
 
         const ui64 Cookie;
-    };
-
-    struct TEvScheduleUpdateClusters : public NActors::TEventLocal<TEvScheduleUpdateClusters, EvScheduleUpdateClusters> {
-        TEvScheduleUpdateClusters()
-        { }
-    };
-
-
-    struct TEvUpdateClusters : public NActors::TEventLocal<TEvUpdateClusters, EvUpdateClusters> {
-        TEvUpdateClusters(const TString& localCluster, bool enabled, const TVector<TString>& clusters)
-            : LocalCluster(localCluster)
-            , Enabled(enabled)
-            , Clusters(clusters)
-        { }
-
-        const TString LocalCluster;
-        const bool Enabled;
-        const TVector<TString> Clusters;
-    };
-
-    struct TEvQueryCompiled : public NActors::TEventLocal<TEvQueryCompiled, EvQueryCompiled> {
-        TEvQueryCompiled(const TString& selectQ, const TString& updateQ, const TString& deleteQ)
-            : SelectQ(selectQ)
-            , UpdateQ(updateQ)
-            , DeleteQ(deleteQ)
-        { }
-
-        const TString SelectQ, UpdateQ, DeleteQ;
     };
 
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
@@ -374,17 +337,19 @@ struct TEvPQProxy {
     };
 
     struct TEvStartRead : public NActors::TEventLocal<TEvStartRead, EvStartRead> {
-        TEvStartRead(ui64 id, ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset)
+        TEvStartRead(ui64 id, ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset, const TMaybe<ui64>& maxOffset)
             : AssignId(id)
             , ReadOffset(readOffset)
             , CommitOffset(commitOffset)
             , VerifyReadOffset(verifyReadOffset)
+            , MaxOffset(maxOffset)
         { }
 
         const ui64 AssignId;
         ui64 ReadOffset;
         TMaybe<ui64> CommitOffset;
         bool VerifyReadOffset;
+        TMaybe<ui64> MaxOffset;
     };
 
     struct TEvReleased : public NActors::TEventLocal<TEvReleased, EvReleased> {
@@ -405,19 +370,32 @@ struct TEvPQProxy {
         const ui64 AssignId;
     };
 
+    struct TEvUpdateReadMetrics : public NActors::TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {};
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset)
+        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset, const bool readingFinishedSent)
             : AssignId(assignId)
             , StartCookie(startCookie)
             , LastCookie(lastCookie)
             , Offset(offset)
+            , EndOffset(endOffset)
+            , ReadingFinishedSent(readingFinishedSent)
         { }
 
         ui64 AssignId;
         ui64 StartCookie;
         ui64 LastCookie;
         ui64 Offset;
+        ui64 EndOffset;
+        bool ReadingFinishedSent;
+    };
+
+    struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
+        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
+            : ParentPartitionId(parentPartitionId)
+        { }
+
+        ui64 ParentPartitionId;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {
@@ -434,17 +412,19 @@ struct TEvPQProxy {
 
     struct TEvLockPartition : public NActors::TEventLocal<TEvLockPartition, EvLockPartition> {
         explicit TEvLockPartition(const ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset,
-                                   bool startReading)
+                                   bool startReading, const TMaybe<ui64>& maxOffset)
             : ReadOffset(readOffset)
             , CommitOffset(commitOffset)
             , VerifyReadOffset(verifyReadOffset)
             , StartReading(startReading)
+            , MaxOffset(maxOffset)
         { }
 
         ui64 ReadOffset;
         TMaybe<ui64> CommitOffset;
         bool VerifyReadOffset;
         bool StartReading;
+        TMaybe<ui64> MaxOffset;
     };
 
 
@@ -474,23 +454,30 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
-                           bool init = true)
+        TEvPartitionStatus(const TPartitionId& partition,
+                           const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+                           const TExplicitType<bool> clientHasAnyCommits,
+                           const TExplicitType<ui64> readOffset,
+                           const TExplicitType<bool> init = true)
             : Partition(partition)
             , Offset(offset)
             , EndOffset(endOffset)
+            , ClientHasAnyCommits(clientHasAnyCommits)
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
             , NodeId(nodeId)
             , Generation(generation)
+            , ReadOffset(readOffset)
             , Init(init)
         { }
 
         TPartitionId Partition;
         ui64 Offset;
         ui64 EndOffset;
+        bool ClientHasAnyCommits;
         ui64 WriteTimestampEstimateMs;
         ui64 NodeId;
         ui64 Generation;
+        ui64 ReadOffset;
         bool Init;
     };
 
@@ -585,6 +572,11 @@ struct TEvPQProxy {
     };
 
     struct TEvDirectReadDestroyPartitionSession : public TEventLocal<TEvDirectReadDestroyPartitionSession, EvDirectReadDestroyPartitionSession> {
+
+        TEvDirectReadDestroyPartitionSession(const TString& sessionId, ui64 partitionSessionId)
+            : ReadKey(sessionId, partitionSessionId)
+        {}
+
         TEvDirectReadDestroyPartitionSession(const NKikimr::NPQ::TReadSessionKey& sessionKey,
                                              Ydb::PersQueue::ErrorCode::ErrorCode code, const TString& reason)
             : ReadKey(sessionKey)
@@ -627,12 +619,13 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
             : Topic(topic)
             , PartitionId(partitionId)
             , FirstMessage(first)
             , AdjacentPartitionIds(std::move(adjacentPartitionIds))
             , ChildPartitionIds(std::move(childPartitionIds))
+            , EndOffset(endOffset)
         {}
 
         TString Topic;
@@ -641,11 +634,8 @@ struct TEvPQProxy {
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
-    };
 
-    struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>
-                                 , public TLocalResponseBase {
-        TAlterTopicResponse Response;
+        ui64 EndOffset;
     };
 };
 
@@ -663,34 +653,5 @@ struct TLocalRequestBase {
     TString Token;
 
 };
-
-struct TGetPartitionsLocationRequest : public TLocalRequestBase {
-    TGetPartitionsLocationRequest() = default;
-    TGetPartitionsLocationRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
-        : TLocalRequestBase(topic, database, token)
-        , PartitionIds(partitionIds)
-    {}
-
-    TVector<ui32> PartitionIds;
-
-};
-
-struct TAlterTopicRequest : public TLocalRequestBase {
-    TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
-                       const TString& database, const TString& token, bool missingOk)
-        : TLocalRequestBase(request.path(), database, token)
-        , Request(std::move(request))
-        , WorkingDir(workDir)
-        , Name(name)
-        , MissingOk(missingOk)
-    {}
-
-    Ydb::Topic::AlterTopicRequest Request;
-    TString WorkingDir;
-    TString Name;
-    bool MissingOk;
-};
-
-
 
 }

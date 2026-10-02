@@ -2,9 +2,10 @@
 
 |  Среда | Инструкция | Уровень поддержки |
 | --- | --- | --- |
-| Встроенный UI | [Справка](../../../reference/embedded-ui/index.md) | |
+| {{ ydb-ui-name }} | [Справка](../../../reference/ydb-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Инструкция](../dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | JetBrains Database viewer |  —  | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | [JetBrains DataGrip](https://www.jetbrains.com/ru-ru/datagrip/) | [Инструкция](../datagrip.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 | Другие JDBC-совместимые IDE | — | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| [Visual Studio Code](https://code.visualstudio.com) | [Инструкция](../vscode-plugin.md) | С помощью [YDB for VS Code](https://github.com/ydb-platform/ydb-vscode-plugin) |
 | [Jupyter Notebook](https://jupyter.org) | [Инструкция](../jupyter.md) | С помощью [YDB-SQLAlchemy](https://github.com/ydb-platform/ydb-sqlalchemy/releases)|

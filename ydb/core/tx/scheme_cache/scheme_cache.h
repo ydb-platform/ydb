@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -48,12 +48,7 @@ struct TSchemeCacheConfig : public TThrRefBase {
 
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
-
-    struct TUser {
-        TString Sid;
-
-        TString ToString() const;
-    };
+    using THashInitParams = std::unordered_map<NLoginProto::EHashType::HashType, std::string>;
 
     struct TGroup {
         TString Sid;
@@ -69,12 +64,12 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     {}
 
     explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
-        : DomainKey(GetDomainKey(descr.GetDomainKey()))
+        : DomainKey(TPathId::FromDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
     {
         if (descr.HasResourcesDomainKey()) {
-            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
+            ResourcesDomainKey = TPathId::FromDomainKey(descr.GetResourcesDomainKey());
         } else {
             ResourcesDomainKey = DomainKey;
         }
@@ -90,9 +85,15 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasSecurityState()) {
             for (const auto& sid : descr.GetSecurityState().GetSids()) {
                 switch (sid.GetType()) {
-                case NLoginProto::ESidType_SidType_USER:
-                    Users.emplace_back(sid.GetName());
+                case NLoginProto::ESidType_SidType_USER: {
+                    THashInitParams userHashesInitParams;
+                    userHashesInitParams.reserve(sid.HashesInitParamsSize());
+                    for (const auto& hashInitParams : sid.GetHashesInitParams()) {
+                        userHashesInitParams.emplace(hashInitParams.GetHashType(), hashInitParams.GetInitParams());
+                    }
+                    Users.emplace(sid.GetName(), std::move(userHashesInitParams));
                     break;
+                }
                 case NLoginProto::ESidType_SidType_GROUP: {
                     TVector<TString> members(sid.GetMembers().begin(), sid.GetMembers().end());
                     Groups.emplace_back(sid.GetName(), std::move(members));
@@ -129,23 +130,32 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         return DomainKey != ResourcesDomainKey;
     }
 
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
     ui64 SharedHiveId = 0;
-    TVector<TUser> Users;
+    std::unordered_map<std::string, THashInitParams> Users;
     TVector<TGroup> Groups;
 
     TString ToString() const;
 
-private:
-    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) {
-        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId());
-    }
-
 }; // TDomainInfo
+
+enum class ETableKind {
+    KindUnknown = 0,
+    KindRegularTable = 1,
+    KindSyncIndexTable = 2,
+    KindAsyncIndexTable = 3,
+    KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
+    KindJsonIndexTable = 6,
+};
 
 struct TSchemeCacheNavigate {
     enum class EStatus {
@@ -194,6 +204,10 @@ struct TSchemeCacheNavigate {
         KindResourcePool = 22,
         KindBackupCollection = 23,
         KindTransfer = 24,
+        KindSysView = 25,
+        KindSecret = 26,
+        KindStreamingQuery = 27,
+        KindTestShardSet = 28,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -315,6 +329,26 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TBackupCollectionDescription Description;
     };
 
+    struct TSysViewInfo : public TAtomicRefCount<TSysViewInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSysViewDescription Description;
+    };
+
+    struct TSecretInfo : public TAtomicRefCount<TSecretInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSecretDescription Description;
+    };
+
+    struct TStreamingQueryInfo : public TAtomicRefCount<TStreamingQueryInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TStreamingQueryDescription Description;
+    };
+
+    struct TTestShardSetInfo : public TAtomicRefCount<TTestShardSetInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TTestShardSetDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -346,9 +380,12 @@ struct TSchemeCacheNavigate {
         THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
+        THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
+        TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
+        ETableKind TableKind = ETableKind::KindUnknown;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
@@ -369,6 +406,10 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
         TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
+        TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
+        TIntrusiveConstPtr<TSecretInfo> SecretInfo;
+        TIntrusiveConstPtr<TStreamingQueryInfo> StreamingQueryInfo;
+        TIntrusiveConstPtr<TTestShardSetInfo> TestShardSetInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
@@ -416,14 +457,6 @@ struct TSchemeCacheRequest {
         OpScheme = 1 << 3,
     };
 
-    enum EKind {
-        KindUnknown = 0,
-        KindRegularTable = 1,
-        KindSyncIndexTable = 2,
-        KindAsyncIndexTable = 3,
-        KindVectorIndexTable = 4,
-    };
-
     struct TEntry {
         // in
         THolder<TKeyDesc> KeyDescription;
@@ -433,7 +466,7 @@ struct TSchemeCacheRequest {
 
         // out
         EStatus Status = EStatus::Unknown;
-        EKind Kind = EKind::KindUnknown;
+        ETableKind Kind = ETableKind::KindUnknown;
         TIntrusivePtr<TDomainInfo> DomainInfo;
         ui64 GeneralVersion = 0;
 
@@ -460,40 +493,6 @@ struct TSchemeCacheRequest {
     TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
 
 }; // TSchemeCacheRequest
-
-struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
-    TActorId Sender;
-    ui64 Cookie;
-    ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheRequest> Request;
-    const TInstant CreatedAt;
-    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
-
-    TSchemeCacheRequestContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
-        : Sender(sender)
-        , Cookie(cookie)
-        , WaitCounter(0)
-        , Request(request)
-        , CreatedAt(now)
-    {}
-};
-
-struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
-    TActorId Sender;
-    ui64 Cookie;
-    ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheNavigate> Request;
-    const TInstant CreatedAt;
-    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
-
-    TSchemeCacheNavigateContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
-        : Sender(sender)
-        , Cookie(cookie)
-        , WaitCounter(0)
-        , Request(request)
-        , CreatedAt(now)
-    {}
-};
 
 class TDescribeResult
     : public TAtomicRefCount<TDescribeResult>

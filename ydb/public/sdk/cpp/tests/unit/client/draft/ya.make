@@ -1,10 +1,8 @@
 UNITTEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -12,6 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    library/cpp/testing/common
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/tests/unit/client/draft/helpers
 )
@@ -19,6 +18,7 @@ PEERDIR(
 SRCS(
     ydb_scripting_response_headers_ut.cpp
     ydb_view_ut.cpp
+    ydb_udf_ut.cpp
 )
 
 END()

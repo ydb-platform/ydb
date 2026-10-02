@@ -15,7 +15,7 @@
 #include <boost/filesystem/config.hpp>
 #include <boost/filesystem/path.hpp>
 #include <cstdio>
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 #include <wchar.h>
 #include <cstddef>
 #include <cstring>
@@ -27,12 +27,12 @@
 namespace boost {
 namespace filesystem {
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 {
-#if defined(__CYGWIN__) || (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR) && defined(__STRICT_ANSI__))
-    // Cygwin and MinGW32 in strict ANSI mode do not declare _wfopen
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR) && defined(__STRICT_ANSI__)
+    // MinGW32 in strict ANSI mode does not declare _wfopen
     return std::fopen(p.string().c_str(), mode);
 #else
     // mode should only contain ASCII characters and is likely short
@@ -70,14 +70,14 @@ inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 #endif
 }
 
-#else // defined(BOOST_WINDOWS_API)
+#else // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 {
     return std::fopen(p.c_str(), mode);
 }
 
-#endif // defined(BOOST_WINDOWS_API)
+#endif // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 } // namespace filesystem
 } // namespace boost

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h>
 
-namespace NYdb::inline V3::NDataStreams::V1 {
+namespace NYdb::inline Dev::NDataStreams::V1 {
 
     template<class TProtoResult>
     class TProtoResultWrapper : public NYdb::TStatus {

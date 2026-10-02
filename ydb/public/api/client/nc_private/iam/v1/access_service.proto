@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/nc_private/iam/v1/access.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "AccessServiceProto";
+option java_package = "ai.nebius.iam.access.api.priv.v1";
+
+service AccessService {
+  option (api_service_name) = "access.iam";
+  option (audit.service_audit).disabled.reason = "DPL service does not require audit";
+
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse); // Avoid building your own authorization based on the returned accounts, use Authorize method.
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+}
+
+message AuthenticateRequest {
+  oneof credentials {
+    string iam_token = 1 [(nebius.credentials) = true]; // Good old IAM token, signed by our token service. Avoid storing it as its both expiring and dangerous to leak
+    AwsCompatibleSignature aws_compatible_signature = 2; // For AWS compatible interface in our s3-compatible storage.
+    AnonymousCredential anonymous_credential = 3; // for publicly available endpoints. Anonymous group permissions will be accessible here. https://docs.nebius.dev/en/iam/for-services/pseudogroups
+  }
+}
+
+message AuthenticateResponse {
+  ResultCode resultCode = 1;
+  Account account = 2;
+  google.protobuf.Timestamp session_expires_at = 3;
+
+  enum ResultCode {
+    OK = 0; // authentication was successful.
+    UNKNOWN_SUBJECT = 1; // if the subject: doesn't exist, deleted, not found or account doesn't exist in the tenant owning the resource.
+    INVALID_TOKEN = 2; // The iam_token is not valid. It has an invalid length, invalid signature, etc.
+  }
+}
+
+message AuthorizeRequest {
+  map<int64, AuthorizeCheck> checks = 1; // A list of authorization checks. You can mix different subject identifiers for authorization here, but only a single one is expected to be clients
+  bool validate_taxonomy_integrity = 10; // Validate taxonomy of all checks. Taxonomy checks that provided managed_resource_id and resource_path are built according to iam metadata hierarchy. If taxonomy is incorrect INVALID_ARGUMENT is thrown.
+}
+
+message AuthorizeResponse {
+  map<int64, AuthorizeResult> results = 1; // A list of authorization check results. Indexes in the map will match the indexes in the AuthorizeRequest
+}
+
+message AuthorizeCheck {
+  Permission permission = 1; // A valid IAM permission to check. Permission will be checked based on subject existing roles, so it has to be included in metadata to work
+
+  // this field is to be renamed into managed_resource_id, which will better inform about its semantics
+  string managed_resource_id = 2; // A valid IAM container where the resource is located in OR the resource id itself in case its IAM managed resource. Access Service WILL check that this container/resource actually exists and its status is correct.
+
+  ResourcePath resource_path = 3; // Resource path down from the container to your resource. Its your service responsibility to check the validity of resource path. Access service will not validate it, as it has no knowledge of your resources
+
+  oneof identifier {
+    string iam_token = 4 [(credentials) = true]; // Good old IAM token, signed by our token service. Avoid storing it as its both expiring and dangerous to leak
+    Account account = 5  [deprecated = true]; // Already authenticated account. We consider this API dangerous and error-prone.
+    AwsCompatibleSignature aws_compatible_signature = 6; // For AWS compatible interface in our s3-compatible storage.
+    AnonymousCredential anonymous_credential = 7; // for publicly available endpoints. Anonymous group permissions will be accessible here. https://docs.nebius.dev/en/iam/for-services/pseudogroups
+  }
+
+  /*
+    Whether the passed identifier is initial request identifier (the party which initiated the request, usually the user).
+    In case there are multiple checks for the same subject identifier, you should set this field to the same value in all of them.
+    AS will return bad request in case there are multiple different identifiers marked as initial request identifier
+    This field does not affect authorization in any way, it only affects the same field in the returned response
+   */
+  bool identifier_is_initial_request_identifier = 8;
+
+  /*
+   Validate if managed_resource_id is missing in the request or the path is not traversable up to the root.
+   If check fails, then PERMISSION_DENIED will be in AuthorizeResult.status for corresponding AuthorizeCheck.
+   NOTE: By default, resource integrity is always checked, but in some corner cases(for example, fallback on root scenario) it's not.
+   Property ensures, that managed_resource_id's integrity is validated even for corner case scenarios.
+   */
+  bool ensure_managed_resource_id_integrity = 9 [deprecated = true];
+
+}
+
+message AuthorizeResult {
+  ResultCode resultCode = 1; // The result of authorization with more details. Avoid returning this to user.
+  Account account = 2;  // The account authorized for this request
+  AuthorizeStatus status = 3; // The result of authorization. Safe to return to user.
+  ImpersonationInfo impersonation_info = 4; // The chain of impersonations which lead to the token
+
+  message AuthorizeStatus {
+    AuthorizeStatusCode code = 1;
+    string message = 2;
+
+    enum AuthorizeStatusCode {
+      UNSPECIFIED = 0;
+      OK = 1; // Access granted
+      PERMISSION_DENIED = 2; // Authenticated, but permission was denied
+      UNAUTHENTICATED = 3; // Authentication failed so do not know which subject to check permisions for
+    }
+
+    bool identifier_is_initial_request_identifier = 7; // this field will be set based on the same field in AuthorizeCheck.
+  }
+
+  enum ResultCode {
+    OK = 0; // Access granted.
+    PERMISSION_DENIED = 1; // Authenticated, but permission was denied
+    UNKNOWN_SUBJECT = 2; // if the subject: doesn't exist, deleted, not found or account doesn't exist in the tenant owning the resource.
+    INVALID_TOKEN = 3; // The iam_token is not valid. It has an invalid length, invalid signature, etc.
+  }
+}
+
+message AwsCompatibleSignature {
+  string aws_access_key_id = 1;
+  string string_to_sign = 2;
+  string signature = 3 [(sensitive) = true];
+  AmzSignatureV4KeyParams sign_key_params = 4;
+}
+
+message AmzSignatureV4KeyParams {
+  google.protobuf.Timestamp amz_date = 1;
+  string amz_region = 2;
+  string amz_service = 3;
+}
+
+message AnonymousCredential {
+}
+
+message ImpersonationInfo {
+  repeated ImpersonationAccount chain = 1;
+
+  message ImpersonationAccount {
+    repeated Account account = 1;
+  }
+}

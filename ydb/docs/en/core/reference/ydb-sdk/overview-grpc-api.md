@@ -4,4 +4,4 @@
 
 The following services are available:
 
-* [{#T}](health-check-api.md).
+* [Health Check API](health-check-api.md).

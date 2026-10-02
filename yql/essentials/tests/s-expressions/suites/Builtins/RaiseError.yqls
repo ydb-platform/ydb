@@ -1,0 +1,9 @@
+# /* custom error: foo */
+(
+(let res_sink (DataSink 'result))
+
+(let world (Write! world res_sink (Key) (RaiseError 'foo)  '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

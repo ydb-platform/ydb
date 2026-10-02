@@ -4,9 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -22,6 +22,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    consumer_collection_ut.cpp
     memory_controller_ut.cpp
     memtable_collection_ut.cpp
 )

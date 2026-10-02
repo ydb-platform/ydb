@@ -1,5 +1,7 @@
 #include "tx_draft.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_WRITE
+
 namespace NKikimr::NColumnShard {
 
 bool TTxWriteDraft::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -13,6 +15,8 @@ bool TTxWriteDraft::Execute(TTransactionContext& txc, const TActorContext& /*ctx
 
 void TTxWriteDraft::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxWriteDraft::Complete");
+    YDB_LOG_DEBUG("",
+        {"event", "draft_completed"});
     Completed = true;
     for (auto&& action : WriteController->GetBlobActions()) {
         action.second->OnCompleteTxBeforeWrite(*Self);
@@ -20,4 +24,4 @@ void TTxWriteDraft::Complete(const TActorContext& ctx) {
     ctx.Register(NColumnShard::CreateWriteActor(Self->TabletID(), WriteController, TInstant::Max()));
 }
 
-}
+}   // namespace NKikimr::NColumnShard

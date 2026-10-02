@@ -83,6 +83,8 @@ re2 = CMakeNinjaNixProject(
         "include/re2": [
             "re2/re2.h",
             "re2/stringpiece.h",
+            "re2/regexp.h",
+            "re2/walker-inl.h",
         ],
         "include/util": [
             "util/logging.h",

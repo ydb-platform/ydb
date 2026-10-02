@@ -58,7 +58,7 @@ Options:
 Перейдите в каталог в исходном коде, который должен быть корневым для вашего проекта. Запустите команду `ya ide`, указав имя IDE, и целевой каталог для записи конфигурации проекта IDE в параметре `-P`. Например, для работы с изменениями библиотеки YQL в vscode вы можете запустить следующую команду:
 
 ```bash
-cd ~/ydbwork/ydb/библиотека/yql
+cd ~/ydbwork/ydb/library/yql
 ya ide vscode -P=~/ydbwork/vscode/yqllib
 ```
 
@@ -92,3 +92,5 @@ ya test ydb/core
 ```
 
 Для запуска medium и large тестов добавьте опции `-tt` и `-ttt` к вызову `ya test` соответственно.
+
+{% include [career](./_includes/career.md) %}

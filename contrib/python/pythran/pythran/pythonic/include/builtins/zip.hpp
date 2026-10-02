@@ -10,8 +10,7 @@ namespace builtins
 {
 
   template <typename... Iter>
-  auto zip(Iter &&...iters) -> decltype(map(builtins::None,
-                                            std::forward<Iter>(iters)...));
+  auto zip(Iter &&...iters) -> decltype(map(builtins::None, std::forward<Iter>(iters)...));
 
   DEFINE_FUNCTOR(pythonic::builtins, zip);
 } // namespace builtins

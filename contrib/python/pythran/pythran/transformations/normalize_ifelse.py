@@ -6,7 +6,7 @@ from pythran.passmanager import Transformation
 import gast as ast
 
 
-class NormalizeIfElse(Transformation):
+class NormalizeIfElse(Transformation[Ancestors]):
     '''
 
     >>> import gast as ast
@@ -46,9 +46,6 @@ class NormalizeIfElse(Transformation):
         else:
             return 2
     '''
-
-    def __init__(self):
-        super(NormalizeIfElse, self).__init__(Ancestors)
 
     def check_lasts(self, node):
         if isinstance(node, (ast.Return, ast.Break, ast.Return)):

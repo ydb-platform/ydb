@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 -- Null handling
 SELECT
     JSON_VALUE (NULL, 'strict $.key'),

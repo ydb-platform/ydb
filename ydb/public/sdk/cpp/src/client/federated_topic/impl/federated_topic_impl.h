@@ -1,18 +1,18 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/common/executor_impl.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/federated_topic/impl/federation_observer.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federation_observer.h>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 class TFederatedTopicClient::TImpl {
 public:
@@ -65,6 +65,8 @@ public:
     std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
+    NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllClusterInfo();
+
     std::shared_ptr<TFederatedDbObserver> GetObserver() {
         std::lock_guard guard(Lock);
         return Observer;
@@ -74,8 +76,8 @@ public:
 
 private:
 
-     // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
-     NTopic::IExecutor::TPtr GetSubsessionHandlersExecutor();
+    // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
+    IExecutor::TPtr GetSubsessionHandlersExecutor();
 
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
@@ -84,9 +86,9 @@ private:
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> ProvidedCodecs =
          std::make_shared<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>>();
 
-    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
+    IExecutor::TPtr SubsessionHandlersExecutor;
 
     TAdaptiveLock Lock;
 };
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

@@ -117,19 +117,19 @@ TFuture<TYsonString> TAsyncYsonWriter::Finish()
             }
         }
 
-        TString result;
+        std::string result;
         result.reserve(length);
         for (const auto& [ysonStr, trailingSeparator] : segments) {
             result.append(ysonStr.AsStringBuf());
             if (trailingSeparator) {
-                result.append(NDetail::ItemSeparatorSymbol);
+                result.push_back(NDetail::ItemSeparatorSymbol);
             }
         }
 
         return TYsonString(result, type);
     });
 
-    return AllSucceeded(AsyncSegments_).ApplyUnique(std::move(callback));
+    return AllSucceeded(AsyncSegments_).AsUnique().Apply(std::move(callback));
 }
 
 const TAsyncYsonWriter::TAsyncSegments& TAsyncYsonWriter::GetSegments() const

@@ -16,7 +16,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #endif
 
-#include "time_zone_libc.h"
+#include "absl/time/internal/cctz/src/time_zone_libc.h"
 
 #include <chrono>
 #include <ctime>
@@ -80,6 +80,15 @@ auto tm_gmtoff(const std::tm& tm) -> decltype(timezone + 0) {
 auto tm_zone(const std::tm& tm) -> decltype(tzname[0]) {
   const bool is_dst = tm.tm_isdst > 0;
   return tzname[is_dst];
+}
+#elif defined(__FREERTOS__) || defined(__ZEPHYR__)
+long int tm_gmtoff(const std::tm& tm) {
+  (void)tm;
+  return 0;
+}
+const char* tm_zone(const std::tm& tm) {
+  (void)tm;
+  return "UTC";
 }
 #else
 // Adapt to different spellings of the struct std::tm extension fields.

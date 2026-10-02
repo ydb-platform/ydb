@@ -12,7 +12,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
-    ydb/core/tx/columnshard/counters/common
+    ydb/library/signals
+    ydb/core/tx/limiter/grouped_memory/tracing
 )
 
 GENERATE_ENUM_SERIALIZATION(allocation.h)

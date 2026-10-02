@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/pack_num.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -45,7 +44,7 @@ void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUd
     }
 }
 
-}
+} // namespace
 
 void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash, TString& out) {
     out.clear();
@@ -54,8 +53,8 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TVector<NUdf::TUnboxedValue> values;
     TraverseGraph(roots, rootCount, values);
 
-    for (ui32 i = 0; i < values.size(); ++i) {
-        auto state = values[i].Save();
+    for (const auto& value : values) {
+        auto state = value.Save();
         if (state.IsString() || state.IsEmbedded()) {
             auto strRef = state.AsStringRef();
             auto size = strRef.Size();
@@ -63,8 +62,7 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
             if (size) {
                 out.AppendNoAlias(strRef.Data(), size);
             }
-        }
-        else if (state.IsBoxed()) {
+        } else if (state.IsBoxed()) {
             TString taskState;
             auto listIt = state.GetListIterator();
             NUdf::TUnboxedValue str;
@@ -84,7 +82,7 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TStringBuf state(in);
 
     MKQL_ENSURE(state.size() >= sizeof(ui64), "Serialized state is corrupted - no hash");
-    ui64 storedHash = *(ui64*)state.data();
+    ui64 storedHash = ReadUnaligned<ui64>(state.data());
     state.Skip(sizeof(storedHash));
 
     MKQL_ENSURE(hash == storedHash, "Unable to load graph state, different hashes");
@@ -92,17 +90,16 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TVector<NUdf::TUnboxedValue> values;
     TraverseGraph(roots, rootCount, values);
 
-    for (ui32 i = 0; i < values.size(); ++i) {
+    for (auto& value : values) {
         auto size = ReadUi64(state);
         if (size) {
             MKQL_ENSURE(size <= state.size(), "Serialized state is corrupted");
-            values[i].Load(NUdf::TStringRef(state.data(), size));
+            value.Load(NUdf::TStringRef(state.data(), size));
             state.Skip(size);
         }
     }
 
-    MKQL_ENSURE(state.size() == 0, "State was not loaded correctly");
+    MKQL_ENSURE(state.empty(), "State was not loaded correctly");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

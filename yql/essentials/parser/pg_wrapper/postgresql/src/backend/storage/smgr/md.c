@@ -577,13 +577,24 @@ mdzeroextend(SMgrRelation reln, ForkNumber forknum,
 		 * that decision should be made though? For now just use a cutoff of
 		 * 8, anything between 4 and 8 worked OK in some local testing.
 		 */
-		if (numblocks > 8)
+		if (numblocks > 8 &&
+			file_extend_method != FILE_EXTEND_METHOD_WRITE_ZEROS)
 		{
-			int			ret;
+			int			ret = 0;
 
-			ret = FileFallocate(v->mdfd_vfd,
-								seekpos, (off_t) BLCKSZ * numblocks,
-								WAIT_EVENT_DATA_FILE_EXTEND);
+#ifdef HAVE_POSIX_FALLOCATE
+			if (file_extend_method == FILE_EXTEND_METHOD_POSIX_FALLOCATE)
+			{
+				ret = FileFallocate(v->mdfd_vfd,
+									seekpos, (off_t) BLCKSZ * numblocks,
+									WAIT_EVENT_DATA_FILE_EXTEND);
+			}
+			else
+#endif
+			{
+				elog(ERROR, "unsupported file_extend_method: %d",
+					 file_extend_method);
+			}
 			if (ret != 0)
 			{
 				ereport(ERROR,
@@ -990,19 +1001,24 @@ mdnblocks(SMgrRelation reln, ForkNumber forknum)
 
 /*
  * mdtruncate() -- Truncate relation to specified number of blocks.
+ *
+ * Guaranteed not to allocate memory, so it can be used in a critical section.
+ * Caller must have called smgrnblocks() to obtain curnblk while holding a
+ * sufficient lock to prevent a change in relation size, and not used any smgr
+ * functions for this relation or handled interrupts in between.  This makes
+ * sure we have opened all active segments, so that truncate loop will get
+ * them all!
+ *
+ * If nblocks > curnblk, the request is ignored when we are InRecovery,
+ * otherwise, an error is raised.
  */
 void
-mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
+mdtruncate(SMgrRelation reln, ForkNumber forknum,
+		   BlockNumber curnblk, BlockNumber nblocks)
 {
-	BlockNumber curnblk;
 	BlockNumber priorblocks;
 	int			curopensegs;
 
-	/*
-	 * NOTE: mdnblocks makes sure we have opened all active segments, so that
-	 * truncation loop will get them all!
-	 */
-	curnblk = mdnblocks(reln, forknum);
 	if (nblocks > curnblk)
 	{
 		/* Bogus request ... but no complaint if InRecovery */
@@ -1298,7 +1314,7 @@ _fdvec_resize(SMgrRelation reln,
 		reln->md_seg_fds[forknum] =
 			MemoryContextAlloc(MdCxt, sizeof(MdfdVec) * nseg);
 	}
-	else
+	else if (nseg > reln->md_num_open_segs[forknum])
 	{
 		/*
 		 * It doesn't seem worthwhile complicating the code to amortize
@@ -1309,6 +1325,16 @@ _fdvec_resize(SMgrRelation reln,
 		reln->md_seg_fds[forknum] =
 			repalloc(reln->md_seg_fds[forknum],
 					 sizeof(MdfdVec) * nseg);
+	}
+	else
+	{
+		/*
+		 * We don't reallocate a smaller array, because we want mdtruncate()
+		 * to be able to promise that it won't allocate memory, so that it is
+		 * allowed in a critical section.  This means that a bit of space in
+		 * the array is now wasted, until the next time we add a segment and
+		 * reallocate.
+		 */
 	}
 
 	reln->md_num_open_segs[forknum] = nseg;

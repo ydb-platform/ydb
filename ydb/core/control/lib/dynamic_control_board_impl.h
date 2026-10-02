@@ -1,0 +1,34 @@
+#pragma once
+
+#include "immediate_control_board_wrapper.h"
+
+#include <ydb/core/util/concurrent_rw_hash.h>
+
+namespace NKikimr {
+
+class TControlBoardTableHtmlRenderer;
+
+class TDynamicControlBoard : public TThrRefBase {
+private:
+    TConcurrentRWHashMap<TString, TIntrusivePtr<TControl>, 16> Board;
+public:
+    bool RegisterLocalControl(TControlWrapper control, TString name);
+
+    bool RegisterSharedControl(TControlWrapper& control, TString name);
+
+    void RestoreDefaults();
+
+    void RestoreDefault(TString name);
+
+    // Restore a named control and report its value transition if it exists.
+    bool RestoreDefault(TString name, TAtomicBase& outPrevValue, TAtomicBase& outNewValue);
+
+    bool SetValue(TString name, TAtomic value, TAtomic &outPrevValue);
+
+    // Only for tests
+    void GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const;
+
+    void RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const;
+};
+
+}

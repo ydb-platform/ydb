@@ -41,19 +41,21 @@ private:
 
     struct THash
     {
-        size_t operator() (const TInternedObjectData<T>* internedData) const;
-        size_t operator() (const T& data) const;
+        size_t operator()(const TWeakPtr<TInternedObjectData<T>>& internedData) const;
+        size_t operator()(const T& data) const;
     };
 
     struct TEqual
     {
-        bool operator() (const TInternedObjectData<T>* lhs, const TInternedObjectData<T>* rhs) const;
-        bool operator() (const TInternedObjectData<T>* lhs, const T& rhs) const;
+        bool operator()(
+            const TWeakPtr<TInternedObjectData<T>>& lhs,
+            const TWeakPtr<TInternedObjectData<T>>& rhs) const;
+        bool operator()(const TWeakPtr<TInternedObjectData<T>>& lhs, const T& rhs) const;
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
 
-    using TProfilerSet = THashSet<TInternedObjectData<T>*, THash, TEqual>;
+    using TProfilerSet = THashSet<TWeakPtr<TInternedObjectData<T>>, THash, TEqual>;
     TProfilerSet Registry_;
 };
 
@@ -91,10 +93,10 @@ public:
     TInternedObject();
 
     TInternedObject(const TInternedObject<T>& other) = default;
-    TInternedObject(TInternedObject<T>&& other) = default;
+    TInternedObject(TInternedObject<T>&& other) noexcept = default;
 
     TInternedObject<T>& operator=(const TInternedObject<T>& other) = default;
-    TInternedObject<T>& operator=(TInternedObject<T>&& other) = default;
+    TInternedObject<T>& operator=(TInternedObject<T>&& other) noexcept = default;
 
     explicit operator bool() const;
 

@@ -1,5 +1,6 @@
 RECURSE(
     bin
+    ut
 )
 
 PY3_LIBRARY(ydbd_slice)
@@ -7,6 +8,10 @@ PY3_LIBRARY(ydbd_slice)
 PY_SRCS(
     __init__.py
     cluster_description.py
+    yaml_configurator.py
+    process_profiles.py
+    config_client.py
+    blobstorage_init.py
     kube/__init__.py
     kube/api.py
     kube/cms.py
@@ -24,6 +29,7 @@ PY_SRCS(
 PEERDIR(
     ydb/tools/cfg
     ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/PyYAML
     contrib/python/ruamel.yaml
     contrib/python/kubernetes

@@ -1,12 +1,12 @@
 #include "yql_yt_ytflow_optimize.h"
 #include "yql_yt_helpers.h"
+#include "yql_yt_table.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 
@@ -15,12 +15,10 @@ namespace NYql {
 using namespace NNodes;
 
 
-class TYtYtflowOptimization: public IYtflowOptimization {
+class TYtYtflowOptimization: public TEmptyYtflowOptimization {
 public:
-    TYtYtflowOptimization(TYtState* state)
-        : State_(state)
+    TYtYtflowOptimization(TYtState::TWeakPtr /*state*/)
     {
-        Y_UNUSED(State_);
     }
 
 public:
@@ -78,7 +76,7 @@ public:
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
 
-        auto* listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
+        auto listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TYtWriteTable>(ctx, write->Pos())
@@ -89,13 +87,10 @@ public:
                 .Build()
             .Done().Ptr();
     }
-
-private:
-    TYtState* State_;
 };
 
-THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowOptimization>(state);
 }
 

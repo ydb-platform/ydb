@@ -48,8 +48,8 @@ TUploadStatus::TUploadStatus(const NKikimrTxDataShard::TError::EKind status, con
         case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
             Code = Ydb::StatusIds::OVERLOADED;
             break;
-        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
-        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
+        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
             Code = Ydb::StatusIds::UNAVAILABLE;
             break;
         case NKikimrTxDataShard::TError::SCHEME_ERROR:
@@ -86,6 +86,7 @@ TUploadCounters::TUploadCounters()
     : TBase("BulkUpsert") {
             RequestsCount = TBase::GetDeriviative("Requests/Count");
             ReplyDuration = TBase::GetHistogram("Replies/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
+            SuccessReplyDuration = TBase::GetHistogram("Replies/SuccessDuration", NMonitoring::ExponentialHistogram(15, 2, 10));
 
             RowsCount = TBase::GetDeriviative("Rows/Count");
             PackageSizeRecordsByRecords = TBase::GetHistogram("ByRecords/PackageSize/Records", NMonitoring::ExponentialHistogram(15, 2, 10));
@@ -95,5 +96,8 @@ TUploadCounters::TUploadCounters()
             WritingDuration = TBase::GetHistogram("Writing/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
             CommitDuration = TBase::GetHistogram("Commit/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
             PrepareReplyDuration = TBase::GetHistogram("ToReply/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
+            WrittenBytes = TBase::GetDeriviative("Replies/WrittenBytes");
+            FailedBytes = TBase::GetDeriviative("Replies/FailedBytes");
+            RequestsBytes = TBase::GetDeriviative("Requests/Bytes");
 }
 }

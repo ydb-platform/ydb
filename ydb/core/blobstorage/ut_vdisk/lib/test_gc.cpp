@@ -1,6 +1,8 @@
 #include "test_gc.h"
 #include "helpers.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -25,7 +27,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                            channel, collect, collectGen, collectStep, Keep, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // read command
     TAutoPtr<IActor> readCmd;
@@ -62,20 +64,20 @@ virtual void Scenario(const TActorContext &ctx) {
                                            channel, collect, collectGen, collectStep, nullptr, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf->VDisks->Get(0)));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // load data
     SyncRunner->Run(ctx, ManyPutsToOneVDisk(SyncRunner->NotifyID(), Conf->VDisks->Get(0), &DataSet, 1,
                                             NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf->VDisks->Get(0)));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // read command
     TAutoPtr<IActor> readCmd;
@@ -83,7 +85,9 @@ virtual void Scenario(const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
         TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "Test: from= to=\n",
+            {"from", from},
+            {"to", to});
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -124,26 +128,26 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
                                                               nullptr, nullptr));
         // set gc settings
         SyncRunner->Run(ctx, gcCommand);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+        YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
         // wait for sync
         SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+        YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
         // wait for compaction
         SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+        YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
 
         // load data
         SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
         // wait for sync
         SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+        YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
         // wait for compaction
         SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+        YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
         // read command
         TAutoPtr<IActor> readCmd;
@@ -151,7 +155,9 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+            YDB_LOG_NOTICE_CTX(ctx, "Test: from= to=\n",
+                {"from", from},
+                {"to", to});
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -194,26 +200,26 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
 
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // read command
     TAutoPtr<IActor> readCmd;
@@ -221,7 +227,9 @@ virtual void Scenario(const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
         TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "Test: from= to=\n",
+            {"from", from},
+            {"to", to});
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -251,14 +259,14 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // prepare gc command
     ui64 tabletID = DefaultTestTabletId;
@@ -272,7 +280,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           channel, collect, collectGen, collectStep, nullptr, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // read until db is empty
     bool done = false;
@@ -282,7 +290,9 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
+            YDB_LOG_NOTICE_CTX(ctx, "Test range",
+                {"from", from},
+                {"to", to});
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -297,7 +307,8 @@ virtual void Scenario(const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_ABORT_UNLESS(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: emptyDb=%s", (done ? "true" : "false"));
+            YDB_LOG_NOTICE_CTX(ctx, "Test: emptyDb",
+                {"emptyDb", done});
         };
         readCmd.Reset(CreateOneGet(SyncRunner->NotifyID(), sendFunc, checkFunc));
         SyncRunner->Run(ctx, readCmd);
@@ -317,14 +328,14 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // prepare gc command
     ui64 tabletID = DefaultTestTabletId;
@@ -338,7 +349,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           channel, collect, collectGen, collectStep, nullptr, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // read until db is empty
     bool done = false;
@@ -348,7 +359,9 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
+            YDB_LOG_NOTICE_CTX(ctx, "Test range",
+                {"from", from},
+                {"to", to});
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -363,7 +376,8 @@ virtual void Scenario(const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_ABORT_UNLESS(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: emptyDb=%s", (done ? "true" : "false"));
+            YDB_LOG_NOTICE_CTX(ctx, "Test: emptyDb",
+                {"emptyDb", done});
         };
         readCmd.Reset(CreateOneGet(SyncRunner->NotifyID(), sendFunc, checkFunc));
         SyncRunner->Run(ctx, readCmd);
@@ -380,7 +394,7 @@ void SendGC(const TActorContext &ctx, const TGCSettings &s) {
     TAutoPtr<IActor> gcCommand;
     gcCommand.Reset(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, s, nullptr, nullptr));
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 }
 
 virtual void Scenario(const TActorContext &ctx) {
@@ -403,22 +417,22 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // wait for sync
 //    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-//    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+//    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
 //    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-//    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+//    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
 /*
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // read command
     TAutoPtr<IActor> readCmd;
@@ -429,7 +443,9 @@ virtual void Scenario(const TActorContext &ctx) {
         req.Reset(new TEvBlobStorage::TEvVGet(instance.VDiskID));
         TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, TLogoBlobID::HashGeneric, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, TLogoBlobID::HashGeneric, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", ~from.ToString(), ~to.ToString());
+        YDB_LOG_NOTICE_CTX(ctx, "Test: from= to=\n",
+            {"from", ~from},
+            {"to", ~to});
         req->AddRangeQuery(from, to, 10, nullptr);
         ctx.Send(instance.ActorID, req.release());
 

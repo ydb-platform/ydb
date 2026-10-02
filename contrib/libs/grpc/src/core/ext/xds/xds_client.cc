@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <functional>
 #include <type_traits>
 
 #include "y_absl/strings/match.h"
@@ -31,7 +32,7 @@
 #include "y_absl/strings/string_view.h"
 #include "y_absl/strings/strip.h"
 #include "y_absl/types/optional.h"
-#include "upb/arena.h"
+#include "upb/mem/arena.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/log.h>
@@ -152,7 +153,8 @@ class XdsClient::ChannelState::AdsCallState
                        y_absl::string_view serialized_resource) override
         Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
-    void ResourceWrapperParsingFailed(size_t idx) override;
+    void ResourceWrapperParsingFailed(size_t idx,
+                                      y_absl::string_view message) override;
 
     Result TakeResult() { return std::move(result_); }
 
@@ -445,8 +447,8 @@ XdsClient::ChannelState::ChannelState(WeakRefCountedPtr<XdsClient> xds_client,
       xds_client_(std::move(xds_client)),
       server_(server) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
-    gpr_log(GPR_INFO, "[xds_client %p] creating channel to %s",
-            xds_client_.get(), server.server_uri().c_str());
+    gpr_log(GPR_INFO, "[xds_client %p] creating channel %p for server %s",
+            xds_client_.get(), this, server.server_uri().c_str());
   }
   y_absl::Status status;
   transport_ = xds_client_->transport_factory_->Create(
@@ -473,6 +475,10 @@ XdsClient::ChannelState::~ChannelState() {
 // called from DualRefCounted::Unref, which cannot have a lock annotation for
 // a lock in this subclass.
 void XdsClient::ChannelState::Orphan() Y_ABSL_NO_THREAD_SAFETY_ANALYSIS {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+    gpr_log(GPR_INFO, "[xds_client %p] orphaning xds channel %p for server %s",
+            xds_client(), this, server_.server_uri().c_str());
+  }
   shutting_down_ = true;
   transport_.reset();
   // At this time, all strong refs are removed, remove from channel map to
@@ -860,23 +866,20 @@ void XdsClient::ChannelState::AdsCallState::AdsResponseParser::ParseResource(
       TString(serialized_resource), result_.version, update_time_);
   // Notify watchers.
   auto& watchers_list = resource_state.watchers;
-  auto* value =
-      result_.type->CopyResource(resource_state.resource.get()).release();
   xds_client()->work_serializer_.Schedule(
-      [watchers_list, value]()
+      [watchers_list, value = resource_state.resource]()
           Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&xds_client()->work_serializer_) {
             for (const auto& p : watchers_list) {
               p.first->OnGenericResourceChanged(value);
             }
-            delete value;
           },
       DEBUG_LOCATION);
 }
 
 void XdsClient::ChannelState::AdsCallState::AdsResponseParser::
-    ResourceWrapperParsingFailed(size_t idx) {
-  result_.errors.emplace_back(y_absl::StrCat(
-      "resource index ", idx, ": Can't decode Resource proto wrapper"));
+    ResourceWrapperParsingFailed(size_t idx, y_absl::string_view message) {
+  result_.errors.emplace_back(
+      y_absl::StrCat("resource index ", idx, ": ", message));
 }
 
 //
@@ -1208,6 +1211,11 @@ void XdsClient::ChannelState::LrsCallState::Reporter::Orphan() {
 
 void XdsClient::ChannelState::LrsCallState::Reporter::
     ScheduleNextReportLocked() {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+    gpr_log(GPR_INFO,
+            "[xds_client %p] xds server %s: scheduling load report timer",
+            xds_client(), parent_->chand()->server_.server_uri().c_str());
+  }
   timer_handle_ = xds_client()->engine()->RunAfter(report_interval_, [this]() {
     ApplicationCallbackExecCtx callback_exec_ctx;
     ExecCtx exec_ctx;
@@ -1354,6 +1362,10 @@ void XdsClient::ChannelState::LrsCallState::MaybeStartReportingLocked() {
     return;
   }
   // Start reporting.
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+    gpr_log(GPR_INFO, "[xds_client %p] xds server %s: creating load reporter",
+            xds_client(), chand()->server_.server_uri().c_str());
+  }
   reporter_ = MakeOrphanable<Reporter>(
       Ref(DEBUG_LOCATION, "LRS+load_report+start"), load_reporting_interval_);
 }
@@ -1480,6 +1492,7 @@ XdsClient::XdsClient(
       xds_federation_enabled_(XdsFederationEnabled()),
       api_(this, &grpc_xds_client_trace, bootstrap_->node(), &symtab_,
            std::move(user_agent_name), std::move(user_agent_version)),
+      work_serializer_(engine),
       engine_(std::move(engine)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
     gpr_log(GPR_INFO, "[xds_client %p] creating xds client", this);
@@ -1566,6 +1579,14 @@ void XdsClient::WatchResource(const XdsResourceType* type,
     xds_server = authority->server();
   }
   if (xds_server == nullptr) xds_server = &bootstrap_->server();
+  // Canonify the xDS server instance, so that we make sure we're using
+  // the same instance as will be used in AddClusterDropStats() and
+  // AddClusterLocalityStats().  This may yield a different result than
+  // the logic above if the same server is listed both in the authority
+  // and as the top-level server.
+  // TODO(roth): This is really ugly -- need to find a better way to
+  // index the xDS server than by address here.
+  xds_server = bootstrap_->FindXdsServer(*xds_server);
   {
     MutexLock lock(&mu_);
     MaybeRegisterResourceTypeLocked(type);
@@ -1582,12 +1603,11 @@ void XdsClient::WatchResource(const XdsResourceType* type,
                 "[xds_client %p] returning cached listener data for %s", this,
                 TString(name).c_str());
       }
-      auto* value = type->CopyResource(resource_state.resource.get()).release();
       work_serializer_.Schedule(
-          [watcher, value]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
-            watcher->OnGenericResourceChanged(value);
-            delete value;
-          },
+          [watcher, value = resource_state.resource]()
+              Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
+                watcher->OnGenericResourceChanged(value);
+              },
           DEBUG_LOCATION);
     } else if (resource_state.meta.client_status ==
                XdsApi::ResourceMetadata::DOES_NOT_EXIST) {

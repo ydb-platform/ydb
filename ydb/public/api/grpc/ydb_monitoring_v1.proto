@@ -10,4 +10,6 @@ service MonitoringService {
     rpc SelfCheck(Monitoring.SelfCheckRequest) returns (Monitoring.SelfCheckResponse);
     // Checks current node health
     rpc NodeCheck(Monitoring.NodeCheckRequest) returns (Monitoring.NodeCheckResponse);
+    // Get cluster state
+    rpc ClusterState(Monitoring.ClusterStateRequest) returns (Monitoring.ClusterStateResponse);
 }

@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import glob
 import inspect
 import platform
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar, cast
-
-import setuptools
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..dist import Distribution
 from ..warnings import SetuptoolsDeprecationWarning, SetuptoolsWarning
-from .bdist_egg import bdist_egg as bdist_egg_cls
 
 import distutils.command.install as orig
 from distutils.errors import DistutilsArgError
@@ -26,7 +22,7 @@ def __getattr__(name: str):  # pragma: no cover
     if name == "_install":
         SetuptoolsDeprecationWarning.emit(
             "`setuptools.command._install` was an internal implementation detail "
-            + "that was left in for numpy<1.9 support.",
+            "that was left in for numpy<1.9 support.",
             due_date=(2025, 5, 2),  # Originally added on 2024-11-01
         )
         return orig.install
@@ -67,9 +63,7 @@ class install(orig.install):
             standards-based tools.
             """,
             see_url="https://blog.ganssle.io/articles/2021/10/setup-py-deprecated.html",
-            # TODO: Document how to bootstrap setuptools without install
-            #       (e.g. by unziping the wheel file)
-            #       and then add a due_date to this warning.
+            due_date=(2025, 10, 31),
         )
 
         super().initialize_options()
@@ -95,19 +89,6 @@ class install(orig.install):
         # command without --root or --single-version-externally-managed
         self.path_file = None
         self.extra_dirs = ''
-        return None
-
-    def run(self):
-        # Explicit request for old-style install?  Just do it
-        if self.old_and_unmanageable or self.single_version_externally_managed:
-            return super().run()
-
-        if not self._called_from_setup(inspect.currentframe()):
-            # Run in backward-compatibility mode to support bdist_* commands.
-            super().run()
-        else:
-            self.do_egg_install()
-
         return None
 
     @staticmethod
@@ -142,39 +123,6 @@ class install(orig.install):
             return caller_module == 'distutils.dist' and info.function == 'run_commands'
 
         return False
-
-    def do_egg_install(self) -> None:
-        easy_install = self.distribution.get_command_class('easy_install')
-
-        cmd = cast(
-            # We'd want to cast easy_install as type[easy_install_cls] but a bug in
-            # mypy makes it think easy_install() returns a Command on Python 3.12+
-            # https://github.com/python/mypy/issues/18088
-            easy_install_cls,
-            easy_install(  # type: ignore[call-arg]
-                self.distribution,
-                args="x",
-                root=self.root,
-                record=self.record,
-            ),
-        )
-        cmd.ensure_finalized()  # finalize before bdist_egg munges install cmd
-        cmd.always_copy_from = '.'  # make sure local-dir eggs get installed
-
-        # pick up setup-dir .egg files only: no .egg-info
-        cmd.package_index.scan(glob.glob('*.egg'))
-
-        self.run_command('bdist_egg')
-        bdist_egg = cast(bdist_egg_cls, self.distribution.get_command_obj('bdist_egg'))
-        args = [bdist_egg.egg_output]
-
-        if setuptools.bootstrap_install_from:
-            # Bootstrap self-installation of setuptools
-            args.insert(0, setuptools.bootstrap_install_from)
-
-        cmd.args = args
-        cmd.run(show_deprecation=False)
-        setuptools.bootstrap_install_from = None
 
 
 # XXX Python 3.1 doesn't see _nc if this is inside the class

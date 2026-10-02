@@ -7,6 +7,7 @@
 #include "flat_sausage_packet.h"
 #include "flat_part_loader.h"
 #include "flat_dbase_naked.h"
+#include "util_fmt_abort.h"
 
 #include <util/generic/xrange.h>
 
@@ -16,8 +17,6 @@ namespace NBoot {
 
     class TBundleLoadStep final: public NBoot::IStep {
     public:
-        using TCache = TPrivatePageCache::TInfo;
-
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Bundle;
 
         TBundleLoadStep() = delete;
@@ -35,14 +34,17 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
-            PageCollections.resize(LargeGlobIds.size());
+            Prebuilt.resize(LargeGlobIds.size());
+            Components.resize(LargeGlobIds.size());
 
             for (auto slot: xrange(LargeGlobIds.size())) {
-                if (auto *info = Back->PageCaches.FindPtr(LargeGlobIds[slot].Lead)) {
-                    PageCollections[slot] = *info;
+                if (auto *cached = Back->PageCollections.FindPtr(LargeGlobIds[slot].Lead)) {
+                    // Use existing cached collection as prebuilt
+                    Prebuilt[slot] = *cached;
                 } else {
+                    Prebuilt[slot] = nullptr;
                     LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
                 }
             }
@@ -50,14 +52,14 @@ namespace NBoot {
             TryLoad();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) noexcept override
+        bool HandleBio(NSharedCache::TEvResult &msg) override
         {
-            Y_ABORT_UNLESS(Loader, "PageCollections loader got un unexpected pages fetch");
+            Y_ENSURE(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(msg.Cookie, msg.Loaded);
+                Loader->Save(std::move(msg.Pages));
 
                 TryFinalize();
 
@@ -70,20 +72,20 @@ namespace NBoot {
             return msg.Status == NKikimrProto::OK;
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 
             if (Loader) {
-                Y_ABORT("Got an unexpected load blobs result");
-            } else if (load->Cookie >= PageCollections.size()) {
-                Y_ABORT("Got blobs load step with an invalid cookie");
-            } else if (PageCollections[load->Cookie]) {
-                Y_ABORT("Page collection is already loaded at room %zu", load->Cookie);
+                Y_TABLET_ERROR("Got an unexpected load blobs result");
+            } else if (load->Cookie >= LargeGlobIds.size()) {
+                Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
+            } else if (Prebuilt[load->Cookie]) {
+                Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
             } else {
-                auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
-
-                PageCollections[load->Cookie] = new TPrivatePageCache::TInfo(pack);
+                // StageParseMeta constructs both NPageCollection::TPageCollection and TPrivatePageCache::TPageCollection
+                Components[load->Cookie].LargeGlobId = load->LargeGlobId;
+                Components[load->Cookie].RawMeta = load->PlainData();
             }
 
             TryLoad();
@@ -93,12 +95,16 @@ namespace NBoot {
         void TryLoad()
         {
             if (!LeftMetas) {
-                Loader = new NTable::TLoader(
-                    std::move(PageCollections),
-                    std::move(Legacy),
-                    std::move(Opaque),
-                    std::move(Deltas),
-                    Epoch);
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(Components),
+                    .Legacy = std::move(Legacy),
+                    .Opaque = std::move(Opaque),
+                    .Deltas = std::move(Deltas),
+                    .Epoch = Epoch,
+                };
+
+                // Pass pre-built collections — StageParseMeta fills null slots from components
+                Loader = new NTable::TLoader(std::move(parts), std::move(Prebuilt));
 
                 TryFinalize();
             }
@@ -107,8 +113,8 @@ namespace NBoot {
         void TryFinalize()
         {
             if (!LeftReads) {
-                for (auto req : Loader->Run(false)) {
-                    LeftReads += Logic->LoadPages(this, req);
+                if (auto fetch = Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
+                    LeftReads += Logic->LoadPages(this, std::move(fetch));
                 }
             }
 
@@ -135,19 +141,23 @@ namespace NBoot {
 
         void PropagateSideEffects(const NTable::TPartView &partView)
         {
-            for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
-                Logic->Result().PageCaches.push_back(cache);
+            for (auto &pageCollection : partView.As<NTable::TPartStore>()->PageCollections)
+                Logic->Result().PageCollections.push_back(pageCollection);
 
-            if (auto &cache = partView.As<NTable::TPartStore>()->Pseudo)
-                Logic->Result().PageCaches.push_back(cache);
+            if (auto &pageCollection = partView.As<NTable::TPartStore>()->Pseudo)
+                Logic->Result().PageCollections.push_back(pageCollection);
         }
 
     private:
+        using TPageCollection = TPrivatePageCache::TPageCollection;
+
         const ui32 Table = Max<ui32>();
 
         TAutoPtr<NTable::TLoader> Loader;
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-        TVector<TIntrusivePtr<TCache>> PageCollections;
+        TVector<NTable::TPageCollectionComponents> Components;
+        // Pre-built TPrivatePageCache::TPageCollection for slots found in Back->PageCollections cache
+        TVector<TIntrusivePtr<TPageCollection>> Prebuilt;
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;

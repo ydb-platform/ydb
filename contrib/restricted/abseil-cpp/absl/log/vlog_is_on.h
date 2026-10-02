@@ -40,6 +40,8 @@
 // last . and everything after it) is stripped from each filename prior to
 // matching, as is the special suffix "-inl".
 //
+// Example: --vmodule=module_a=1,module_b=2
+//
 // Files are matched against globs in `--vmodule` in order, and the first match
 // determines the verbosity level.
 //
@@ -57,8 +59,6 @@
 #define ABSL_LOG_VLOG_IS_ON_H_
 
 #include "absl/log/absl_vlog_is_on.h"  // IWYU pragma: export
-
-// IWYU pragma: private, include "absl/log/log.h"
 
 // Each VLOG_IS_ON call site gets its own VLogSite that registers with the
 // global linked list of sites to asynchronously update its verbosity level on

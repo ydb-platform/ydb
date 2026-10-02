@@ -229,7 +229,7 @@ namespace boost { namespace xpressive { namespace detail
 } // namespace detail
 
 /// INTERNAL ONLY (for backwards compatibility)
-unsigned int const repeat_max = UINT_MAX-1;
+BOOST_INLINE_CONSTEXPR unsigned int repeat_max = UINT_MAX-1;
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief For infinite repetition of a sub-expression.
@@ -237,17 +237,17 @@ unsigned int const repeat_max = UINT_MAX-1;
 /// Magic value used with the repeat\<\>() function template
 /// to specify an unbounded repeat. Use as: repeat<17, inf>('a').
 /// The equivalent in perl is /a{17,}/.
-unsigned int const inf = UINT_MAX-1;
+BOOST_INLINE_CONSTEXPR unsigned int inf = UINT_MAX-1;
 
 /// INTERNAL ONLY (for backwards compatibility)
-proto::terminal<detail::epsilon_matcher>::type const epsilon = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::epsilon_matcher>::type epsilon = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Successfully matches nothing.
 ///
 /// Successfully matches a zero-width sequence. nil always succeeds and
 /// never consumes any characters.
-proto::terminal<detail::epsilon_matcher>::type const nil = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::epsilon_matcher>::type nil = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches an alpha-numeric character.
@@ -257,7 +257,7 @@ proto::terminal<detail::epsilon_matcher>::type const nil = {{}};
 ///
 /// \attention alnum is equivalent to /[[:alnum:]]/ in perl. ~alnum is equivalent
 /// to /[[:^alnum:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const alnum = {{"alnum", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type alnum = {{"alnum", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches an alphabetic character.
@@ -267,7 +267,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const alnum = {{"alnum"
 ///
 /// \attention alpha is equivalent to /[[:alpha:]]/ in perl. ~alpha is equivalent
 /// to /[[:^alpha:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const alpha = {{"alpha", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type alpha = {{"alpha", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a blank (horizonal white-space) character.
@@ -277,7 +277,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const alpha = {{"alpha"
 ///
 /// \attention blank is equivalent to /[[:blank:]]/ in perl. ~blank is equivalent
 /// to /[[:^blank:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const blank = {{"blank", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type blank = {{"blank", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a control character.
@@ -287,7 +287,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const blank = {{"blank"
 ///
 /// \attention cntrl is equivalent to /[[:cntrl:]]/ in perl. ~cntrl is equivalent
 /// to /[[:^cntrl:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const cntrl = {{"cntrl", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type cntrl = {{"cntrl", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a digit character.
@@ -297,7 +297,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const cntrl = {{"cntrl"
 ///
 /// \attention digit is equivalent to /[[:digit:]]/ in perl. ~digit is equivalent
 /// to /[[:^digit:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const digit = {{"digit", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type digit = {{"digit", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a graph character.
@@ -307,7 +307,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const digit = {{"digit"
 ///
 /// \attention graph is equivalent to /[[:graph:]]/ in perl. ~graph is equivalent
 /// to /[[:^graph:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const graph = {{"graph", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type graph = {{"graph", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a lower-case character.
@@ -317,7 +317,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const graph = {{"graph"
 ///
 /// \attention lower is equivalent to /[[:lower:]]/ in perl. ~lower is equivalent
 /// to /[[:^lower:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const lower = {{"lower", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type lower = {{"lower", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a printable character.
@@ -327,7 +327,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const lower = {{"lower"
 ///
 /// \attention print is equivalent to /[[:print:]]/ in perl. ~print is equivalent
 /// to /[[:^print:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const print = {{"print", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type print = {{"print", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a punctuation character.
@@ -337,7 +337,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const print = {{"print"
 ///
 /// \attention punct is equivalent to /[[:punct:]]/ in perl. ~punct is equivalent
 /// to /[[:^punct:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const punct = {{"punct", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type punct = {{"punct", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a space character.
@@ -347,7 +347,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const punct = {{"punct"
 ///
 /// \attention space is equivalent to /[[:space:]]/ in perl. ~space is equivalent
 /// to /[[:^space:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const space = {{"space", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type space = {{"space", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches an upper-case character.
@@ -357,7 +357,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const space = {{"space"
 ///
 /// \attention upper is equivalent to /[[:upper:]]/ in perl. ~upper is equivalent
 /// to /[[:^upper:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const upper = {{"upper", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type upper = {{"upper", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a hexadecimal digit character.
@@ -367,14 +367,14 @@ proto::terminal<detail::posix_charset_placeholder>::type const upper = {{"upper"
 ///
 /// \attention xdigit is equivalent to /[[:xdigit:]]/ in perl. ~xdigit is equivalent
 /// to /[[:^xdigit:]]/ in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const xdigit = {{"xdigit", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type xdigit = {{"xdigit", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Beginning of sequence assertion.
 ///
 /// For the character sequence [begin, end), 'bos' matches the
 /// zero-width sub-sequence [begin, begin).
-proto::terminal<detail::assert_bos_matcher>::type const bos = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_bos_matcher>::type bos = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief End of sequence assertion.
@@ -385,7 +385,7 @@ proto::terminal<detail::assert_bos_matcher>::type const bos = {{}};
 /// \attention Unlike the perl end of sequence assertion \$, 'eos' will
 /// not match at the position [end-1, end-1) if *(end-1) is '\\n'. To
 /// get that behavior, use (!_n >> eos).
-proto::terminal<detail::assert_eos_matcher>::type const eos = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_eos_matcher>::type eos = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Beginning of line assertion.
@@ -393,7 +393,7 @@ proto::terminal<detail::assert_eos_matcher>::type const eos = {{}};
 /// 'bol' matches the zero-width sub-sequence
 /// immediately following a logical newline sequence. The regex traits
 /// is used to determine what constitutes a logical newline sequence.
-proto::terminal<detail::assert_bol_placeholder>::type const bol = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_bol_placeholder>::type bol = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief End of line assertion.
@@ -401,7 +401,7 @@ proto::terminal<detail::assert_bol_placeholder>::type const bol = {{}};
 /// 'eol' matches the zero-width sub-sequence
 /// immediately preceeding a logical newline sequence. The regex traits
 /// is used to determine what constitutes a logical newline sequence.
-proto::terminal<detail::assert_eol_placeholder>::type const eol = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_eol_placeholder>::type eol = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Beginning of word assertion.
@@ -409,7 +409,7 @@ proto::terminal<detail::assert_eol_placeholder>::type const eol = {{}};
 /// 'bow' matches the zero-width sub-sequence
 /// immediately following a non-word character and preceeding a word character.
 /// The regex traits are used to determine what constitutes a word character.
-proto::terminal<detail::assert_word_begin>::type const bow = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_begin>::type bow = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief End of word assertion.
@@ -417,7 +417,7 @@ proto::terminal<detail::assert_word_begin>::type const bow = {{}};
 /// 'eow' matches the zero-width sub-sequence
 /// immediately following a word character and preceeding a non-word character.
 /// The regex traits are used to determine what constitutes a word character.
-proto::terminal<detail::assert_word_end>::type const eow = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_end>::type eow = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Word boundary assertion.
@@ -427,7 +427,7 @@ proto::terminal<detail::assert_word_end>::type const eow = {{}};
 /// constitutes a word character. To match a non-word boundary, use ~_b.
 ///
 /// \attention _b is like \\b in perl. ~_b is like \\B in perl.
-proto::terminal<detail::assert_word_boundary>::type const _b = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_boundary>::type _b = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a word character.
@@ -437,7 +437,7 @@ proto::terminal<detail::assert_word_boundary>::type const _b = {{}};
 /// character.
 ///
 /// \attention _w is like \\w in perl. ~_w is like \\W in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const _w = {{"w", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _w = {{"w", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a digit character.
@@ -447,7 +447,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const _w = {{"w", false
 /// character.
 ///
 /// \attention _d is like \\d in perl. ~_d is like \\D in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const _d = {{"d", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _d = {{"d", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a space character.
@@ -457,7 +457,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const _d = {{"d", false
 /// character.
 ///
 /// \attention _s is like \\s in perl. ~_s is like \\S in perl.
-proto::terminal<detail::posix_charset_placeholder>::type const _s = {{"s", false}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _s = {{"s", false}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a literal newline character, '\\n'.
@@ -466,7 +466,7 @@ proto::terminal<detail::posix_charset_placeholder>::type const _s = {{"s", false
 /// that is not a newline.
 ///
 /// \attention ~_n is like '.' in perl without the /s modifier.
-proto::terminal<char>::type const _n = {'\n'};
+BOOST_INLINE_CONSTEXPR proto::terminal<char>::type _n = {'\n'};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches a logical newline sequence.
@@ -475,7 +475,7 @@ proto::terminal<char>::type const _n = {'\n'};
 /// line separator class, as determined by the regex traits, or the '\\r\\n' sequence.
 /// For the purpose of back-tracking, '\\r\\n' is treated as a unit.
 /// To match any one character that is not a logical newline, use ~_ln.
-detail::logical_newline_xpression const _ln = {{}};
+BOOST_INLINE_CONSTEXPR detail::logical_newline_xpression _ln = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Matches any one character.
@@ -484,7 +484,7 @@ detail::logical_newline_xpression const _ln = {{}};
 /// '_' matches any one character, including the newline.
 ///
 /// \attention To match any character except the newline, use ~_n
-proto::terminal<detail::any_matcher>::type const _ = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::any_matcher>::type _ = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Reference to the current regex object
@@ -493,7 +493,7 @@ proto::terminal<detail::any_matcher>::type const _ = {{}};
 /// identifier is a short-hand for the current regex object. For instance,
 /// sregex rx = '(' >> (self | nil) >> ')'; will create a regex object that
 /// matches balanced parens such as "((()))".
-proto::terminal<detail::self_placeholder>::type const self = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::self_placeholder>::type self = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Used to create character sets.
@@ -510,7 +510,7 @@ proto::terminal<detail::self_placeholder>::type const self = {{}};
 ///
 /// Sets can be composed of other, possibly complemented, sets. For instance,
 /// set[ ~digit | ~(set= 'a','b','c') ].
-detail::set_initializer_type const set = {{}};
+BOOST_INLINE_CONSTEXPR detail::set_initializer_type set = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Sub-match placeholder type, used to create named captures in
@@ -575,7 +575,7 @@ public:
 // would be preferable.
 /// INTERNAL ONLY
 #define BOOST_XPRESSIVE_GLOBAL_MARK_TAG(NAME, VALUE)                            \
-    boost::xpressive::mark_tag::proto_base_expr const NAME = {{VALUE}}          \
+    BOOST_INLINE_CONSTEXPR boost::xpressive::mark_tag::proto_base_expr NAME = {{VALUE}}          \
     /**/
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -632,7 +632,7 @@ template<typename Expr> detail::unspecified icase(Expr const &expr) { return 0; 
 #ifdef BOOST_XPRESSIVE_DOXYGEN_INVOKED
 template<typename Literal> detail::unspecified as_xpr(Literal const &literal) { return 0; }
 #else
-proto::functional::as_expr<> const as_xpr = {};
+BOOST_INLINE_CONSTEXPR proto::functional::as_expr<> as_xpr = {};
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -823,15 +823,15 @@ imbue(Locale const &loc)
     return mod;
 }
 
-proto::terminal<detail::attribute_placeholder<mpl::int_<1> > >::type const a1 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<2> > >::type const a2 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<3> > >::type const a3 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<4> > >::type const a4 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<5> > >::type const a5 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<6> > >::type const a6 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<7> > >::type const a7 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<8> > >::type const a8 = {{}};
-proto::terminal<detail::attribute_placeholder<mpl::int_<9> > >::type const a9 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<1> > >::type a1 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<2> > >::type a2 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<3> > >::type a3 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<4> > >::type a4 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<5> > >::type a5 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<6> > >::type a6 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<7> > >::type a7 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<8> > >::type a8 = {{}};
+BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<9> > >::type a9 = {{}};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Specify which characters to skip when matching a regex.

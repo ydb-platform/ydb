@@ -603,7 +603,6 @@ pgstat_report_stat(bool force)
 		!have_slrustats &&
 		!pgstat_have_pending_wal())
 	{
-		Assert(pending_since == 0);
 		return 0;
 	}
 
@@ -824,6 +823,9 @@ pgstat_fetch_entry(PgStat_Kind kind, Oid dboid, Oid objoid)
 	Assert(!kind_info->fixed_amount);
 
 	pgstat_prep_snapshot();
+
+	/* clear padding */
+	memset(&key, 0, sizeof(struct PgStat_HashKey));
 
 	key.kind = kind;
 	key.dboid = dboid;
@@ -1396,7 +1398,15 @@ pgstat_write_statsfile(void)
 
 		CHECK_FOR_INTERRUPTS();
 
-		/* we may have some "dropped" entries not yet removed, skip them */
+		/*
+		 * We should not see any "dropped" entries when writing the stats
+		 * file, as all backends and auxiliary processes should have cleaned
+		 * up their references before they terminated.
+		 *
+		 * However, since we are already shutting down, it is not worth
+		 * crashing the server over any potential cleanup issues, so we simply
+		 * skip such entries if encountered.
+		 */
 		Assert(!ps->dropped);
 		if (ps->dropped)
 			continue;
@@ -1642,6 +1652,16 @@ pgstat_read_statsfile(void)
 
 					header = pgstat_init_entry(key.kind, p);
 					dshash_release_lock(pgStatLocal.shared_hash, p);
+					if (header == NULL)
+					{
+						/*
+						 * It would be tempting to switch this ERROR to a
+						 * WARNING, but it would mean that all the statistics
+						 * are discarded when the environment fails on OOM.
+						 */
+						elog(ERROR,	"could not allocate entry %d/%u/%u",
+							 key.kind, key.dboid, key.objoid);
+					}
 
 					if (!read_chunk(fpin,
 									pgstat_get_entry_data(key.kind, header),

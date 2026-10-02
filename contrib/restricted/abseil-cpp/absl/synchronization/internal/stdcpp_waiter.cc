@@ -16,23 +16,15 @@
 
 #ifdef ABSL_INTERNAL_HAVE_STDCPP_WAITER
 
-#include <chrono>  // NOLINT(build/c++11)
 #include <condition_variable>  // NOLINT(build/c++11)
 #include <mutex>  // NOLINT(build/c++11)
 
 #include "absl/base/config.h"
-#include "absl/base/internal/raw_logging.h"
-#include "absl/base/internal/thread_identity.h"
-#include "absl/base/optimization.h"
 #include "absl/synchronization/internal/kernel_timeout.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
-
-#ifdef ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
-constexpr char StdcppWaiter::kName[];
-#endif
 
 StdcppWaiter::StdcppWaiter() : waiter_count_(0), wakeup_count_(0) {}
 

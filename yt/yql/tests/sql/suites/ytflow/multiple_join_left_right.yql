@@ -1,0 +1,48 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$input_stream = 
+    select 
+        key || "_before" as key_before,
+        key,
+        value
+    from Input
+    where value > 2;
+
+$joined_stream_left =
+    select 
+        origin_stream.key as key,
+        origin_stream.value as value,
+        origin_stream.key_before as key_before,
+        kv_table_a.kv_value_a as kv_value_a
+    from $input_stream as origin_stream
+    left join InputKeyValueTableA as kv_table_a
+    on origin_stream.key = kv_table_a.key;
+
+$joined_stream_right = 
+    select 
+        joined_stream.key as key,
+        joined_stream.value as value,
+        joined_stream.key_before,
+        joined_stream.kv_value_a,
+        kv_table_b.kv_value_b
+    from InputKeyValueTableB as kv_table_b
+    right join $joined_stream_left as joined_stream
+    on kv_table_b.key = joined_stream.key;
+
+insert into Output
+select 
+    key,
+    value,
+    `joined_stream.key_before` as key_before,
+    key || "_after" as key_after,
+    `joined_stream.kv_value_a` as kv_value_a,
+    `kv_table_b.kv_value_b` as kv_value_b
+from $joined_stream_right
+where value * 2 <= `kv_table_b.kv_value_b` or value < 7;

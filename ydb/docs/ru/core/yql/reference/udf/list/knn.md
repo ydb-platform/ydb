@@ -1,42 +1,18 @@
 # KNN
 
-## Введение
+## Введение {#introduction}
 
-[Поиск ближайшего соседа](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) - это задача оптимизации, заключающаяся в нахождении ближайшей точки (или набора точек) в заданном наборе данных к заданной точке запроса. Близость может быть определена в терминах метрики расстояния или сходства.
-Обобщением задачи NN является задача [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), где от нас требуется найти `k` ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
+Одним из частных случаев {% if backend_name == 'YDB' %}[векторного поиска](../../../../concepts/query_execution/vector_search.md){% else %}векторного поиска{% endif %} является задача [k-NN](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), где требуется найти `k` ближайших точек к точке запроса. Это может быть полезно в различных приложениях, таких как классификация изображений, рекомендательные системы и многое другое.
 
 Решения задачи k-NN разбивается на два крупных подкласса методов: точные и приближенные.
 
-### Точный метод
+### Точный метод {#exact-method}
 
-В основе точного метода лежит вычисление расстояния от точки запроса до каждой другой точки в базе данных. Этот алгоритм, также известный как наивный подход, имеет время выполнения `O(dn)`, где `n` - количество точек в наборе данных, а `d` - его размерность.
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
-Преимуществом метода является отсутствие необходимости в дополнительных структурах данных, вроде специализированных векторных индексов.
-Недостатком является необходимость полного перебора данных. Но данный недостаток является несущественным в случаях, когда произошла предварительная фильтрация данных, например, по идентификатору пользователя.
+### Приближенные методы  {#approximate-methods}
 
-Пример:
-
-```yql
-$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
-
-SELECT id, fact, embedding FROM Facts
-WHERE user="Williams"
-ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10;
-```
-
-### Приближенные методы
-
-Приближенные методы не производят полный перебор исходных данных, за счет этого работают существенно быстрее, хоть и допускают некоторое ухудшение качества поиска.
-
-В данном документе приведен [пример приближенного поиска](#примеры-приближенного-поиска) с помощью скалярного квантования, не требущий построения вторичного векторного индекса.
-
-**Скалярное квантование** это метод сжатия векторов, когда множество координат отображаются в множество меньшей размерности.
-Этот модуль поддерживает точный поиск по `Float`, `Int8`, `Uint8`, `Bit` векторам.
-Соответственно, возможно скалярное квантование из `Float` в один из этих типов.
-
-Скалярное квантование уменьшает время необходимое для чтения/записи, поскольку число байт сокращается в разы.
-Например, при квантовании из `Float` в `Bit` каждый вектор становится меньше в `32` раза.
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 
@@ -44,16 +20,16 @@ LIMIT 10;
 
 {% endnote %}
 
-## Типы данных
+## Типы данных {#data-types}
 
 В математике для хранения точек используется вектор вещественных или целых чисел.
 В этом модуле вектора представлены типом данных `String`, который является бинарным сериализованным представлением вектора.
 
-## Функции
+## Функции {#functions}
 
 Функции работы с векторами реализовываются в виде пользовательских функций (UDF) в модуле `Knn`.
 
-### Функции преобразования вектора в бинарное представление
+### Функции преобразования вектора в бинарное представление {#functions-convert}
 
 Функции преобразования нужны для сериализации векторов во внутреннее бинарное представление и обратно.
 
@@ -61,13 +37,23 @@ LIMIT 10;
 
 {% if backend_name == "YDB" %}
 Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку.
+
+{% note info %}
+
 В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
+
+{% endnote %}
+
+
+
 {% endif %}
 
-#### Сигнатуры функций
+#### Сигнатуры функций {#functions-convert-signature}
 
 ```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
+Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -77,13 +63,32 @@ Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
 
-#### Детали имплементации
+#### Формат сериализации {#functions-convert-format}
 
-`ToBinaryStringBit` преобразует в `1` все координаты которые больше `0`, остальные координаты преобразуются в `0`.
+Функции сериализации векторных данных преобразуют массив элементов в байтовую строку следующего формата:
 
-### Функции расстояния и сходства
+- **Основная часть** — непрерывный массив элементов ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
+- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):
+  - `1` — `Float` (4 байта на элемент);
+  - `2` — `Uint8` (1 байт на элемент);
+  - `3` — `Int8` (1 байт на элемент);
+  - `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
+  - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
+  - `10` — `Bit` (1 бит на элемент).
 
-Функции расстояния и сходства принимают на вход два вектора и возвращают расстояние/сходство между ними.
+Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
+
+Формат `Bit` содержит дополнительный байт перед маркером типа с количеством неиспользованных битов в последнем байте данных.
+
+#### Детали имплементации {#functions-convert-details}
+
+`ToBinaryStringFloat16` и `ToBinaryStringBFloat16` округляют координаты `Float` до ближайшего представимого значения, при равенстве расстояний — до чётного. `FloatFromBinaryString` преобразует их обратно в `Float`. Для векторных индексов с такими форматами укажите `vector_type=float16` или `vector_type=bfloat16`.
+
+`ToBinaryStringBit` преобразует в `1` все координаты, которые больше `0`. Остальные координаты преобразуются в `0`.
+
+### Функции расстояния и сходства {#functions-distance}
+
+Функции расстояния и сходства принимают на вход два сериализованных вектора (`String`) и возвращают расстояние/сходство между ними.
 
 {% note info %}
 
@@ -102,7 +107,7 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 * манхэттенское расстояние `ManhattanDistance`, также известно как `L1 distance`  (сумма модулей покоординатной разности)
 * Евклидово расстояние `EuclideanDistance`, также известно как `L2 distance` (корень суммы квадратов покоординатной разности)
 
-#### Сигнатуры функций
+#### Сигнатуры функций {#functions-distance-signatures}
 
 ```yql
 Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
@@ -116,7 +121,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
@@ -128,11 +133,11 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 
 {% endnote %}
 
-## Примеры точного поиска
+## Примеры точного поиска {#exact-vector-search-examples}
 
 {% if backend_name == "YDB" %}
 
-### Создание таблицы
+### Создание таблицы {#exact-vector-search-examples-create}
 
 ```yql
 CREATE TABLE Facts (
@@ -144,7 +149,7 @@ CREATE TABLE Facts (
 );
 ```
 
-### Добавление векторов
+### Добавление векторов {#exact-vector-search-examples-upsert}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -154,7 +159,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 {% else %}
 
-### Декларация данных
+### Декларация данных {#exact-vector-search-examples-create-list}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -170,7 +175,7 @@ $facts = AsList(
 
 {% endif %}
 
-### Точный поиск K ближайших векторов
+### Точный поиск K ближайших векторов {#exact-vector-search-k-nearest}
 
 {% if backend_name == "YDB" %}
 
@@ -198,7 +203,7 @@ LIMIT $K;
 
 {% endif %}
 
-### Точный поиск векторов, находящихся в радиусе R
+### Точный поиск векторов, находящихся в радиусе R {#exact-vector-search-radius}
 
 {% if backend_name == "YDB" %}
 
@@ -222,14 +227,14 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 
 {% endif %}
 
-## Примеры приближенного поиска
+## Примеры приближенного поиска {#approximate-vector-search-examples}
 
-Данный пример отличается от [примера с точным поиском](#примеры-точного-поиска) использованием битового квантования.
+Данный пример отличается от [примера с точным поиском](#exact-vector-search-examples) использованием битового квантования.
 Это позволяет сначала делать грубый предварительный поиск по колонке `embedding_bit`, а затем уточнять результаты по основной колонке с векторами `embedding`.
 
 {% if backend_name == "YDB" %}
 
-### Создание таблицы
+### Создание таблицы {#approximate-vector-search-examples-create}
 
 ```yql
 CREATE TABLE Facts (
@@ -242,7 +247,7 @@ CREATE TABLE Facts (
 );
 ```
 
-### Добавление векторов
+### Добавление векторов {#approximate-vector-search-examples-upsert}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -252,7 +257,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 {% else %}
 
-### Декларация данных
+### Декларация данных {#approximate-vector-search-examples-create-list}
 
 ```yql
 $vector = [1.f, 2.f, 3.f, 4.f];
@@ -269,13 +274,13 @@ $facts = AsList(
 
 {% endif %}
 
-### Скалярное квантование
+### Скалярное квантование {#approximate-vector-search-scalar-quantization}
 
 ML модель может выполнять квантование или это можно сделать вручную с помощью YQL.
 
 Ниже приведен пример квантования в YQL.
 
-#### Float -> Int8
+#### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 
 ```yql
 $MapInt8 = ($x) -> {
@@ -289,7 +294,7 @@ $FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];
 SELECT ListMap($FloatList, $MapInt8);
 ```
 
-### Приближенный поиск K ближайших векторов: битовое квантование
+### Приближенный поиск K ближайших векторов: битовое квантование {#approximate-vector-search-scalar-quantization-example}
 
 Алгоритм приближенного поиска:
 

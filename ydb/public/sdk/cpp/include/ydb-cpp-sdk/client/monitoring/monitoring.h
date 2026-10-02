@@ -1,14 +1,15 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Monitoring {
     class SelfCheckResult;
+    class ClusterStateResult;
 }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TProtoAccessor;
 
@@ -28,12 +29,22 @@ enum class EStatusFlag {
 
 struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
     FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
+    FLUENT_SETTING_OPTIONAL(bool, NoMerge);
+    FLUENT_SETTING_OPTIONAL(bool, NoCache);
     FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
     FLUENT_SETTING_OPTIONAL(uint32_t, MaximumLevel);
 };
 
+struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSettings> {
+    FLUENT_SETTING_OPTIONAL(uint32_t, DurationSeconds);
+    FLUENT_SETTING_OPTIONAL(uint32_t, PeriodSeconds);
+    FLUENT_SETTING_OPTIONAL(bool, NoSanitize);
+    FLUENT_SETTING_OPTIONAL(bool, CountersOnly);
+};
+
+
 class TSelfCheckResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 public:
     TSelfCheckResult(TStatus&& status, Ydb::Monitoring::SelfCheckResult&& result);
 private:
@@ -43,6 +54,17 @@ private:
 
 using TAsyncSelfCheckResult = NThreading::TFuture<TSelfCheckResult>;
 
+class TClusterStateResult : public TStatus {
+    friend class NYdb::TProtoAccessor;
+public:
+    TClusterStateResult(TStatus&& status, Ydb::Monitoring::ClusterStateResult&& result);
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+using TAsyncClusterStateResult = NThreading::TFuture<TClusterStateResult>;
+
 class TMonitoringClient {
     class TImpl;
 
@@ -50,6 +72,8 @@ public:
     TMonitoringClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncSelfCheckResult SelfCheck(const TSelfCheckSettings& settings = TSelfCheckSettings());
+
+    TAsyncClusterStateResult ClusterState(const TClusterStateSettings& settings = TClusterStateSettings());
 private:
     std::shared_ptr<TImpl> Impl_;
 };

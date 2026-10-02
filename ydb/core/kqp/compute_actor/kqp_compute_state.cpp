@@ -59,7 +59,11 @@ TString TShardState::ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const
     return sb;
 }
 
-const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const {
+const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool allRanges) const {
+    if (allRanges) {
+        return Ranges;
+    }
+
     // No any data read previously, return all ranges
     if (!LastKey.DataSize()) {
         return Ranges;

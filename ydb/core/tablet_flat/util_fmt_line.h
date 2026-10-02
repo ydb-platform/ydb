@@ -17,6 +17,7 @@ namespace NUtil {
         Crit    = ((1 + 2) << 8) | 1,
         Error   = ((1 + 3) << 8) | 0,
         Warn    = ((1 + 4) << 8) | 0,
+        Notice  = ((1 + 5) << 8) | 0,
 
         Info    = ((1 + 6) << 8) | 0,
         Inf1    = ((1 + 6) << 8) | 1,
@@ -31,7 +32,7 @@ namespace NUtil {
 
     class ILogged {
     public:
-        virtual void LogLn(ELnLev, const TString&) const noexcept = 0;
+        virtual void LogLn(ELnLev, const TString&) const = 0;
     };
 
     class TLogLn : public TStringOutput {
@@ -73,7 +74,7 @@ namespace NUtil {
     class ILogger {
     public:
         virtual ~ILogger() = default;
-        virtual TLogLn Log(ELnLev) const noexcept = 0;
+        virtual TLogLn Log(ELnLev) const = 0;
     };
 
 }

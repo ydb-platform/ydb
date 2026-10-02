@@ -26,7 +26,7 @@
 #include "ares_private.h"
 #include "ares_event.h"
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && defined(CARES_THREADS)
 
 ares_status_t ares_event_configchg_init(ares_event_configchg_t **configchg,
                                         ares_event_thread_t     *e)
@@ -43,7 +43,7 @@ void ares_event_configchg_destroy(ares_event_configchg_t *configchg)
   (void)configchg;
 }
 
-#elif defined(__linux__)
+#elif defined(__linux__) && defined(CARES_THREADS)
 
 #  include <sys/inotify.h>
 
@@ -174,7 +174,7 @@ done:
   return status;
 }
 
-#elif defined(USE_WINSOCK)
+#elif defined(USE_WINSOCK) && defined(CARES_THREADS)
 
 #  include <winsock2.h>
 #  include <iphlpapi.h>
@@ -207,12 +207,14 @@ void ares_event_configchg_destroy(ares_event_configchg_t *configchg)
 
 #  ifdef HAVE_REGISTERWAITFORSINGLEOBJECT
   if (configchg->regip4_wait != NULL) {
-    UnregisterWait(configchg->regip4_wait);
+    /* Use INVALID_HANDLE_VALUE to wait for any running callback to complete
+     * before returning, preventing use-after-free of configchg */
+    UnregisterWaitEx(configchg->regip4_wait, INVALID_HANDLE_VALUE);
     configchg->regip4_wait = NULL;
   }
 
   if (configchg->regip6_wait != NULL) {
-    UnregisterWait(configchg->regip6_wait);
+    UnregisterWaitEx(configchg->regip6_wait, INVALID_HANDLE_VALUE);
     configchg->regip6_wait = NULL;
   }
 
@@ -379,10 +381,11 @@ done:
   return status;
 }
 
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) && defined(CARES_THREADS)
 
 #  include <sys/types.h>
 #  include <unistd.h>
+#  include <stdbool.h>
 #  include <notify.h>
 #  include <dlfcn.h>
 #  include <fcntl.h>
@@ -531,7 +534,7 @@ done:
   return status;
 }
 
-#elif defined(HAVE_STAT) && !defined(_WIN32)
+#elif defined(HAVE_STAT) && !defined(_WIN32) && defined(CARES_THREADS)
 #  ifdef HAVE_SYS_TYPES_H
 #    include <sys/types.h>
 #  endif
@@ -665,6 +668,12 @@ ares_status_t ares_event_configchg_init(ares_event_configchg_t **configchg,
     goto done;
   }
 
+  c->lock = ares_thread_mutex_create();
+  if (c->lock == NULL) {
+    status = ARES_ENOMEM;
+    goto done;
+  }
+
   c->resolvconf_path = c->e->channel->resolvconf_path;
   if (c->resolvconf_path == NULL) {
     c->resolvconf_path = PATH_RESOLV_CONF;
@@ -722,6 +731,8 @@ void ares_event_configchg_destroy(ares_event_configchg_t *configchg)
 ares_status_t ares_event_configchg_init(ares_event_configchg_t **configchg,
                                         ares_event_thread_t     *e)
 {
+  (void)configchg;
+  (void)e;
   /* No ability */
   return ARES_ENOTIMP;
 }
@@ -729,6 +740,7 @@ ares_status_t ares_event_configchg_init(ares_event_configchg_t **configchg,
 void ares_event_configchg_destroy(ares_event_configchg_t *configchg)
 {
   /* No-op */
+  (void)configchg;
 }
 
 #endif

@@ -6,13 +6,27 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/byte_buf.h>
 #include <aws/common/common.h>
 
 AWS_PUSH_SANE_WARNING_LEVEL
 
+/**
+ * Platform OS enumeration and their corresponding string representations.
+ *
+ * String mappings:
+ * - AWS_PLATFORM_OS_WINDOWS → "Windows" (Microsoft Windows family)
+ * - AWS_PLATFORM_OS_MAC     → "macOS"   (Apple desktop/laptop)
+ * - AWS_PLATFORM_OS_IOS     → "iOS"     (Apple mobile platforms, covers iOS, watchOS, tvOS,
+ *                                        and other non-macOS Apple platforms)
+ * - AWS_PLATFORM_OS_ANDROID → "Android" (Google Android)
+ * - AWS_PLATFORM_OS_UNIX    → "Unix"    (Linux, BSD, other Unix-like)
+ */
 enum aws_platform_os {
     AWS_PLATFORM_OS_WINDOWS,
     AWS_PLATFORM_OS_MAC,
+    AWS_PLATFORM_OS_IOS,
+    AWS_PLATFORM_OS_ANDROID,
     AWS_PLATFORM_OS_UNIX,
 };
 
@@ -21,15 +35,69 @@ struct aws_cpu_info {
     bool suspected_hyper_thread;
 };
 
+struct aws_system_environment;
+
 AWS_EXTERN_C_BEGIN
+
+/**
+ * Allocates and initializes information about the system the current process is executing on.
+ * If successful returns an instance of aws_system_environment. If it fails, it will return NULL.
+ *
+ * Note: This api is used internally and is still early in its evolution.
+ * It may change in incompatible ways in the future.
+ */
+AWS_COMMON_API
+struct aws_system_environment *aws_system_environment_load(struct aws_allocator *allocator);
+
+AWS_COMMON_API
+struct aws_system_environment *aws_system_environment_acquire(struct aws_system_environment *env);
+
+AWS_COMMON_API
+void aws_system_environment_release(struct aws_system_environment *env);
+
+/**
+ * Returns the virtualization vendor for the specified compute environment, e.g. "Xen, Amazon EC2, etc..."
+ *
+ * The return value may be empty and in that case no vendor was detected.
+ */
+AWS_COMMON_API
+struct aws_byte_cursor aws_system_environment_get_virtualization_vendor(const struct aws_system_environment *env);
+
+/**
+ * Returns the product name for the specified compute environment. For example, the Amazon EC2 Instance type.
+ *
+ * The return value may be empty and in that case no vendor was detected.
+ */
+AWS_COMMON_API
+struct aws_byte_cursor aws_system_environment_get_virtualization_product_name(const struct aws_system_environment *env);
+
+/**
+ * Returns the number of processors for the specified compute environment.
+ */
+AWS_COMMON_API
+size_t aws_system_environment_get_processor_count(struct aws_system_environment *env);
+
+/**
+ * Returns the number of separate cpu groupings (multi-socket configurations or NUMA).
+ */
+AWS_COMMON_API
+size_t aws_system_environment_get_cpu_group_count(const struct aws_system_environment *env);
 
 /* Returns the OS this was built under */
 AWS_COMMON_API
 enum aws_platform_os aws_get_platform_build_os(void);
 
+/* Returns the OS this was built under as a string */
+AWS_COMMON_API
+struct aws_byte_cursor aws_get_platform_build_os_string(void);
+
 /* Returns the number of online processors available for usage. */
 AWS_COMMON_API
 size_t aws_system_info_processor_count(void);
+
+/* Returns the system page size in bytes. */
+AWS_COMMON_API
+size_t aws_system_info_page_size(void);
 
 /**
  * Returns the logical processor groupings on the system (such as multiple numa nodes).

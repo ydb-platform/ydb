@@ -4,6 +4,7 @@ $date_max_value = 49673l;
 $date_max = unwrap(CAST($date_max_value - 1 AS date));
 $datetime_max = unwrap(CAST($date_max_value * 86400 - 1 AS datetime));
 $timestamp_max = unwrap(CAST($date_max_value * 86400 * 1000000 - 1 AS timestamp));
+
 $date32_min = unwrap(CAST(-53375809 AS date32));
 $date32_max = unwrap(CAST(53375807 AS date32));
 $date32_plus1 = unwrap(CAST(1 AS date32));
@@ -11,19 +12,23 @@ $datetime64_min = unwrap(CAST(-4611669897600 AS datetime64));
 $datetime64_max = unwrap(CAST(4611669811199 AS datetime64));
 $timestamp64_min = unwrap(CAST(-4611669897600000000 AS timestamp64));
 $timestamp64_max = unwrap(CAST(4611669811199999999 AS timestamp64));
+
 $timestamp64_max_narrow = unwrap(CAST($timestamp_max AS timestamp64));
 $datetime64_max_narrow = unwrap(CAST($datetime_max AS datetime64));
+
 $datetime64_zero = unwrap(CAST(0 AS datetime64));
 $timestamp64_zero = unwrap(CAST(0 AS timestamp64));
 $datetime64_minus1 = unwrap(CAST(-1 AS datetime64));
 $timestamp64_minus1 = unwrap(CAST(-1 AS timestamp64));
 $timestamp64_2xx31 = unwrap(CAST(2147483648 AS timestamp64));
+
 $datetime64_day_ml = unwrap(CAST(-86401 AS datetime64));
 $datetime64_day_m = unwrap(CAST(-86400 AS datetime64));
 $datetime64_day_mr = unwrap(CAST(-86399 AS datetime64));
 $datetime64_day_pl = unwrap(CAST(86399 AS datetime64));
 $datetime64_day_p = unwrap(CAST(86400 AS datetime64));
 $datetime64_day_pr = unwrap(CAST(86401 AS datetime64));
+
 $timestamp64_day_ml = unwrap(CAST(-86400l * 1000000 - 1 AS timestamp64));
 $timestamp64_day_m = unwrap(CAST(-86400l * 1000000 AS timestamp64));
 $timestamp64_day_mr = unwrap(CAST(-86400l * 1000000 + 1 AS timestamp64));

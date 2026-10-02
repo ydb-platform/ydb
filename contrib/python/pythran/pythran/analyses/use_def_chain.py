@@ -17,33 +17,30 @@ class ExtendedDefUseChains(beniget.DefUseChains):
         md.visit(self, node)
         return super(ExtendedDefUseChains, self).visit(node)
 
-
-class UseDefChains(ModuleAnalysis):
-
-    """
-    Build use-define chains analysis for each variable.
-    """
-
-    def __init__(self):
-        self.result = None
-        super(UseDefChains, self).__init__(DefUseChains)
-
-    def visit_Module(self, node):
-        udc = beniget.UseDefChains(self.def_use_chains)
-        self.result = udc.chains
-
-
 class DefUseChains(ModuleAnalysis):
 
     """
     Build define-use-define chains analysis for each variable.
     """
 
-    def __init__(self):
-        self.result = None
-        super(DefUseChains, self).__init__()
+    ResultType = type(None)
 
     def visit_Module(self, node):
         duc = ExtendedDefUseChains()
         duc.visit(node)
         self.result = duc
+
+
+class UseDefChains(ModuleAnalysis[DefUseChains]):
+
+    """
+    Build use-define chains analysis for each variable.
+    """
+
+    ResultType = type(None)
+
+    def visit_Module(self, node):
+        udc = beniget.UseDefChains(self.def_use_chains)
+        self.result = udc.chains
+
+

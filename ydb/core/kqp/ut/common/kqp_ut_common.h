@@ -3,55 +3,24 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
-
-
-#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
-    template <bool OPT>                                                                                            \
-    struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TTestCase##N() : TCurrentTestCase() {                                                                      \
-            if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
-        }                                                                                                          \
-        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
-        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \
-        void Execute_(NUnitTest::TTestContext&) override;                                                          \
-    };                                                                                                             \
-    struct TTestRegistration##N {                                                                                  \
-        TTestRegistration##N() {                                                                                   \
-            TCurrentTest::AddTest(TTestCase##N<true>::CreateOn);                                                   \
-            TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template <bool OPT>                                                                                            \
-    void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
+#include <util/system/mutex.h>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -71,61 +40,116 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
+using TTestLogSettings = NTestUtils::TTestLogSettings;
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
+private:
+    void InitDefaultConfig() {
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
+        FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
+
+        if (!AppConfig.MutableColumnShardConfig()->HasReaderClassName()) {
+            SetColumnShardReaderClassName("SIMPLE");
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasDisabledOnSchemeShard()) {
+            AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
+            AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        }
+    }
+public:
     NKikimrConfig::TAppConfig AppConfig;
     NKikimrPQ::TPQConfig PQConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
     TString AuthToken;
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
+    bool EnableScriptExecutionBackgroundChecks = true;
+    bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    std::shared_ptr<TMutex> LogStreamMutex;
+    TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
+    bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory =
+        std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
+    std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+    NKikimrConfig::TImmediateControlsConfig Controls;
+    TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
+    bool EnableStorageProxy = false;
+    bool UseLocalCheckpointsInStreamingQueries = false;
+    TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    std::optional<TTestLogSettings> LogSettings;
+    bool Verbose = false;
 
-    TKikimrSettings()
-    {
-        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
-        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
-        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
-        exchangerSettings->SetStartDelayMs(10);
-        exchangerSettings->SetMaxDelayMs(10);
-        AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
-        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
-        FeatureFlags.SetEnableSparsedColumns(true);
-        FeatureFlags.SetEnableWritePortionsOnInsert(true);
-        FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
-        FeatureFlags.SetEnableFollowerStats(true);
-        FeatureFlags.SetEnableColumnStore(true);
+    TKikimrSettings() {
+        InitDefaultConfig();
     }
 
-    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
+    explicit TKikimrSettings(const NKikimrConfig::TAppConfig& value)
+        : AppConfig(value)
+    {
+        InitDefaultConfig();
+    }
+
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
     TKikimrSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& value) { KqpSettings = value; return *this; }
     TKikimrSettings& SetAuthToken(const TString& value) { AuthToken = value; return *this; }
     TKikimrSettings& SetDomainRoot(const TString& value) { DomainRoot = value; return *this; }
     TKikimrSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
+    TKikimrSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
+    TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
+    TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
+    TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
+    TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
+    TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
+    TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }
     TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
+    TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
+    TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
+    TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
+    TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
+        AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
+        return *this;
+    }
+    TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -152,13 +176,40 @@ public:
     ~TKikimrRunner() {
         Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
-        RunCall([&] { Driver->Stop(true); return false; });
+        // Stop the driver to close all client-side gRPC connections
+        RunCall([&] { Driver->Stop(true); Driver.Reset(); return false; });
+
+        // In single-threaded mode (UseRealThreads=false), actor system events
+        // need explicit dispatching. After Driver->Stop(), there may be pending
+        // server-side session cleanup events in the actor system mailbox.
+        // Dispatch them so gRPC server doesn't see stale in-progress requests
+        // during shutdown (which would cause it to wait and leak memory).
+        // In real-threads mode, the actor system threads handle this automatically.
+        if (!Server->GetRuntime()->IsRealThreads()) {
+            auto savedTimeout = Server->GetRuntime()->SetDispatchTimeout(TDuration::MilliSeconds(500));
+            try {
+                TDispatchOptions opts;
+                Server->GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(500));
+            } catch (const TEmptyEventQueueException&) {
+                // Timeout is expected when there are no more events to dispatch
+            }
+            Server->GetRuntime()->SetDispatchTimeout(savedTimeout);
+        }
+
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
 
-        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+        // Shutdown gRPC servers to stop accepting new connections
+        // This prevents memory leaks from connections being established during shutdown
+        Server->ShutdownGRpc();
 
+        if (!WaitHttpGatewayFinalization(CountersRoot)) {
+            Cerr << "Failed to finalize http gateway before destruction" << Endl;
+        }
+
+        // Server.Reset() will call ShutdownGRpc() again in TServer destructor,
+        // but it's safe to call multiple times as Shutdown() is idempotent
         Server.Reset();
         Client.Reset();
     }
@@ -166,11 +217,15 @@ public:
     NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
-    NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
+    TString CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount = 1, TDuration timeout = TDuration::Seconds(30), bool acceptIfExists = false);
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
+
+    NYdb::NScheme::TSchemeClient GetSchemeClient(NYdb::TCommonClientSettings settings = NYdb::TCommonClientSettings()) const {
+        return NYdb::NScheme::TSchemeClient(*Driver, settings);
+    }
 
     NYdb::NTable::TTableClient GetTableClient(
         NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
@@ -203,12 +258,12 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
+    Tests::TServer::TPtr Server;
     THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
     TAdaptiveThreadPool ThreadPool;
     bool ThreadPoolStarted_ = false;
     TPortManager PortManager;
@@ -221,8 +276,7 @@ private:
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
     const NKikimrConfig::TAppConfig& appConfig = {})
 {
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
+    auto settings = TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetEnableScriptExecutionOperations(true);
 
@@ -246,6 +300,9 @@ enum class EIndexTypeSql {
     GlobalSync,
     GlobalAsync,
     GlobalVectorKMeansTree,
+    GlobalFulltextPlain,
+    GlobalFulltextRelevance,
+    GlobalJson
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -257,6 +314,9 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+    case NKqp::EIndexTypeSql::GlobalFulltextPlain:
+    case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
+    case NKqp::EIndexTypeSql::GlobalJson:
         return "GLOBAL";
     }
 }
@@ -270,33 +330,19 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalAsync;
     case EIndexTypeSql::GlobalVectorKMeansTree:
         return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-    }
-}
-
-inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "USING vector_kmeans_tree";
-    }
-}
-
-inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
+    case EIndexTypeSql::GlobalFulltextPlain:
+        return NYdb::NTable::EIndexType::GlobalFulltextPlain;
+    case EIndexTypeSql::GlobalFulltextRelevance:
+        return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+    case EIndexTypeSql::GlobalJson:
+        return NYdb::NTable::EIndexType::GlobalJson;
     }
 }
 
 TString ReformatYson(const TString& yson);
+TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
@@ -324,7 +370,7 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
-void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
 inline void AssertTableReads(const NYdb::NTable::TDataQueryResult& result, TStringBuf table, ui64 expectedReads) {
@@ -339,6 +385,8 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
 {
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
+
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query, NYdb::NQuery::TTxControl txControl = NYdb::NQuery::TTxControl::NoTx());
 
 class TStreamReadError : public yexception {
 public:
@@ -370,6 +418,10 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateT
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
+void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
@@ -382,6 +434,11 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
@@ -389,6 +446,7 @@ struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */
@@ -398,6 +456,54 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
+
+class TTestExtEnv {
+public:
+    struct TEnvSettings {
+        size_t StaticNodeCount = 1;
+        size_t DynamicNodeCount = 1;
+        TString PoolName = "hdd1";
+        bool UseRealThreads = true;
+        NKikimrConfig::TFeatureFlags FeatureFlags;
+    };
+
+    TTestExtEnv(TEnvSettings envSettings);
+    ~TTestExtEnv();
+
+    NYdb::TDriver& GetDriver() const {
+        return *Driver;
+    }
+
+    void CreateDatabase(const TString& databaseName);
+    Tests::TServer& GetServer() const;
+    Tests::TClient& GetClient() const;
+    const TString& GetEndpoint() const;
+
+private:
+    TPortManager PortManager;
+
+    Tests::TServerSettings::TPtr Settings;
+    Tests::TServer::TPtr Server;
+    THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
+
+    TString Endpoint;
+    NYdb::TDriverConfig DriverConfig;
+    THolder<NYdb::TDriver> Driver;
+
+    TEnvSettings EnvSettings;
+};
+
+void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
+
+// Waits until the KQP proxy recognizes the subject's connect permission.
+// Useful after GrantConnect to avoid UNAUTHORIZED/UNAVAILABLE races.
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject);
+
+inline NYdb::NQuery::TExecuteQuerySettings NoRetryExecuteQuerySettings() {
+    return NYdb::NQuery::TExecuteQuerySettings().RetrySettings(
+        NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+}
 
 } // namespace NKqp
 } // namespace NKikimr

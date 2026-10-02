@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Protocol Documentation</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Ubuntu:400,700,400italic"/>
+    <style>
+      body {
+        width: 60em;
+        margin: 1em auto;
+        color: #222;
+        font-family: "Ubuntu", sans-serif;
+        padding-bottom: 4em;
+      }
+
+      h1 {
+        font-weight: normal;
+        border-bottom: 1px solid #aaa;
+        padding-bottom: 0.5ex;
+      }
+
+      h2 {
+        border-bottom: 1px solid #aaa;
+        padding-bottom: 0.5ex;
+        margin: 1.5em 0;
+      }
+
+      h3 {
+        font-weight: normal;
+        border-bottom: 1px solid #aaa;
+        padding-bottom: 0.5ex;
+      }
+
+      a {
+        text-decoration: none;
+        color: #567e25;
+      }
+
+      table {
+        width: 100%;
+        font-size: 80%;
+        border-collapse: collapse;
+      }
+
+      thead {
+        font-weight: 700;
+        background-color: #dcdcdc;
+      }
+
+      tbody tr:nth-child(even) {
+        background-color: #fbfbfb;
+      }
+
+      td {
+        border: 1px solid #ccc;
+        padding: 0.5ex 2ex;
+      }
+
+      td p {
+        text-indent: 1em;
+        margin: 0;
+      }
+
+      td p:nth-child(1) {
+        text-indent: 0;  
+      }
+
+       
+      .field-table td:nth-child(1) {  
+        width: 10em;
+      }
+      .field-table td:nth-child(2) {  
+        width: 10em;
+      }
+      .field-table td:nth-child(3) {  
+        width: 6em;
+      }
+      .field-table td:nth-child(4) {  
+        width: auto;
+      }
+
+       
+      .extension-table td:nth-child(1) {  
+        width: 10em;
+      }
+      .extension-table td:nth-child(2) {  
+        width: 10em;
+      }
+      .extension-table td:nth-child(3) {  
+        width: 10em;
+      }
+      .extension-table td:nth-child(4) {  
+        width: 5em;
+      }
+      .extension-table td:nth-child(5) {  
+        width: auto;
+      }
+
+       
+      .enum-table td:nth-child(1) {  
+        width: 10em;
+      }
+      .enum-table td:nth-child(2) {  
+        width: 10em;
+      }
+      .enum-table td:nth-child(3) {  
+        width: auto;
+      }
+
+       
+      .scalar-value-types-table tr {
+        height: 3em;
+      }
+
+       
+      #toc-container ul {
+        list-style-type: none;
+        padding-left: 1em;
+        line-height: 180%;
+        margin: 0;
+      }
+      #toc > li > a {
+        font-weight: bold;
+      }
+
+       
+      .file-heading {
+        width: 100%;
+        display: table;
+        border-bottom: 1px solid #aaa;
+        margin: 4em 0 1.5em 0;
+      }
+      .file-heading h2 {
+        border: none;
+        display: table-cell;
+      }
+      .file-heading a {
+        text-align: right;
+        display: table-cell;
+      }
+
+       
+      .badge {
+        width: 1.6em;
+        height: 1.6em;
+        display: inline-block;
+
+        line-height: 1.6em;
+        text-align: center;
+        font-weight: bold;
+        font-size: 60%;
+
+        color: #89ba48;
+        background-color: #dff0c8;
+
+        margin: 0.5ex 1em 0.5ex -1em;
+        border: 1px solid #fbfbfb;
+        border-radius: 1ex;
+      }
+    </style>
+
+    
+    <link rel="stylesheet" type="text/css" href="stylesheet.css"/>
+  </head>
+
+  <body>
+
+    <h1 id="title">Protocol Documentation</h1>
+
+    <h2>Table of Contents</h2>
+
+    <div id="toc-container">
+      <ul id="toc">
+        
+          
+          <li>
+            <a href="#Booking.proto">Booking.proto</a>
+            <ul>
+              
+                <li>
+                  <a href="#com.example.Booking"><span class="badge">M</span>Booking</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.BookingStatus"><span class="badge">M</span>BookingStatus</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.BookingStatusID"><span class="badge">M</span>BookingStatusID</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.EmptyBookingMessage"><span class="badge">M</span>EmptyBookingMessage</a>
+                </li>
+              
+              
+              
+              
+                <li>
+                  <a href="#com.example.BookingService"><span class="badge">S</span>BookingService</a>
+                </li>
+              
+            </ul>
+          </li>
+        
+          
+          <li>
+            <a href="#Customer.proto">Customer.proto</a>
+            <ul>
+              
+                <li>
+                  <a href="#com.example.Address"><span class="badge">M</span>Address</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.Customer"><span class="badge">M</span>Customer</a>
+                </li>
+              
+              
+              
+              
+            </ul>
+          </li>
+        
+          
+          <li>
+            <a href="#Vehicle.proto">Vehicle.proto</a>
+            <ul>
+              
+                <li>
+                  <a href="#com.example.Manufacturer"><span class="badge">M</span>Manufacturer</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.Model"><span class="badge">M</span>Model</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.Vehicle"><span class="badge">M</span>Vehicle</a>
+                </li>
+              
+                <li>
+                  <a href="#com.example.Vehicle.Category"><span class="badge">M</span>Vehicle.Category</a>
+                </li>
+              
+              
+                <li>
+                  <a href="#com.example.Manufacturer.Category"><span class="badge">E</span>Manufacturer.Category</a>
+                </li>
+              
+              
+                <li>
+                  <a href="#Vehicle.proto-extensions"><span class="badge">X</span>File-level Extensions</a>
+                </li>
+              
+              
+            </ul>
+          </li>
+        
+        <li><a href="#scalar-value-types">Scalar Value Types</a></li>
+      </ul>
+    </div>
+
+    
+      
+      <div class="file-heading">
+        <h2 id="Booking.proto">Booking.proto</h2><a href="#title">Top</a>
+      </div>
+      <p>Booking related messages.</p><p>This file is really just an example. The data model is completely</p><p>fictional.</p>
+
+      
+        <h3 id="com.example.Booking">Booking</h3>
+        <p>Represents the booking of a vehicle.</p><p>Vehicles are some cool shit. But drive carefully!</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>vehicle_id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td></td>
+                  <td><p>ID of booked vehicle. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>customer_id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td></td>
+                  <td><p>Customer that booked the vehicle. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>status</td>
+                  <td><a href="#com.example.BookingStatus">BookingStatus</a></td>
+                  <td></td>
+                  <td><p>Status of the booking. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>confirmation_sent</td>
+                  <td><a href="#bool">bool</a></td>
+                  <td></td>
+                  <td><p>Has booking confirmation been sent? </p></td>
+                </tr>
+              
+                <tr>
+                  <td>payment_received</td>
+                  <td><a href="#bool">bool</a></td>
+                  <td></td>
+                  <td><p>Has payment been received? </p></td>
+                </tr>
+              
+                <tr>
+                  <td>color_preference</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p><strong>Deprecated.</strong> Color preference of the customer. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+            
+            
+            <h4>Fields with deprecated option</h4>
+            <table>
+              <thead>
+                <tr>
+                  <td>Name</td>
+                  <td>Option</td>
+                </tr>
+              </thead>
+              <tbody>
+              
+                <tr>
+                  <td>color_preference</td>
+                  <td><p>true</p></td>
+                </tr>
+              
+              </tbody>
+            </table>
+            
+          
+
+        
+      
+        <h3 id="com.example.BookingStatus">BookingStatus</h3>
+        <p>Represents the status of a vehicle booking.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td></td>
+                  <td><p>Unique booking status ID. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>description</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>Booking status description. E.g. &#34;Active&#34;. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+            
+            
+            <h4>Validated Fields</h4>
+            <table>
+              <thead>
+                <tr>
+                  <td>Field</td>
+                  <td>Validations</td>
+                </tr>
+              </thead>
+              <tbody>
+              
+                <tr>
+                  <td>description</td>
+                  <td>
+                    <ul>
+                    
+                      <li>string_not_empty: true</li>
+                    
+                      <li>length_lt: 255</li>
+                    
+                    </ul>
+                  </td>
+                </tr>
+              
+              </tbody>
+            </table>
+            
+          
+
+        
+      
+        <h3 id="com.example.BookingStatusID">BookingStatusID</h3>
+        <p>Represents the booking status ID.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td></td>
+                  <td><p>Unique booking status ID. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="com.example.EmptyBookingMessage">EmptyBookingMessage</h3>
+        <p>An empty message for testing</p>
+
+        
+
+        
+      
+
+      
+
+      
+
+      
+        <h3 id="com.example.BookingService">BookingService</h3>
+        <p>Service for handling vehicle bookings.</p>
+        <table class="enum-table">
+          <thead>
+            <tr><td>Method Name</td><td>Request Type</td><td>Response Type</td><td>Description</td></tr>
+          </thead>
+          <tbody>
+            
+              <tr>
+                <td>BookVehicle</td>
+                <td><a href="#com.example.Booking">Booking</a></td>
+                <td><a href="#com.example.BookingStatus">BookingStatus</a></td>
+                <td><p>Used to book a vehicle. Pass in a Booking and a BookingStatus will be returned.</p></td>
+              </tr>
+            
+              <tr>
+                <td>BookingUpdates</td>
+                <td><a href="#com.example.BookingStatusID">BookingStatusID</a></td>
+                <td><a href="#com.example.BookingStatus">BookingStatus</a> stream</td>
+                <td><p>Used to subscribe to updates of the BookingStatus.</p></td>
+              </tr>
+            
+          </tbody>
+        </table>
+
+        
+          
+          
+          <h4>Methods with HTTP bindings</h4>
+          <table>
+            <thead>
+              <tr>
+                <td>Method Name</td>
+                <td>Method</td>
+                <td>Pattern</td>
+                <td>Body</td>
+              </tr>
+            </thead>
+            <tbody>
+            
+              
+              
+              <tr>
+                <td>BookVehicle</td>
+                <td>POST</td>
+                <td>/api/bookings/vehicle/{vehicle_id}</td>
+                <td>*</td>
+              </tr>
+              
+            
+            </tbody>
+          </table>
+          
+        
+    
+      
+      <div class="file-heading">
+        <h2 id="Customer.proto">Customer.proto</h2><a href="#title">Top</a>
+      </div>
+      <p>This file has messages for describing a customer.</p>
+
+      
+        <h3 id="com.example.Address">Address</h3>
+        <p>Represents a mail address.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>address_line_1</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>First address line. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>address_line_2</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Second address line. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>address_line_3</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Second address line. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>town</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Address town. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>county</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Address county, if applicable. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>country</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Address country. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="com.example.Customer">Customer</h3>
+        <p>Represents a customer.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td>required</td>
+                  <td><p>Unique customer ID. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>first_name</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Customer first name. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>last_name</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Customer last name. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>details</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Customer details. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>email_address</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Customer e-mail address. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>phone_number</td>
+                  <td><a href="#string">string</a></td>
+                  <td>repeated</td>
+                  <td><p>Customer phone numbers, primary first. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>mail_addresses</td>
+                  <td><a href="#com.example.Address">Address</a></td>
+                  <td>repeated</td>
+                  <td><p>Customer mail addresses, primary first. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+
+      
+
+      
+
+      
+    
+      
+      <div class="file-heading">
+        <h2 id="Vehicle.proto">Vehicle.proto</h2><a href="#title">Top</a>
+      </div>
+      <p>Messages describing manufacturers / vehicles.</p>
+
+      
+        <h3 id="com.example.Manufacturer">Manufacturer</h3>
+        <p>Represents a manufacturer of cars.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td>required</td>
+                  <td><p>The unique manufacturer ID. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>code</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>A manufacturer code, e.g. &#34;DKL4P&#34;. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>details</td>
+                  <td><a href="#string">string</a></td>
+                  <td>optional</td>
+                  <td><p>Manufacturer details (minimum orders et.c.). </p></td>
+                </tr>
+              
+                <tr>
+                  <td>category</td>
+                  <td><a href="#com.example.Manufacturer.Category">Manufacturer.Category</a></td>
+                  <td>optional</td>
+                  <td><p>Manufacturer category. Default: CATEGORY_EXTERNAL</p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="com.example.Model">Model</h3>
+        <p>Represents a vehicle model.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>The unique model ID. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>model_code</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>The car model code, e.g. &#34;PZ003&#34;. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>model_name</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>The car model name, e.g. &#34;Z3&#34;. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>daily_hire_rate_dollars</td>
+                  <td><a href="#sint32">sint32</a></td>
+                  <td>required</td>
+                  <td><p>Dollars per day. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>daily_hire_rate_cents</td>
+                  <td><a href="#sint32">sint32</a></td>
+                  <td>required</td>
+                  <td><p>Cents per day. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="com.example.Vehicle">Vehicle</h3>
+        <p>Represents a vehicle that can be hired.</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#int32">int32</a></td>
+                  <td>required</td>
+                  <td><p>Unique vehicle ID. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>model</td>
+                  <td><a href="#com.example.Model">Model</a></td>
+                  <td>required</td>
+                  <td><p>Vehicle model. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>reg_number</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Vehicle registration number. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>mileage</td>
+                  <td><a href="#sint32">sint32</a></td>
+                  <td>optional</td>
+                  <td><p>Current vehicle mileage, if known. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>category</td>
+                  <td><a href="#com.example.Vehicle.Category">Vehicle.Category</a></td>
+                  <td>optional</td>
+                  <td><p>Vehicle category. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>daily_hire_rate_dollars</td>
+                  <td><a href="#sint32">sint32</a></td>
+                  <td>optional</td>
+                  <td><p>Dollars per day. Default: 50</p></td>
+                </tr>
+              
+                <tr>
+                  <td>daily_hire_rate_cents</td>
+                  <td><a href="#sint32">sint32</a></td>
+                  <td>optional</td>
+                  <td><p>Cents per day. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+          <br>
+          <table class="extension-table">
+            <thead>
+              <tr><td>Extension</td><td>Type</td><td>Base</td><td>Number</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>series</td>
+                  <td><a href="#string">string</a></td>
+                  <td><a href="#com.example.Model">Model</a></td>
+                  <td>100</td>
+                  <td><p>Vehicle model series.</p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+        
+      
+        <h3 id="com.example.Vehicle.Category">Vehicle.Category</h3>
+        <p>Represents a vehicle category. E.g. "Sedan" or "Truck".</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>code</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Category code. E.g. &#34;S&#34;. </p></td>
+                </tr>
+              
+                <tr>
+                  <td>description</td>
+                  <td><a href="#string">string</a></td>
+                  <td>required</td>
+                  <td><p>Category name. E.g. &#34;Sedan&#34;. </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+
+      
+        <h3 id="com.example.Manufacturer.Category">Manufacturer.Category</h3>
+        <p>Manufacturer category. A manufacturer may be either inhouse or external.</p>
+        <table class="enum-table">
+          <thead>
+            <tr><td>Name</td><td>Number</td><td>Description</td></tr>
+          </thead>
+          <tbody>
+            
+              <tr>
+                <td>CATEGORY_INHOUSE</td>
+                <td>0</td>
+                <td><p>The manufacturer is inhouse.</p></td>
+              </tr>
+            
+              <tr>
+                <td>CATEGORY_EXTERNAL</td>
+                <td>1</td>
+                <td><p>The manufacturer is external.</p></td>
+              </tr>
+            
+          </tbody>
+        </table>
+      
+
+      
+        <h3 id="Vehicle.proto-extensions">File-level Extensions</h3>
+        <table class="extension-table">
+          <thead>
+            <tr><td>Extension</td><td>Type</td><td>Base</td><td>Number</td><td>Description</td></tr>
+          </thead>
+          <tbody>
+            
+              <tr>
+                <td>country</td>
+                <td><a href="#string">string</a></td>
+                <td><a href="#com.example.Manufacturer">Manufacturer</a></td>
+                <td>100</td>
+                <td><p>Manufacturer country. Default: China</p></td>
+              </tr>
+            
+          </tbody>
+        </table>
+      
+
+      
+    
+
+    <h2 id="scalar-value-types">Scalar Value Types</h2>
+    <table class="scalar-value-types-table">
+      <thead>
+        <tr><td>.proto Type</td><td>Notes</td><td>C++</td><td>Java</td><td>Python</td><td>Go</td><td>C#</td><td>PHP</td><td>Ruby</td></tr>
+      </thead>
+      <tbody>
+        
+          <tr id="double">
+            <td>double</td>
+            <td></td>
+            <td>double</td>
+            <td>double</td>
+            <td>float</td>
+            <td>float64</td>
+            <td>double</td>
+            <td>float</td>
+            <td>Float</td>
+          </tr>
+        
+          <tr id="float">
+            <td>float</td>
+            <td></td>
+            <td>float</td>
+            <td>float</td>
+            <td>float</td>
+            <td>float32</td>
+            <td>float</td>
+            <td>float</td>
+            <td>Float</td>
+          </tr>
+        
+          <tr id="int32">
+            <td>int32</td>
+            <td>Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint32 instead.</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>int</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>integer</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="int64">
+            <td>int64</td>
+            <td>Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint64 instead.</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>int/long</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>integer/string</td>
+            <td>Bignum</td>
+          </tr>
+        
+          <tr id="uint32">
+            <td>uint32</td>
+            <td>Uses variable-length encoding.</td>
+            <td>uint32</td>
+            <td>int</td>
+            <td>int/long</td>
+            <td>uint32</td>
+            <td>uint</td>
+            <td>integer</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="uint64">
+            <td>uint64</td>
+            <td>Uses variable-length encoding.</td>
+            <td>uint64</td>
+            <td>long</td>
+            <td>int/long</td>
+            <td>uint64</td>
+            <td>ulong</td>
+            <td>integer/string</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="sint32">
+            <td>sint32</td>
+            <td>Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int32s.</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>int</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>integer</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="sint64">
+            <td>sint64</td>
+            <td>Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int64s.</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>int/long</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>integer/string</td>
+            <td>Bignum</td>
+          </tr>
+        
+          <tr id="fixed32">
+            <td>fixed32</td>
+            <td>Always four bytes. More efficient than uint32 if values are often greater than 2^28.</td>
+            <td>uint32</td>
+            <td>int</td>
+            <td>int</td>
+            <td>uint32</td>
+            <td>uint</td>
+            <td>integer</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="fixed64">
+            <td>fixed64</td>
+            <td>Always eight bytes. More efficient than uint64 if values are often greater than 2^56.</td>
+            <td>uint64</td>
+            <td>long</td>
+            <td>int/long</td>
+            <td>uint64</td>
+            <td>ulong</td>
+            <td>integer/string</td>
+            <td>Bignum</td>
+          </tr>
+        
+          <tr id="sfixed32">
+            <td>sfixed32</td>
+            <td>Always four bytes.</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>int</td>
+            <td>int32</td>
+            <td>int</td>
+            <td>integer</td>
+            <td>Bignum or Fixnum (as required)</td>
+          </tr>
+        
+          <tr id="sfixed64">
+            <td>sfixed64</td>
+            <td>Always eight bytes.</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>int/long</td>
+            <td>int64</td>
+            <td>long</td>
+            <td>integer/string</td>
+            <td>Bignum</td>
+          </tr>
+        
+          <tr id="bool">
+            <td>bool</td>
+            <td></td>
+            <td>bool</td>
+            <td>boolean</td>
+            <td>boolean</td>
+            <td>bool</td>
+            <td>bool</td>
+            <td>boolean</td>
+            <td>TrueClass/FalseClass</td>
+          </tr>
+        
+          <tr id="string">
+            <td>string</td>
+            <td>A string must always contain UTF-8 encoded or 7-bit ASCII text.</td>
+            <td>string</td>
+            <td>String</td>
+            <td>str/unicode</td>
+            <td>string</td>
+            <td>string</td>
+            <td>string</td>
+            <td>String (UTF-8)</td>
+          </tr>
+        
+          <tr id="bytes">
+            <td>bytes</td>
+            <td>May contain any arbitrary sequence of bytes.</td>
+            <td>string</td>
+            <td>ByteString</td>
+            <td>str</td>
+            <td>[]byte</td>
+            <td>ByteString</td>
+            <td>string</td>
+            <td>String (ASCII-8BIT)</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  </body>
+</html>
+

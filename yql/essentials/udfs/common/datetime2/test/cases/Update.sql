@@ -1,25 +1,35 @@
 /* syntax version 1 */
-SELECT
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 2005)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 2200 as Year)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, NULL, 7)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 13 as Month)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, NULL, NULL, 20)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 32 as Day)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 2018, 2, 30)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, NULL, NULL, NULL, 11, 10, 9)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 11 as Hour)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 24 as Hour)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 10 as Minute)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 60 as Minute)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 9 as Second)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 60 as Second)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 123456 as Microsecond)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 2000000 as Microsecond)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 100 as TimezoneId)) as String),
-    cast(DateTime::MakeTzTimestamp(DateTime::Update(tm, 1000 as TimezoneId)) as String)
-from (
-    select
-        cast(ftztimestamp as TzTimestamp) as tm
-    from Input
-);
+$check = ($arg) -> {
+    return <|
+        upyear:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 2005)) AS String),
+        inyear:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 2200 as Year)) AS String),
+        upmonth:  CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, NULL, 7)) AS String),
+        inmonth:  CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 13 as Month)) AS String),
+        upday:    CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, NULL, NULL, 20)) AS String),
+        inday:    CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 32 as Day)) AS String),
+        ipdate:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 2018, 2, 30)) AS String),
+        uptime:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, NULL, NULL, NULL, 11, 10, 9)) AS String),
+        unhour:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 11 as Hour)) AS String),
+        inhour:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 24 as Hour)) AS String),
+        unminute: CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 10 as Minute)) AS String),
+        inminute: CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 60 as Minute)) AS String),
+        unsecond: CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 9 as Second)) AS String),
+        insecond: CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 60 as Second)) AS String),
+        unmsec:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 123456 as Microsecond)) AS String),
+        inmsec:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 2000000 as Microsecond)) AS String),
+        untzid:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 100 as TimezoneId)) AS String),
+        intzid:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 1000 as TimezoneId)) AS String),
+    |>
+};
+
+$typeDispatcher = ($row) -> {
+    $tm = $row.tm;
+    return <|
+        explicit: $check(DateTime::Split($tm)),
+        implicit: $check($tm),
+    |>;
+};
+
+$input = SELECT CAST(ftztimestamp AS TzTimestamp) as tm FROM Input;
+
+PROCESS $input USING $typeDispatcher(TableRow());

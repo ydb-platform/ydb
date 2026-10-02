@@ -1,33 +1,39 @@
 import argparse
+from gettext import gettext
 import os
 import sys
-import warnings
-from gettext import gettext
 from typing import Any
 from typing import Callable
 from typing import cast
 from typing import Dict
+from typing import final
 from typing import List
+from typing import Literal
 from typing import Mapping
 from typing import NoReturn
 from typing import Optional
 from typing import Sequence
 from typing import Tuple
-from typing import TYPE_CHECKING
 from typing import Union
+import warnings
 
 import _pytest._io
-from _pytest.compat import final
 from _pytest.config.exceptions import UsageError
 from _pytest.deprecated import ARGUMENT_PERCENT_DEFAULT
 from _pytest.deprecated import ARGUMENT_TYPE_STR
 from _pytest.deprecated import ARGUMENT_TYPE_STR_CHOICE
 from _pytest.deprecated import check_ispytest
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
 
 FILE_OR_DIR = "file_or_dir"
+
+
+class NotSet:
+    def __repr__(self) -> str:
+        return "<notset>"
+
+
+NOT_SET = NotSet()
 
 
 @final
@@ -93,7 +99,7 @@ class Parser:
         :param opts:
             Option names, can be short or long options.
         :param attrs:
-            Same attributes as the argparse library's :py:func:`add_argument()
+            Same attributes as the argparse library's :meth:`add_argument()
             <argparse.ArgumentParser.add_argument>` function accepts.
 
         After command line parsing, options are available on the pytest config
@@ -177,9 +183,9 @@ class Parser:
         name: str,
         help: str,
         type: Optional[
-            "Literal['string', 'paths', 'pathlist', 'args', 'linelist', 'bool']"
+            Literal["string", "paths", "pathlist", "args", "linelist", "bool"]
         ] = None,
-        default: Any = None,
+        default: Any = NOT_SET,
     ) -> None:
         """Register an ini-file option.
 
@@ -206,8 +212,28 @@ class Parser:
         :py:func:`config.getini(name) <pytest.Config.getini>`.
         """
         assert type in (None, "string", "paths", "pathlist", "args", "linelist", "bool")
+        if default is NOT_SET:
+            default = get_ini_default_for_type(type)
+
         self._inidict[name] = (help, type, default)
         self._ininames.append(name)
+
+
+def get_ini_default_for_type(
+    type: Optional[Literal["string", "paths", "pathlist", "args", "linelist", "bool"]],
+) -> Any:
+    """
+    Used by addini to get the default value for a given ini-option type, when
+    default is not supplied.
+    """
+    if type is None:
+        return ""
+    elif type in ("paths", "pathlist", "args", "linelist"):
+        return []
+    elif type == "bool":
+        return False
+    else:
+        return ""
 
 
 class ArgumentError(Exception):
@@ -375,7 +401,7 @@ class OptionGroup:
         :param opts:
             Option names, can be short or long options.
         :param attrs:
-            Same attributes as the argparse library's :py:func:`add_argument()
+            Same attributes as the argparse library's :meth:`add_argument()
             <argparse.ArgumentParser.add_argument>` function accepts.
         """
         conflict = set(opts).intersection(
@@ -455,7 +481,7 @@ class MyOptionParser(argparse.ArgumentParser):
         ) -> Optional[Tuple[Optional[argparse.Action], str, Optional[str]]]:
             if not arg_string:
                 return None
-            if not arg_string[0] in self.prefix_chars:
+            if arg_string[0] not in self.prefix_chars:
                 return None
             if arg_string in self._option_string_actions:
                 action = self._option_string_actions[arg_string]

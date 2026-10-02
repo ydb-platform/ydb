@@ -50,9 +50,9 @@ concept CInvocationTimePolicy = CCallbackResultProcessor<T> &&
     { policy.SetOptions(options) } -> std::same_as<void>;
 
     { policy.ShouldKickstart(options) } -> std::same_as<bool>;
-    { policy.KickstartDeadline() } -> std::same_as<TInstant>;
+    { policy.GenerateKickstartDeadline() } -> std::same_as<TInstant>;
 
-    { policy.NextDeadline() } -> std::same_as<TInstant>;
+    { policy.GenerateNextDeadline() } -> std::same_as<TInstant>;
     { policy.IsOutOfBandProhibited() } -> std::same_as<bool>;
     { policy.Reset() } -> std::same_as<void>;
 };
@@ -65,7 +65,7 @@ concept CInvocationTimePolicy = CCallbackResultProcessor<T> &&
 //! DefaultInvocationTimePolicy wants to be able to change only the period
 //! So it defines SetOptions(Period) and ShouldKickstart(Period).
 //! After this is done, Period is a partial option for DefaultInvocationTimePolicy.
-//! Concept below accounts for desire to change several options (e.g. Peiod and Splay)
+//! Concept below accounts for desire to change several options (e.g. Period and Splay)
 //! at the same time.
 template <class TPolicy, class... TOptions>
 concept CPartialOptions = requires (TOptions... partialOptions, TPolicy policy)
@@ -87,6 +87,12 @@ public:
 
     //! Starts the instance.
     void Start();
+
+    //! Starts the instance. Returns a future that becomes set when the first callback
+    //! invocation since the last stop finishes.
+    //! If the call arrives to an already started executor, the future stays the same
+    //! and still corresponds to the first invocation.
+    TFuture<void> StartAndGetFirstExecutedEvent();
 
     bool IsStarted() const;
 
@@ -134,6 +140,7 @@ private:
     TDelayedExecutorCookie Cookie_;
     TPromise<void> IdlePromise_;
     TPromise<void> ExecutedPromise_;
+    TPromise<void> FirstExecutedEventPromise_;
 
     void DoStop(TGuard<NThreading::TSpinLock>& guard);
 

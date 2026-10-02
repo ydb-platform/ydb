@@ -9,18 +9,15 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class pS>
-  typename std::enable_if<std::tuple_size<pS>::value == 1,
-                          types::ndarray<long, types::pshape<long>>>::type
-  bincount(types::ndarray<T, pS> const &expr,
-           types::none_type weights = builtins::None,
+  std::enable_if_t<std::tuple_size<pS>::value == 1, types::ndarray<long, types::pshape<long>>>
+  bincount(types::ndarray<T, pS> const &expr, types::none_type weights = builtins::None,
            types::none<long> minlength = builtins::None);
 
   template <class T, class E, class pS>
-  typename std::enable_if<
+  std::enable_if_t<
       std::tuple_size<pS>::value == 1,
-      types::ndarray<decltype(std::declval<long>() *
-                              std::declval<typename E::dtype>()),
-                     types::pshape<long>>>::type
+      types::ndarray<decltype(std::declval<long>() * std::declval<typename E::dtype>()),
+                     types::pshape<long>>>
   bincount(types::ndarray<T, pS> const &expr, E const &weights,
            types::none<long> minlength = builtins::None);
 

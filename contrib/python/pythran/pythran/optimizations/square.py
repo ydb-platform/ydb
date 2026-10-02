@@ -38,9 +38,6 @@ class Square(Transformation):
         [AST_any(), ast.Constant(2, None)],
         [])
 
-    def __init__(self):
-        Transformation.__init__(self)
-
     def replace(self, value):
         self.update = self.need_import = True
         module_name = ast.Name(mangle('numpy'), ast.Load(), None, None)

@@ -9,14 +9,15 @@
 #include "flat_page_blobs.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_committed.h"
+#include "util_fmt_abort.h"
 #include "util_pool.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/vector.h>
@@ -90,7 +91,7 @@ namespace NMem {
         explicit TTreeAllocatorState(size_t pageSize)
             : PageSize(pageSize)
         {
-            Y_ABORT_UNLESS(PageSize >= sizeof(TFreeItem));
+            Y_ENSURE(PageSize >= sizeof(TFreeItem));
         }
 
         ~TTreeAllocatorState() noexcept {
@@ -209,7 +210,7 @@ namespace NMem {
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 
-            Y_ABORT_UNLESS(ops.size() < Max<ui16>(), "Too large update ops array");
+            Y_ENSURE(ops.size() < Max<ui16>(), "Too large update ops array");
 
             // Filter legacy empty values and re-order them in tag order
             ScratchUpdateTags.clear();
@@ -252,8 +253,14 @@ namespace NMem {
                 while (next) {
                     TRowVersion nextVersion = next->RowVersion;
                     if (nextVersion.Step == Max<ui64>()) {
+                        if (next->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            next = next->Next;
+                            continue;
+                        }
                         auto* commitVersion = committed.Find(nextVersion.TxId);
                         if (!commitVersion) {
+                            // Skip uncommitted updates
                             next = next->Next;
                             continue;
                         }
@@ -272,8 +279,14 @@ namespace NMem {
                 while (next) {
                     TRowVersion nextVersion = next->RowVersion;
                     if (nextVersion.Step == Max<ui64>()) {
+                        if (next->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            next = next->Next;
+                            continue;
+                        }
                         auto* commitVersion = committed.Find(nextVersion.TxId);
                         if (!commitVersion) {
+                            // Skip uncommitted updates
                             next = next->Next;
                             continue;
                         }
@@ -288,8 +301,13 @@ namespace NMem {
                 // See which tags we need to merge from earlier row versions
                 while (mergeFrom && rop == ERowOp::Upsert) {
                     if (mergeFrom->RowVersion.Step == Max<ui64>()) {
+                        if (mergeFrom->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            mergeFrom = mergeFrom->Next;
+                            continue;
+                        }
                         if (!committed.Find(mergeFrom->RowVersion.TxId)) {
-                            // this item is not committed, skip
+                            // Skip uncommitted updates
                             mergeFrom = mergeFrom->Next;
                             continue;
                         }
@@ -333,7 +351,7 @@ namespace NMem {
             }
 
             const size_t mergedSize = ScratchUpdateTags.size() + ScratchMergeTags.size();
-            Y_ABORT_UNLESS(mergedSize < Max<ui16>(), "Merged row update is too large");
+            Y_ENSURE(mergedSize < Max<ui16>(), "Merged row update is too large");
 
             auto *update = NewUpdate(mergedSize);
 
@@ -341,6 +359,7 @@ namespace NMem {
             update->RowVersion = rowVersion;
             update->Items = mergedSize;
             update->Rop = rop;
+            update->Lock = ELockMode::None;
 
             ui32 dstIndex = 0;
 
@@ -363,8 +382,10 @@ namespace NMem {
                 } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
                     /* Payloadless ECellOp types may have zero type value */
                 } else if (info->TypeInfo.GetTypeId() != ops[it].Value.Type()) {
-                    Y_ABORT("Got an unexpected column type %" PRIu16 " in cell update for tag %" PRIu32 " (expected %" PRIu16 ")",
-                        ops[it].Value.Type(), ops[it].Tag, info->TypeInfo.GetTypeId());
+                    Y_TABLET_ERROR(
+                        "Got an unexpected column type " << ops[it].Value.Type()
+                        << " in cell update for tag " << ops[it].Tag
+                        << " (expected " << info->TypeInfo.GetTypeId() << ")");
                 }
 
                 auto cell = ops[it].AsCell();
@@ -380,7 +401,7 @@ namespace NMem {
                     cell = TCell::Make<ui64>(ref);
 
                 } else if (ops[it].Op != ELargeObj::Inline) {
-                    Y_ABORT("Got an unexpected ELargeObj reference in update ops");
+                    Y_TABLET_ERROR("Got an unexpected ELargeObj reference in update ops");
                 } else if (!cell.IsInline()) {
                     cell = Clone(cell.Data(), cell.Size());
                 }
@@ -418,6 +439,50 @@ namespace NMem {
                 MinRowVersion = Min(MinRowVersion, rowVersion);
                 MaxRowVersion = Max(MaxRowVersion, rowVersion);
             }
+        }
+
+        void LockRow(ELockMode mode, TRawVals key_, ui64 txId)
+        {
+            const TCelled key(key_, *Scheme->Keys, true);
+            const NMem::TTreeValue* const current = Tree.Find(NMem::TCandidate{ key.Cells });
+            const NMem::TUpdate* next = current ? current->GetFirst() : nullptr;
+
+            while (next && next->Rop == ERowOp::Absent) {
+                // New lock replaces older locks, avoid keeping them around
+                next = next->Next;
+            }
+
+            auto *update = NewUpdate(0);
+
+            update->Next = next;
+            update->RowVersion = TRowVersion(Max<ui64>(), txId);
+            update->Items = 0;
+            update->Rop = ERowOp::Absent;
+            update->Lock = mode;
+
+            if (current) {
+                Tree.UpdateUnsafe()->Chain = update;
+            } else {
+                Tree.EmplaceUnsafe(NewKey(key.Cells), update);
+                ++RowCount;
+            }
+
+            ++OpsCount;
+
+            // Note: lock only deltas don't affect min/max row version
+            // But we still have to update them because they may result in deltas on compaction
+            MinRowVersion = TRowVersion::Min();
+            MaxRowVersion = TRowVersion::Max();
+
+            if (RollbackState) {
+                auto it = TxIdStats.find(txId);
+                if (it != TxIdStats.end()) {
+                    UndoBuffer.push_back(TUndoOpUpdateTxIdStats{ txId, it->second });
+                } else {
+                    UndoBuffer.push_back(TUndoOpEraseTxIdStats{ txId });
+                }
+            }
+            ++TxIdStats[txId].OpsCount;
         }
 
         size_t GetUsedMem() const noexcept
@@ -460,7 +525,8 @@ namespace NMem {
             return TxIdStats;
         }
 
-        void CommitTx(ui64 txId, TRowVersion rowVersion) {
+        bool CommitTx(ui64 txId, TRowVersion rowVersion) {
+            bool newRef = false;
             auto it = Committed.find(txId);
             bool toInsert = (it == Committed.end());
 
@@ -480,12 +546,16 @@ namespace NMem {
                             UndoBuffer.push_back(TUndoOpInsertRemoved{ txId });
                         }
                         Removed.erase(itRemoved);
+                    } else {
+                        newRef = true;
                     }
                 }
             }
+            return newRef;
         }
 
-        void RemoveTx(ui64 txId) {
+        bool RemoveTx(ui64 txId) {
+            bool newRef = false;
             auto it = Committed.find(txId);
             if (it == Committed.end()) {
                 auto itRemoved = Removed.find(txId);
@@ -494,8 +564,10 @@ namespace NMem {
                         UndoBuffer.push_back(TUndoOpEraseRemoved{ txId });
                     }
                     Removed.insert(txId);
+                    newRef = true;
                 }
             }
+            return newRef;
         }
 
         const absl::flat_hash_map<ui64, TRowVersion>& GetCommittedTransactions() const {
@@ -507,7 +579,7 @@ namespace NMem {
         }
 
     private:
-        NMem::TTreeKey NewKey(const TCell* src) noexcept {
+        NMem::TTreeKey NewKey(const TCell* src) {
             const size_t items = Scheme->Keys->Size();
             const size_t bytes = sizeof(TCell) * items;
 
@@ -522,14 +594,14 @@ namespace NMem {
             return NMem::TTreeKey(key);
         }
 
-        NMem::TUpdate* NewUpdate(ui32 cols) noexcept
+        NMem::TUpdate* NewUpdate(ui32 cols)
         {
             const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate);
 
             return (NMem::TUpdate*)Pool.Allocate(bytes);
         }
 
-        TCell Clone(const char *data, ui32 size) noexcept
+        TCell Clone(const char *data, ui32 size)
         {
             const bool small = TCell::CanInline(size);
 

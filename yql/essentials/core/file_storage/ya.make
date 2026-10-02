@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/core/file_storage/defs
     yql/essentials/core/file_storage/download
     yql/essentials/core/file_storage/http_download
+    yql/essentials/public/issue
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/utils/fetch
@@ -31,5 +32,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    download
     ut
 )

@@ -3,6 +3,8 @@ package NYT.NNodeTrackerClient.NProto;
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/node_tracker_client";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(gritukan): Move it to TReqFullChunkHeartbeat after switching to new heartbeats.
@@ -88,12 +90,14 @@ message TMediumStatistics
 {
     required int32 medium_index = 1;
     required double io_weight = 3;
+    optional int64 max_write_sessions_per_location = 4;
 }
 
 message TNetworkStatistics
 {
     required string network = 1;
     required bool throttling_reads = 2 [default = false];
+    optional bool throttling_writes = 3 [default = false];
 }
 
 // Describes the current state of the whole node.
@@ -227,6 +231,7 @@ message TDataNodeStatistics
     required bool full = 9;
     repeated TChunkLocationStatistics chunk_locations = 10;
     repeated TMediumStatistics media = 11;
+    optional int32 max_write_sessions = 12;
 }
 
 message TExecNodeStatistics

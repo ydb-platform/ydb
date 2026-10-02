@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(bytes___bytes____doc__,
 "__bytes__($self, /)\n"
@@ -34,8 +35,8 @@ PyDoc_STRVAR(bytes_split__doc__,
 "\n"
 "  sep\n"
 "    The delimiter according which to split the bytes.\n"
-"    None (the default value) means split on ASCII whitespace characters\n"
-"    (space, tab, return, newline, formfeed, vertical tab).\n"
+"    None (the default value) means split on ASCII whitespace\n"
+"    characters (space, tab, return, newline, formfeed, vertical tab).\n"
 "  maxsplit\n"
 "    Maximum number of splits to do.\n"
 "    -1 (the default value) means no limit.");
@@ -118,12 +119,12 @@ PyDoc_STRVAR(bytes_partition__doc__,
 "\n"
 "Partition the bytes into three parts using the given separator.\n"
 "\n"
-"This will search for the separator sep in the bytes. If the separator is found,\n"
-"returns a 3-tuple containing the part before the separator, the separator\n"
-"itself, and the part after it.\n"
+"This will search for the separator sep in the bytes.  If the\n"
+"separator is found, returns a 3-tuple containing the part before the\n"
+"separator, the separator itself, and the part after it.\n"
 "\n"
-"If the separator is not found, returns a 3-tuple containing the original bytes\n"
-"object and two empty bytes objects.");
+"If the separator is not found, returns a 3-tuple containing the\n"
+"original bytes object and two empty bytes objects.");
 
 #define BYTES_PARTITION_METHODDEF    \
     {"partition", (PyCFunction)bytes_partition, METH_O, bytes_partition__doc__},
@@ -138,10 +139,6 @@ bytes_partition(PyBytesObject *self, PyObject *arg)
     Py_buffer sep = {NULL, NULL};
 
     if (PyObject_GetBuffer(arg, &sep, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&sep, 'C')) {
-        _PyArg_BadArgument("partition", "argument", "contiguous buffer", arg);
         goto exit;
     }
     return_value = bytes_partition_impl(self, &sep);
@@ -161,12 +158,13 @@ PyDoc_STRVAR(bytes_rpartition__doc__,
 "\n"
 "Partition the bytes into three parts using the given separator.\n"
 "\n"
-"This will search for the separator sep in the bytes, starting at the end. If\n"
-"the separator is found, returns a 3-tuple containing the part before the\n"
-"separator, the separator itself, and the part after it.\n"
+"This will search for the separator sep in the bytes, starting at the\n"
+"end.  If the separator is found, returns a 3-tuple containing the\n"
+"part before the separator, the separator itself, and the part after\n"
+"it.\n"
 "\n"
-"If the separator is not found, returns a 3-tuple containing two empty bytes\n"
-"objects and the original bytes object.");
+"If the separator is not found, returns a 3-tuple containing two\n"
+"empty bytes objects and the original bytes object.");
 
 #define BYTES_RPARTITION_METHODDEF    \
     {"rpartition", (PyCFunction)bytes_rpartition, METH_O, bytes_rpartition__doc__},
@@ -181,10 +179,6 @@ bytes_rpartition(PyBytesObject *self, PyObject *arg)
     Py_buffer sep = {NULL, NULL};
 
     if (PyObject_GetBuffer(arg, &sep, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&sep, 'C')) {
-        _PyArg_BadArgument("rpartition", "argument", "contiguous buffer", arg);
         goto exit;
     }
     return_value = bytes_rpartition_impl(self, &sep);
@@ -206,13 +200,14 @@ PyDoc_STRVAR(bytes_rsplit__doc__,
 "\n"
 "  sep\n"
 "    The delimiter according which to split the bytes.\n"
-"    None (the default value) means split on ASCII whitespace characters\n"
-"    (space, tab, return, newline, formfeed, vertical tab).\n"
+"    None (the default value) means split on ASCII whitespace\n"
+"    characters (space, tab, return, newline, formfeed, vertical tab).\n"
 "  maxsplit\n"
 "    Maximum number of splits to do.\n"
 "    -1 (the default value) means no limit.\n"
 "\n"
-"Splitting is done starting at the end of the bytes and working to the front.");
+"Splitting is done starting at the end of the bytes and working to\n"
+"the front.");
 
 #define BYTES_RSPLIT_METHODDEF    \
     {"rsplit", _PyCFunction_CAST(bytes_rsplit), METH_FASTCALL|METH_KEYWORDS, bytes_rsplit__doc__},
@@ -301,13 +296,218 @@ PyDoc_STRVAR(bytes_join__doc__,
 #define BYTES_JOIN_METHODDEF    \
     {"join", (PyCFunction)bytes_join, METH_O, bytes_join__doc__},
 
+PyDoc_STRVAR(bytes_find__doc__,
+"find($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the lowest index in B where subsection \'sub\' is found, such that \'sub\' is contained within B[start,end].\n"
+"\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.\n"
+"\n"
+"Return -1 on failure.");
+
+#define BYTES_FIND_METHODDEF    \
+    {"find", _PyCFunction_CAST(bytes_find), METH_FASTCALL, bytes_find__doc__},
+
+static PyObject *
+bytes_find_impl(PyBytesObject *self, PyObject *sub, Py_ssize_t start,
+                Py_ssize_t end);
+
+static PyObject *
+bytes_find(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *sub;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("find", nargs, 1, 3)) {
+        goto exit;
+    }
+    sub = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_find_impl(self, sub, start, end);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(bytes_index__doc__,
+"index($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the lowest index in B where subsection \'sub\' is found, such that \'sub\' is contained within B[start,end].\n"
+"\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.\n"
+"\n"
+"Raise ValueError if the subsection is not found.");
+
+#define BYTES_INDEX_METHODDEF    \
+    {"index", _PyCFunction_CAST(bytes_index), METH_FASTCALL, bytes_index__doc__},
+
+static PyObject *
+bytes_index_impl(PyBytesObject *self, PyObject *sub, Py_ssize_t start,
+                 Py_ssize_t end);
+
+static PyObject *
+bytes_index(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *sub;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("index", nargs, 1, 3)) {
+        goto exit;
+    }
+    sub = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_index_impl(self, sub, start, end);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(bytes_rfind__doc__,
+"rfind($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the highest index in B where subsection \'sub\' is found, such that \'sub\' is contained within B[start,end].\n"
+"\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.\n"
+"\n"
+"Return -1 on failure.");
+
+#define BYTES_RFIND_METHODDEF    \
+    {"rfind", _PyCFunction_CAST(bytes_rfind), METH_FASTCALL, bytes_rfind__doc__},
+
+static PyObject *
+bytes_rfind_impl(PyBytesObject *self, PyObject *sub, Py_ssize_t start,
+                 Py_ssize_t end);
+
+static PyObject *
+bytes_rfind(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *sub;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("rfind", nargs, 1, 3)) {
+        goto exit;
+    }
+    sub = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_rfind_impl(self, sub, start, end);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(bytes_rindex__doc__,
+"rindex($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the highest index in B where subsection \'sub\' is found, such that \'sub\' is contained within B[start,end].\n"
+"\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.\n"
+"\n"
+"Raise ValueError if the subsection is not found.");
+
+#define BYTES_RINDEX_METHODDEF    \
+    {"rindex", _PyCFunction_CAST(bytes_rindex), METH_FASTCALL, bytes_rindex__doc__},
+
+static PyObject *
+bytes_rindex_impl(PyBytesObject *self, PyObject *sub, Py_ssize_t start,
+                  Py_ssize_t end);
+
+static PyObject *
+bytes_rindex(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *sub;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("rindex", nargs, 1, 3)) {
+        goto exit;
+    }
+    sub = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_rindex_impl(self, sub, start, end);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(bytes_strip__doc__,
 "strip($self, bytes=None, /)\n"
 "--\n"
 "\n"
 "Strip leading and trailing bytes contained in the argument.\n"
 "\n"
-"If the argument is omitted or None, strip leading and trailing ASCII whitespace.");
+"If the argument is omitted or None, strip leading and trailing ASCII\n"
+"whitespace.");
 
 #define BYTES_STRIP_METHODDEF    \
     {"strip", _PyCFunction_CAST(bytes_strip), METH_FASTCALL, bytes_strip__doc__},
@@ -403,6 +603,55 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(bytes_count__doc__,
+"count($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the number of non-overlapping occurrences of subsection \'sub\' in bytes B[start:end].\n"
+"\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.");
+
+#define BYTES_COUNT_METHODDEF    \
+    {"count", _PyCFunction_CAST(bytes_count), METH_FASTCALL, bytes_count__doc__},
+
+static PyObject *
+bytes_count_impl(PyBytesObject *self, PyObject *sub, Py_ssize_t start,
+                 Py_ssize_t end);
+
+static PyObject *
+bytes_count(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *sub;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("count", nargs, 1, 3)) {
+        goto exit;
+    }
+    sub = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_count_impl(self, sub, start, end);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(bytes_translate__doc__,
 "translate($self, table, /, delete=b\'\')\n"
 "--\n"
@@ -412,8 +661,9 @@ PyDoc_STRVAR(bytes_translate__doc__,
 "  table\n"
 "    Translation table, which must be a bytes object of length 256.\n"
 "\n"
-"All characters occurring in the optional argument delete are removed.\n"
-"The remaining characters are mapped through the given translation table.");
+"All characters occurring in the optional argument delete are\n"
+"removed.  The remaining characters are mapped through the given\n"
+"translation table.");
 
 #define BYTES_TRANSLATE_METHODDEF    \
     {"translate", _PyCFunction_CAST(bytes_translate), METH_FASTCALL|METH_KEYWORDS, bytes_translate__doc__},
@@ -476,10 +726,10 @@ PyDoc_STRVAR(bytes_maketrans__doc__,
 "maketrans(frm, to, /)\n"
 "--\n"
 "\n"
-"Return a translation table useable for the bytes or bytearray translate method.\n"
+"Return a translation table usable for the bytes or bytearray translate method.\n"
 "\n"
-"The returned table will be one where each byte in frm is mapped to the byte at\n"
-"the same position in to.\n"
+"The returned table will be one where each byte in frm is mapped to\n"
+"the byte at the same position in to.\n"
 "\n"
 "The bytes objects frm and to must be of the same length.");
 
@@ -502,15 +752,7 @@ bytes_maketrans(void *null, PyObject *const *args, Py_ssize_t nargs)
     if (PyObject_GetBuffer(args[0], &frm, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&frm, 'C')) {
-        _PyArg_BadArgument("maketrans", "argument 1", "contiguous buffer", args[0]);
-        goto exit;
-    }
     if (PyObject_GetBuffer(args[1], &to, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&to, 'C')) {
-        _PyArg_BadArgument("maketrans", "argument 2", "contiguous buffer", args[1]);
         goto exit;
     }
     return_value = bytes_maketrans_impl(&frm, &to);
@@ -562,15 +804,7 @@ bytes_replace(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
     if (PyObject_GetBuffer(args[0], &old, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&old, 'C')) {
-        _PyArg_BadArgument("replace", "argument 1", "contiguous buffer", args[0]);
-        goto exit;
-    }
     if (PyObject_GetBuffer(args[1], &new, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&new, 'C')) {
-        _PyArg_BadArgument("replace", "argument 2", "contiguous buffer", args[1]);
         goto exit;
     }
     if (nargs < 3) {
@@ -610,8 +844,9 @@ PyDoc_STRVAR(bytes_removeprefix__doc__,
 "\n"
 "Return a bytes object with the given prefix string removed if present.\n"
 "\n"
-"If the bytes starts with the prefix string, return bytes[len(prefix):].\n"
-"Otherwise, return a copy of the original bytes.");
+"If the bytes starts with the prefix string, return\n"
+"bytes[len(prefix):].  Otherwise, return a copy of the original\n"
+"bytes.");
 
 #define BYTES_REMOVEPREFIX_METHODDEF    \
     {"removeprefix", (PyCFunction)bytes_removeprefix, METH_O, bytes_removeprefix__doc__},
@@ -626,10 +861,6 @@ bytes_removeprefix(PyBytesObject *self, PyObject *arg)
     Py_buffer prefix = {NULL, NULL};
 
     if (PyObject_GetBuffer(arg, &prefix, PyBUF_SIMPLE) != 0) {
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&prefix, 'C')) {
-        _PyArg_BadArgument("removeprefix", "argument", "contiguous buffer", arg);
         goto exit;
     }
     return_value = bytes_removeprefix_impl(self, &prefix);
@@ -649,9 +880,9 @@ PyDoc_STRVAR(bytes_removesuffix__doc__,
 "\n"
 "Return a bytes object with the given suffix string removed if present.\n"
 "\n"
-"If the bytes ends with the suffix string and that suffix is not empty,\n"
-"return bytes[:-len(prefix)].  Otherwise, return a copy of the original\n"
-"bytes.");
+"If the bytes ends with the suffix string and that suffix is not\n"
+"empty, return bytes[:-len(prefix)].  Otherwise, return a copy of the\n"
+"original bytes.");
 
 #define BYTES_REMOVESUFFIX_METHODDEF    \
     {"removesuffix", (PyCFunction)bytes_removesuffix, METH_O, bytes_removesuffix__doc__},
@@ -668,10 +899,6 @@ bytes_removesuffix(PyBytesObject *self, PyObject *arg)
     if (PyObject_GetBuffer(arg, &suffix, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&suffix, 'C')) {
-        _PyArg_BadArgument("removesuffix", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
     return_value = bytes_removesuffix_impl(self, &suffix);
 
 exit:
@@ -680,6 +907,108 @@ exit:
        PyBuffer_Release(&suffix);
     }
 
+    return return_value;
+}
+
+PyDoc_STRVAR(bytes_startswith__doc__,
+"startswith($self, prefix[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return True if the bytes starts with the specified prefix, False otherwise.\n"
+"\n"
+"  prefix\n"
+"    A bytes or a tuple of bytes to try.\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.");
+
+#define BYTES_STARTSWITH_METHODDEF    \
+    {"startswith", _PyCFunction_CAST(bytes_startswith), METH_FASTCALL, bytes_startswith__doc__},
+
+static PyObject *
+bytes_startswith_impl(PyBytesObject *self, PyObject *subobj,
+                      Py_ssize_t start, Py_ssize_t end);
+
+static PyObject *
+bytes_startswith(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *subobj;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("startswith", nargs, 1, 3)) {
+        goto exit;
+    }
+    subobj = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_startswith_impl(self, subobj, start, end);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(bytes_endswith__doc__,
+"endswith($self, suffix[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return True if the bytes ends with the specified suffix, False otherwise.\n"
+"\n"
+"  suffix\n"
+"    A bytes or a tuple of bytes to try.\n"
+"  start\n"
+"    Optional start position. Default: start of the bytes.\n"
+"  end\n"
+"    Optional stop position. Default: end of the bytes.");
+
+#define BYTES_ENDSWITH_METHODDEF    \
+    {"endswith", _PyCFunction_CAST(bytes_endswith), METH_FASTCALL, bytes_endswith__doc__},
+
+static PyObject *
+bytes_endswith_impl(PyBytesObject *self, PyObject *subobj, Py_ssize_t start,
+                    Py_ssize_t end);
+
+static PyObject *
+bytes_endswith(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *subobj;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+
+    if (!_PyArg_CheckPositional("endswith", nargs, 1, 3)) {
+        goto exit;
+    }
+    subobj = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    return_value = bytes_endswith_impl(self, subobj, start, end);
+
+exit:
     return return_value;
 }
 
@@ -692,11 +1021,11 @@ PyDoc_STRVAR(bytes_decode__doc__,
 "  encoding\n"
 "    The encoding with which to decode the bytes.\n"
 "  errors\n"
-"    The error handling scheme to use for the handling of decoding errors.\n"
-"    The default is \'strict\' meaning that decoding errors raise a\n"
-"    UnicodeDecodeError. Other possible values are \'ignore\' and \'replace\'\n"
-"    as well as any other name registered with codecs.register_error that\n"
-"    can handle UnicodeDecodeErrors.");
+"    The error handling scheme to use for the handling of decoding\n"
+"    errors.  The default is \'strict\' meaning that decoding errors\n"
+"    raise a UnicodeDecodeError.  Other possible values are \'ignore\'\n"
+"    and \'replace\' as well as any other name registered with\n"
+"    codecs.register_error that can handle UnicodeDecodeErrors.");
 
 #define BYTES_DECODE_METHODDEF    \
     {"decode", _PyCFunction_CAST(bytes_decode), METH_FASTCALL|METH_KEYWORDS, bytes_decode__doc__},
@@ -790,8 +1119,8 @@ PyDoc_STRVAR(bytes_splitlines__doc__,
 "\n"
 "Return a list of the lines in the bytes, breaking at line boundaries.\n"
 "\n"
-"Line breaks are not included in the resulting list unless keepends is given and\n"
-"true.");
+"Line breaks are not included in the resulting list unless keepends\n"
+"is given and true.");
 
 #define BYTES_SPLITLINES_METHODDEF    \
     {"splitlines", _PyCFunction_CAST(bytes_splitlines), METH_FASTCALL|METH_KEYWORDS, bytes_splitlines__doc__},
@@ -875,9 +1204,6 @@ bytes_fromhex(PyTypeObject *type, PyObject *arg)
         _PyArg_BadArgument("fromhex", "argument", "str", arg);
         goto exit;
     }
-    if (PyUnicode_READY(arg) == -1) {
-        goto exit;
-    }
     string = arg;
     return_value = bytes_fromhex_impl(type, string);
 
@@ -894,8 +1220,8 @@ PyDoc_STRVAR(bytes_hex__doc__,
 "  sep\n"
 "    An optional single character or byte to separate hex bytes.\n"
 "  bytes_per_sep\n"
-"    How many bytes between separators.  Positive values count from the\n"
-"    right, negative values count from the left.\n"
+"    How many bytes between separators.  Positive values count from\n"
+"    the right, negative values count from the left.\n"
 "\n"
 "Example:\n"
 ">>> value = b\'\\xb9\\x01\\xef\'\n"
@@ -961,7 +1287,7 @@ bytes_hex(PyBytesObject *self, PyObject *const *args, Py_ssize_t nargs, PyObject
             goto skip_optional_pos;
         }
     }
-    bytes_per_sep = _PyLong_AsInt(args[1]);
+    bytes_per_sep = PyLong_AsInt(args[1]);
     if (bytes_per_sep == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -1063,4 +1389,4 @@ skip_optional_pos:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=31a9e4af85562612 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=d2bb8823b8a6a75b input=a9049054013a1b77]*/

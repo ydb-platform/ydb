@@ -68,12 +68,23 @@ public:
 
 class TDSAccessorBase: public NActors::TActorBootstrapped<TDSAccessorBase> {
 private:
+    enum class EState {
+        UNKNOWN,
+        EXISTS,
+        NON_EXISTS
+    };
+    struct TTableInfo {
+        EState State = EState::UNKNOWN;
+        int64_t RetryCount = 0;
+    };
     using TBase = NActors::TActorBootstrapped<TDSAccessorBase>;
     YDB_READONLY(TInstant, RequestedActuality, TInstant::Zero());
     const NRequest::TConfig Config;
-    std::map<TString, i32> ExistenceChecks;
-    std::map<TString, i32> CurrentExistence;
+    std::map<IClassBehaviour::TPtr, TString> ManagerPinPath;
+    std::map<TString, TTableInfo> ExistenceChecks;
+    std::map<TString, TTableInfo> CurrentExistence;
     void StartSnapshotsFetchingImpl();
+
 protected:
     std::shared_ptr<TRefreshInternalController> InternalController;
     NFetcher::ISnapshotsFetcher::TPtr SnapshotConstructor;
@@ -93,6 +104,19 @@ protected:
     void Handle(NRequest::TEvRequestFailed::TPtr& ev);
     void Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev);
     void Handle(TTableExistsActor::TEvController::TEvResult::TPtr& ev);
+
+    ///
+    /// This method only for testing purpose, do not use it
+    ///
+    bool IsPathPinned(const TString& path) const {
+        for (const auto& p : ManagerPinPath) {
+            if (p.second == path) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 public:
     void Bootstrap();
 

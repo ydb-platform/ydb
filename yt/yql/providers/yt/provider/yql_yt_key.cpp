@@ -64,8 +64,7 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
     }
 
     if (key.ChildrenSize() < 1) {
-        ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component - table or tablescheme, "
-            " and may have second tag - view")));
+        ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component")));
         return false;
     }
     else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFolders>(&key)) {
@@ -85,38 +84,37 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
             .DiveHandler = walkFolders.DiveHandler().Ptr(),
             .PostHandler = walkFolders.PostHandler().Ptr(),
         });
-        
+
         return true;
     }
     else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFoldersImpl>(&key)) {
         Type = EType::WalkFoldersImpl;
         const auto walkFolders = maybeWalkFolders.Cast();
-        
+
         ui64 stateKey;
         if (!TryFromString(walkFolders.ProcessStateKey().StringValue(), stateKey)) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()),
                 TStringBuilder() << MrWalkFoldersImplName << ": incorrect format of state map key"));
             return false;
         }
-        
+
         WalkFolderImplArgs = MakeMaybe(TWalkFoldersImplArgs{
             .UserStateExpr = walkFolders.PickledUserState().Ptr(),
             .UserStateType = walkFolders.UserStateType().Ptr(),
             .StateKey = stateKey,
         });
-        
+
         Type = EType::WalkFoldersImpl;
         return true;
     }
 
-    auto tagName = key.Child(0)->Child(0)->Content();
-    if (tagName == TStringBuf("table")) {
+    if (const auto& tag = key.Head().Head(); tag.IsAtom("table")) {
         Type = EType::Table;
         if (key.ChildrenSize() > 3) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
             return false;
         }
-    } else if (tagName == TStringBuf("tablescheme")) {
+    } else if (tag.IsAtom("tablescheme")) {
         Type = EType::TableScheme;
         if (key.ChildrenSize() > 3) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
@@ -125,8 +123,26 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
         if (isOutput) {
             Type = EType::Table;
         }
-    } else {
-        ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tagName));
+    } else if (tag.IsAtom("objectId")) {
+        if (const auto& type = key.Tail(); 2U == type.ChildrenSize() && type.Head().IsAtom("typeId")
+            && type.Tail().IsCallable("String") && 1U == type.Tail().ChildrenSize() && type.Tail().Tail().IsAtom("VIEW")) {
+            Type = EType::View;
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TString("Unexpected ") + type.Head().Content()));
+            return false;
+        }
+    } else if (tag.IsAtom("link")) {
+        if (!isOutput) {
+            ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Link key is not supported for input"));
+            return false;
+        }
+        Type = EType::Link;
+        if (key.ChildrenSize() > 2) {
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
+            return false;
+        }
+    } else  {
+        ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tag.Content()));
         return false;
     }
 
@@ -145,8 +161,10 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
         Path = tableName->Content();
     }
     else if (nameNode->IsCallable(MrTableRangeName) || nameNode->IsCallable(MrTableRangeStrictName)) {
-        if (EType::TableScheme == Type) {
-            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), "MrTableRange[Strict] must not be used with tablescheme tag"));
+        if (EType::TableScheme == Type || EType::Link == Type) {
+            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
+                << "MrTableRange[Strict] must not be used with "
+                << (EType::Link == Type ? "link" : "tablescheme") << " tag"));
             return false;
         }
 
@@ -180,12 +198,18 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
 
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Expected String or MrTableRange[Strict]"));
+        return false;
     }
 
     if (key.ChildrenSize() > 1) {
         for (ui32 i = 1; i < key.ChildrenSize(); ++i) {
-            auto tag = key.Child(i)->Child(0);
-            if (tag->Content() == TStringBuf("view")) {
+            const auto& tag = key.Child(i)->Head();
+            if (Type == EType::Link && !tag.IsAtom("target")) {
+                ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TStringBuilder() << "Unexpected tag: " << tag.Content()));
+                return false;
+            }
+
+            if (tag.IsAtom("view")) {
                 const TExprNode* viewNode = key.Child(i)->Child(1);
                 if (!viewNode->IsCallable("String")) {
                     ctx.AddError(TIssue(ctx.GetPosition(viewNode->Pos()), "Expected String"));
@@ -202,8 +226,39 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
                     ctx.AddError(TIssue(ctx.GetPosition(viewNode->Child(0)->Pos()), "View name must not be empty"));
                     return false;
                 }
+            } else if (tag.IsAtom("typeId")) {
+                if (Type != EType::View) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Missed object id."));
+                    return false;
+                }
+                if (const auto viewNode = key.Child(i)->Child(1);
+                    !(viewNode->IsCallable("String") && viewNode->ChildrenSize() == 1 && viewNode->Head().IsAtom("VIEW"))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(viewNode->Pos()), "Expected String 'VIEW'."));
+                    return false;
+                }
+            } else if (tag.IsAtom("extraColumns")) {
+                const TExprNode::TPtr value = key.Child(i)->Child(1);
+                if (!value->IsCallable("AsStruct")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(value->Pos()), "Expected literal Struct"));
+                    return false;
+                }
+                ExtraColumns = value;
+            } else if (tag.IsAtom("target")) {
+                if (Type != EType::Link) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Target is only supported for link keys"));
+                    return false;
+                }
+                const auto targetNode = key.Child(i)->Child(1);
+                if (!targetNode->IsCallable("String") || targetNode->ChildrenSize() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(targetNode->Pos()), "Expected String"));
+                    return false;
+                }
+                if (!EnsureAtom(*targetNode->Child(0), ctx)) {
+                    return false;
+                }
+                Target = TString(targetNode->Child(0)->Content());
             } else {
-                ctx.AddError(TIssue(ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag: " << tag->Content()));
+                ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TStringBuilder() << "Unexpected tag: " << tag.Content()));
                 return false;
             }
         }
@@ -269,7 +324,7 @@ bool TYtOutputKey::Parse(const TExprNode& keyNode, TExprContext& ctx) {
         return false;
     }
 
-    if (GetType() != TYtKey::EType::Table) {
+    if (GetType() != TYtKey::EType::Table && GetType() != TYtKey::EType::Link && GetType() != TYtKey::EType::View) {
         ctx.AddError(TIssue(ctx.GetPosition(keyNode.Child(0)->Child(0)->Pos()),
             TStringBuilder() << "Unexpected tag: " << keyNode.Child(0)->Child(0)->Content()));
         return false;

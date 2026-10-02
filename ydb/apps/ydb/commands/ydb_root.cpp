@@ -2,15 +2,18 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
-
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+
+#include <library/cpp/getopt/small/completer.h>
+#include <library/cpp/resource/resource.h>
+#include <util/string/strip.h>
 
 #include <filesystem>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TClientCommandRoot::TClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRootCommon(name, settings)
@@ -40,14 +43,18 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
         if (config.UseIamAuth) {
             if (config.YCToken) {
                 return CreateIamOAuthCredentialsProviderFactory(
-                    { {.Endpoint = config.IamEndpoint}, config.YCToken });
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.YCToken });
             }
             if (config.UseMetadataCredentials) {
                 return CreateIamCredentialsProviderFactory();
             }
+            if (config.SaKeyParams) {
+                return CreateIamJwtParamsCredentialsProviderFactory(
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyParams });
+            }
             if (config.SaKeyFile) {
                 return CreateIamJwtFileCredentialsProviderFactory(
-                    { {.Endpoint = config.IamEndpoint}, config.SaKeyFile });
+                    { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyFile });
             }
         }
         return CreateInsecureCredentialsProviderFactory();
@@ -72,37 +79,31 @@ namespace {
             }
         }
     }
-}
+} // anonymous namespace
 
 void TYdbClientCommandRoot::Config(TConfig& config) {
     TClientCommandRoot::Config(config);
 
-    NLastGetopt::TOpts& opts = *config.Opts;
-    RemoveOption(opts, "svnrevision");
+    RemoveOption(config.Opts->GetOpts(), "svnrevision");
 }
 
 int TYdbClientCommandRoot::Run(TConfig& config) {
     if (config.StorageUrl.has_value() && config.NeedToCheckForUpdate) {
         TYdbUpdater updater(config.StorageUrl.value());
-        if (config.ForceVersionCheck) {
-            Cout << "Force checking if there is a newer version..." << Endl;
-        }
-        if (updater.CheckIfUpdateNeeded(config.ForceVersionCheck)) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-            Cerr << colors.Green() << "(!) New version of YDB CLI is available. Run 'ydb update' command for update. "
-                << "You can also disable further version checks with 'ydb version --disable-checks' command"
-                << colors.OldColor() << Endl;
-        } else if (config.ForceVersionCheck) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-            Cout << colors.GreenColor() << "Current version is up to date"
-                << colors.OldColor() << Endl;
-        }
+        updater.PrintUpdateMessageIfNeeded(config.ForceVersionCheck);
     }
 
     return TClientCommandRoot::Run(config);
 }
 
 int NewYdbClient(int argc, char** argv) {
+    auto schemeCtx = DetectSchemeCompletion(argc, const_cast<const char**>(argv));
+
+    if (!schemeCtx) {
+        NLastGetopt::NComp::TCustomCompleter::FireCustomCompleter(
+            argc, const_cast<const char**>(argv));
+    }
+
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
     settings.UseAccessToken = true;
@@ -115,11 +116,25 @@ int NewYdbClient(int argc, char** argv) {
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
 
+    settings.BuildInfoProvider = []() -> NYdb::NConsoleClient::TYdbCliBuildInfo {
+        TString version;
+        try {
+            version = StripString(NResource::Find("version.txt"));
+        } catch (...) {
+        }
+        if (version.empty()) {
+            version = "0.0.0";
+        }
+        return {"ydb-cli", version};
+    };
+
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");
+    if (schemeCtx) {
+        commandsRoot->SetSchemeCompletionContext(std::move(*schemeCtx));
+    }
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

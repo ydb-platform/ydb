@@ -1,14 +1,16 @@
 #include "ast_nodes.h"
 
+#include <utility>
+
 namespace NYql::NJsonPath {
 
 TAstNode::TAstNode(TPosition pos)
-    : Pos(pos)
+    : Pos_(std::move(pos))
 {
 }
 
 TPosition TAstNode::GetPos() const {
-    return Pos;
+    return Pos_;
 }
 
 EReturnType TAstNode::GetReturnType() const {
@@ -17,25 +19,25 @@ EReturnType TAstNode::GetReturnType() const {
 
 TRootNode::TRootNode(TPosition pos, TAstNodePtr expr, EJsonPathMode mode)
     : TAstNode(pos)
-    , Expr(expr)
-    , Mode(mode)
+    , Expr_(std::move(expr))
+    , Mode_(mode)
 {
 }
 
-const TAstNodePtr TRootNode::GetExpr() const {
-    return Expr;
+TAstNodePtr TRootNode::GetExpr() const {
+    return Expr_;
 }
 
 EJsonPathMode TRootNode::GetMode() const {
-    return Mode;
+    return Mode_;
 }
 
 void TRootNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitRoot(*this);
+    visitor.VisitRoot(*this);
 }
 
 EReturnType TRootNode::GetReturnType() const {
-    return Expr->GetReturnType();
+    return Expr_->GetReturnType();
 }
 
 TContextObjectNode::TContextObjectNode(TPosition pos)
@@ -44,17 +46,17 @@ TContextObjectNode::TContextObjectNode(TPosition pos)
 }
 
 void TContextObjectNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitContextObject(*this);
+    visitor.VisitContextObject(*this);
 }
 
-TVariableNode::TVariableNode(TPosition pos, const TString& name)
+TVariableNode::TVariableNode(TPosition pos, TString name)
     : TAstNode(pos)
-    , Name(name)
+    , Name_(std::move(name))
 {
 }
 
 const TString& TVariableNode::GetName() const {
-    return Name;
+    return Name_;
 }
 
 void TVariableNode::Accept(IAstNodeVisitor& visitor) const {
@@ -72,133 +74,133 @@ void TLastArrayIndexNode::Accept(IAstNodeVisitor& visitor) const {
 
 TNumberLiteralNode::TNumberLiteralNode(TPosition pos, double value)
     : TAstNode(pos)
-    , Value(value)
+    , Value_(value)
 {
 }
 
 double TNumberLiteralNode::GetValue() const {
-    return Value;
+    return Value_;
 }
 
 void TNumberLiteralNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitNumberLiteral(*this);
+    visitor.VisitNumberLiteral(*this);
 }
 
-TMemberAccessNode::TMemberAccessNode(TPosition pos, const TString& member, TAstNodePtr input)
+TMemberAccessNode::TMemberAccessNode(TPosition pos, TString member, TAstNodePtr input)
     : TAstNode(pos)
-    , Member(member)
-    , Input(input)
+    , Member_(std::move(member))
+    , Input_(std::move(input))
 {
 }
 
-const TStringBuf TMemberAccessNode::GetMember() const {
-    return Member;
+TStringBuf TMemberAccessNode::GetMember() const {
+    return Member_;
 }
 
-const TAstNodePtr TMemberAccessNode::GetInput() const {
-    return Input;
+TAstNodePtr TMemberAccessNode::GetInput() const {
+    return Input_;
 }
 
 void TMemberAccessNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitMemberAccess(*this);
+    visitor.VisitMemberAccess(*this);
 }
 
 TWildcardMemberAccessNode::TWildcardMemberAccessNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input(input)
+    , Input_(std::move(input))
 {
 }
 
-const TAstNodePtr TWildcardMemberAccessNode::GetInput() const {
-    return Input;
+TAstNodePtr TWildcardMemberAccessNode::GetInput() const {
+    return Input_;
 }
 
 void TWildcardMemberAccessNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitWildcardMemberAccess(*this);
+    visitor.VisitWildcardMemberAccess(*this);
 }
 
 TArrayAccessNode::TArrayAccessNode(TPosition pos, TVector<TSubscript> subscripts, TAstNodePtr input)
     : TAstNode(pos)
-    , Subscripts(subscripts)
-    , Input(input)
+    , Subscripts_(std::move(subscripts))
+    , Input_(std::move(input))
 {
 }
 
 const TVector<TArrayAccessNode::TSubscript>& TArrayAccessNode::GetSubscripts() const {
-    return Subscripts;
+    return Subscripts_;
 }
 
-const TAstNodePtr TArrayAccessNode::GetInput() const {
-    return Input;
+TAstNodePtr TArrayAccessNode::GetInput() const {
+    return Input_;
 }
 
 void TArrayAccessNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitArrayAccess(*this);
+    visitor.VisitArrayAccess(*this);
 }
 
 TWildcardArrayAccessNode::TWildcardArrayAccessNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input(input)
+    , Input_(std::move(input))
 {
 }
 
-const TAstNodePtr TWildcardArrayAccessNode::GetInput() const {
-    return Input;
+TAstNodePtr TWildcardArrayAccessNode::GetInput() const {
+    return Input_;
 }
 
 void TWildcardArrayAccessNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitWildcardArrayAccess(*this);
+    visitor.VisitWildcardArrayAccess(*this);
 }
 
 TUnaryOperationNode::TUnaryOperationNode(TPosition pos, EUnaryOperation op, TAstNodePtr expr)
     : TAstNode(pos)
-    , Operation(op)
-    , Expr(expr)
+    , Operation_(op)
+    , Expr_(std::move(expr))
 {
 }
 
 EUnaryOperation TUnaryOperationNode::GetOp() const {
-    return Operation;
+    return Operation_;
 }
 
-const TAstNodePtr TUnaryOperationNode::GetExpr() const {
-    return Expr;
+TAstNodePtr TUnaryOperationNode::GetExpr() const {
+    return Expr_;
 }
 
 void TUnaryOperationNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitUnaryOperation(*this);
+    visitor.VisitUnaryOperation(*this);
 }
 
 EReturnType TUnaryOperationNode::GetReturnType() const {
-    return Operation == EUnaryOperation::Not ? EReturnType::Bool : EReturnType::Any;
+    return Operation_ == EUnaryOperation::Not ? EReturnType::Bool : EReturnType::Any;
 }
 
 TBinaryOperationNode::TBinaryOperationNode(TPosition pos, EBinaryOperation op, TAstNodePtr leftExpr, TAstNodePtr rightExpr)
     : TAstNode(pos)
-    , Operation(op)
-    , LeftExpr(leftExpr)
-    , RightExpr(rightExpr)
+    , Operation_(op)
+    , LeftExpr_(std::move(leftExpr))
+    , RightExpr_(std::move(rightExpr))
 {
 }
 
 EBinaryOperation TBinaryOperationNode::GetOp() const {
-    return Operation;
+    return Operation_;
 }
 
-const TAstNodePtr TBinaryOperationNode::GetLeftExpr() const {
-    return LeftExpr;
+TAstNodePtr TBinaryOperationNode::GetLeftExpr() const {
+    return LeftExpr_;
 }
 
-const TAstNodePtr TBinaryOperationNode::GetRightExpr() const {
-    return RightExpr;
+TAstNodePtr TBinaryOperationNode::GetRightExpr() const {
+    return RightExpr_;
 }
 
 void TBinaryOperationNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitBinaryOperation(*this);
+    visitor.VisitBinaryOperation(*this);
 }
 
 EReturnType TBinaryOperationNode::GetReturnType() const {
-    switch (Operation) {
+    switch (Operation_) {
         case EBinaryOperation::Less:
         case EBinaryOperation::LessEqual:
         case EBinaryOperation::Greater:
@@ -216,16 +218,16 @@ EReturnType TBinaryOperationNode::GetReturnType() const {
 
 TBooleanLiteralNode::TBooleanLiteralNode(TPosition pos, bool value)
     : TAstNode(pos)
-    , Value(value)
+    , Value_(value)
 {
 }
 
 bool TBooleanLiteralNode::GetValue() const {
-    return Value;
+    return Value_;
 }
 
 void TBooleanLiteralNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitBooleanLiteral(*this);
+    visitor.VisitBooleanLiteral(*this);
 }
 
 TNullLiteralNode::TNullLiteralNode(TPosition pos)
@@ -234,21 +236,21 @@ TNullLiteralNode::TNullLiteralNode(TPosition pos)
 }
 
 void TNullLiteralNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitNullLiteral(*this);
+    visitor.VisitNullLiteral(*this);
 }
 
-TStringLiteralNode::TStringLiteralNode(TPosition pos, const TString& value)
+TStringLiteralNode::TStringLiteralNode(TPosition pos, TString value)
     : TAstNode(pos)
-    , Value(value)
+    , Value_(std::move(value))
 {
 }
 
 const TString& TStringLiteralNode::GetValue() const {
-    return Value;
+    return Value_;
 }
 
 void TStringLiteralNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitStringLiteral(*this);
+    visitor.VisitStringLiteral(*this);
 }
 
 TFilterObjectNode::TFilterObjectNode(TPosition pos)
@@ -257,60 +259,60 @@ TFilterObjectNode::TFilterObjectNode(TPosition pos)
 }
 
 void TFilterObjectNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitFilterObject(*this);
+    visitor.VisitFilterObject(*this);
 }
 
 TFilterPredicateNode::TFilterPredicateNode(TPosition pos, TAstNodePtr predicate, TAstNodePtr input)
     : TAstNode(pos)
-    , Predicate(predicate)
-    , Input(input)
+    , Predicate_(std::move(predicate))
+    , Input_(std::move(input))
 {
 }
 
-const TAstNodePtr TFilterPredicateNode::GetPredicate() const {
-    return Predicate;
+TAstNodePtr TFilterPredicateNode::GetPredicate() const {
+    return Predicate_;
 }
 
-const TAstNodePtr TFilterPredicateNode::GetInput() const {
-    return Input;
+TAstNodePtr TFilterPredicateNode::GetInput() const {
+    return Input_;
 }
 
 void TFilterPredicateNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitFilterPredicate(*this);
+    visitor.VisitFilterPredicate(*this);
 }
 
 TMethodCallNode::TMethodCallNode(TPosition pos, EMethodType type, TAstNodePtr input)
     : TAstNode(pos)
-    , Type(type)
-    , Input(input)
+    , Type_(type)
+    , Input_(std::move(input))
 {
 }
 
 EMethodType TMethodCallNode::GetType() const {
-    return Type;
+    return Type_;
 }
 
-const TAstNodePtr TMethodCallNode::GetInput() const {
-    return Input;
+TAstNodePtr TMethodCallNode::GetInput() const {
+    return Input_;
 }
 
 void TMethodCallNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitMethodCall(*this);
+    visitor.VisitMethodCall(*this);
 }
 
 TStartsWithPredicateNode::TStartsWithPredicateNode(TPosition pos, TAstNodePtr input, TAstNodePtr prefix)
     : TAstNode(pos)
-    , Input(input)
-    , Prefix(prefix)
+    , Input_(std::move(input))
+    , Prefix_(std::move(prefix))
 {
 }
 
-const TAstNodePtr TStartsWithPredicateNode::GetInput() const {
-    return Input;
+TAstNodePtr TStartsWithPredicateNode::GetInput() const {
+    return Input_;
 }
 
-const TAstNodePtr TStartsWithPredicateNode::GetPrefix() const {
-    return Prefix;
+TAstNodePtr TStartsWithPredicateNode::GetPrefix() const {
+    return Prefix_;
 }
 
 EReturnType TStartsWithPredicateNode::GetReturnType() const {
@@ -318,17 +320,17 @@ EReturnType TStartsWithPredicateNode::GetReturnType() const {
 }
 
 void TStartsWithPredicateNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitStartsWithPredicate(*this);
+    visitor.VisitStartsWithPredicate(*this);
 }
 
 TExistsPredicateNode::TExistsPredicateNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input(input)
+    , Input_(std::move(input))
 {
 }
 
-const TAstNodePtr TExistsPredicateNode::GetInput() const {
-    return Input;
+TAstNodePtr TExistsPredicateNode::GetInput() const {
+    return Input_;
 }
 
 EReturnType TExistsPredicateNode::GetReturnType() const {
@@ -336,17 +338,17 @@ EReturnType TExistsPredicateNode::GetReturnType() const {
 }
 
 void TExistsPredicateNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitExistsPredicate(*this);
+    visitor.VisitExistsPredicate(*this);
 }
 
 TIsUnknownPredicateNode::TIsUnknownPredicateNode(TPosition pos, TAstNodePtr input)
     : TAstNode(pos)
-    , Input(input)
+    , Input_(std::move(input))
 {
 }
 
-const TAstNodePtr TIsUnknownPredicateNode::GetInput() const {
-    return Input;
+TAstNodePtr TIsUnknownPredicateNode::GetInput() const {
+    return Input_;
 }
 
 EReturnType TIsUnknownPredicateNode::GetReturnType() const {
@@ -354,22 +356,22 @@ EReturnType TIsUnknownPredicateNode::GetReturnType() const {
 }
 
 void TIsUnknownPredicateNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitIsUnknownPredicate(*this);
+    visitor.VisitIsUnknownPredicate(*this);
 }
 
 TLikeRegexPredicateNode::TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NReWrapper::IRePtr&& regex)
     : TAstNode(pos)
-    , Input(input)
-    , Regex(std::move(regex))
+    , Input_(std::move(input))
+    , Regex_(std::move(regex))
 {
 }
 
-const TAstNodePtr TLikeRegexPredicateNode::GetInput() const {
-    return Input;
+TAstNodePtr TLikeRegexPredicateNode::GetInput() const {
+    return Input_;
 }
 
 const NReWrapper::IRePtr& TLikeRegexPredicateNode::GetRegex() const {
-    return Regex;
+    return Regex_;
 }
 
 EReturnType TLikeRegexPredicateNode::GetReturnType() const {
@@ -377,7 +379,7 @@ EReturnType TLikeRegexPredicateNode::GetReturnType() const {
 }
 
 void TLikeRegexPredicateNode::Accept(IAstNodeVisitor& visitor) const {
-    return visitor.VisitLikeRegexPredicate(*this);
+    visitor.VisitLikeRegexPredicate(*this);
 }
 
-}
+} // namespace NYql::NJsonPath

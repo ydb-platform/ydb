@@ -37,7 +37,7 @@ static void ares_requeue_queries(ares_conn_t  *conn,
   ares_tvnow(&now);
 
   while ((query = ares_llist_first_val(conn->queries_to_conn)) != NULL) {
-    ares_requeue_query(query, &now, requeue_status, ARES_TRUE, NULL);
+    ares_requeue_query(query, &now, requeue_status, ARES_TRUE, NULL, NULL);
   }
 }
 
@@ -112,11 +112,11 @@ void ares_check_cleanup_conns(const ares_channel_t *channel)
         do_cleanup = ARES_TRUE;
       }
 
-      /* If the associated server has failures, close it out. Resetting the
-       * connection (and specifically the source port number) can help resolve
-       * situations where packets are being dropped.
+      /* If the connection has been retired for new queries, close it out once
+       * idle.  Resetting the connection (and specifically the source port
+       * number) can help resolve situations where packets are being dropped.
        */
-      if (conn->server->consec_failures > 0) {
+      if (conn->flags & ARES_CONN_FLAG_NONEW) {
         do_cleanup = ARES_TRUE;
       }
 

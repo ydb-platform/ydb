@@ -20,7 +20,14 @@
 #include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
+#ifdef GPR_WINDOWS
+// clang-format off
+#include <ws2def.h>
+#include <afunix.h>
+// clang-format on
+#else
 #include <sys/un.h>
+#endif  // GPR_WINDOWS
 #endif
 
 #include <functional>
@@ -80,7 +87,7 @@ class BinderConnector : public grpc_core::SubchannelConnector {
 
   void OnConnected(std::unique_ptr<grpc_binder::Binder> endpoint_binder) {
     GPR_ASSERT(endpoint_binder != nullptr);
-    grpc_transport* transport = grpc_create_binder_transport_client(
+    grpc_core::Transport* transport = grpc_create_binder_transport_client(
         std::move(endpoint_binder),
         grpc_binder::GetSecurityPolicySetting()->Get(conn_id_));
     GPR_ASSERT(transport != nullptr);

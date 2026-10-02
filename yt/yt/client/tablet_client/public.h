@@ -94,6 +94,18 @@ YT_DEFINE_ERROR_ENUM(
     ((TabletServantIsNotActive)               (1740))
     ((UniqueIndexConflict)                    (1741))
     ((TabletReplicationEraMismatch)           (1742))
+    ((OrderedDynamicStoreRotateEpochMismatch) (1743))
+    ((TabletIsInIntermediateState)            (1744))
+    ((HunkTabletStoreToggleConflict)          (1745))
+    ((HunkStoreAllocationFailed)              (1746))
+    ((TabletResharded)                        (1747))
+    ((ReadOnlySmoothMovementStage)            (1748))
+    ((CellHasNoLeader)                        (1749))
+    ((TabletReplicationEraIsUnknown)          (1750))
+
+    // Test error codes.
+    ((TestingFailureBeforeWrite)              (1798))
+    ((TestingFailureAfterWrite)               (1799))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -142,10 +154,10 @@ DEFINE_BIT_ENUM(EReplicationLogDataFlags,
 
 struct TReplicationLogTable
 {
-    static const TString ChangeTypeColumnName;
-    static const TString KeyColumnNamePrefix;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string KeyColumnNamePrefix;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_BIT_ENUM(EUnversionedUpdateDataFlags,
@@ -160,9 +172,9 @@ constexpr EUnversionedUpdateDataFlags MaxValidUnversionedUpdateDataFlags =
 
 struct TUnversionedUpdateSchema
 {
-    static const TString ChangeTypeColumnName;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_ENUM(ETabletCellHealth,
@@ -200,6 +212,8 @@ DEFINE_ENUM(ETabletActionKind,
 
 DEFINE_ENUM(ETabletActionState,
     ((Preparing)                (0))
+    ((ProvisionallyFlushing)   (14))
+    ((ProvisionallyFlushed)    (15))
     ((Freezing)                 (1))
     ((Frozen)                   (2))
     ((Unmounting)               (3))
@@ -216,18 +230,13 @@ DEFINE_ENUM(ETabletActionState,
     ((AbortingSmoothMove)       (13))
 );
 
-DEFINE_ENUM(ETabletServiceFeatures,
-    ((WriteGenerations)         (0))
-    ((SharedWriteLocks)         (1))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
     ((New)                  (2))
 );
 
-extern const TString CustomRuntimeDataWatermarkKey;
+extern const std::string CustomRuntimeDataWatermarkKey;
 struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
 
@@ -239,6 +248,7 @@ DEFINE_ENUM(ESecondaryIndexKind,
     ((Unique)                   (2))
 );
 
+struct TUnfoldedColumns;
 struct TIndexInfo;
 
 DEFINE_ENUM(ETableToIndexCorrespondence,
@@ -250,17 +260,18 @@ DEFINE_ENUM(ETableToIndexCorrespondence,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
-DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicatedTableOptions)
+DECLARE_REFCOUNTED_STRUCT(TReplicationCollocationOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)
 DECLARE_REFCOUNTED_STRUCT(TTableReplicaInfo)
 DECLARE_REFCOUNTED_STRUCT(ITableMountCache)
+DECLARE_REFCOUNTED_STRUCT(TReshardRedirectionHint)
 
 ////////////////////////////////////////////////////////////////////////////////
 

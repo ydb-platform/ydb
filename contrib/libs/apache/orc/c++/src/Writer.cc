@@ -24,6 +24,7 @@
 #include "Utils.hh"
 
 #include <memory>
+#include <stdexcept>
 
 namespace orc {
 
@@ -700,6 +701,40 @@ namespace orc {
       }
       case CHAR: {
         protoType.set_kind(proto::Type_Kind_CHAR);
+        break;
+      }
+      case GEOMETRY: {
+        protoType.set_kind(proto::Type_Kind_GEOMETRY);
+        protoType.set_crs(t.getCrs());
+        break;
+      }
+      case GEOGRAPHY: {
+        protoType.set_kind(proto::Type_Kind_GEOGRAPHY);
+        protoType.set_crs(t.getCrs());
+        switch (t.getAlgorithm()) {
+          case geospatial::EdgeInterpolationAlgorithm::SPHERICAL: {
+            protoType.set_algorithm(proto::Type_EdgeInterpolationAlgorithm_SPHERICAL);
+            break;
+          }
+          case orc::geospatial::EdgeInterpolationAlgorithm::VINCENTY: {
+            protoType.set_algorithm(proto::Type_EdgeInterpolationAlgorithm_VINCENTY);
+            break;
+          }
+          case orc::geospatial::EdgeInterpolationAlgorithm::THOMAS: {
+            protoType.set_algorithm(proto::Type_EdgeInterpolationAlgorithm_VINCENTY);
+            break;
+          }
+          case orc::geospatial::EdgeInterpolationAlgorithm::ANDOYER: {
+            protoType.set_algorithm(proto::Type_EdgeInterpolationAlgorithm_ANDOYER);
+            break;
+          }
+          case orc::geospatial::EdgeInterpolationAlgorithm::KARNEY: {
+            protoType.set_algorithm(proto::Type_EdgeInterpolationAlgorithm_KARNEY);
+            break;
+          }
+          default:
+            throw std::invalid_argument("Unknown Algorithm.");
+        }
         break;
       }
       default:

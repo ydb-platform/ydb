@@ -1,10 +1,12 @@
 #pragma once
 #include "common.h"
-#include <util/generic/hash.h>
+
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/blobs_action/counters/write.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/write.h>
+
+#include <util/generic/hash.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -23,7 +25,10 @@ private:
     THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
+    YDB_FLAG_ACCESSOR(Bulk, false);
+    YDB_ACCESSOR(bool, CacheAfterWrite, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
+
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
@@ -31,22 +36,27 @@ protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
 
+    virtual void DoUpdateChannelApproximateFreeSpace(const TUnifiedBlobId& /*blobId*/, float /*approximateFreeSpaceShare*/) {
+    }
+
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
+
 public:
     IBlobsWritingAction(const TString& storageId)
         : TBase(storageId)
     {
-
     }
+
     virtual ~IBlobsWritingAction();
     bool IsReady() const;
 
     void Merge(const std::shared_ptr<IBlobsWritingAction>& action) {
         AFL_VERIFY(action);
         AFL_VERIFY(!WritingStarted);
+        CacheAfterWrite = CacheAfterWrite || action->CacheAfterWrite;
         for (auto&& i : action->BlobsForWrite) {
             AddDataForWrite(i.first, i.second);
         }
@@ -63,8 +73,10 @@ public:
     void Abort() {
         Aborted = true;
     }
+
     TUnifiedBlobId AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId = {});
     void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status);
+    void UpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare);
 
     void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
         return DoOnExecuteTxBeforeWrite(self, dbBlobs);
@@ -73,6 +85,7 @@ public:
     ui32 GetBlobsCount() const {
         return BlobsWriteCount;
     }
+
     ui32 GetTotalSize() const {
         return SumSize;
     }
@@ -97,6 +110,7 @@ public:
 class TWriteActionsCollection {
 private:
     THashMap<TString, std::shared_ptr<IBlobsWritingAction>> Actions;
+
 public:
     THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::const_iterator begin() const {
         return Actions.begin();
@@ -133,4 +147,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

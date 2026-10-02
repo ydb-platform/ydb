@@ -46,12 +46,13 @@ namespace NLastGetopt {
         bool GotMinusMinus_; //true if "--" have been seen in argv
 
     protected:
-        const TOpt* CurrentOpt_;  // ptr on the last meeted option
+        const TOpt* CurrentOpt_;  // ptr on the last met option
         TStringBuf CurrentValue_; // the value of the last met argument (corresponding to CurrentOpt_)
 
     private:
         typedef THashSet<const TOpt*> TdOptSet;
         TdOptSet OptsSeen_; //the set of options that have been met during parsing
+        bool FreeArgsSeen_ = false;
 
         TList<const TOpt*> OptsDefault_;
 

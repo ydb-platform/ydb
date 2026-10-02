@@ -7,10 +7,6 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
-
 TEST_SRCS(
     test_alloc_default.py
     test_dc_local.py
@@ -18,9 +14,9 @@ TEST_SRCS(
     test_scheduling.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

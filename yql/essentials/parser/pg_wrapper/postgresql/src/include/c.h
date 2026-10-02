@@ -166,6 +166,16 @@
 #define PG_USED_FOR_ASSERTS_ONLY pg_attribute_unused()
 #endif
 
+/*
+ * Our C and C++ compilers may have different ideas about which printf
+ * archetype best represents what src/port/snprintf.c can do.
+ */
+#ifndef __cplusplus
+#define PG_PRINTF_ATTRIBUTE PG_C_PRINTF_ATTRIBUTE
+#else
+#define PG_PRINTF_ATTRIBUTE PG_CXX_PRINTF_ATTRIBUTE
+#endif
+
 /* GCC and XLC support format attributes */
 #if (defined(__GNUC__) && !defined(__clang__)) || defined(__IBMC__)
 #define pg_attribute_format_arg(a) __attribute__((format_arg(a)))
@@ -419,7 +429,7 @@ typedef void (*pg_funcptr_t) (void);
  * bool
  *		Boolean value, either true or false.
  *
- * We use stdbool.h if available and its bool has size 1.  That's useful for
+ * We use stdbool.h if bool has size 1 after including it.  That's useful for
  * better compiler and debugger output and for compatibility with third-party
  * libraries.  But PostgreSQL currently cannot deal with bool of other sizes;
  * there are static assertions around the code to prevent that.

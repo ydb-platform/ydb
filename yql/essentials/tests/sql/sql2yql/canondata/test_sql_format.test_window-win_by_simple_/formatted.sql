@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     key,
     row_number() OVER w

@@ -14,11 +14,11 @@ public:
         size_t MinUpperCaseCount = 0;
         size_t MinNumbersCount = 0;
         size_t MinSpecialCharsCount = 0;
-        TString SpecialChars = VALID_SPECIAL_CHARS;
+        TString SpecialChars;
         bool CanContainUsername = false;
     };
 
-    static const TString VALID_SPECIAL_CHARS;
+    static const std::unordered_set<char> VALID_SPECIAL_CHARS;
 
     size_t MinLength = 0;
     size_t MinLowerCaseCount = 0;
@@ -70,8 +70,9 @@ private:
 
 public:
     TPasswordChecker(const TPasswordComplexity& passwordComplexity);
-    TResult Check(const TString& username, const TString& password) const;
+    TResult Check(const std::string& username, const std::string& password) const;
     void Update(const TPasswordComplexity& passwordComplexity);
+    const TPasswordComplexity& GetPasswordComplexity() const;
 };
 
 } // NLogin

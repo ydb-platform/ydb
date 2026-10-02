@@ -4,12 +4,17 @@
 #include <yt/yt/core/net/listener.h>
 #include <yt/yt/core/net/dialer.h>
 #include <yt/yt/core/net/config.h>
+#include <yt/yt/core/net/packet_connection.h>
 #include <yt/yt/core/net/private.h>
+#include <yt/yt/core/net/socket.h>
 
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/network/pollerimpl.h>
+
+#include <util/system/tempfile.h>
 
 namespace NYT::NNet {
 namespace {
@@ -59,16 +64,74 @@ TEST_F(TNetTest, CreateConnectionPair)
     std::tie(a, b) = CreateConnectionPair(Poller_);
 }
 
+#if defined(HAVE_EPOLL_POLLER)
+
+TEST_F(TNetTest, ConnectionArmFailure)
+{
+    TTempFileHandle file;
+    SafeMakeNonblocking(file.GetHandle());
+    EXPECT_THROW(
+        CreateConnectionFromFD(SafeDup(file.GetHandle()), /*localAddress*/ {}, /*remoteAddress*/ {}, Poller_),
+        TSystemError);
+}
+
+#endif
+
+#ifdef _linux_
+
+TEST_F(TNetTest, PipeConnectionRejectsRegularFile)
+{
+    TTempFileHandle file;
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateInputConnectionFromFD(SafeDup(file.GetHandle()), std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateInputConnectionFromPath(std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(
+            std::string(file.Name()),
+            Poller_,
+            /*pipeHolder*/ {},
+            /*capacity*/ {},
+            EDeliveryFencedMode::Old),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(
+            std::string(file.Name()),
+            Poller_,
+            /*pipeHolder*/ {},
+            /*capacity*/ {},
+            EDeliveryFencedMode::New),
+        "is not a FIFO");
+}
+
+#endif
+
+TEST_F(TNetTest, PacketConnectionBindFailure)
+{
+    TFileDescriptorGuard socket(CreateUdpSocket(AF_INET6));
+    BindSocket(socket.Get(), TNetworkAddress::CreateIPv6Loopback(0));
+
+    EXPECT_THROW(
+        CreatePacketConnection(GetSocketName(socket.Get()), Poller_),
+        TErrorException);
+}
+
 TEST_F(TNetTest, TransferFourBytes)
 {
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    a->Write(TSharedRef::FromString("ping")).Get();
+    WaitUntilSet(a->Write(TSharedRef::FromString(std::string("ping"))));
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).Get().ValueOrThrow());
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
+    ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ping"));
 }
 
 TEST_F(TNetTest, TransferFourBytesUsingWriteV)
@@ -76,32 +139,32 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
-        TSharedRef::FromString("p"),
-        TSharedRef::FromString("i"),
-        TSharedRef::FromString("n"),
-        TSharedRef::FromString("g")
-    }, TSharedRefArray::TMoveParts{})).Get().ThrowOnError();
+    WaitForFast(a->WriteV(TSharedRefArray(std::vector<TSharedRef>{
+        TSharedRef::FromString(std::string("p")),
+        TSharedRef::FromString(std::string("i")),
+        TSharedRef::FromString(std::string("n")),
+        TSharedRef::FromString(std::string("g"))
+    }, TSharedRefArray::TMoveParts{}))).ThrowOnError();
 
     auto buffer = TSharedMutableRef::Allocate(10);
-    ASSERT_EQ(4u, b->Read(buffer).Get().ValueOrThrow());
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ping"));
+    ASSERT_EQ(4u, WaitForFast(b->Read(buffer)).ValueOrThrow());
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ping"));
 }
 
 TEST_F(TNetTest, BigTransfer)
 {
-// Select-based poller implementation is much slower there.
+// Select-based poller re-arms on every partial IO, so each chunk costs a full poller cycle.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
     auto sender = BIND([=] {
-        auto buffer = TSharedRef::FromString(TString(K, 'f'));
+        auto buffer = TSharedRef::FromString(std::string(K, 'f'));
         for (int i = 0; i < N; ++i) {
             WaitFor(a->Write(buffer)).ThrowOnError();
         }
@@ -125,17 +188,17 @@ TEST_F(TNetTest, BigTransfer)
         .AsyncVia(Poller_->GetInvoker())
         .Run();
 
-    sender.Get().ThrowOnError();
-    receiver.Get().ThrowOnError();
+    WaitForFast(sender).ThrowOnError();
+    WaitForFast(receiver).ThrowOnError();
 }
 
 TEST_F(TNetTest, BidirectionalTransfer)
 {
-// Select-based poller implementation is much slower there.
+// See the note in BigTransfer.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;
@@ -143,7 +206,7 @@ TEST_F(TNetTest, BidirectionalTransfer)
 
     auto startSender = [&] (IConnectionPtr conn) {
         return BIND([=] {
-            auto buffer = TSharedRef::FromString(TString(K, 'f'));
+            auto buffer = TSharedRef::FromString(std::string(K, 'f'));
             for (int i = 0; i < N; ++i) {
                 WaitFor(conn->Write(buffer)).ThrowOnError();
             }
@@ -177,7 +240,7 @@ TEST_F(TNetTest, BidirectionalTransfer)
         startReceiver(b)
     };
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    WaitForFast(AllSucceeded(futures)).ThrowOnError();
 }
 
 class TContinueReadInCaseOfWriteErrorsTest
@@ -190,28 +253,28 @@ TEST_P(TContinueReadInCaseOfWriteErrorsTest, ContinueReadInCaseOfWriteErrors)
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
 
-    auto data = TSharedRef::FromString(TString(16 * 1024, 'f'));
+    auto data = TSharedRef::FromString(std::string(16 * 1024, 'f'));
     bool gracefulConnectionClose = GetParam();
     // If server closes the connection without reading the entire request,
     // it causes an error 'Connection reset by peer' on client's side right after reading response.
     if (!gracefulConnectionClose) {
-        b->Write(data).Get().ThrowOnError();
+        WaitForFast(b->Write(data)).ThrowOnError();
     }
-    a->Write(data).Get().ThrowOnError();
-    a->Close().Get().ThrowOnError();
+    WaitForFast(a->Write(data)).ThrowOnError();
+    WaitForFast(a->Close()).ThrowOnError();
 
     {
-        auto data = TSharedRef::FromString(TString(16 * 1024, 'a'));
+        auto data = TSharedRef::FromString(std::string(16 * 1024, 'a'));
         #ifndef _win_
-            EXPECT_THROW(b->Write(data).Get().ThrowOnError(), TErrorException);
+            EXPECT_THROW(WaitForFast(b->Write(data)).ThrowOnError(), TErrorException);
         #endif
     }
 
     auto buffer = TSharedMutableRef::Allocate(32 * 1024);
-    auto read = b->Read(buffer).Get().ValueOrThrow();
+    auto read = WaitForFast(b->Read(buffer)).ValueOrThrow();
 
     EXPECT_EQ(data.size(), read);
-    ASSERT_EQ(ToString(buffer.Slice(0, 4)), TString("ffff"));
+    ASSERT_EQ(ToString(buffer.Slice(0, 4)), std::string("ffff"));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -230,7 +293,7 @@ TEST_F(TNetTest, StressConcurrentClose)
 
         auto runSender = [&] (IConnectionPtr conn) {
             return BIND([=] {
-                auto buffer = TSharedRef::FromString(TString(16 * 1024, 'f'));
+                auto buffer = TSharedRef::FromString(std::string(16 * 1024, 'f'));
                 while (true) {
                     WaitFor(conn->Write(buffer)).ThrowOnError();
                 }
@@ -257,7 +320,7 @@ TEST_F(TNetTest, StressConcurrentClose)
         YT_UNUSED_FUTURE(runReceiver(b));
 
         Sleep(TDuration::MilliSeconds(10));
-        a->Close().Get().ThrowOnError();
+        WaitForFast(a->Close()).ThrowOnError();
     }
 }
 
@@ -269,7 +332,7 @@ TEST_F(TNetTest, Bind)
     #ifdef _win_
         return;
     #endif
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(0);
         auto listener = CreateListener(address, Poller_, Poller_);
 
@@ -283,27 +346,25 @@ TEST_F(TNetTest, Bind)
     #endif
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 
 TEST_F(TNetTest, DialError)
 {
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(4000);
         auto dialer = CreateDialer();
-        EXPECT_THROW(dialer->Dial(address).Get().ValueOrThrow(), TErrorException);
+        EXPECT_THROW(WaitForFast(dialer->Dial(address)).ValueOrThrow(), TErrorException);
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 
 TEST_F(TNetTest, DialSuccess)
 {
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(0);
         auto listener = CreateListener(address, Poller_, Poller_);
         auto dialer = CreateDialer();
@@ -315,14 +376,13 @@ TEST_F(TNetTest, DialSuccess)
         WaitFor(futureAccept).ValueOrThrow();
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 
 TEST_F(TNetTest, ManyDials)
 {
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(0);
         auto listener = CreateListener(address, Poller_, Poller_);
         auto dialer = CreateDialer();
@@ -336,14 +396,13 @@ TEST_F(TNetTest, ManyDials)
         WaitFor(AllSucceeded(std::vector<TFuture<IConnectionPtr>>{futureDial1, futureDial2, futureAccept1, futureAccept2})).ValueOrThrow();
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 
 TEST_F(TNetTest, AbandonDial)
 {
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(0);
         auto listener = CreateListener(address, Poller_, Poller_);
         auto dialer = CreateDialer();
@@ -351,22 +410,20 @@ TEST_F(TNetTest, AbandonDial)
         YT_UNUSED_FUTURE(dialer->Dial(listener->GetAddress()));
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 
 TEST_F(TNetTest, AbandonAccept)
 {
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto address = TNetworkAddress::CreateIPv6Loopback(0);
         auto listener = CreateListener(address, Poller_, Poller_);
 
         YT_UNUSED_FUTURE(listener->Accept());
     })
         .AsyncVia(Poller_->GetInvoker())
-        .Run()
-        .Get()
+        .Run())
         .ThrowOnError();
 }
 

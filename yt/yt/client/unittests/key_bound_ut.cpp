@@ -23,7 +23,7 @@ TEST(TKeyBoundTest, Simple)
     builder.AddValue(MakeUnversionedDoubleValue(3.14, 0));
     builder.AddValue(MakeUnversionedInt64Value(-42, 1));
     builder.AddValue(MakeUnversionedUint64Value(27, 2));
-    TString str = "Foo";
+    std::string str = "Foo";
     builder.AddValue(MakeUnversionedStringValue(str, 3));
 
     auto owningRow = builder.FinishRow();
@@ -55,13 +55,13 @@ TEST(TKeyBoundTest, Simple)
     }
 }
 
-TEST(TKeyBound, Helper)
+TEST(TKeyBoundTest, Helper)
 {
     TUnversionedOwningRowBuilder builder;
     builder.AddValue(MakeUnversionedDoubleValue(3.14, 0));
     builder.AddValue(MakeUnversionedInt64Value(-42, 1));
     builder.AddValue(MakeUnversionedUint64Value(27, 2));
-    TString str = "Foo";
+    std::string str = "Foo";
     builder.AddValue(MakeUnversionedStringValue(str, 3));
 
     auto owningRow = builder.FinishRow();
@@ -225,7 +225,7 @@ TEST(TKeyBoundTest, Serialization)
     builder.AddValue(MakeUnversionedDoubleValue(3.14, 0));
     builder.AddValue(MakeUnversionedInt64Value(-42, 1));
     builder.AddValue(MakeUnversionedUint64Value(27, 2));
-    TString str = "Foo";
+    std::string str = "Foo";
     builder.AddValue(MakeUnversionedStringValue(str, 3));
 
     auto owningRow = builder.FinishRow();

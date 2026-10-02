@@ -1,11 +1,18 @@
 #include "schemeshard__operation_common.h"
 
+#include "schemeshard__tenant_shred_manager.h"
+
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -15,15 +22,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {
-    auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
-    const auto& shard = context.SS->ShardInfos[shardIdx];
+    auto tablePartitionConfig = ss->GetTablePartitionConfigWithAlterData(targetPath->PathId);
+    const auto& shard = ss->ShardInfos[shardIdx];
 
     if (shard.TabletType == ETabletType::BlockStorePartition ||
-        shard.TabletType == ETabletType::BlockStorePartition2)
+        shard.TabletType == ETabletType::BlockStorePartition2 ||
+        shard.TabletType == ETabletType::BlockStorePartitionDirect)
     {
-        auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
+        auto it = ss->BlockStoreVolumes.FindPtr(targetPath->PathId);
         Y_ABORT_UNLESS(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
         auto volume = *it;
         /*const auto* volumeConfig = &volume->VolumeConfig;
@@ -34,20 +42,20 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
 
     THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
-    TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
+    TPathId domainId = ss->ResolvePathIdForDomain(targetPath);
 
-    TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
+    TPathElement::TPtr domainEl = ss->PathsById.at(domainId);
     auto objectDomain = ev->Record.MutableObjectDomain();
     if (domainEl->IsRoot()) {
-        objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
-        objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
+        objectDomain->SetSchemeShard(ss->ParentDomainId.OwnerId);
+        objectDomain->SetPathId(ss->ParentDomainId.LocalPathId);
     } else {
         objectDomain->SetSchemeShard(domainId.OwnerId);
         objectDomain->SetPathId(domainId.LocalPathId);
     }
 
-    Y_ABORT_UNLESS(context.SS->SubDomains.contains(domainId));
-    TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(domainId);
+    Y_ABORT_UNLESS(ss->SubDomains.contains(domainId));
+    TSubDomainInfo::TPtr subDomain = ss->SubDomains.at(domainId);
 
     TPathId resourcesDomainId;
     if (subDomain->GetResourcesDomainId()) {
@@ -81,11 +89,13 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     if (shard.TabletType == ETabletType::BlockStorePartition   ||
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::RTMRPartition) {
-        // Partitions should never be booted by local
+        // These partitions should never be booted by local.
+        // BlockStorePartitionDirect is intentionally omitted and may be booted local for now.
         ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
     }
 
     ev->Record.SetObjectId(targetPath->PathId.LocalPathId);
+    ev->Record.SetIsBackup(ss->IsBackupTable(targetPath->PathId));
 
     if (shard.TabletID) {
         ev->Record.SetTabletID(ui64(shard.TabletID));
@@ -99,16 +109,14 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
 TCreateParts::TCreateParts(const TOperationId& id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {});
+    IgnoreMessages({});
 }
 
 bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvAdoptTablet"
-                << ", at tabletId: " << context.SS->SelfTabletId());
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvAdoptTablet"
-                << ", message% " << DebugReply(ev));
+    YDB_LOG_INFO_CTX(context.Ctx, "");
+    YDB_LOG_DEBUG_CTX(context.Ctx, "",
+        {"message", DebugReply(ev)},
+    );
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -132,11 +140,10 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     if (!context.SS->AdoptedShards.contains(shardIdx)) {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvAdoptTablet"
-                    << " Got TTxAdoptTabletReply for shard but it is not present in AdoptedShards"
-                    << ", shardIdx: " << shardIdx
-                    << ", tabletId:" << tabletId);
+        YDB_LOG_INFO_CTX(context.Ctx, "Got TTxAdoptTabletReply for shard but it is not present in AdoptedShards",
+            {"shardIdx", shardIdx},
+            {"tabletId", tabletId},
+        );
         return false;
     }
 
@@ -170,12 +177,10 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
 }
 
 bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvCreateTabletReply"
-                << ", at tabletId: " << context.SS->SelfTabletId());
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvCreateTabletReply"
-                << ", message: " << DebugReply(ev));
+    YDB_LOG_INFO_CTX(context.Ctx, "");
+    YDB_LOG_DEBUG_CTX(context.Ctx, "",
+        {"message", DebugReply(ev)},
+    );
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -197,10 +202,10 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
     if (status ==  NKikimrProto::BLOCKED) {
         Y_ABORT_UNLESS(!context.SS->IsDomainSchemeShard);
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " CreateRequest BLOCKED "
-                                    << " at Hive: " << hive
-                                    << " msg: " << DebugReply(ev));
+        YDB_LOG_NOTICE_CTX(context.Ctx, "CreateRequest BLOCKED at Hive",
+            {"hive", hive},
+            {"msg", DebugReply(ev)},
+        );
 
         // do not unsubscribe message
         // context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
@@ -222,13 +227,13 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
 
         auto path = context.SS->PathsById.at(txState.TargetPathId);
-        auto request = CreateEvCreateTablet(path, shardIdx, context);
+        auto request = CreateEvCreateTablet(path, shardIdx, context.SS);
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " CreateRequest"
-                                << " Redirect from Hive: " << hive
-                                << " to Hive: " << redirectTo
-                                << " msg:  " << request->Record.DebugString());
+        YDB_LOG_DEBUG_CTX(context.Ctx, "CreateRequest: Redirect from Hive to Hive",
+            {"hive", hive},
+            {"redirectToHive", redirectTo},
+            {"msg", request->Record.DebugString()},
+        );
 
         context.OnComplete.BindMsgToPipe(OperationId, redirectTo, shardIdx, request.Release());
         return false;
@@ -256,6 +261,12 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             break;
         case ETabletType::BackupController:
             context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+            break;
+        case ETabletType::WasmCompileController:
+            context.SS->TabletCounters->Simple()[COUNTER_WASM_COMPILE_CONTROLLER_COUNT].Add(1);
+            break;
+        case ETabletType::TestShard:
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
         default:
             break;
@@ -294,41 +305,36 @@ THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, 
         shard.TabletType,
         ui64(context.SS->SelfTabletId()), ui64(shardIdx.GetLocalId()));
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " AdoptRequest"
-                << " Event to Hive: " << ev->Record.DebugString().c_str());
+    YDB_LOG_DEBUG_CTX(context.Ctx, "AdoptRequest: Event to Hive",
+        {"message", ev->Record.DebugString()},
+    );
 
     return ev;
 }
 
 bool TCreateParts::ProgressState(TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
-
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << ", operation type: " << TTxState::TypeName(txState->TxType)
-                            << ", at tablet# " << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "",
+        {"txType", TTxState::TypeName(txState->TxType)},
+    );
 
     if (txState->TxType == TTxState::TxDropTable
         || txState->TxType == TTxState::TxAlterTable
         || txState->TxType == TTxState::TxBackup
         || txState->TxType == TTxState::TxRestore) {
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " SourceTablePartitioningChangedForModification"
-                                    << ", tx type: " << TTxState::TypeName(txState->TxType));
+            YDB_LOG_INFO_CTX(context.Ctx, "SourceTablePartitioningChangedForModification",
+                {"txType", TTxState::TypeName(txState->TxType)},
+            );
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
     } else if (txState->TxType == TTxState::TxCopyTable) {
         if (NTableState::SourceTablePartitioningChangedForCopyTable(*txState, context)) {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                        << " SourceTablePartitioningChangedForCopyTable"
-                        << ", tx type: " << TTxState::TypeName(txState->TxType));
+            YDB_LOG_INFO_CTX(context.Ctx, "SourceTablePartitioningChangedForCopyTable",
+                {"txType", TTxState::TypeName(txState->TxType)},
+            );
             NTableState::UpdatePartitioningForCopyTable(OperationId, *txState, context);
         }
     }
@@ -344,17 +350,17 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
 
         if (context.SS->AdoptedShards.contains(shard.Idx)) {
             auto ev = AdoptRequest(shard.Idx, context);
-            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(context.Ctx), shard.Idx, ev.Release());
+            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(), shard.Idx, ev.Release());
         } else {
             auto path = context.SS->PathsById.at(txState->TargetPathId);
-            auto ev = CreateEvCreateTablet(path, shard.Idx, context);
+            auto ev = CreateEvCreateTablet(path, shard.Idx, context.SS);
 
-            auto hiveToRequest = context.SS->ResolveHive(shard.Idx, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(shard.Idx);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " CreateRequest"
-                                    << " Event to Hive: " << hiveToRequest
-                                    << " msg:  "<< ev->Record.DebugString().c_str());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "CreateRequest: Event to Hive",
+                {"hive", hiveToRequest},
+                {"msg", ev->Record.DebugString()},
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, shard.Idx, ev.Release());
         }
@@ -362,9 +368,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     }
 
     if (nothingToDo) {
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " ProgressState"
-                                << " no shards to create, do next state");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "no shards to create, do next state");
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
@@ -381,7 +385,7 @@ TDeleteParts::TDeleteParts(const TOperationId& id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
 {
-    IgnoreMessages(DebugHint(), {});
+    IgnoreMessages({});
 }
 
 void TDeleteParts::DeleteShards(TOperationContext& context) {
@@ -394,8 +398,7 @@ void TDeleteParts::DeleteShards(TOperationContext& context) {
 }
 
 bool TDeleteParts::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+    YDB_LOG_INFO_CTX(context.Ctx, "");
     DeleteShards(context);
 
     NIceDb::TNiceDb db(context.GetDB());
@@ -412,8 +415,7 @@ TDeletePartsAndDone::TDeletePartsAndDone(const TOperationId& id)
 }
 
 bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+    YDB_LOG_INFO_CTX(context.Ctx, "");
     DeleteShards(context);
 
     context.OnComplete.DoneOperation(OperationId);
@@ -425,7 +427,14 @@ bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
 TDone::TDone(const TOperationId& id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), AllIncomingEvents());
+    IgnoreMessages(AllIncomingEvents());
+}
+
+TDone::TDone(const TOperationId& id, TPathElement::EPathState targetState)
+    : OperationId(id)
+    , TargetState(targetState)
+{
+    IgnoreMessages(AllIncomingEvents());
 }
 
 bool TDone::Process(TOperationContext& context) {
@@ -434,10 +443,11 @@ bool TDone::Process(TOperationContext& context) {
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-    Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
+    Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
         << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
         << ", PathId: " << path->PathId
-        << ", PathName: " << path->Name);
+        << ", TargetState: " << (TargetState ? NKikimrSchemeOp::EPathState_Name(*TargetState) : "null")
+        << ", OperationId: " << OperationId);
 
     if (path->IsPQGroup() && txState->IsCreate()) {
         TPathElement::TPtr parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -449,6 +459,8 @@ bool TDone::Process(TOperationContext& context) {
 
     if (txState->IsDrop()) {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNotExist);
+    } else if (TargetState) {
+        context.OnComplete.ReleasePathState(OperationId, path->PathId, *TargetState);
     } else {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNoChanges);
     }
@@ -457,6 +469,9 @@ bool TDone::Process(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
         TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
         if (srcPath->PathState == TPathElement::EPathState::EPathStateCopying) {
+            context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+        }
+        if (txState->TxType == TTxState::TxRotateCdcStream) {
             context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
         }
     }
@@ -478,8 +493,7 @@ bool TDone::Process(TOperationContext& context) {
 }
 
 bool TDone::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     return Process(context);
 }
@@ -494,10 +508,7 @@ bool CollectProposeTxResults(
         TFuncCheck checkPrepared,
         TFuncToString toString)
 {
-    auto ssId = context.SS->SelfTabletId();
-
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TEvProposeTransactionResult at tablet: " << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "TEvProposeTransactionResult");
 
     auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
     auto shardMinStep = TStepId(ev->Get()->Record.GetMinStep());
@@ -505,12 +516,10 @@ bool CollectProposeTxResults(
 
     // Ignore COMPLETE
     if (!checkPrepared(status)) {
-        LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ignore TEvProposeTransactionResult as not prepared"
-                        << ", shard: " << tabletId
-                        << ", operationId: " << operationId
-                        << ", result status: " << toString(status)
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_ERROR_CTX(context.Ctx, "Ignore TEvProposeTransactionResult as not prepared",
+            {"shard", tabletId},
+            {"resultStatus", toString(status)},
+        );
         return false;
     }
 
@@ -527,25 +536,21 @@ bool CollectProposeTxResults(
 
     // Ignore if this is a repeated message
     if (!txState.ShardsInProgress.contains(shardIdx)) {
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ignore TEvProposeTransactionResult as duplicate"
-                        << ", shard: " << tabletId
-                        << ", shardIdx: " << shardIdx
-                        << ", operationId: " << operationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "Ignore TEvProposeTransactionResult as duplicate",
+            {"shard", tabletId},
+            {"shardIdx", shardIdx},
+        );
         return false;
     }
 
     txState.ShardsInProgress.erase(shardIdx);
     context.OnComplete.UnbindMsgFromPipe(operationId, tabletId, shardIdx);
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectProposeTransactionResults accept TEvProposeTransactionResult"
-                    << ", shard: " << tabletId
-                    << ", shardIdx: " << shardIdx
-                    << ", operationId: " << operationId
-                    << ", left await: " << txState.ShardsInProgress.size()
-                    << ", at schemeshard: " << ssId);
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CollectProposeTransactionResults: accept TEvProposeTransactionResult",
+        {"shard", tabletId},
+        {"shardIdx", shardIdx},
+        {"inprogressCount", txState.ShardsInProgress.size()},
+    );
 
     if (txState.ShardsInProgress.empty()) {
         // All datashards have replied so we can proceed with this transaction
@@ -592,45 +597,47 @@ bool CollectProposeTransactionResults(
     return CollectProposeTxResults(ev, operationId, context, prepared, toString);
 }
 
-bool CollectSchemaChanged(
+namespace {
+
+template<typename TEvent>
+bool CollectSchemaChangedImpl(
         const TOperationId& operationId,
-        const TEvDataShard::TEvSchemaChanged::TPtr& ev,
+        const TEvent& ev,
         TOperationContext& context)
 {
-    auto ssId = context.SS->SelfTabletId();
-
     const auto& evRecord = ev->Get()->Record;
-    const TActorId ackTo = ev->Get()->GetSource();
+    const TActorId ackTo = TEvSchemaChangedTraits<TEvent>::GetSource(ev);
 
-    auto datashardId = TTabletId(evRecord.GetOrigin());
+    auto shardId = TTabletId(evRecord.GetOrigin());
 
     Y_ABORT_UNLESS(context.SS->FindTx(operationId));
     TTxState& txState = *context.SS->FindTx(operationId);
 
-    auto shardIdx = context.SS->MustGetShardIdx(datashardId);
+    auto shardIdx = context.SS->MustGetShardIdx(shardId);
     Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
     // Save this notification if was received earlier than the Tx switched to ProposedWaitParts state
-    ui32 generation = evRecord.GetGeneration();
+    const auto& generation = TEvSchemaChangedTraits<TEvent>::GetGeneration(ev);
     auto pTablet = txState.SchemeChangeNotificationReceived.FindPtr(shardIdx);
-    if (pTablet && pTablet->second >= generation) {
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CollectSchemaChanged Ignore TEvDataShard::TEvSchemaChanged as outdated"
-                        << ", operationId: " << operationId
-                        << ", shardIdx: " << shardIdx
-                        << ", datashard " << datashardId
-                        << ", event generation: " << generation
-                        << ", known generation: " << pTablet->second
-                        << ", at schemeshard: " << ssId);
+    if (pTablet && generation && (pTablet->second >= *generation)) {
+        YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged: Ignore as outdated",
+            {"shardIdx", shardIdx},
+            {"shard", shardId},
+            {"eventGeneration", generation},
+            {"knownGeneration", pTablet->second},
+        );
         return false;
     }
 
-    txState.SchemeChangeNotificationReceived[shardIdx] = std::make_pair(ackTo, generation);
+    txState.SchemeChangeNotificationReceived[shardIdx] = std::make_pair(ackTo, generation ? *generation : 0);
 
 
-    if (evRecord.HasOpResult()) {
+    if (TEvSchemaChangedTraits<TEvent>::HasOpResult(ev)) {
         // TODO: remove TxBackup handling
-        Y_DEBUG_ABORT_UNLESS(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
+        Y_DEBUG_ABORT_UNLESS(
+            txState.TxType == TTxState::TxBackup ||
+            txState.TxType == TTxState::TxRestore ||
+            txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable);
     }
 
     if (!txState.ReadyForNotifications) {
@@ -644,15 +651,13 @@ bool CollectSchemaChanged(
 
     txState.ShardsInProgress.erase(shardIdx);
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectSchemaChanged accept TEvDataShard::TEvSchemaChanged"
-                    << ", operationId: " << operationId
-                    << ", shardIdx: " << shardIdx
-                    << ", datashard: " << datashardId
-                    << ", left await: " << txState.ShardsInProgress.size()
-                    << ", txState.State: " << TTxState::StateName(txState.State)
-                    << ", txState.ReadyForNotifications: " << txState.ReadyForNotifications
-                    << ", at schemeshard: " << ssId);
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged: accept",
+        {"shardIdx", shardIdx},
+        {"shard", shardId},
+        {"inprogressCount", txState.ShardsInProgress.size()},
+        {"txState", TTxState::StateName(txState.State)},
+        {"readyForNotifications", txState.ReadyForNotifications},
+    );
 
     if (txState.ShardsInProgress.empty()) {
         AckAllSchemaChanges(operationId, txState, context);
@@ -665,13 +670,26 @@ bool CollectSchemaChanged(
     return false;
 }
 
-void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOperationContext &context) {
-    TTabletId ssId = context.SS->SelfTabletId();
+} //namespace
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "all shard schema changes has been received"
-                    << ", operationId: " << operationId
-                    << ", at schemeshard: " << ssId);
+bool CollectSchemaChanged(
+        const TOperationId& operationId,
+        const TEvDataShard::TEvSchemaChanged::TPtr& ev,
+        TOperationContext& context)
+{
+    return CollectSchemaChangedImpl<>(operationId, ev, context);
+}
+
+bool CollectSchemaChanged(
+        const TOperationId& operationId,
+        const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev,
+        TOperationContext& context)
+{
+    return CollectSchemaChangedImpl(operationId, ev, context);
+}
+
+void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOperationContext &context) {
+    YDB_LOG_INFO_CTX(context.Ctx, "All shard schema changes have been received");
 
     // Ack to all participating datashards
     for (const auto& items : txState.SchemeChangeNotificationReceived) {
@@ -679,11 +697,9 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
         const auto shardIdx = items.first;
         const auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "send schema changes ack message"
-                        << ", operation: " << operationId
-                        << ", datashard: " << tabletId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "Send schema changes ack message",
+            {"datashard", tabletId},
+        );
 
         auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(operationId.GetTxId()));
@@ -692,13 +708,13 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
     }
 }
 
-bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
-    for (auto& shard : table->GetPartitions()) {
-        shardIdxsLeft.insert(shard.ShardIdx);
+    for (const auto* shard : table->GetPartitions()) {
+        shardIdxsLeft.insert(shard->ShardIdx);
     }
 
     for (auto& shardOp : txState.Shards) {
@@ -709,6 +725,34 @@ bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationC
 
     // Any new partitions?
     return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForColumnTableModificationImpl(TTxState &txState, TOperationContext &context) {
+    Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
+    auto table = context.SS->ColumnTables.at(txState.TargetPathId);
+
+    THashSet<TShardIdx> shardIdxsLeft;
+    for (auto& shard : table->GetOwnedColumnShardsVerified()) {
+        TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+        shardIdxsLeft.insert(shardIdx);
+    }
+
+    for (auto& shardOp : txState.Shards) {
+        // Is this shard still on the list of partitions?
+        if (shardIdxsLeft.erase(shardOp.Idx) == 0)
+            return true;
+    }
+
+    // Any new partitions?
+    return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+    TPath dstPath = TPath::Init(txState.TargetPathId, context.SS);
+    if (dstPath->IsColumnTable()) {
+        return CheckPartitioningChangedForColumnTableModificationImpl(txState, context);
+    }
+    return CheckPartitioningChangedForTableModificationImpl(txState, context);
 }
 
 void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &txState, TOperationContext &context) {
@@ -747,6 +791,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxPrepareIndexValidation) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxUpdateMainTableOnIndexMove) {
@@ -763,7 +809,11 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxTruncateTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_ABORT("UNREACHABLE");
@@ -791,8 +841,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     }
 
     // Fill new list of tx shards
-    for (auto& shard : table->GetPartitions()) {
-        auto shardIdx = shard.ShardIdx;
+    for (const auto* shard : table->GetPartitions()) {
+        auto shardIdx = shard->ShardIdx;
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
         auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -836,8 +886,8 @@ bool SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperat
     const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
 
     THashSet<TShardIdx> srcShardIdxsLeft;
-    for (const auto& p : srcTableInfo->GetPartitions()) {
-        srcShardIdxsLeft.insert(p.ShardIdx);
+    for (const auto* p : srcTableInfo->GetPartitions()) {
+        srcShardIdxsLeft.insert(p->ShardIdx);
     }
 
     for (const auto& shard : txState.Shards) {
@@ -885,7 +935,6 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
             context.SS->ShardInfos.erase(shard.Idx);
             domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
-            context.SS->OnShardRemoved(shard.Idx);
         }
     }
     txState.Shards.clear();
@@ -928,8 +977,16 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     TShardInfo datashardInfo = TShardInfo::DataShardInfo(operationId.GetTxId(), txState.TargetPathId);
     datashardInfo.BindedChannels = channelsBinding;
 
-    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo,
-        ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS));
+    auto newPartitioning = ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
+    TVector<TShardIdx> newShardsIdx;
+    newShardsIdx.reserve(newPartitioning.size());
+    for (const auto& part : newPartitioning) {
+        newShardsIdx.push_back(part.ShardIdx);
+    }
+    context.SS->CopyPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
+    if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+    }
 
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 
@@ -942,15 +999,15 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     context.SS->PersistUpdateNextPathId(db);
     context.SS->PersistUpdateNextShardIdx(db);
     // Persist new shards info
-    for (const auto& shard : dstTableInfo->GetPartitions()) {
-        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
-        const auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
-        context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
-        context.SS->PersistChannelsBinding(db, shard.ShardIdx, channelsBinding);
+    for (const auto* shard : dstTableInfo->GetPartitions()) {
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard->ShardIdx), "shard info is set before");
+        const auto tabletType = context.SS->ShardInfos[shard->ShardIdx].TabletType;
+        context.SS->PersistShardMapping(db, shard->ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
+        context.SS->PersistChannelsBinding(db, shard->ShardIdx, channelsBinding);
 
         if (storePerShardConfig) {
-            dstTableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
-            context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+            dstTableInfo->PerShardPartitionConfig[shard->ShardIdx].CopyFrom(perShardConfig);
+            context.SS->PersistAddTableShardPartitionConfig(db, shard->ShardIdx, perShardConfig);
         }
     }
 
@@ -958,14 +1015,22 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
 }
 
 TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
-    TVector<TTableShardInfo> dstPartitions = srcTableInfo->GetPartitions();
+    // Build a mutable copy of src partitions for the dst table.
+    TVector<TTableShardInfo> dstPartitions;
+    {
+        const auto& srcParts = srcTableInfo->GetPartitions();
+        dstPartitions.reserve(srcParts.size());
+        for (const auto* p : srcParts) {
+            dstPartitions.push_back(*p);
+        }
+    }
 
     // Source table must not be altered or drop while we are performing copying. So we put it into a special state.
     ui64 count = dstPartitions.size();
     txState.Shards.reserve(count*2);
     for (ui64 i = 0; i < count; ++i) {
         // Source shards need to get "Send parts" transaction
-        auto srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+        auto srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
         Y_ABORT_UNLESS(ss->ShardInfos.contains(srcShardIdx), "Source table shard not found");
         auto srcTabletId = ss->ShardInfos[srcShardIdx].TabletID;
         Y_ABORT_UNLESS(srcTabletId != InvalidTabletId);
@@ -983,35 +1048,35 @@ TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDa
 }
 
 // NTableState::TProposedWaitParts
-//
+// Must be in sync with NTableState::TMoveTableProposedWaitParts
 TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
 {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed");
-    IgnoreMessages(DebugHint(),
-        { TEvHive::TEvCreateTabletReply::EventType
+    YDB_LOG_TRACE("Constructed");
+    IgnoreMessages({ TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
+        , TEvColumnShard::TEvProposeTransactionResult::EventType
         , TEvPrivate::TEvOperationPlan::EventType }
     );
 }
 
-bool TProposedWaitParts::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
+template<typename TEvent>
+bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& context) {
     const auto& evRecord = ev->Get()->Record;
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvSchemaChanged"
-                            << " at tablet: " << ssId);
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvSchemaChanged"
-                            << " at tablet: " << ssId
-                            << " message: " << evRecord.ShortDebugString());
+    YDB_LOG_INFO_CTX(context.Ctx, "",
+        {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
+    );
+    YDB_LOG_DEBUG_CTX(context.Ctx, "",
+        {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        {"message", evRecord.ShortDebugString()},
+    );
 
     if (!CollectSchemaChanged(OperationId, ev, context)) {
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                                << " CollectSchemaChanged: false");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged returned false",
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        );
         return false;
     }
 
@@ -1019,21 +1084,25 @@ bool TProposedWaitParts::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, T
     TTxState& txState = *context.SS->FindTx(OperationId);
 
     if (!txState.ReadyForNotifications) {
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                                << " ReadyForNotifications: false");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "ReadyForNotifications is false",
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        );
         return false;
     }
 
     return true;
 }
 
-bool TProposedWaitParts::ProgressState(TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
+bool TProposedWaitParts::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+    return HandleReplyImpl(ev, context);
+}
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " ProgressState"
-                    << " at tablet: " << ssId);
+bool TProposedWaitParts::HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
+    return HandleReplyImpl(ev, context);
+}
+
+bool TProposedWaitParts::ProgressState(TOperationContext& context) {
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -1108,11 +1177,11 @@ void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTx
     for (auto shardIdx: shards) {
         Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
         auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Collect shard"
-                    << ", shard idx: " << shardIdx
-                    << ", tabletID: " << shardInfo.TabletID
-                    << ", path id: " << shardInfo.PathId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "Collect shard",
+            {"shardIdx", shardIdx},
+            {"tabletId", shardInfo.TabletID},
+            {"pathId", shardInfo.PathId},
+        );
 
         txState->Shards.emplace_back(shardIdx, shardInfo.TabletType, txState->State);
 
@@ -1141,7 +1210,42 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
     }
 }
 
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context) {
+    for (auto otherTxId: relatedTx) {
+        if (otherTxId == operationId.GetTxId()) {
+            continue;
+        }
+
+        YDB_LOG_NOTICE_CTX(context.Ctx, "tx dependency has been found",
+            {"dependentTx", operationId.GetTxId()},
+            {"parentTx", otherTxId},
+        );
+
+        context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
+
+        Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
+        auto otherOperation = context.SS->Operations.at(otherTxId);
+        // AbortUnsafe marks parts as done; clear active barriers first to avoid
+        // IsDoneBarrier() VERIFY when a blocked part is force-aborted.
+        otherOperation->ForceClearBarriers();
+        for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
+            if (auto part = otherOperation->Parts.at(partId)) {
+                part->AbortUnsafe(operationId.GetTxId(), context);
+            }
+        }
+    }
+}
+
 }  // namespace NForceDrop
+
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
+    if (parentPath.Base()->HasActiveChanges()) {
+        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                                    ? parentPath.Base()->CreateTxId
+                                    : parentPath.Base()->LastTxId;
+        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
+    }
+}
 
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
@@ -1170,7 +1274,7 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
     }
 }
 
-void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TProposeContext& context, bool isBackup) {
     parentPath.Base()->IncAliveChildrenPrivate(isBackup);
     if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
         auto grandParent = parentPath.Parent();
@@ -1244,15 +1348,29 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
     return scheme;
 }
 
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(tablePath);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+    auto operation = scheme.MutableMoveIndex();
+    operation->SetTablePath(tablePath);
+    operation->SetSrcPath(srcIndexPath);
+    operation->SetDstPath(dstIndexName);
+
+    return scheme;
+}
+
 void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOperationContext& context) {
     TTxState* txState = context.SS->FindTx(opId);
     Y_ABORT_UNLESS(txState);
 
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, ""
-        << TTxState::TypeName(txState->TxType) << " AbortUnsafe"
-        << ": opId# " << opId
-        << ", txId# " << txId
-        << ", ssId# " << context.SS->TabletID());
+    YDB_LOG_NOTICE_CTX(context.Ctx, "AbortUnsafe",
+        {"txType", TTxState::TypeName(txState->TxType)},
+        {"operationId", opId},
+        {"forceDropTxId", txId},
+        {"schemeshard", context.SS->TabletID()},
+    );
 
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -1270,3 +1388,53 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
 
 }
 }
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop)
+{
+    Y_UNUSED(table);
+    TVector<TPathId> publishedIndexes;
+
+    for (const auto& [childName, childPathId] : path->GetChildren()) {
+        if (!context.SS->PathsById.contains(childPathId)) {
+            continue;
+        }
+        auto childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsTableIndex() || childPath->Dropped()) {
+            continue;
+        }
+        if (skipPlannedToDrop && childPath->PlannedToDrop()) {
+            continue;
+        }
+        if (!context.SS->Indexes.contains(childPathId)) {
+            continue;
+        }
+        auto index = context.SS->Indexes.at(childPathId);
+        if (index->AlterVersion < targetVersion) {
+            index->AlterVersion = targetVersion;
+            // If there's ongoing alter operation, also update alterData version to converge
+            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                index->AlterData->AlterVersion = targetVersion;
+                context.SS->PersistTableIndexAlterData(db, childPathId);
+            }
+            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+            context.SS->ClearDescribePathCaches(childPath);
+            context.OnComplete.PublishToSchemeBoard(operationId, childPathId);
+            publishedIndexes.push_back(childPathId);
+        }
+    }
+
+    return publishedIndexes;
+}
+
+}  // NKikimr::NSchemeShard::NTableIndexVersion
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

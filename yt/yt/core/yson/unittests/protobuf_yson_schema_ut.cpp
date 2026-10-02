@@ -43,7 +43,7 @@ TEST(TProtobufYsonSchemaTest, WriteMessageSchema)
             {name="bytes_field";type="string";};
             {name="float_field";type="float";};
             {name="double_field";type="double";};
-            {name="enum_field";type={type_name="enum";enum_name="EEnum";"values"=["value0";"value1";];};};
+            {name="enum_field";type={type_name="tagged";tag="enum/EEnum";item="string";"enum"=["value0";"value1";];};};
             {name="required_int32_field";type="int32";required=%true;};
             {name="repeated_int32_field";type={type_name="list";item="int32";};};
             {name="string_to_int32_map";type={type_name="dict";key="utf8";value="int32";};};
@@ -56,7 +56,7 @@ TEST(TProtobufYsonSchemaTest, WriteMessageSchema)
 
     EXPECT_TRUE(AreNodesEqual(actualNode, expectedNode))
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n"
-        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text).AsStringBuf() << "\n\n";
+        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n";
 }
 
 TEST(TProtobufYsonSchemaTest, CamelCaseNames)
@@ -69,7 +69,10 @@ TEST(TProtobufYsonSchemaTest, CamelCaseNames)
         type_name="struct";
         members=[
             {name="SomeField";type="int32";};
-            {name="EnumField";type={type_name="enum";enum_name="EEnum";"values"=["VALUE_NONE";"VALUE_FIRST";];};};
+            {
+                name="EnumField";
+                type={type_name="tagged";tag="enum/EEnum";item="string";"enum"=["VALUE_NONE";"VALUE_FIRST";];};
+            };
         ];
     })";
 
@@ -100,7 +103,10 @@ TEST(TProtobufYsonSchemaTest, ForceSnakeCaseNames)
         type_name="struct";
         members=[
             {name="some_field";type="int32";};
-            {name="enum_field";type={type_name="enum";enum_name="EEnum";"values"=["value_none";"value_first";];};};
+            {
+                name="enum_field";
+                type={type_name="tagged";tag="enum/EEnum";item="string";"enum"=["value_none";"value_first";];};
+            };
         ];
     })";
 

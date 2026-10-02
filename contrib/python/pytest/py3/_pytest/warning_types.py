@@ -1,13 +1,12 @@
 import dataclasses
 import inspect
-import warnings
 from types import FunctionType
 from typing import Any
+from typing import final
 from typing import Generic
 from typing import Type
 from typing import TypeVar
-
-from _pytest.compat import final
+import warnings
 
 
 class PytestWarning(UserWarning):
@@ -56,7 +55,13 @@ class PytestRemovedIn8Warning(PytestDeprecationWarning):
     __module__ = "pytest"
 
 
-class PytestReturnNotNoneWarning(PytestRemovedIn8Warning):
+class PytestRemovedIn9Warning(PytestDeprecationWarning):
+    """Warning class for features that will be removed in pytest 9."""
+
+    __module__ = "pytest"
+
+
+class PytestReturnNotNoneWarning(PytestWarning):
     """Warning emitted when a test function is returning value other than None."""
 
     __module__ = "pytest"
@@ -74,11 +79,7 @@ class PytestExperimentalApiWarning(PytestWarning, FutureWarning):
 
     @classmethod
     def simple(cls, apiname: str) -> "PytestExperimentalApiWarning":
-        return cls(
-            "{apiname} is an experimental api that may change over time".format(
-                apiname=apiname
-            )
-        )
+        return cls(f"{apiname} is an experimental api that may change over time")
 
 
 @final

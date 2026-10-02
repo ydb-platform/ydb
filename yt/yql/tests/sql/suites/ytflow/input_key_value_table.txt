@@ -1,0 +1,2 @@
+{"key"="foo";"kv_value"=10};
+{"key"="foobar";"kv_value"=20};

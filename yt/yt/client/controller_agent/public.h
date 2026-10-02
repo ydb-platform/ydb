@@ -1,0 +1,23 @@
+#pragma once
+
+#include <yt/yt/client/ypath/public.h>
+
+namespace NYT::NControllerAgent {
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EOperationIncarnationSwitchReason,
+    (JobAborted)
+    (JobFailed)
+    (JobInterrupted)
+    (JobLackAfterRevival)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NYPath::ELayerAccessMethod;
+using NYPath::ELayerFilesystem;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NControllerAgent

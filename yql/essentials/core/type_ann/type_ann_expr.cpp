@@ -4,8 +4,11 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_func_stack.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/exception_utils.h>
 #include <yql/essentials/utils/log/log.h>
+
 #include <util/datetime/cputimer.h>
 #include <util/generic/scope.h>
 
@@ -15,38 +18,63 @@ namespace {
 
 constexpr bool PrintCallableTimes = false;
 
+constexpr ui32 MaxChildrenForFuzzing = 100;
+
+THashSet<TStringBuf> FuzzUntypedExcludes = {
+    "S3ReadObject!",
+    "S3ParseSettings",
+    "DqCnMerge",
+    "DqJoin",
+    "DqPhyMapJoin",
+    "DqPhyCrossJoin",
+    "DqPhyJoinDict",
+};
+
+// IO funcs will be skipped during partial typecheck
+THashSet<TStringBuf> FuzzUniversalExcludes = {
+    "ConfRead!",
+    "PgReadTable!",
+};
+
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
     TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
         ETypeCheckMode mode)
-        : CallableTransformer(callableTransformer)
-        , Types(types)
-        , Mode(mode)
+        : CallableTransformer_(callableTransformer)
+        , Types_(types)
+        , Mode_(mode)
     {
     }
 
-    ~TTypeAnnotationTransformer() {
-        if (PrintCallableTimes) {
+    ~TTypeAnnotationTransformer() override {
+        if (!PrintCallableTimes) {
+            return;
+        }
+        NYql::WithAbortOnException([&] {
             std::vector<std::pair<TStringBuf, std::pair<ui64, ui64>>> pairs;
-            pairs.reserve(CallableTimes.size());
-            for (auto& x : CallableTimes) {
+            pairs.reserve(CallableTimes_.size());
+            for (auto& x : CallableTimes_) {
                 pairs.emplace_back(x.first, x.second);
             }
 
-            Sort(pairs.begin(), pairs.end(), [](auto a,auto b) { return a.second.first > b.second.first; });
+            Sort(pairs.begin(), pairs.end(), [](auto a, auto b) { return a.second.first > b.second.first; });
             Cerr << "=============\n";
             for (auto& x : pairs) {
                 Cerr << x.first << " : " << CyclesToDuration(x.second.first) << " # " << x.second.second << Endl;
             }
             Cerr << "=============\n";
-        }
+        }, "TTypeAnnotationTransformer");
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoTransform");
         output = input;
-        if (Mode == ETypeCheckMode::Initial && IsComplete) {
+        if (Mode_ == ETypeCheckMode::Initial && IsComplete_) {
             return TStatus::Ok;
+        }
+
+        if (IsOptimizerEnabled<KeepWorldOptName>(Types_) && !IsOptimizerDisabled<KeepWorldOptName>(Types_)) {
+            KeepWorldEnabled_ = true;
         }
 
         auto status = TransformNode(input, output, ctx);
@@ -55,22 +83,22 @@ public:
             WriteRepeatCallableCount();
         }
 
-        if (status.Level != TStatus::Error && HasRenames) {
-            output = ctx.ReplaceNodes(std::move(output), Processed);
+        if (status.Level != TStatus::Error && HasRenames_) {
+            output = ctx.ReplaceNodes(std::move(output), Processed_);
         }
 
-        Processed.clear();
+        Processed_.clear();
         if (status == TStatus::Ok) {
-            Types.ExpectedTypes.clear();
-            Types.ExpectedColumnOrders.clear();
+            Types_.ExpectedTypes.clear();
+            Types_.ExpectedColumnOrders.clear();
         }
 
-        HasRenames = false;
-        if (Mode == ETypeCheckMode::Initial && status == TStatus::Ok) {
-            IsComplete = true;
+        HasRenames_ = false;
+        if (Mode_ == ETypeCheckMode::Initial && status == TStatus::Ok) {
+            IsComplete_ = true;
         }
 
-        if (Mode == ETypeCheckMode::Repeat) {
+        if (Mode_ == ETypeCheckMode::Repeat) {
             CheckFatalTypeError(status);
         }
 
@@ -81,8 +109,8 @@ public:
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoGetAsyncFuture");
         Y_UNUSED(input);
         TVector<NThreading::TFuture<void>> futures;
-        for (const auto& callable : CallableInputs) {
-            futures.push_back(CallableTransformer->GetAsyncFuture(*callable));
+        for (const auto& callable : CallableInputs_) {
+            futures.push_back(CallableTransformer_->GetAsyncFuture(*callable));
         }
 
         return WaitExceptionOrAll(futures);
@@ -92,10 +120,10 @@ public:
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoApplyAsyncChanges");
         output = input;
         TStatus combinedStatus = TStatus::Ok;
-        for (const auto& callable : CallableInputs) {
+        for (const auto& callable : CallableInputs_) {
             callable->SetState(TExprNode::EState::TypePending);
             TExprNode::TPtr callableOutput;
-            auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx);
+            auto status = CallableTransformer_->ApplyAsyncChanges(callable, callableOutput, ctx);
             Y_ABORT_UNLESS(callableOutput);
             YQL_ENSURE(status != TStatus::Async);
             YQL_ENSURE(callableOutput == callable);
@@ -105,38 +133,40 @@ public:
             }
         }
 
-        CallableInputs.clear();
+        CallableInputs_.clear();
         if (combinedStatus.Level == TStatus::Ok) {
-            Processed.clear();
+            Processed_.clear();
         }
 
-        if (Mode == ETypeCheckMode::Repeat) {
+        if (Mode_ == ETypeCheckMode::Repeat) {
             CheckFatalTypeError(combinedStatus);
         }
 
         return combinedStatus;
     }
 
-    void Rewind() {
-        CallableTransformer->Rewind();
-        CallableInputs.clear();
-        Processed.clear();
-        HasRenames = false;
-        RepeatCallableCount.clear();
-        CurrentFunctions = {};
-        CallableTimes.clear();
-        IsComplete = false;
+    void Rewind() override {
+        CallableTransformer_->Rewind();
+        CallableInputs_.clear();
+        Processed_.clear();
+        HasRenames_ = false;
+        RepeatCallableCount_.clear();
+        FunctionStack_.Reset();
+        CallableTimes_.clear();
+        IsComplete_ = false;
+        FuzzLambdaNode_.Reset();
+        FuzzUniversalNode_.Reset();
     }
 
 
 private:
     void WriteRepeatCallableCount() {
-        if (RepeatCallableCount.empty()) {
+        if (RepeatCallableCount_.empty()) {
             return;
         }
 
         TVector<std::pair<TString, ui64>> values;
-        for (const auto& x : RepeatCallableCount) {
+        for (const auto& x : RepeatCallableCount_) {
             values.push_back({ x.first, x.second });
         }
 
@@ -151,12 +181,12 @@ private:
         }
 
         YQL_CLOG(DEBUG, Core) << out.Str();
-        RepeatCallableCount.clear();
+        RepeatCallableCount_.clear();
     }
 
     TStatus TransformNode(const TExprNode::TPtr& start, TExprNode::TPtr& output, TExprContext& ctx) {
         output = start;
-        auto processedPair = Processed.emplace(start.Get(), nullptr); // by default node is not changed
+        auto processedPair = Processed_.emplace(start.Get(), nullptr); // by default node is not changed
         if (!processedPair.second) {
             if (processedPair.first->second) {
                 output = processedPair.first->second;
@@ -165,7 +195,7 @@ private:
 
             switch (start->GetState()) {
             case TExprNode::EState::Initial:
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeInProgress:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::TypePending:
@@ -181,7 +211,7 @@ private:
                     break;
                 }
 
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeComplete:
             case TExprNode::EState::ConstrInProgress:
             case TExprNode::EState::ConstrPending:
@@ -200,58 +230,9 @@ private:
 
         auto input = start;
         for (size_t transformCount = 0; true; ++transformCount) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
-                TStringBuilder str;
-                str << "At ";
-                switch (input->Type()) {
-                case TExprNode::Callable:
-                    if (!CurrentFunctions.empty() && CurrentFunctions.top().second) {
-                        return nullptr;
-                    }
-
-                    if (!CurrentFunctions.empty()) {
-                        CurrentFunctions.top().second = true;
-                    }
-
-                    str << "function: " << NormalizeCallableName(input->Content());
-                    break;
-                case TExprNode::List:
-                    if (CurrentFunctions.empty()) {
-                        str << "tuple";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                case TExprNode::Lambda:
-                    if (CurrentFunctions.empty()) {
-                        str << "lambda";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                default:
-                    str << "unknown";
-                }
-
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
-            });
-
-            if (input->Type() == TExprNode::Callable) {
-                CurrentFunctions.push(std::make_pair(input->Content(), false));
-            }
-            Y_SCOPE_EXIT(this, input) {
-                if (input->Type() == TExprNode::Callable) {
-                    CurrentFunctions.pop();
-                    if (!CurrentFunctions.empty() && CurrentFunctions.top().first.EndsWith('!')) {
-                        CurrentFunctions.top().second = true;
-                    }
-                }
+            FunctionStack_.EnterFrame(*input, ctx);
+            Y_DEFER {
+                FunctionStack_.LeaveFrame(*input, ctx);
             };
 
             TStatus retStatus = TStatus::Error;
@@ -299,6 +280,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -349,6 +331,8 @@ private:
                     (const TTypeAnnotationNode*)ctx.MakeType<TUnitExprType>() :
                     ctx.MakeType<TTupleExprType>(children));
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
+                input->UpdateSideEffectsFromChildren();
                 return TStatus::Ok;
             }
 
@@ -368,8 +352,9 @@ private:
                     return argStatus;
                 }
 
-                if (argStatus.Level == TStatus::Repeat)
+                if (argStatus.Level == TStatus::Repeat) {
                     return TStatus::Ok;
+                }
 
                 TStatus combinedStatus = TStatus::Ok;
                 TExprNode::TListType newChildren;
@@ -411,6 +396,8 @@ private:
 
                 if (input->GetTypeAnn()) {
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
+                    input->UpdateSideEffectsFromChildren();
                 }
 
                 return TStatus::Ok;
@@ -460,12 +447,13 @@ private:
                     }
                 }
 
-                CurrentFunctions.top().second = true;
+                FunctionStack_.MarkUsed();
+                input->UpdateSideEffectsFromChildren();
                 auto cyclesBefore = PrintCallableTimes ? GetCycleCount() : 0;
-                auto status = CallableTransformer->Transform(input, output, ctx);
+                auto status = DoCallableTransform(input, output, ctx);
                 auto cyclesAfter = PrintCallableTimes ? GetCycleCount() : 0;
                 if (PrintCallableTimes) {
-                    auto& x = CallableTimes[input->Content()];
+                    auto& x = CallableTimes_[input->Content()];
                     x.first += (cyclesAfter - cyclesBefore);
                     ++x.second;
                 }
@@ -484,15 +472,19 @@ private:
 
                     input->SetState(TExprNode::EState::TypeComplete);
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
+                    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                        input->SetSideEffects(ESideEffects::None);
+                    }
                 }
                 else if (status == TStatus::Async) {
-                    CallableInputs.push_back(input);
+                    CallableInputs_.push_back(input);
                     input->SetState(TExprNode::EState::TypeInProgress);
                 } else {
-                    RepeatCallableCount[input.Get()->Content()] += 1;
+                    RepeatCallableCount_[input.Get()->Content()] += 1;
                     if (output != input.Get()) {
                         processedPair.first->second = output;
-                        HasRenames = true;
+                        HasRenames_ = true;
                     }
 
                     retStatus = status;
@@ -506,6 +498,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -560,20 +553,182 @@ private:
     }
 
     void CheckExpected(const TExprNode& input, TExprContext& ctx) {
-        CheckExpectedTypeAndColumnOrder(input, ctx, Types);
+        CheckExpectedTypeAndColumnOrder(input, ctx, Types_);
+    }
+
+    void CalculateWorld(TExprNode& input) {
+        if (!KeepWorldEnabled_) {
+            return;
+        }
+
+        YQL_ENSURE(!input.GetWorldLinks());
+        if (input.IsAtom() || input.IsWorld() || input.IsArgument()) {
+            return;
+        }
+
+        TExprNode::TListType candidates;
+        bool hasWorlds = false;
+        for (const auto& child : input.Children()) {
+            if (!child->GetTypeAnn()) {
+                continue;
+            }
+
+            if (child->GetTypeAnn()->ReturnsWorld()) {
+                if (!child->IsWorld()) {
+                    hasWorlds = true;
+                    candidates.push_back(child);
+                }
+            } else {
+                auto inner = child->GetWorldLinks();
+                if (inner) {
+                    candidates.insert(candidates.end(), inner->begin(), inner->end());
+                }
+            }
+        }
+
+        SortUniqueBy(candidates, [](const auto& p){ return p->UniqueId(); });
+        if (!candidates.empty()) {
+            if (!hasWorlds) {
+                for (const auto& child : input.Children()) {
+                    if (!child->GetTypeAnn()) {
+                        continue;
+                    }
+
+                    if (!child->GetTypeAnn()->ReturnsWorld()) {
+                        auto inner = child->GetWorldLinks();
+                        if (inner && *inner == candidates) {
+                            input.SetWorldLinks(std::move(inner));
+                            return;
+                        }
+                    }
+                }
+            }
+
+            input.SetWorldLinks(std::make_shared<TExprNode::TListType>(std::move(candidates)));
+        }
+    }
+
+    enum class EFuzzMode {
+        UntypedLambda,
+        Universal
+    };
+
+    void FuzzCallable(const TExprNode::TPtr& originalInput, TExprContext& ctx, EFuzzMode mode, TStringBuf description) {
+        if (originalInput->ChildrenSize() == 0) {
+            return;
+        }
+
+        if (originalInput->ChildrenSize() > MaxChildrenForFuzzing) {
+            return;
+        }
+
+        TExprNode::TPtr subst;
+        switch (mode) {
+        case EFuzzMode::UntypedLambda:
+            {
+                if (FuzzUntypedExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzLambdaNode_) {
+                    auto voidNode = ctx.NewCallable(originalInput->Pos(), "Void", {});
+                    voidNode->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+                    auto argsNode = ctx.NewArguments(originalInput->Pos(), {});
+                    argsNode->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                    FuzzLambdaNode_ = ctx.NewLambda(originalInput->Pos(),
+                                                    std::move(argsNode), std::move(voidNode));
+                }
+
+                subst = FuzzLambdaNode_;
+                break;
+            }
+        case EFuzzMode::Universal:
+            {
+                if (FuzzUniversalExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzUniversalNode_) {
+                    auto arg = ctx.NewCallable(originalInput->Pos(), "UniversalType", {});
+                    arg->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TUniversalExprType>()));
+                    FuzzUniversalNode_ = ctx.NewCallable(originalInput->Pos(), "InstanceOf", {arg});
+                    FuzzUniversalNode_->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                }
+
+                subst = FuzzUniversalNode_;
+                break;
+            }
+        }
+
+        ctx.IssueManager.Mute(mode == EFuzzMode::Universal);
+        Y_DEFER {
+            ctx.IssueManager.Unmute();
+        };
+
+        for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {
+            auto fuzzInput = ctx.ShallowCopy(*originalInput);
+            fuzzInput->ChildRef(i) = subst;
+
+            TExprNode::TPtr fuzzOutput;
+            try {
+                auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
+                switch (mode) {
+                case EFuzzMode::UntypedLambda:
+                    Y_UNUSED(fuzzStatus);
+                    break;
+                case EFuzzMode::Universal:
+                    if (fuzzStatus == IGraphTransformer::TStatus::Error) {
+                        throw yexception() << "Error status";
+                    }
+
+                    break;
+                }
+            } catch (...) {
+                ythrow yexception() << "Fuzz " << description << " failed for callable " << originalInput->Content()
+                    << ", mutated input #" << i << ", reason: " << CurrentExceptionMessage();
+            }
+        }
+    }
+
+protected:
+    virtual IGraphTransformer::TStatus DoCallableTransform(const TExprNode::TPtr& input,
+                                                           TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr inputCopy;
+        if (GetTypes().FuzzUntypedLambda || (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal)) {
+            inputCopy = ctx.ShallowCopy(*input);
+        }
+
+        auto status = CallableTransformer_->Transform(input, output, ctx);
+
+        if (GetTypes().FuzzUntypedLambda && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::UntypedLambda, "untyped lambda");
+        }
+
+        if (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::Universal, "universal");
+        }
+
+        return status;
+    }
+
+    TTypeAnnotationContext& GetTypes() {
+        return Types_;
     }
 
 private:
-    TAutoPtr<IGraphTransformer> CallableTransformer;
-    TTypeAnnotationContext& Types;
-    const ETypeCheckMode Mode;
-    bool IsComplete = false;
-    TDeque<TExprNode::TPtr> CallableInputs;
-    TNodeOnNodeOwnedMap Processed;
-    bool HasRenames = false;
-    THashMap<TString, ui64> RepeatCallableCount;
-    TStack<std::pair<TStringBuf, bool>> CurrentFunctions;
-    THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
+    TAutoPtr<IGraphTransformer> CallableTransformer_;
+    TTypeAnnotationContext& Types_;
+    const ETypeCheckMode Mode_;
+    bool IsComplete_ = false;
+    TDeque<TExprNode::TPtr> CallableInputs_;
+    TNodeOnNodeOwnedMap Processed_;
+    bool HasRenames_ = false;
+    THashMap<TString, ui64> RepeatCallableCount_;
+    TFunctionStack FunctionStack_;
+    THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes_;
+    bool KeepWorldEnabled_ = false;
+    TExprNode::TPtr FuzzLambdaNode_;
+    TExprNode::TPtr FuzzUniversalNode_;
 };
 
 } // namespace
@@ -601,20 +756,30 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     TVector<TTransformStage> transformers;
     auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN;
     transformers.push_back(TTransformStage(
-        CreateFunctorTransformer(&ExpandApply),
+        CreateFunctorTransformer([&typeAnnotationContext](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return ExpandApply(input, output, ctx, typeAnnotationContext);
+        }),
         "ExpandApply",
         issueCode));
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(
             [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return ValidateProviders(input, output, ctx, typeAnnotationContext);
-        }),
+                return ValidateProviders(input, output, ctx, typeAnnotationContext);
+            }
+        ),
         "ValidateProviders",
         issueCode));
-
     transformers.push_back(TTransformStage(
         CreateConfigureTransformer(typeAnnotationContext),
         "Configure",
+        issueCode));
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
+            [&typeAnnotationContext](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                return ExpandSeq(input, output, ctx, typeAnnotationContext);
+            }
+        ),
+        "ExpandSeq",
         issueCode));
 
     // NOTE: add fake EvaluateExpression step to break infinite loop
@@ -671,7 +836,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
             issueCode));
     }
 
-    return CreateCompositeGraphTransformer(transformers, true);
+    return CreateCompositeGraphTransformer(transformers, /*useIssueScopes=*/true);
 }
 
 bool SyncAnnotateTypes(
@@ -702,7 +867,7 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
         return nullptr;
     }
 

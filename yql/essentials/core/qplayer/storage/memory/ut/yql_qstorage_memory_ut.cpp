@@ -7,5 +7,5 @@
 using namespace NYql;
 
 Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
-    GENERATE_TESTS(MakeMemoryQStorage, false)
-}
+GENERATE_TESTS(MakeMemoryQStorage, false)
+} // Y_UNIT_TEST_SUITE(TQStorageMemoryTests)

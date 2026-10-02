@@ -94,7 +94,7 @@ class _Config:
         "maxopt": str or None
             utilized for target's policy '$maxopt' and the value should
             contains the maximum acceptable optimization by the compiler.
-            e.g. in gcc `'-O3'`
+            e.g. in gcc ``'-O3'``
 
         **Notes**:
             * case-sensitive for compiler names and flags
@@ -104,8 +104,8 @@ class _Config:
 
     conf_min_features : dict
         A dictionary defines the used CPU features for
-        argument option `'min'`, the key represent the CPU architecture
-        name e.g. `'x86'`. Default values provide the best effort
+        argument option ``'min'``, the key represent the CPU architecture
+        name e.g. ``'x86'``. Default values provide the best effort
         on wide range of users platforms.
 
         **Note**: case-sensitive for architecture names.
@@ -325,7 +325,7 @@ class _Config:
         ## ARMv8.2 dot product
         ASIMDDP = dict(interest=6, implies="ASIMD"),
         ## ARMv8.2 Single & half-precision Multiply
-        ASIMDFHM = dict(interest=7, implies="ASIMDHP"),
+        ASIMDFHM = dict(interest=7, implies="ASIMDHP")
     )
     def conf_features_partial(self):
         """Return a dictionary of supported CPU features by the platform,

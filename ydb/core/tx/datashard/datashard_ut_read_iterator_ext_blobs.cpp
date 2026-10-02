@@ -13,7 +13,7 @@
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 
@@ -76,12 +76,16 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         TTestActorRuntime* Runtime;
 
         TNode(bool useExternalBlobs, int externalBlobColumns = 1) : ServerSettings(Pm.GetPort(2134)) {
+            TServerSettings::TControls controls;
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
+
             ServerSettings.SetDomainName("Root")
                 .SetUseRealThreads(false)
                 .AddStoragePool("ssd")
                 .AddStoragePool("hdd")
                 .AddStoragePool("ext")
-                .SetEnableUuidAsPrimaryKey(true);
+                .SetEnableUuidAsPrimaryKey(true)
+                .SetControls(controls);
 
             Server = new TServer(ServerSettings);
             
@@ -235,8 +239,93 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 10);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 2);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 2);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 10); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 10); // can be up to total requested blobs
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 10);
+    }
+
+    Y_UNIT_TEST(ExtBlobsWithSpecificKeys) {
+        // Read specific keys via read iterator as it has another code path.
+        TNode node(true);
+
+        auto server = node.Server;
+        auto& runtime = *node.Runtime;
+        auto& sender = node.Sender;
+        auto shard1 = node.Shard;
+        auto tableId1 = node.TableId;
+
+        TString largeValue(1_MB, 'L');
+
+        for (int i = 0; i < 20; i++) {
+            TString chunkNum = ToString(i);
+            TString query = R"___(
+                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        {
+            Cerr << "... waiting for stats after upsert" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
+        }
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            Cerr << "... waiting for stats after compaction" << Endl;
+            auto stats = WaitTableStats(runtime, shard1, [](const NKikimrTableStats::TTableStats& stats) {
+                return stats.GetPartCount() >= 1;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
+        }
+        
+        RebootTablet(runtime, shard1, sender);
+
+        auto iteratorCounter = SetupReadIteratorObserver(runtime);
+
+        // Read every second row so that KQP doesn't optimize it to a single range request.
+        TStringStream query;
+        query << R"(
+            SELECT blob_id, chunk_num, data0 
+            FROM `/Root/table-1` 
+            WHERE )";
+
+        for (int i = 0; i <= 18; i += 2) {
+            if (i > 0) {
+                query << " OR ";
+            }
+            query << "(blob_id = Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\") AND chunk_num = " << i << ")";
+        }
+
+        query << R"(
+            ORDER BY blob_id, chunk_num ASC 
+            LIMIT 100;
+        )";
+
+        auto readFuture = KqpSimpleSend(runtime, query.Str());
+
+        Ydb::Table::ExecuteDataQueryResponse res = AwaitResponse(runtime, std::move(readFuture));
+        auto& operation = res.Getoperation();
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Table::ExecuteQueryResult result;
+        operation.result().UnpackTo(&result);
+        UNIT_ASSERT_EQUAL(result.result_sets().size(), 1);
+        auto& resultSet = result.result_sets()[0];
+        UNIT_ASSERT_EQUAL(resultSet.rows_size(), 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 2);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 10); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 10); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 10);
     }
 
@@ -284,8 +373,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 3, 7);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 0);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 3); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 3); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
     }
 
@@ -333,8 +424,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 3);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 0);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 3); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 3); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
     }
 
@@ -389,8 +482,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), {1, 5, 6, 7, 8, 9});
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 1);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 6); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 6); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 6);
     }
 
@@ -463,7 +558,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         runtime.WaitFor("blocked results", [&]{ return blockedResults.size() > 0 || finished; });
 
         if (!finished) {
-            UNIT_ASSERT_VALUES_EQUAL(passedRows, 1u);
+            UNIT_ASSERT_GE(passedRows, 1u);
+            UNIT_ASSERT_LT(passedRows, 5u);
 
             if (withReboot) {
                 dropReadId.emplace(
@@ -545,8 +641,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 10, 0, 2);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 3);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 4);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 3);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 20); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 4);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 20); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 20);
     }
 
@@ -637,7 +735,12 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
             auto& expectedResult = expectedResults[test];
 
-            UNIT_ASSERT_VALUES_EQUAL_C(*iteratorCounter, expectedResult, "test " << test);
+            UNIT_ASSERT_VALUES_EQUAL_C(iteratorCounter->Reads, expectedResult.Reads, "test " << test);
+            UNIT_ASSERT_GE_C(iteratorCounter->Continues, expectedResult.Continues, "test " << test);
+            UNIT_ASSERT_LE_C(iteratorCounter->Continues, 20, "test " << test); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+            UNIT_ASSERT_GE_C(iteratorCounter->EvGets, expectedResult.EvGets, "test " << test);
+            UNIT_ASSERT_LE_C(iteratorCounter->EvGets, expectedResult.BlobsRequested, "test " << test); // can be up to total requested blobs
+            UNIT_ASSERT_VALUES_EQUAL_C(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested, "test " << test);
         }
     }
 

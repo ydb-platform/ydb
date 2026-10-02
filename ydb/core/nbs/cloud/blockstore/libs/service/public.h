@@ -1,0 +1,46 @@
+#pragma once
+
+#include <util/generic/ptr.h>
+
+#include <memory>
+
+namespace NYdb::NBS::NBlockStore {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TCallContext;
+using TCallContextPtr = TIntrusivePtr<TCallContext>;
+
+struct IStorage;
+using IStoragePtr = std::shared_ptr<IStorage>;
+
+struct IDurableStorage;
+using IDurableStoragePtr = std::shared_ptr<IDurableStorage>;
+
+struct IStorageProvider;
+using IStorageProviderPtr = std::shared_ptr<IStorageProvider>;
+
+struct IDeviceHandler;
+using IDeviceHandlerPtr = std::shared_ptr<IDeviceHandler>;
+
+struct IDeviceHandlerFactory;
+using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
+
+struct ITraceService;
+using ITraceServicePtr = std::shared_ptr<ITraceService>;
+
+struct TVolumeConfig;
+using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;
+
+using TStorageBuffer = std::shared_ptr<char>;
+
+struct TReadBlocksLocalRequest;
+struct TReadBlocksLocalResponse;
+
+struct TWriteBlocksLocalRequest;
+struct TWriteBlocksLocalResponse;
+
+struct TZeroBlocksLocalRequest;
+struct TZeroBlocksLocalResponse;
+
+}   // namespace NYdb::NBS::NBlockStore

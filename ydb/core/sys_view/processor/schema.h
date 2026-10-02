@@ -54,10 +54,11 @@ struct TProcessorSchema : NIceDb::Schema {
         struct ByReadBytes : Column<5, NScheme::NTypeIds::String> {};
         struct ByCpuTime   : Column<6, NScheme::NTypeIds::String> {};
         struct ByRequestUnits : Column<7, NScheme::NTypeIds::String> {};
+        struct IntervalEnd : Column<8, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<NodeId>;
         using TColumns = TableColumns<NodeId, QueryHashes, TextsToGet,
-            ByDuration, ByReadBytes, ByCpuTime, ByRequestUnits>;
+            ByDuration, ByReadBytes, ByCpuTime, ByRequestUnits, IntervalEnd>;
     };
 
 #define RESULT_QUERY_TABLE(TableName, TableID)                           \
@@ -119,8 +120,19 @@ struct TProcessorSchema : NIceDb::Schema {
 
     RESULT_PARTITION_TABLE(TopPartitionsOneMinute, 17)
     RESULT_PARTITION_TABLE(TopPartitionsOneHour, 18)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneMinute, 20)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneHour, 21)
 
 #undef RESULT_PARTITION_TABLE
+
+    struct IntervalMetricsOneHour : Table<22> {
+        struct HourEnd   : Column<1, NScheme::NTypeIds::Timestamp> {};
+        struct QueryHash : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Data      : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<HourEnd, QueryHash>;
+        using TColumns = TableColumns<HourEnd, QueryHash, Data>;
+    };
 
     using TTables = SchemaTables<
         SysParams,
@@ -141,7 +153,10 @@ struct TProcessorSchema : NIceDb::Schema {
         IntervalPartitionTops,
         IntervalPartitionFollowerTops,
         TopPartitionsOneMinute,
-        TopPartitionsOneHour
+        TopPartitionsOneHour,
+        TopPartitionsByTliOneMinute,
+        TopPartitionsByTliOneHour,
+        IntervalMetricsOneHour
     >;
 
     using TSettings = SchemaSettings<
@@ -152,6 +167,7 @@ struct TProcessorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_Database = 1;
     static constexpr ui64 SysParam_CurrentStage = 2;
     static constexpr ui64 SysParam_IntervalEnd = 3;
+    static constexpr ui64 SysParam_LastMergedQueryMetricsIntervalEnd = 4;
 };
 
 }

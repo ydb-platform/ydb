@@ -45,11 +45,15 @@ namespace NTabletFlatExecutor {
         static TPartComponents MakePageCollectionComponents(const TBundle &proto, bool unsplit = false);
 
     private:
-        void Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TInfo &cache);
+        void Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection);
         void Bundle(
                 NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
                 const TLargeGlobId &largeGlobId,
                 const NPageCollection::TPageCollection *pack);
+        void Bundle(
+                NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
+                const TLargeGlobId &largeGlobId,
+                const TSharedData &rawMeta);
 
     private:
         const bool PutMeta = false;     /* Save page collection metablob in bundle  */

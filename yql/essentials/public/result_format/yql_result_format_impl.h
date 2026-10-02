@@ -12,4 +12,4 @@ inline void Check(bool value, const TSourceLocation& location) {
 #define CHECK(value) Check(value, __LOCATION__)
 #define UNEXPECTED ythrow TUnsupportedException() << "Unhandled case"
 
-}
+} // namespace NYql::NResult

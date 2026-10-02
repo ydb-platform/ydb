@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/minikql/dom/json.h>
 
@@ -29,18 +29,18 @@ public:
     TJsonPathTestBase();
 
 protected:
-    const TVector<TStringBuf> LAX_MODES = {"", "lax "};
-    const TVector<TStringBuf> STRICT_MODES = {"strict "};
-    const TVector<TStringBuf> ALL_MODES = {"", "lax ", "strict "};
+    const TVector<TStringBuf> LaxModes_ = {"", "lax "};
+    const TVector<TStringBuf> StrictModes_ = {"strict "};
+    const TVector<TStringBuf> AllModes_ = {"", "lax ", "strict "};
 
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
-    TMemoryUsageInfo MemInfo;
-    THolderFactory HolderFactory;
-    TDefaultValueBuilder ValueBuilder;
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry_;
+    TScopedAlloc Alloc_;
+    TTypeEnvironment Env_;
+    TMemoryUsageInfo MemInfo_;
+    THolderFactory HolderFactory_;
+    TDefaultValueBuilder ValueBuilder_;
 
-    const int MAX_PARSE_ERRORS = 100;
+    const int MaxParseErrors_ = 100;
 
     TIssueCode C(TIssuesIds::EIssueCode code);
 

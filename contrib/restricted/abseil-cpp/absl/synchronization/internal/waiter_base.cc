@@ -14,16 +14,15 @@
 
 #include "absl/synchronization/internal/waiter_base.h"
 
+#include <atomic>
+#include <cassert>
+
 #include "absl/base/config.h"
 #include "absl/base/internal/thread_identity.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
-
-#ifdef ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
-constexpr int WaiterBase::kIdlePeriods;
-#endif
 
 void WaiterBase::MaybeBecomeIdle() {
   base_internal::ThreadIdentity *identity =

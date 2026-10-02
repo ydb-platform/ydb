@@ -1,22 +1,30 @@
 LIBRARY()
 
 SRCS(
-    auth.h
-    auth.cpp
     actor_activity_names.cpp
-    appdata.h
     appdata.cpp
-    backtrace.h
+    appdata.h
+    auth.cpp
+    auth.h
     backtrace.cpp
+    backtrace.h
+    blobstorage.cpp
+    blobstorage.h
+    blobstorage_data_kind.h
+    blobstorage_grouptype.cpp
+    blobstorage_relevance.cpp
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
-    blobstorage.h
-    blobstorage.cpp
-    blobstorage_grouptype.cpp
+    boot_type.cpp
+    boot_type.h
+    bridge.cpp
+    bridge.h
     channel_profiles.h
     counters.cpp
     counters.h
+    database_kind.cpp
+    database_kind.h
     defs.h
     domain.cpp
     domain.h
@@ -26,20 +34,30 @@ SRCS(
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h
+    http_database_param.cpp
+    http_database_param.h
     interconnect_channels.h
+    kmeans_clusters.cpp
+    local_user_token.cpp
+    local_user_token.h
     localdb.cpp
     localdb.h
     location.h
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    request_types.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -55,59 +73,79 @@ SRCS(
     statestorage_monitoring.cpp
     statestorage_proxy.cpp
     statestorage_replica.cpp
+    statestorage_ringwalker.h
+    storage_pool_kinds.h
     storage_pools.cpp
     storage_pools.h
-    subdomain.h
     subdomain.cpp
+    subdomain.h
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h
+    tablet_history_cutter.h
     tablet_killer.cpp
     tablet_pipe.h
     tablet_pipecache.h
     tablet_resolver.h
     tablet_status_checker.cpp
-    tabletid.h
     tablet_types.h
+    tabletid.h
     traceid.cpp
     traceid.h
     tracing.h
-    tx_processing.h
     tx_processing.cpp
+    tx_processing.h
     user_registry.h
     wilson_tracing_control.cpp
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/helpers
-    ydb/library/actors/interconnect
-    ydb/library/actors/protos
-    ydb/library/actors/wilson
-    ydb/library/aclib
+    contrib/libs/snowball
+    library/cpp/deprecated/atomic
     library/cpp/deprecated/enum_codegen
+    library/cpp/dot_product
+    library/cpp/json
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
+    library/cpp/svnversion
     library/cpp/time_provider
+    ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
     ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out
+    ydb/core/scheme
+    ydb/library/accessor
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/interconnect
+    ydb/library/actors/protos
+    ydb/library/actors/wilson
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
-    library/cpp/deprecated/atomic
 )
+
+PEERDIR(
+    ydb/library/superlemmer_stub
+)
+
+YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
@@ -115,7 +153,10 @@ PEERDIR(
 )
 ENDIF()
 
-GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(boot_type.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(auth.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(database_kind.h)
 
 END()
 
@@ -123,8 +164,12 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
+    ut_backtrace
     ut_board_subscriber
+    ut_http_database_param
 )
+ENDIF()

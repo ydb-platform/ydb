@@ -37,15 +37,29 @@ struct TPDiskInfo {
     TVector<TSectorInfo> SectorInfo;
 };
 
-// Throws TFileError in case of errors
+struct TFormatOptions {
+    bool IsErasureEncodeUserLog = false;
+    bool TrimEntireDevice = false;
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap = nullptr;
+    bool EnableSmallDiskOptimization = true;
+    std::optional<TRcBuf> Metadata = std::nullopt;
+    bool PlainDataChunks = false;
+    bool EnableFormatAndMetadataEncryption = true;
+    std::optional<bool> EnableSectorEncryption = std::nullopt;
+    std::optional<bool> ForceRandomizeMagic = std::nullopt;
+    // When set, the physical chunk size to write into the format record, instead of deriving it from
+    // the user-accessible size passed to FormatPDisk. Must be a multiple of the sector size and of
+    // NPDisk::ChunkSizeAlignment.
+    std::optional<ui32> PhysicalChunkSizeBytes = std::nullopt;
+};
+
+// Throws yexception in case of errors
 void ObliterateDisk(TString path);
 
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey,
     const NPDisk::TKey &sysLogKey, const NPDisk::TKey &mainKey, TString textMessage,
-    const bool isErasureEncodeUserLog = false, const bool trimEntireDevice = false,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr, bool enableSmallDiskOptimization = true,
-    std::optional<TRcBuf> metadata = std::nullopt);
+    const TFormatOptions& options = {});
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);

@@ -7,7 +7,7 @@
 #include <dlfcn.h>
 #include <cxxabi.h>
 
-namespace NYT::NBacktrace {
+namespace NYT::NBacktrace::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,9 +94,9 @@ void DumpStackFrameInfo(TBaseFormatter* formatter, const void* pc)
 
 } // namespace
 
-Y_WEAK void SymbolizeBacktrace(
+void SymbolizeBacktraceImpl(
     TBacktrace backtrace,
-    const std::function<void(TStringBuf)>& frameCallback)
+    const std::function<void(TStringBuf)>& writeCallback)
 {
     for (int i = 0; i < std::ssize(backtrace); ++i) {
         TRawFormatter<1024> formatter;
@@ -104,10 +104,10 @@ Y_WEAK void SymbolizeBacktrace(
         formatter.AppendNumber(i + 1, 10, 2);
         formatter.AppendString(". ");
         DumpStackFrameInfo(&formatter, backtrace[i]);
-        frameCallback(formatter.GetBuffer());
+        writeCallback(formatter.GetBuffer());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBacktrace
+} // namespace NYT::NBacktrace::NDetail

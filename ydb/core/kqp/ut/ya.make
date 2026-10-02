@@ -1,23 +1,32 @@
 RECURSE_FOR_TESTS(
+    tracing
     arrow
+    batch_operations
+    channels
+    close_with_load
     cost
     data
     data_integrity
+    discovery
     effects
     federated_query
     indexes
     idx_test
     join
+    knn
     olap
     opt
     perf
-    pg
+    rbo
     query
     scan
     scheme
     service
-    spilling
+    stream_lookup
+    runtime
     sysview
+    tli
+    topics
     tx
     view
     yql

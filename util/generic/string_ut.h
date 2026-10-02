@@ -553,7 +553,9 @@ public:
         TStringType s7(s6);
         UNIT_ASSERT(s7 == s6);
 #ifndef TSTRING_IS_STD_STRING
-        UNIT_ASSERT(s7.c_str() == s6.c_str());
+        if (TStringUseCow) {
+            UNIT_ASSERT(s7.c_str() == s6.c_str());
+        }
 #endif
 
         TStringType s8(s7, 1, 3);
@@ -648,6 +650,10 @@ public:
 
 #ifndef TSTRING_IS_STD_STRING
     void TestRefCount() {
+        if (!TStringUseCow) {
+            return; // exercises copy-on-write internals (RefCount/IsDetached)
+        }
+
         using TStr = TStringType;
 
         struct TestStroka: public TStr {
@@ -727,6 +733,13 @@ public:
 
         UNIT_ASSERT(s.Contains('1'));
         UNIT_ASSERT(!s.Contains('*'));
+
+        // std-compatible "contains".
+        UNIT_ASSERT(s.contains(Data._345()));
+        UNIT_ASSERT(!s2.contains(Data._345()));
+
+        UNIT_ASSERT(s.contains('1'));
+        UNIT_ASSERT(!s.contains('*'));
 
         TStringType empty;
         UNIT_ASSERT(s.Contains(empty));
@@ -996,6 +1009,10 @@ public:
 
 #ifndef TSTRING_IS_STD_STRING
     void TestCharRef() {
+        if (!TStringUseCow) {
+            return; // exercises copy-on-write internals (RefCount/IsDetached)
+        }
+
         const char_type abc[] = {'a', 'b', 'c', 0};
         const char_type bbc[] = {'b', 'b', 'c', 0};
         const char_type cbc[] = {'c', 'b', 'c', 0};

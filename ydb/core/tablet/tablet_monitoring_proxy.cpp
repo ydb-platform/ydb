@@ -12,6 +12,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <util/string/ascii.h>
 #include <util/string/builder.h>
 
 ////////////////////////////////////////////
@@ -29,19 +30,30 @@ bool IsFormUrlencoded(const NMonitoring::IMonHttpRequest& request) {
     return contentType == "application/x-www-form-urlencoded";
 }
 
+static constexpr TDuration RequestTimeout = TDuration::Seconds(60);
+static constexpr TStringBuf RequestDeadlineHeader = "x-ydb-monitoring-deadline-us";
+
 class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const NMonitoring::IMonHttpRequest& request, const TString& userToken)
+    TForwardingActor(
+        const TTabletMonitoringProxyConfig& config,
+        ui64 targetTablet,
+        const std::optional<ui32>& followerId,
+        const TActorId& sender,
+        const NMonitoring::IMonHttpRequest& request,
+        const TString& userToken
+    )
         : Config(config)
         , TargetTablet(targetTablet)
-        , ForceFollower(forceFollower)
+        , FollowerId(followerId)
         , Sender(sender)
         , Request(ConvertRequestToProtobuf(request, userToken))
-    {}
+    {
+    }
 
     static NActorsProto::TRemoteHttpInfo ConvertRequestToProtobuf(const NMonitoring::IMonHttpRequest& request, const TString& userToken) {
         NActorsProto::TRemoteHttpInfo pb;
@@ -63,6 +75,9 @@ public:
             pb.SetPostContent(content.data(), content.size());
         }
         for (const auto& header : request.GetHeaders()) {
+            if (AsciiEqualsIgnoreCase(header.Name(), RequestDeadlineHeader)) {
+                continue;
+            }
             auto *p = pb.AddHeaders();
             p->SetName(header.Name());
             p->SetValue(header.Value());
@@ -75,16 +90,22 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        const TInstant deadline = TAppData::TimeProvider->Now() + RequestTimeout;
+        auto* deadlineHeader = Request.AddHeaders();
+        deadlineHeader->SetName(TString(RequestDeadlineHeader));
+        deadlineHeader->SetValue(TStringBuilder() << deadline.MicroSeconds());
+
         NTabletPipe::TClientConfig config;
-        config.AllowFollower = ForceFollower;
-        config.ForceFollower = ForceFollower;
+
+        config.AllowFollower = (FollowerId && (*FollowerId != 0));
+        config.FollowerId = FollowerId;
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
 
         PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(std::move(Request)));
 
-        ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
         Become(&TThis::StateWork);
     }
 
@@ -101,9 +122,11 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (!ev->Get()->ServerId) {
-            auto reply = Sprintf("Tablet pipe with %" PRIu64 " is not connected with status: %s"
+            auto reply = Sprintf("Tablet pipe with %" PRIu64 " (follower ID %" PRIu64
+                                 ") is not connected with status: %s"
                                  " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)",
                                  ev->Get()->TabletId,
+                                 FollowerId.value_or(0),
                                  NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(),
                                  ev->Get()->TabletId);
             Notify(ctx, reply);
@@ -118,7 +141,7 @@ public:
     }
 
     void Handle(NMon::TEvRemoteHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
-        Notify(ctx, ev->Get()->Html);
+        Notify(ctx, ev->Get()->Html, ev->Get()->Nonce);
         Detach(ctx);
     }
 
@@ -157,8 +180,10 @@ public:
         Detach(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) {
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
+    void Notify(const TActorContext &ctx, const TString& html, const TString& nonce = {}) {
+        auto* res = new NMon::TEvHttpInfoRes(html);
+        res->Nonce = nonce;
+        ctx.Send(Sender, res);
     }
 
     void Wakeup(const TActorContext &ctx) {
@@ -174,7 +199,7 @@ public:
 private:
     const TTabletMonitoringProxyConfig Config;
     const ui64 TargetTablet;
-    const bool ForceFollower;
+    const std::optional<ui32> FollowerId;
     const TActorId Sender;
     NActorsProto::TRemoteHttpInfo Request;
     TActorId PipeClient;
@@ -243,7 +268,6 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
 ////////////////////////////////////////////
 void
 TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-    //
     NMon::TEvHttpInfo* msg = ev->Get();
     const TCgiParameters* cgi;
 
@@ -262,7 +286,6 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             return;
         }
     }
-    //
 
     // temporary copy-paste
     if (cgi->Has("RestartTabletID")) {
@@ -273,24 +296,29 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             return;
         }
     }
-    //
 
-    bool hasFollowerParam = cgi->Has("FollowerID");
-    if (hasFollowerParam) {
-        const TString &tabletIdParam = cgi->Get("FollowerID");
-        const ui64 tabletId = TryParseTabletId(tabletIdParam);
-        if (tabletId) {
-            ctx.Register(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request, msg->UserToken));
-            return;
-        }
+    // NOTE: This forces the leader, if the followerId parameter is not specified
+    ui32 followerId = 0;
+
+    if (cgi->Has("FollowerID")) {
+        TryFromString(cgi->Get("FollowerID"), followerId);
     }
 
-    bool hasIdParam = cgi->Has("TabletID");
-    if (hasIdParam) {
-        const TString &tabletIdParam = cgi->Get("TabletID");
-        const ui64 tabletId = TryParseTabletId(tabletIdParam);
+    if (cgi->Has("TabletID")) {
+        const ui64 tabletId = TryParseTabletId(cgi->Get("TabletID"));
+
         if (tabletId) {
-            ctx.Register(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request, msg->UserToken));
+            ctx.Register(
+                new TForwardingActor(
+                    Config,
+                    tabletId,
+                    followerId,
+                    ev->Sender,
+                    msg->Request,
+                    msg->UserToken
+                )
+            );
+
             return;
         }
     }
@@ -394,6 +422,17 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                     tabletId = NKikimr::MakeConsoleID();
                     TABLER() {
                         TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">CONSOLE</a>";}
+                        TABLED() {str << tabletId;}
+                        TABLED() {str << " <a href=\"tablets?SsId="
+                                    << tabletId << "\">"
+                                    << "<span class=\"glyphicon glyphicon-tasks\""
+                                    << " title=\"State Storage\" />"
+                                    << "</a>";}
+                        TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
+                    }
+                    tabletId = NKikimr::MakeDbsControllerID();
+                    TABLER() {
+                        TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">DBS_CONTROLLER</a>";}
                         TABLED() {str << tabletId;}
                         TABLED() {str << " <a href=\"tablets?SsId="
                                     << tabletId << "\">"

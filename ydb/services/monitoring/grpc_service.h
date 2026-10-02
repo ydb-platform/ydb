@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
-
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>

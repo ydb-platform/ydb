@@ -7,18 +7,20 @@
 #include <util/generic/yexception.h>
 #include <util/string/join.h>
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
 
 #include <util/digest/multi.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
 
 namespace {
 
@@ -45,6 +47,8 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
             return setting.mysql_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kLogging:
             return setting.logging().auth().identity_case();
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return setting.iceberg().warehouse_auth().identity_case();
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             return FederatedQuery::IamAuth::IDENTITY_NOT_SET;
     }
@@ -54,36 +58,17 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
 
 namespace NFq {
 
-void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev) const
 {
-    TInstant startTime = TInstant::Now();
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
-    const TString cloudId = event.CloudId;
     const FederatedQuery::CreateQueryRequest& request = event.Request;
-    const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase = event.ComputeDatabase;
-    ui64 resultLimit = 0;
-    if (event.Quotas) {
-        if (auto it = event.Quotas->find(QUOTA_QUERY_RESULT_LIMIT); it != event.Quotas->end()) {
-            resultLimit = it->second.Limit.Value;
-        }
-    }
-    auto queryType = request.content().type();
-    ui64 executionLimitMills = GetExecutionLimitMills(queryType, event.Quotas);
-    const TString scope = event.Scope;
-    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
-    requestCounters.IncInFly();
-    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const TString user = event.User;
-    const TString token = event.Token;
+
     TPermissions permissions = Config->Proto.GetEnablePermissions()
                                 ? event.Permissions
                                 : TPermissions{TPermissions::QUERY_INVOKE | TPermissions::MANAGE_PUBLIC};
-    if (IsSuperUser(user)) {
+    if (IsSuperUser(event.User)) {
         permissions.SetAll();
     }
-    const size_t byteSize = request.ByteSizeLong();
-    const TString queryId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::QUERY);
-    CPS_LOG_T("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateQuery(ev);
     if (request.execute_mode() != FederatedQuery::SAVE && !permissions.Check(TPermissions::QUERY_INVOKE)) {
@@ -97,10 +82,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
     }
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
-
     if (event.Quotas) {
         TQuotaMap::const_iterator it = event.Quotas->end();
+        const auto queryType = request.content().type();
         if (queryType == FederatedQuery::QueryContent::ANALYTICS) {
             it = event.Quotas->find(QUOTA_ANALYTICS_COUNT_LIMIT);
         } else if (queryType == FederatedQuery::QueryContent::STREAMING) {
@@ -120,24 +104,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "VCPU rate limit can't be less than zero"));
     }
 
-    if (issues) {
-        CPS_LOG_W("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
-        const TDuration delta = TInstant::Now() - startTime;
-        SendResponseIssues<TEvControlPlaneStorage::TEvCreateQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, false);
-        return;
-    }
+    return issues;
+}
 
-    const TString idempotencyKey = request.idempotency_key();
-    const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
-
+std::pair<FederatedQuery::Query, FederatedQuery::Job> TControlPlaneStorageBase::GetCreateQueryProtos(
+    const FederatedQuery::CreateQueryRequest& request, const TString& user, TInstant startTime) const
+{
     FederatedQuery::Query query;
     FederatedQuery::QueryContent& content = *query.mutable_content() = request.content();
     FederatedQuery::QueryMeta& meta = *query.mutable_meta();
+
+    const TString queryId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::QUERY);
     FederatedQuery::CommonMeta& common = *meta.mutable_common() = CreateCommonMeta(queryId, user, startTime, InitialRevision);
     meta.set_execute_mode(request.execute_mode());
     meta.set_status(request.execute_mode() == FederatedQuery::SAVE ? FederatedQuery::QueryMeta::COMPLETED : FederatedQuery::QueryMeta::STARTING);
 
+    const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
     FederatedQuery::Job job;
     if (request.execute_mode() != FederatedQuery::SAVE) {
         meta.set_last_job_query_revision(InitialRevision);
@@ -153,6 +135,119 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         job.set_automatic(content.automatic());
         *job.mutable_parameters() = content.parameters();
     }
+
+    return {query, job};
+}
+
+FederatedQuery::Internal::QueryInternal TControlPlaneStorageBase::GetQueryInternalProto(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+    const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token,
+    const TMaybe<TQuotaMap>& quotas)
+{
+    FederatedQuery::Internal::QueryInternal queryInternal;
+    if (!config->Proto.GetDisableCurrentIam()) {
+        queryInternal.set_token(token);
+    }
+
+    queryInternal.set_cloud_id(cloudId);
+    queryInternal.set_state_load_mode(FederatedQuery::StateLoadMode::EMPTY);
+    queryInternal.mutable_disposition()->CopyFrom(request.disposition());
+    ui64 resultLimit = 0;
+    if (quotas) {
+        if (const auto it = quotas->find(QUOTA_QUERY_RESULT_LIMIT); it != quotas->end()) {
+            resultLimit = it->second.Limit.Value;
+        }
+    }
+    queryInternal.set_result_limit(resultLimit);
+    *queryInternal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(GetExecutionLimitMills(request.content().type(), quotas)));
+
+    return queryInternal;
+}
+
+void TControlPlaneStorageBase::FillConnectionsAndBindings(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+    FederatedQuery::Internal::QueryInternal& queryInternal, FederatedQuery::QueryContent::QueryType queryType,
+    const TVector<FederatedQuery::Connection>& allConnections,
+    const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
+    const THashMap<TString, FederatedQuery::Binding>& visibleBindings)
+{
+    TSet<TString> disabledConnections;
+    for (const auto& connection : allConnections) {
+        const auto connectionCase = connection.content().setting().connection_case();
+        if (!config->AvailableConnections.contains(connectionCase)) {
+            disabledConnections.insert(connection.meta().id());
+            continue;
+        }
+        if ((queryType == FederatedQuery::QueryContent::STREAMING) && !config->AvailableStreamingConnections.contains(connectionCase)) {
+            disabledConnections.insert(connection.meta().id());
+            continue;
+        }
+        if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && config->Proto.GetDisableCurrentIam()) {
+            disabledConnections.insert(connection.meta().id());
+            continue;
+        }
+    }
+
+    TSet<TString> connectionIds;
+    for (const auto& [_, connection] : visibleConnections) {
+        if (disabledConnections.contains(connection.meta().id())) {
+            continue;
+        }
+        *queryInternal.add_connection() = connection;
+        connectionIds.insert(connection.meta().id());
+    }
+
+    for (const auto& [_, binding] : visibleBindings) {
+        if (!config->AvailableBindings.contains(binding.content().setting().binding_case())) {
+            continue;
+        }
+        if (disabledConnections.contains(binding.content().connection_id())) {
+            continue;
+        }
+
+        *queryInternal.add_binding() = binding;
+        if (!connectionIds.contains(binding.content().connection_id())) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+        }
+    }
+}
+
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
+{
+    TInstant startTime = TInstant::Now();
+    const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const FederatedQuery::CreateQueryRequest& request = event.Request;
+    const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase = event.ComputeDatabase;
+    const auto queryType = request.content().type();
+    const TString scope = event.Scope;
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
+    const TString user = event.User;
+    const TString token = event.Token;
+    const size_t byteSize = request.ByteSizeLong();
+    YDB_LOG_TRACE("CreateQueryRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
+
+    auto mapResult = ev->Get()->TenantInfo->Assign(cloudId, scope, queryType, TenantName);
+
+    if (const auto& issues = ValidateRequest(ev)) {
+        YDB_LOG_WARN("CreateQueryRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
+        const TDuration delta = TInstant::Now() - startTime;
+        SendResponseIssues<TEvControlPlaneStorage::TEvCreateQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
+        LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, false);
+        return;
+    }
+
+    const TString idempotencyKey = request.idempotency_key();
+    const auto [query, job] = GetCreateQueryProtos(request, user, startTime);
+    const TString queryId = query.meta().common().id();
+    const TString jobId = job.meta().id();
 
     std::shared_ptr<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>> response = std::make_shared<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>>();
     response->first.set_query_id(queryId);
@@ -179,10 +274,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         );
     }
 
-    auto prepareParams = [=, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas, idempotencyKey, request, response, cloudId, token, computeDatabase, queryType, query, queryId, mapResult, scope, user, jobId, startTime, tablePathPrefix=YdbConnection->TablePathPrefix, job, config=Config](const std::vector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         if (idempotencyKey) {
@@ -190,84 +285,45 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             if (parser.TryNextRow()) {
                 if (!response->first.ParseFromString(*parser.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for idempotency key request. Please contact internal support";
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for idempotency key request. Please contact internal support";
                 }
                 response->second.IdempotencyResult = true;
                 return make_pair(TString{}, TParamsBuilder{}.Build());
             }
         }
 
-        FederatedQuery::Internal::QueryInternal queryInternal;
-        if (!Config->Proto.GetDisableCurrentIam()) {
-            queryInternal.set_token(token);
-        }
-
-        queryInternal.set_cloud_id(cloudId);
-        queryInternal.set_state_load_mode(FederatedQuery::StateLoadMode::EMPTY);
-        queryInternal.mutable_disposition()->CopyFrom(request.disposition());
-        queryInternal.set_result_limit(resultLimit);
-        *queryInternal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
+        auto queryInternal = GetQueryInternalProto(config, request, cloudId, token, quotas);
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             // TODO: move to run actor priority selection
             *queryInternal.mutable_compute_connection() = computeDatabase.connection();
-            TSet<TString> disabledConnections;
-            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)) {
-                auto connectionCase = connection.content().setting().connection_case();
-                if (!Config->AvailableConnections.contains(connectionCase)) {
-                    disabledConnections.insert(connection.meta().id());
-                    continue;
-                }
-                if ((queryType == FederatedQuery::QueryContent::STREAMING) && !Config->AvailableStreamingConnections.contains(connectionCase)) {
-                    disabledConnections.insert(connection.meta().id());
-                    continue;
-                }
-
-                if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
-                    disabledConnections.insert(connection.meta().id());
-                    continue;
-                }
-            }
-
-            TSet<TString> connectionIds;
-            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
-            for (const auto& [_, connection]: connections) {
-                if (disabledConnections.contains(connection.meta().id())) {
-                    continue;
-                }
-                *queryInternal.add_connection() = connection;
-                connectionIds.insert(connection.meta().id());
-            }
-
-            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
-            for (const auto& [_, binding]: bindings) {
-                if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
-                    continue;
-                }
-
-                if (disabledConnections.contains(binding.content().connection_id())) {
-                    continue;
-                }
-
-                *queryInternal.add_binding() = binding;
-                if (!connectionIds.contains(binding.content().connection_id())) {
-                    ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
-                }
-            }
+            FillConnectionsAndBindings(
+                config,
+                queryInternal,
+                queryType,
+                GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters),
+                GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters),
+                GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters)
+            );
         }
 
-        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (queryInternal.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "CreateQuery(write)");
+        writeQueryBuilder.AddString("tenant", mapResult.TenantName);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -282,7 +338,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
         writeQueryBuilder.AddString("job_id", jobId);
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + config->IdempotencyKeyTtl);
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -302,9 +358,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`,\n"
-                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" NODE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, 0, $now, \"\", \"\");"
+                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, 0, $now, \"\", \"\", $node);"
             );
         }
 
@@ -332,7 +388,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         NActors::TActivationContext::ActorSystem(),
         status,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -367,11 +423,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
     const int64_t limit = request.limit();
-    CPS_LOG_T("ListQueriesRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("ListQueriesRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ListQueriesRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("ListQueriesRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListQueriesResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListQueriesRequest, scope, user, delta, byteSize, false);
@@ -464,7 +525,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListQueriesResult result;
@@ -473,7 +534,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
             FederatedQuery::Query query;
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
             FederatedQuery::BriefQuery briefQuery;
             const auto lastJobId = query.meta().last_job_id();
@@ -498,7 +559,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -508,6 +569,74 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(ListQueriesRequest, scope, user, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev) const
+{
+    return ValidateEvent(ev);
+}
+
+void TControlPlaneStorageBase::FillDescribeQueryResult(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+    FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal,
+    const TString& user, TPermissions permissions)
+{
+    const auto lastJobId = result.query().meta().last_job_id();
+    result.mutable_query()->mutable_meta()->set_last_job_id(lastJobId + "-" + result.query().meta().common().id());
+
+    permissions = config->Proto.GetEnablePermissions()
+        ? permissions
+        : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST | TPermissions::VIEW_QUERY_TEXT};
+    if (IsSuperUser(config, user)) {
+        permissions.SetAll();
+    }
+
+    const auto queryVisibility = result.query().content().acl().visibility();
+    const auto queryUser = result.query().meta().common().created_by();
+    const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
+    if (!hasViewAccess) {
+        ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+    }
+
+    // decompress plan
+    if (internal.plan_compressed().data()) { // todo: remove this if after migration
+        NKikimr::NKqp::TCompressor compressor(internal.plan_compressed().method());
+        result.mutable_query()->mutable_plan()->set_json(compressor.Decompress(internal.plan_compressed().data()));
+        if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+            if (result.query().plan().json().size() > 1000) {
+                // modifing plan this way should definitely reduce query msg size
+                result.mutable_query()->mutable_plan()->set_json(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping plan of size " << result.query().plan().json().size() << " bytes");
+            }
+        }
+    }
+
+    auto timeline = internal.timeline();
+    if (timeline) {
+        result.mutable_query()->mutable_timeline()->set_svg(timeline);
+    }
+
+    if (!permissions.Check(TPermissions::VIEW_AST)) {
+        result.mutable_query()->clear_ast();
+    } else {
+        // decompress AST
+        if (internal.ast_compressed().data()) { // todo: remove this if after migration
+            NKikimr::NKqp::TCompressor compressor(internal.ast_compressed().method());
+            result.mutable_query()->mutable_ast()->set_data(compressor.Decompress(internal.ast_compressed().data()));
+        }
+        if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+            if (result.query().ast().data().size() > 1000) {
+                // modifing AST this way should definitely reduce query msg size
+                result.mutable_query()->mutable_ast()->set_data(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping AST of size " << result.query().ast().data().size() << " bytes");
+            }
+        }
+    }
+    if (!permissions.Check(TPermissions::VIEW_QUERY_TEXT)) {
+        result.mutable_query()->mutable_content()->clear_text();
+    }
+
+    if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+        ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Resulting query of size " << result.query().ByteSizeLong() << " bytes is too big";
+    }
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev)
@@ -521,21 +650,19 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-        ? event.Permissions
-        : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST | TPermissions::VIEW_QUERY_TEXT};
-    if (IsSuperUser(user)) {
-        permissions.SetAll();
-    }
 
     const FederatedQuery::DescribeQueryRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
-    CPS_LOG_T("DescribeQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("DescribeQueryRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
-        CPS_LOG_W("DescribeQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+    if (const auto& issues = ValidateRequest(ev)) {
+        YDB_LOG_WARN("DescribeQueryRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -553,77 +680,29 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, user, permissions, commonCounters=requestCounters.Common] {
+    auto prepare = [resultSets=resultSets, user, permissions=event.Permissions, commonCounters=requestCounters.Common, config=Config] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         FederatedQuery::DescribeQueryResult result;
         if (!result.mutable_query()->ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
-        }
-
-        const auto lastJobId = result.query().meta().last_job_id();
-        result.mutable_query()->mutable_meta()->set_last_job_id(lastJobId + "-" + result.query().meta().common().id());
-
-        const auto queryVisibility = result.query().content().acl().visibility();
-        const auto queryUser = result.query().meta().common().created_by();
-        const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
-        if (!hasViewAccess) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
         FederatedQuery::Internal::QueryInternal internal;
         if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
 
-        // decompress plan
-        if (internal.plan_compressed().data()) { // todo: remove this if after migration
-            TCompressor compressor(internal.plan_compressed().method());
-            result.mutable_query()->mutable_plan()->set_json(compressor.Decompress(internal.plan_compressed().data()));
-            if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
-                if (result.query().plan().json().size() > 1000) {
-                    // modifing plan this way should definitely reduce query msg size
-                    result.mutable_query()->mutable_plan()->set_json(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping plan of size " << result.query().plan().json().size() << " bytes");
-                }
-            }
-        }
-
-        auto timeline = internal.timeline();
-        if (timeline) {
-            result.mutable_query()->mutable_timeline()->set_svg(timeline);
-        }
-
-        if (!permissions.Check(TPermissions::VIEW_AST)) {
-            result.mutable_query()->clear_ast();
-        } else {
-            // decompress AST
-            if (internal.ast_compressed().data()) { // todo: remove this if after migration
-                TCompressor compressor(internal.ast_compressed().method());
-                result.mutable_query()->mutable_ast()->set_data(compressor.Decompress(internal.ast_compressed().data()));
-            }
-            if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
-                if (result.query().ast().data().size() > 1000) {
-                    // modifing AST this way should definitely reduce query msg size
-                    result.mutable_query()->mutable_ast()->set_data(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping AST of size " << result.query().ast().data().size() << " bytes");
-                }
-            }
-        }
-        if (!permissions.Check(TPermissions::VIEW_QUERY_TEXT)) {
-            result.mutable_query()->mutable_content()->clear_text();
-        }
-
-        if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Resulting query of size " << result.query().ByteSizeLong() << " bytes is too big";
-        }
+        FillDescribeQueryResult(config, result, internal, user, permissions);
         return result;
     };
 
@@ -632,13 +711,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
         debugInfo);
 
-    success.Apply([=](const auto& future) {
+    success.Apply([startTime, scope, user, queryId, byteSize](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
@@ -664,11 +743,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     const FederatedQuery::GetQueryStatusRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
-    CPS_LOG_T("GetQueryStatusRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("GetQueryStatusRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("GetQueryStatusRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("GetQueryStatusRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetQueryStatusResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, false);
@@ -690,12 +774,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         FederatedQuery::GetQueryStatusResult result;
@@ -706,7 +790,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString();
         const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, TString{queryUser}, user);
         if (!hasViewAccess) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         return result;
@@ -717,7 +801,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -725,7 +809,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
     success.Apply([=](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
+            LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
 }
 
@@ -751,7 +835,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
-    CPS_LOG_T("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("ModifyQueryRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     if (request.content().type() == FederatedQuery::QueryContent::STREAMING && request.state_load_mode() == FederatedQuery::STATE_LOAD_MODE_UNSPECIFIED) {
         request.set_state_load_mode(FederatedQuery::EMPTY);
@@ -769,10 +855,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
     }
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
+    auto mapResult = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
 
     if (issues) {
-        CPS_LOG_W("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("ModifyQueryRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ModifyQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -812,29 +901,29 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, user, token, permissions, request=std::move(request), response, executionLimitMills, computeDatabase, tablePathPrefix=YdbConnection->TablePathPrefix, mapResult=std::move(mapResult), scope, queryId, idempotencyKey, startTime](const std::vector<TResultSet>& resultSets) {
         const size_t countSets = 1 + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.back());
 
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         FederatedQuery::Query query;
         if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
         FederatedQuery::Internal::QueryInternal internal;
         if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
         *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
 
@@ -844,15 +933,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         const auto queryUser = query.meta().common().created_by();
         const bool hasManageAccess = HasManageAccess(permissions, queryVisibility, queryUser, user);
         if (!hasManageAccess) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         if (query.content().type() != request.content().type()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query type cannot be changed. Please specify " << FederatedQuery::QueryContent_QueryType_Name(query.content().type()) << " instead of " << FederatedQuery::QueryContent_QueryType_Name(request.content().type());
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query type cannot be changed. Please specify " << FederatedQuery::QueryContent_QueryType_Name(query.content().type()) << " instead of " << FederatedQuery::QueryContent_QueryType_Name(request.content().type());
         }
 
         if (query.content().acl().visibility() == FederatedQuery::Acl::SCOPE && request.content().acl().visibility() == FederatedQuery::Acl::PRIVATE) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new query with visibility PRIVATE";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new query with visibility PRIVATE";
         }
 
         auto oldVisibility = query.content().acl().visibility();
@@ -876,10 +965,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             }, query.meta().status());
 
         if (!isValidMode) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
         }
 
-        if (!Config->Proto.GetDisableCurrentIam()) {
+        if (!config->Proto.GetDisableCurrentIam()) {
             internal.set_token(token);
         }
         if (request.execute_mode() != FederatedQuery::SAVE) {
@@ -895,25 +984,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;
-            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)) {
+            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters)) {
                 auto connectionCase = connection.content().setting().connection_case();
-                if (!Config->AvailableConnections.contains(connectionCase)) {
+                if (!config->AvailableConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
-                if ((query.content().type() == FederatedQuery::QueryContent::STREAMING) && !Config->AvailableStreamingConnections.contains(connectionCase)) {
+                if ((query.content().type() == FederatedQuery::QueryContent::STREAMING) && !config->AvailableStreamingConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
 
-                if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
+                if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && config->Proto.GetDisableCurrentIam()) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
             }
 
             TSet<TString> connectionIds;
-            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
+            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters);
             for (const auto& [_, connection]: connections) {
                 if (disabledConnections.contains(connection.meta().id())) {
                     continue;
@@ -922,9 +1011,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                 connectionIds.insert(connection.meta().id());
             }
 
-            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
+            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters);
             for (const auto& [_, binding]: bindings) {
-                if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
+                if (!config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                     continue;
                 }
 
@@ -934,21 +1023,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
                 *internal.add_binding() = binding;
                 if (!connectionIds.contains(binding.content().connection_id())) {
-                    ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
                 }
             }
         }
 
-        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (internal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (internal.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         FederatedQuery::Job job;
-        const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
+        const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(config->IdsPrefix, EEntityType::JOB);
         if (request.execute_mode() != FederatedQuery::SAVE) {
             internal.clear_action();
             query.clear_result_set_meta();
@@ -993,11 +1082,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = internal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyQuery(write)");
+        writeQueryBuilder.AddString("tenant", mapResult.TenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
-        writeQueryBuilder.AddUint64("max_count_jobs", Config->Proto.GetMaxCountJobs());
+        writeQueryBuilder.AddUint64("max_count_jobs", config->Proto.GetMaxCountJobs());
         writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
         writeQueryBuilder.AddString("job_id", jobId);
         writeQueryBuilder.AddString("query", query.SerializeAsString());
@@ -1009,6 +1098,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         writeQueryBuilder.AddInt64("revision", common.revision());
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("result_id", resultId);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
 
         writeQueryBuilder.AddText(
             "$to_delete = (\n"
@@ -1019,7 +1113,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             ");\n"
         );
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + config->IdempotencyKeyTtl);
 
         if (request.content().acl().visibility() == oldVisibility) {
             writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
@@ -1045,9 +1139,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "   (`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, \n"
-                "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" NODE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "   ($tenant, $scope, $query_id, $zero_timestamp, $zero_timestamp, 0, $now, $query_type, \"\", \"\");\n"
+                "   ($tenant, $scope, $query_id, $zero_timestamp, $zero_timestamp, 0, $now, $query_type, \"\", \"\", $node);\n"
             );
         }
 
@@ -1124,7 +1218,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1158,11 +1252,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
-    CPS_LOG_T("DeleteQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("DeleteQueryRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("DeleteQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("DeleteQueryRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DeleteQueryRequest, scope, queryId, user, delta, byteSize, false);
@@ -1241,7 +1340,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1276,11 +1375,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
     const FederatedQuery::QueryAction action = request.action();
-    CPS_LOG_T("ControlQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("ControlQueryRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ControlQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("ControlQueryRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvControlQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ControlQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -1302,9 +1406,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, permissions, user, action, response, idempotencyKey, scope, queryId, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         auto now = TInstant::Now();
@@ -1314,17 +1418,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
 
             if (!queryInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
             }
             tenantName = *parser.ColumnParser(TENANT_COLUMN_NAME).GetOptionalString();
         }
@@ -1334,19 +1438,19 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         {
             TResultSetParser parser(resultSets[1]);
             if (!parser.TryNextRow()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id query or your access rights";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id query or your access rights";
             }
 
             if (!job.ParseFromString(parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString().value_or(""))) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
 
             jobId = job.meta().id();
 
             const bool hasManageAccess = HasManageAccess(permissions, query.content().acl().visibility(), query.meta().common().created_by(), user);
             if (!hasManageAccess) {
-                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
         }
 
@@ -1375,7 +1479,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 metaQuery.set_status(FederatedQuery::QueryMeta::ABORTING_BY_USER);
                 metaQuery.set_aborted_by(user);
             } else {
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::ABORTING_BY_USER) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::ABORTING_BY_USER) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1389,7 +1493,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 metaQuery.set_status(FederatedQuery::QueryMeta::PAUSING);
                 metaQuery.set_paused_by(user);
             } else {
-                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::PAUSING) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::PAUSING) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1398,7 +1502,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             if (isValidStatusForResume) {
                 metaQuery.set_status(FederatedQuery::QueryMeta::RESUMING);
             } else {
-                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::RESUMING) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::RESUMING) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1410,7 +1514,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = queryInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ControlQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ControlQuery(write)");
         writeQueryBuilder.AddString("tenant", tenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -1421,7 +1525,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" JOBS_TABLE_NAME "` SET `" JOB_COLUMN_NAME "` = $job\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
@@ -1472,7 +1576,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1482,6 +1586,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(ControlQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev) const
+{
+    return ValidateEvent(ev);
+}
+
+TPermissions TControlPlaneStorageBase::GetResultDataReadPerimssions(const TEvControlPlaneStorage::TEvGetResultDataRequest& event) const {
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
+                ? event.Permissions
+                : TPermissions{TPermissions::VIEW_PUBLIC};
+    if (IsSuperUser(event.User)) {
+        permissions.SetAll();
+    }
+    return permissions;
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev)
@@ -1501,18 +1620,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     const TString queryId = request.query_id();
     const int byteSize = event.Request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                ? event.Permissions
-                : TPermissions{TPermissions::VIEW_PUBLIC};
-    if (IsSuperUser(user)) {
-        permissions.SetAll();
-    }
+    const TPermissions permissions = GetResultDataReadPerimssions(event);
     const int64_t limit = request.limit();
-    CPS_LOG_T("GetResultDataRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("GetResultDataRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
-        CPS_LOG_W("GetResultDataRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+    if (const auto& issues = ValidateRequest(ev)) {
+        YDB_LOG_WARN("GetResultDataRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetResultDataRequest, scope, user, queryId, resultSetIndex, offset, limit, delta, byteSize, false);
@@ -1544,7 +1662,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 2) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::GetResultDataResult result;
@@ -1553,13 +1671,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
             const auto& resultSet = (*resultSets)[0];
             TResultSetParser parser(resultSet);
             if (!parser.TryNextRow()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             FederatedQuery::Query query;
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
 
             FederatedQuery::Acl::Visibility queryVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
@@ -1567,24 +1685,24 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 
             bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
             if (!hasViewAccess) {
-                ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (resultSetIndex >= query.result_set_meta_size()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result set index out of bound: " << resultSetIndex << " >= " << query.result_set_meta_size();
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result set index out of bound: " << resultSetIndex << " >= " << query.result_set_meta_size();
             }
 
             if (FederatedQuery::QueryMeta::ComputeStatus(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()) != FederatedQuery::QueryMeta::COMPLETED) {
-                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
             }
 
             auto resultSetsExpireAtParser = parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp();
             if (!resultSetsExpireAtParser) {
-                ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
             }
 
             if (*resultSetsExpireAtParser < TInstant::Now()) {
-                ythrow NYql::TCodeLineException(TIssuesIds::EXPIRED) << "Result removed by TTL";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::EXPIRED) << "Result removed by TTL";
             }
 
             resultSetProto.mutable_columns()->CopyFrom(query.result_set_meta(resultSetIndex).column());
@@ -1596,7 +1714,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
             while (parser.TryNextRow()) {
                 if (!resultSetProto.add_rows()->ParseFromString(*parser.ColumnParser(RESULT_SET_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for row. Please contact internal support";
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for row. Please contact internal support";
                 }
             }
         }
@@ -1608,7 +1726,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1649,11 +1767,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         permissions.SetAll();
     }
     const int64_t limit = request.limit();
-    CPS_LOG_T("ListJobsRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("ListJobsRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ListJobsRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("ListJobsRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListJobsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListJobsRequest, scope, user, queryId, delta, byteSize, false);
@@ -1704,7 +1827,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListJobsResult result;
@@ -1713,7 +1836,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
             FederatedQuery::Job job;
             if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
             const TString mergedId = job.meta().id() + "-" + job.query_meta().common().id();
             job.mutable_meta()->set_id(mergedId);
@@ -1741,7 +1864,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1777,11 +1900,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    CPS_LOG_T("DescribeJobRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
+    YDB_LOG_TRACE("DescribeJobRequest",
+        {"request", request.DebugString()},
+        {"userInfo", MakeUserInfo(user, token)});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("DescribeJobRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("DescribeJobRequest: validation",
+            {"request", request.DebugString()},
+            {"userInfo", MakeUserInfo(user, token)},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeJobResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, false);
@@ -1804,26 +1932,26 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
 
-    auto prepare = [=, id=request.job_id(), resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, id=request.job_id(), resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
         }
         auto visibility = static_cast<FederatedQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
         result.mutable_job()->mutable_meta()->set_id(id);
 
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         if (!permissions.Check(TPermissions::VIEW_AST)) {
             result.mutable_job()->clear_ast();
@@ -1839,7 +1967,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1851,10 +1979,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         });
 }
 
-ui64 TYdbControlPlaneStorageActor::GetExecutionLimitMills(
-    FederatedQuery::QueryContent_QueryType queryType,
-    const TMaybe<TQuotaMap>& quotas) {
-
+ui64 TControlPlaneStorageBase::GetExecutionLimitMills(FederatedQuery::QueryContent::QueryType queryType, const TMaybe<TQuotaMap>& quotas) {
     if (!quotas) {
         return 0;
     }

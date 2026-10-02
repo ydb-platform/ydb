@@ -6,6 +6,7 @@
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 
 #include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -141,12 +142,41 @@ TString TYtNodeHashCalculator::MakeSalt(const TYtSettings::TConstPtr& config, co
     return salt;
 }
 
+TMaybe<TString> TYtNodeHashCalculator::GetParentOutputHash(const TExprNode& node) const {
+    if (!CanReplaceParentOutputHash(node)) {
+        return {};
+    }
+
+    const TYtMerge opMerge(&node);
+    const auto sections = opMerge.Input();
+    YQL_ENSURE(sections.Size() == 1);
+    const auto section = sections.Item(0);
+    const auto paths = section.Paths();
+    YQL_ENSURE(paths.Size() == 1);
+    const auto path = paths.Item(0);
+    const auto maybeOutput = path.Table().Maybe<TYtOutput>();
+    if (!maybeOutput) {
+        return {};
+    }
+    const auto parentOpHash = GetHash(maybeOutput.Cast().Operation().Ref());
+    if (parentOpHash.empty()) {
+        return {};
+    }
+    return (THashBuilder() << parentOpHash << FromString<size_t>(maybeOutput.Cast().OutIndex().Value())).Finish();
+}
+
 TString TYtNodeHashCalculator::GetOutputHash(const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) const {
     Y_UNUSED(argIndex);
     Y_UNUSED(frameLevel);
 
     auto output = TYtOutput(&node);
-    auto opUniqueId = GetOutputOp(output).Ref().UniqueId();
+    auto op = GetOutputOp(output);
+
+    if (const auto parentOutputHash = GetParentOutputHash(op.Ref())) {
+        return *parentOutputHash;
+    }
+
+    auto opUniqueId = op.Ref().UniqueId();
     auto it = NodeHash.find(opUniqueId);
     if (it == NodeHash.end()) {
         if (DontFailOnMissingParentOpHash) {

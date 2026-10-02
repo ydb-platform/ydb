@@ -2,7 +2,9 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -16,6 +18,25 @@ using namespace Tests;
 using NClient::TValue;
 
 namespace {
+
+// TEvTabletSetTableInfo is not copyable (all-const members), so observers snapshot it.
+struct TReportedTableInfo {
+    ui64 TabletID;
+    ui32 FollowerId;
+    TPathId TableId;
+    TString TablePath;
+    ui64 SchemaVersion;
+    ui32 MetricsLevel;
+
+    explicit TReportedTableInfo(const TEvTabletCounters::TEvTabletSetTableInfo &ev)
+        : TabletID(ev.TabletID)
+        , FollowerId(ev.FollowerId)
+        , TableId(ev.TableId)
+        , TablePath(ev.TablePath)
+        , SchemaVersion(ev.SchemaVersion)
+        , MetricsLevel(ev.MetricsLevel)
+    {}
+};
 
 TString GetTablePath(TTestActorRuntime &runtime,
                      TActorId sender,
@@ -154,6 +175,282 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
     Y_UNIT_TEST(TestResolvePathAfterRestart) {
         TestTablePath(true, true);
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoReflectsRename) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // DataShard reports its identity from DoPeriodicTasks(), which reschedules every 5s.
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TabletID, shard);
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().FollowerId, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TablePath, "/Root/table-1");
+        auto prevTableId = reported.back().TableId;
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table-1", "/Root/table-1-moved"));
+
+        // No cache to invalidate: the very next tick reads the renamed table out of TableInfos.
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TablePath, "/Root/table-1-moved");
+        UNIT_ASSERT_UNEQUAL(reported.back().TableId, prevTableId);
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoNotSentWithoutFeatureFlag) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        // EnableDataShardDetailedMetrics defaults to false
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(reported.empty());
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoReflectsTableMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // No per-table override and no database default => nothing to report.
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoReflectsIndexImplTableMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Indexes({{"by_value", {"value"}}}));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        // DataShard reports its identity from DoPeriodicTasks(), which reschedules every 5s.
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        auto byPathSuffix = [&](const TString &suffix) {
+            TVector<TReportedTableInfo> matched;
+            for (const auto &info : reported) {
+                if (info.TablePath.EndsWith(suffix)) {
+                    matched.push_back(info);
+                }
+            }
+            return matched;
+        };
+
+        auto indexReports = byPathSuffix("/by_value/indexImplTable");
+        UNIT_ASSERT_C(!indexReports.empty(), "expected at least one report from the index impl table shard");
+        for (const auto &info : indexReports) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info.MetricsLevel,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition),
+                "index impl table " << info.TablePath << " did not inherit the base table's metrics level");
+        }
+
+        auto baseReports = byPathSuffix("/table-1");
+        UNIT_ASSERT_C(!baseReports.empty(), "expected at least one report from the base table shard");
+        for (const auto &info : baseReports) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info.MetricsLevel,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition),
+                "base table " << info.TablePath << " did not report its own metrics level");
+        }
+    }
+
+    // The database-wide TABLES_METRICS_LEVEL reaches DataShard on the subdomain
+    // publish, which bumps no table SchemaVersion. Patch the published subdomain
+    // description on the wire so the DataShard-side handling can be exercised
+    // without a control-plane surface for the database attribute.
+    Y_UNIT_TEST(TestSetTableInfoUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        // Installed before the shard exists, so the very first subdomain
+        // notification it gets already carries the database default.
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        // A per-table override wins over the database default.
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // The database-wide default is persisted, so a restarted shard keeps
+    // reporting it instead of falling back to Unspecified until the next
+    // subdomain publish arrives.
+    Y_UNIT_TEST(TestSubDomainMetricsLevelSurvivesRestart) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // Cut the subscription off entirely, so the restarted shard can only
+        // know the database default from its own local database.
+        patcher.Remove();
+        auto blocker = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                ev.Reset();
+            });
+
+        RebootTablet(runtime, shard, sender);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
     }
 }
 

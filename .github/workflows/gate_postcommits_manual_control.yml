@@ -1,0 +1,224 @@
+name: Manual Gate Control
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'open'
+        type: choice
+        options:
+          - open
+          - close
+      count_of_runners_to_change_label:
+        description: 'Optional: Number of runners to change (leave empty for all)'
+        required: false
+        type: string
+
+jobs:
+  manage_gate:
+    runs-on: ubuntu-latest
+    name: Manual Gate Control
+    steps:
+    - name: Set Gate State
+      shell: bash
+      run: |
+        echo "Performing manual gate ${{ github.event.inputs.action }} operation"
+        
+        # Set limit count if provided
+        LIMIT_COUNT="${{ github.event.inputs.count_of_runners_to_change_label }}"
+        if [[ -n "$LIMIT_COUNT" && "$LIMIT_COUNT" =~ ^[0-9]+$ ]]; then
+          echo "Will change labels for up to $LIMIT_COUNT runners"
+          LIMIT_OPTION=true
+        else
+          echo "Will change labels for all applicable runners"
+          LIMIT_OPTION=false
+        fi
+        
+        if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
+          echo "Closing gate for postcommits - removing postcommit labels"
+          query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
+          OPERATION="Closing"
+          LABEL_ACTION="Removing"
+        else
+          echo "Opening gate for postcommits - adding postcommit labels"
+          query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
+          OPERATION="Opening"
+          LABEL_ACTION="Adding"
+        fi
+        
+        # Function to fetch a page of runners
+        fetch_runners_page() {
+          local page=$1
+          echo "Fetching runners page $page..."
+          local result=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
+            "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=$page")
+          
+          local http_code=$(echo "$result" | tail -n 1)
+          if [ "$http_code" != "200" ]; then
+            echo "HTTP error fetching page $page: $http_code"
+            echo "$result"
+            return 1
+          fi
+          
+          # Remove status code from the end
+          echo "$result" | sed '$d'
+        }
+        
+        # Get all runners with pagination
+        echo "Collecting all runners (paginated)..."
+        page=1
+        all_runner_ids=()
+        more_pages=true
+        
+        while $more_pages; do
+          runners_data=$(fetch_runners_page $page)
+          if [ $? -ne 0 ]; then
+            echo "Failed to fetch runners page $page, exiting"
+            exit 1
+          fi
+          
+          # Extract runner IDs for this page
+          readarray -t page_ids < <(echo "$runners_data" | jq -r "$query" | grep -v "^$")
+          
+          # Check if we have runners on this page
+          count_on_page=${#page_ids[@]}
+          echo "Found $count_on_page eligible runners on page $page"
+          
+          # Append to our array
+          all_runner_ids+=("${page_ids[@]}")
+          
+          # Check if we have more pages
+          runners_count=$(echo "$runners_data" | jq '.runners | length')
+          if [ $runners_count -lt 100 ]; then
+            more_pages=false
+          else
+            page=$((page + 1))
+          fi
+        done
+        
+        # Count total eligible runners
+        total_runners=${#all_runner_ids[@]}
+        echo "Total eligible runners found across all pages: $total_runners"
+        
+        # Limit if needed
+        if [[ "$LIMIT_OPTION" == "true" && $total_runners -gt $LIMIT_COUNT ]]; then
+          all_runner_ids=("${all_runner_ids[@]:0:$LIMIT_COUNT}")
+          echo "Limited to first $LIMIT_COUNT runners"
+        fi
+        
+        # Files to store results and details
+        success_file=$(mktemp)
+        failed_file=$(mktemp)
+        details_file=$(mktemp)
+        
+        # Process runners
+        changed_count=0
+        for runner_id in "${all_runner_ids[@]}"; do
+          changed_count=$((changed_count + 1))
+          echo "Processing runner $changed_count/${#all_runner_ids[@]}: ID $runner_id"
+          
+          if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
+            echo "Removing postcommit label from runner $runner_id"
+            response=$(curl -s -w "\n%{http_code}" -X DELETE -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id/labels/postcommit")
+          else
+            echo "Adding postcommit label to runner $runner_id"
+            response=$(curl -s -w "\n%{http_code}" -X POST -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id/labels" \
+              -d '{"labels":["postcommit"]}')
+          fi
+          
+          # Parse response
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          # Get runner name for better reporting
+          runner_name=$(curl -s -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{github.repository}}/actions/runners/$runner_id" | \
+            jq -r '.name // "Unknown"')
+          
+          # Check success (HTTP 2xx)
+          if [[ $http_code -ge 200 && $http_code -lt 300 ]]; then
+            echo "1" >> "$success_file"
+            status_icon="✅"
+            status_text="Success"
+            echo "$status_icon Success: Label ${{ github.event.inputs.action == 'close' && 'removed' || 'added' }} for runner $runner_name (ID: $runner_id)"
+          else
+            echo "1" >> "$failed_file"
+            status_icon="❌"
+            status_text="Failed"
+            echo "$status_icon Failed: HTTP $http_code for runner $runner_name (ID: $runner_id)"
+            echo "Error response: $body"
+          fi
+          
+          # Add to details for summary
+          echo "| $runner_name | $runner_id | $status_text | $http_code |" >> "$details_file"
+        done
+        
+        # Calculate success/failure counts
+        success_count=$(wc -l < "$success_file")
+        failed_count=$(wc -l < "$failed_file")
+        
+        # Create summary for GitHub Actions
+        echo "## Gate Control Operation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Action:** $OPERATION gate ($LABEL_ACTION 'postcommit' label)" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** \`${{github.repository}}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Total eligible runners | $total_runners |" >> $GITHUB_STEP_SUMMARY
+        if [[ "$LIMIT_OPTION" == "true" ]]; then
+          echo "| Limit applied | $LIMIT_COUNT |" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "| Runners processed | $changed_count |" >> $GITHUB_STEP_SUMMARY
+        echo "| ✅ Successful operations | $success_count |" >> $GITHUB_STEP_SUMMARY
+        echo "| ❌ Failed operations | $failed_count |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ $changed_count -gt 0 ]]; then
+          echo "### Operation Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner Name | ID | Status | HTTP Code |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|----|---------|----|" >> $GITHUB_STEP_SUMMARY
+          cat "$details_file" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### No runners were processed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Console summary
+        echo ""
+        echo "=== OPERATION SUMMARY ==="
+        echo "Action: ${{ github.event.inputs.action }} gate"
+        echo "Total eligible runners: $total_runners"
+        if [[ "$LIMIT_OPTION" == "true" ]]; then
+          echo "Limited to: $LIMIT_COUNT"
+        fi
+        echo "Runners processed: $changed_count"
+        echo "Successful operations: $success_count"
+        echo "Failed operations: $failed_count"
+        echo "========================="
+        
+        # Cleanup temp files
+        rm -f "$success_file" "$failed_file" "$details_file"
+        
+        # Set exit code based on success
+        if [[ $failed_count -gt 0 ]]; then
+          echo "Warning: Some operations failed"
+          echo "::warning::$failed_count operations failed. See summary for details."
+          exit 1
+        fi
+        
+        echo "Gate ${{ github.event.inputs.action }} operation completed successfully"

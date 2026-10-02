@@ -47,6 +47,7 @@
 #include "rewrite/rewriteManip.h"
 #include "statistics/statistics.h"
 #include "storage/bufmgr.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/partcache.h"
@@ -500,6 +501,17 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	/* Grab foreign-table info using the relcache, while we have it */
 	if (relation->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
 	{
+		/* Check if the access to foreign tables is restricted */
+		if (unlikely((restrict_nonsystem_relation_kind & RESTRICT_RELKIND_FOREIGN_TABLE) != 0))
+		{
+			/* there must not be built-in foreign tables */
+			Assert(RelationGetRelid(relation) >= FirstNormalObjectId);
+
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("access to non-system foreign table is restricted")));
+		}
+
 		rel->serverid = GetForeignServerIdByRelId(RelationGetRelid(relation));
 		rel->fdwroutine = GetFdwRoutineForRelation(relation, true);
 	}
@@ -660,6 +672,11 @@ get_relation_foreign_keys(PlannerInfo *root, RelOptInfo *rel,
  * the purposes of inference.  If no opclass (or collation) is specified, then
  * all matching indexes (that may or may not match the default in terms of
  * each attribute opclass/collation) are used for inference.
+ *
+ * Note: during index CONCURRENTLY operations, different transactions may
+ * reference different sets of arbiter indexes. This can lead to false unique
+ * constraint violations that wouldn't occur during normal operations.  For
+ * more information, see insert.sgml.
  */
 List *
 infer_arbiter_indexes(PlannerInfo *root)
@@ -667,6 +684,7 @@ infer_arbiter_indexes(PlannerInfo *root)
 	OnConflictExpr *onconflict = root->parse->onConflict;
 
 	/* Iteration state */
+	Index		varno;
 	RangeTblEntry *rte;
 	Relation	relation;
 	Oid			indexOidFromConstraint = InvalidOid;
@@ -695,7 +713,8 @@ infer_arbiter_indexes(PlannerInfo *root)
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	rte = rt_fetch(root->parse->resultRelation, root->parse->rtable);
+	varno = root->parse->resultRelation;
+	rte = rt_fetch(varno, root->parse->rtable);
 
 	relation = table_open(rte->relid, NoLock);
 
@@ -829,6 +848,9 @@ infer_arbiter_indexes(PlannerInfo *root)
 
 		/* Expression attributes (if any) must match */
 		idxExprs = RelationGetIndexExpressions(idxRel);
+		if (idxExprs && varno != 1)
+			ChangeVarNodes((Node *) idxExprs, 1, varno, 0);
+
 		foreach(el, onconflict->arbiterElems)
 		{
 			InferenceElem *elem = (InferenceElem *) lfirst(el);
@@ -880,6 +902,8 @@ infer_arbiter_indexes(PlannerInfo *root)
 		 * CONFLICT's WHERE clause.
 		 */
 		predExprs = RelationGetIndexPredicate(idxRel);
+		if (predExprs && varno != 1)
+			ChangeVarNodes((Node *) predExprs, 1, varno, 0);
 
 		if (!predicate_implied_by(predExprs, (List *) onconflict->arbiterWhere, false))
 			goto next;
@@ -2218,6 +2242,60 @@ has_row_triggers(PlannerInfo *root, Index rti, CmdType event)
 			if (trigDesc &&
 				(trigDesc->trig_delete_after_row ||
 				 trigDesc->trig_delete_before_row))
+				result = true;
+			break;
+			/* There is no separate event for MERGE, only INSERT/UPDATE/DELETE */
+		case CMD_MERGE:
+			result = false;
+			break;
+		default:
+			elog(ERROR, "unrecognized CmdType: %d", (int) event);
+			break;
+	}
+
+	table_close(relation, NoLock);
+	return result;
+}
+
+/*
+ * has_transition_tables
+ *
+ * Detect whether the specified relation has any transition tables for event.
+ */
+bool
+has_transition_tables(PlannerInfo *root, Index rti, CmdType event)
+{
+	RangeTblEntry *rte = planner_rt_fetch(rti, root);
+	Relation	relation;
+	TriggerDesc *trigDesc;
+	bool		result = false;
+
+	Assert(rte->rtekind == RTE_RELATION);
+
+	/* Currently foreign tables cannot have transition tables */
+	if (rte->relkind == RELKIND_FOREIGN_TABLE)
+		return result;
+
+	/* Assume we already have adequate lock */
+	relation = table_open(rte->relid, NoLock);
+
+	trigDesc = relation->trigdesc;
+	switch (event)
+	{
+		case CMD_INSERT:
+			if (trigDesc &&
+				trigDesc->trig_insert_new_table)
+				result = true;
+			break;
+		case CMD_UPDATE:
+			if (trigDesc &&
+				(trigDesc->trig_update_old_table ||
+				 trigDesc->trig_update_new_table))
+				result = true;
+			break;
+		case CMD_DELETE:
+			if (trigDesc &&
+				trigDesc->trig_delete_old_table)
 				result = true;
 			break;
 			/* There is no separate event for MERGE, only INSERT/UPDATE/DELETE */

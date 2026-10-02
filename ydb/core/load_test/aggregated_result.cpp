@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 

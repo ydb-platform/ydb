@@ -8,15 +8,11 @@ namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-void TLoadContext::RegisterConstructedObject(T* ptr)
+Y_FORCE_INLINE NDetail::TUniverseLoadSchedule* TLoadContext::GetLoadSchedule()
 {
-    if constexpr(std::derived_from<T, TRefCounted>) {
-        Deletors_.push_back([=] { Unref(ptr); });
-    }
+    return LoadSchedule_.get();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPhoenix
-

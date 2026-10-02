@@ -18,10 +18,10 @@ Section 3.3 Scope guard support \[scopeguard\]. The implementation also provides
 
 ### Build status
 
-Branch          | GitHub Actions| Test Matrix | Dependencies |
-:-------------: | --------------| ----------- | ------------ |
-[`master`](https://github.com/boostorg/scope/tree/master) | [![GitHub Actions](https://github.com/boostorg/scope/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/boostorg/scope/actions?query=branch%3Amaster) | [![Tests](https://img.shields.io/badge/matrix-master-brightgreen.svg)](https://www.boost.org/development/tests/master/developer/scope.html) | [![Dependencies](https://img.shields.io/badge/deps-master-brightgreen.svg)](https://pdimov.github.io/boostdep-report/master/scope.html)
-[`develop`](https://github.com/boostorg/scope/tree/develop) | [![GitHub Actions](https://github.com/boostorg/scope/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/boostorg/scope/actions?query=branch%3Adevelop) | [![Tests](https://img.shields.io/badge/matrix-develop-brightgreen.svg)](https://www.boost.org/development/tests/develop/developer/scope.html) | [![Dependencies](https://img.shields.io/badge/deps-develop-brightgreen.svg)](https://pdimov.github.io/boostdep-report/develop/scope.html)
+Branch          | GitHub Actions | AppVeyor | Test Matrix | Dependencies |
+:-------------: | -------------- | -------- | ----------- | ------------ |
+[`master`](https://github.com/boostorg/scope/tree/master) | [![GitHub Actions](https://github.com/boostorg/scope/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/boostorg/scope/actions?query=branch%3Amaster) | [![AppVeyor](https://ci.appveyor.com/api/projects/status/7dr1fo39o27subn1/branch/master?svg=true)](https://ci.appveyor.com/project/Lastique/scope/branch/master) | [![Tests](https://img.shields.io/badge/matrix-master-brightgreen.svg)](https://regression.boost.io/master/developer/scope.html) | [![Dependencies](https://img.shields.io/badge/deps-master-brightgreen.svg)](https://pdimov.github.io/boostdep-report/master/scope.html)
+[`develop`](https://github.com/boostorg/scope/tree/develop) | [![GitHub Actions](https://github.com/boostorg/scope/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/boostorg/scope/actions?query=branch%3Adevelop) | [![AppVeyor](https://ci.appveyor.com/api/projects/status/7dr1fo39o27subn1/branch/develop?svg=true)](https://ci.appveyor.com/project/Lastique/scope/branch/develop) | [![Tests](https://img.shields.io/badge/matrix-develop-brightgreen.svg)](https://regression.boost.io/develop/developer/scope.html) | [![Dependencies](https://img.shields.io/badge/deps-develop-brightgreen.svg)](https://pdimov.github.io/boostdep-report/develop/scope.html)
 
 ### License
 

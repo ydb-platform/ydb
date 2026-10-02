@@ -1,5 +1,6 @@
 SELECT
     CurrentOperationId(),
     CurrentOperationSharedId(),
-    CurrentAuthenticatedUser()
+    CurrentAuthenticatedUser(),
+    CurrentLanguageVersion()
 ;

@@ -15,17 +15,23 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     , Counters(counters)
     , PercentileCounters(percentileCounters)
     , ResponseGroup(percentileCounters->GetSubgroup("subsystem", "response"))
+    , StateGroup(Counters->GetSubgroup("subsystem", "state"))
     , LatencyOverviewGroup(overviewCounters->GetSubgroup("subsystem", "latency"))
     , EventGroup(Counters->GetSubgroup("subsystem", "event"))
     , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
+    , CancellationGroup(Counters->GetSubgroup("subsystem", "cancellation"))
 {
+    TransitionsToDormant = StateGroup->GetCounter("TransitionsToDormant", true);
+    TransitionsToActive = StateGroup->GetCounter("TransitionsToActive", true);
+
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
         GroupIdGen = (ui64(dyn.GroupId.GetRawId()) << 32) | dyn.GroupGeneration;
     }
 
     BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1);
+    GetBlockResponseTime.Initialize(ResponseGroup, "event", "getBlock", "Response in millisec", Percentiles1);
 
     if (!constructLimited) {
         BecomeFull();
@@ -49,6 +55,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true);
     EventPatch = EventGroup->GetCounter("EvPatch", true);
     EventAssimilate = EventGroup->GetCounter("EvAssimilate", true);
+    EventCheckIntegrity = EventGroup->GetCounter("EvCheckIntegrity", true);
 
     PutsSentViaPutBatching = EventGroup->GetCounter("PutsSentViaPutBatching", true);
     PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true);
@@ -76,6 +83,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus");
     ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch");
     ActiveAssimilate = ActiveRequestsGroup->GetCounter("ActiveAssimilate");
+    ActiveCheckIntegrity = ActiveRequestsGroup->GetCounter("ActiveCheckIntegrity");
 
     // special patch counters
     VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed");
@@ -94,6 +102,8 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
         StatusGroup.Init(group->GetSubgroup("request", "status"));
         AssimilateGroup.Init(group->GetSubgroup("request", "assimilate"));
         BlockGroup.Init(group->GetSubgroup("request", "block"));
+        GetBlockGroup.Init(group->GetSubgroup("request", "getBlock"));
+        CheckIntegrityGroup.Init(group->GetSubgroup("request", "checkIntegrity"));
     }
 
     ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");
@@ -111,6 +121,17 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatStatus.emplace(respStatGroup->GetSubgroup("request", "status"));
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
+    RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
+
+    CancelledEvents = CancellationGroup->GetCounter("CancelledEvents", true);
+}
+
+void TBlobStorageGroupProxyMon::CountDormancyTransition(bool isDormant) {
+    if (isDormant) {
+        ++*TransitionsToDormant;
+    } else {
+        ++*TransitionsToActive;
+    }
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {
@@ -204,6 +225,7 @@ void TBlobStorageGroupProxyMon::Update() {
     }
 
     BlockResponseTime.Update();
+    GetBlockResponseTime.Update();
 }
 
 void TBlobStorageGroupProxyMon::ThroughputUpdate() {
@@ -214,6 +236,22 @@ void TBlobStorageGroupProxyMon::ThroughputUpdate() {
     }
 }
 
+void TBlobStorageGroupProxyMon::PrepareForDormancy() {
+    // Replace every rolling frame, then publish once more against a refreshed
+    // frame to expose the resulting empty window.
+    for (size_t i = 0; i <= PercentileTrackerFrameCount; ++i) {
+        Update();
+    }
+    ResetThroughput();
+}
+
+void TBlobStorageGroupProxyMon::ResetThroughput() {
+    if (!IsLimitedMon) {
+        for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) {
+            sensor->get()->Reset();
+        }
+    }
+}
+
 
 } // NKikimr
-

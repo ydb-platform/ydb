@@ -1,0 +1,22 @@
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$stream = select
+    AsList(
+        AsStruct(int64_field as value, "original" as label),
+        AsStruct(int64_field * int64_field as value, "double" as label)
+    ) as items,
+    LENGTH(string_field) > 3 as condition
+from Input;
+
+insert into Output
+select 
+    items.value as value,
+    items.label as label,
+    condition as condition
+from $stream
+flatten list by (items);

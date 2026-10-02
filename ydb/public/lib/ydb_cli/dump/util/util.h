@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/cms/cms.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
@@ -41,6 +42,11 @@ inline TResult Result(const TString& path, TStatus&& status) {
 }
 
 TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TMaybe<NTable::TTableDescription>& out);
+TStatus DescribeExternalDataSource(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out);
+TStatus DescribeSystemView(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeSystemViewResult& out);
+TStatus DescribeReplication(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TReplicationDescription>& out);
+TStatus DescribeTransfer(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TTransferDescription>& out);
+TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TString& out);
 
 NScheme::TDescribePathResult DescribePath(
     NScheme::TSchemeClient& schemeClient,
@@ -75,5 +81,9 @@ TStatus CreateDatabase(
     NCms::TCmsClient& cmsClient,
     const std::string& path,
     const NCms::TCreateDatabaseSettings& settings = {});
+
+TStatus CheckSysViewCompatibility(
+    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
+    const Ydb::Table::DescribeSystemViewResult& actualProto);
 
 } // NYdb::NDump

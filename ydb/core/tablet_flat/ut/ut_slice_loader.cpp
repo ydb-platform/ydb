@@ -9,6 +9,7 @@
 #include <ydb/core/tablet_flat/flat_part_keys.h>
 #include <ydb/core/tablet_flat/flat_sausage_gut.h>
 #include <ydb/core/tablet_flat/flat_store_hotdog.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <ydb/core/tablet_flat/util_basics.h>
 
@@ -19,10 +20,10 @@ namespace NTable {
 
 using namespace NTest;
 using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelper;
-using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
 namespace {
-    NPage::TConf PageConf() noexcept
+    NPage::TConf PageConf()
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -66,6 +67,14 @@ namespace {
             : Part(std::move(part))
             , Room(room)
         {
+            // Build byte-offset to pageId map
+            for (ui32 i = 0; i < Total(); i++) {
+                auto type = Part->Store->GetPageType(Room, i);
+                if (NTest::TStore::IsByteOffsetType(type)) {
+                    auto loc = Part->Store->GetPageLocation(Room, i);
+                    ByteOffsetToPageId[loc.Offset.AsByteOffset()] = i;
+                }
+            }
         }
 
         const TLogoBlobID& Label() const noexcept override
@@ -78,26 +87,43 @@ namespace {
             return Part->Store->PageCollectionPagesCount(Room);
         }
 
-        NPageCollection::TInfo Page(ui32 page) const noexcept override
+        NPageCollection::TInfo Page(ui32 page) const override
         {
             const auto array = Part->Store->PageCollectionArray(Room);
 
             return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const noexcept override
+        NPageCollection::TBorder Bounds(ui32 page) const override
         {
-            Y_ABORT("Unexpected Bounds(...) call");
+            return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
         }
 
-        NPageCollection::TGlobId Glob(ui32) const noexcept override
-        {
-            Y_ABORT("Unexpected Glob(...) call");
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
+            if (location.Offset.IsByteOffset()) {
+                auto it = ByteOffsetToPageId.find(location.Offset.AsByteOffset());
+                if (it == ByteOffsetToPageId.end()) {
+                    return { 0, { Max<ui32>(), 0 }, { Max<ui32>(), 0 } };
+                }
+                ui32 pageId = it->second;
+                ui32 pageSize = Part->Store->GetPageSize(Room, pageId);
+                return { pageSize, { pageId, 0 }, { pageId, pageSize } };
+            }
+            return Bounds(location.Offset.AsPageIndex());
         }
 
-        bool Verify(ui32, TArrayRef<const char>) const noexcept override
+        NPageCollection::TGlobId Glob(ui32) const override
         {
-            Y_ABORT("Unexpected Verify(...) call");
+            Y_TABLET_ERROR("Unexpected Glob(...) call");
+        }
+
+        bool Verify(ui32, TArrayRef<const char>) const override
+        {
+            Y_TABLET_ERROR("Unexpected Verify(...) call");
+        }
+
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
+            return data.size() == location.Size;
         }
 
         size_t BackingSize() const noexcept override
@@ -105,9 +131,15 @@ namespace {
             return Part->Store->PageCollectionBytes(Room);
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return Part->Store->GetPageLocation(Room, pageId);
+        }
+
     private:
         TIntrusiveConstPtr<NTest::TPartStore> Part;
         ui32 Room;
+        THashMap<ui64, ui32> ByteOffsetToPageId;
     };
 
     struct TCheckResult {
@@ -143,22 +175,21 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        NTable::TLoader::TLoaderEnv env(new TCache(pageCollection));
+        NTable::TLoader::TLoaderEnv env(new TPageCollection(pageCollection));
         env.ProvidePart(part.Get());
         TKeysLoader loader(part.Get(), &env);
 
         while (!(result.Run = loader.Do(screen))) {
             if (auto fetch = env.GetFetch()) {
-                UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
+                UNIT_ASSERT_C(fetch.PageCollection.Get() == pageCollection.Get(),
                     "TLoader wants to fetch from an unexpected pageCollection");
-                UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
-                result.Pages += fetch->Pages.size();
+                UNIT_ASSERT_C(fetch.Pages, "TLoader wants a fetch, but there are no pages");
+                result.Pages += fetch.Pages.size();
 
-                for (auto pageId : fetch->Pages) {
-                    auto* page = part->Store->GetPage(0, pageId);
-                    UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
-
-                    env.Save(fetch->Cookie, { pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                for (auto& location : fetch.Pages) {
+                    auto* page = part->Store->GetPage(0, location.Offset);
+                    UNIT_ASSERT_C(page, "TLoader wants a missing page at offset " << location.Offset);
+                    env.Save({ location.Offset, location.Size, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");
@@ -222,7 +253,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
 
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 auto from = index->GetRowId();
                 auto to = Max<TRowId>();
@@ -247,7 +278,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 auto from = index->GetRowId();
                 auto to = Max<TRowId>();
@@ -274,7 +305,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             auto index = CreateIndexIter(&*Part0(), &env, { });
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             while (index->IsValid()) {
                 TRowId begin = index->GetRowId() + 1;
                 TRowId end;

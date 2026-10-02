@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_manager.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/remove.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -9,9 +10,9 @@ class TDeclareRemovingAction: public IBlobsDeclareRemovingAction {
 private:
     using TBase = IBlobsDeclareRemovingAction;
     TBlobManager* Manager;
+
 protected:
     virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) {
-
     }
 
     virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
@@ -21,6 +22,7 @@ protected:
             }
         }
     }
+
     virtual void DoOnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) {
         if (blobsWroteSuccessfully) {
             for (auto i = GetDeclaredBlobs().GetIterator(); i.IsValid(); ++i) {
@@ -28,13 +30,14 @@ protected:
             }
         }
     }
+
 public:
-    TDeclareRemovingAction(const TString& storageId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, TBlobManager& manager)
+    TDeclareRemovingAction(
+        const TString& storageId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, TBlobManager& manager)
         : TBase(storageId, manager.GetSelfTabletId(), counters)
         , Manager(&manager)
     {
-
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

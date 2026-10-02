@@ -12,7 +12,7 @@ enum EStateType {
     // Load own state.
     STATE_TYPE_OWN = 2;
 
-    // Load state from the other task.
+    // Load state from other tasks or explicit state supplied in the plan.
     STATE_TYPE_FOREIGN = 3;
 }
 
@@ -27,12 +27,17 @@ message TTaskPlan {
 
 message TProgramPlan {
     EStateType StateType = 1;
+    // Explicit program state for STATE_TYPE_FOREIGN.
+    optional bytes State = 2;
 }
 
 message TSourcePlan {
     EStateType StateType = 1;
     uint64 InputIndex = 2;
     repeated TForeignTaskSource ForeignTasksSources = 3;
+    // Explicit source state for STATE_TYPE_FOREIGN; overrides ForeignTasksSources.
+    optional bytes State = 4;
+    uint64 StateVersion = 5;
 
     message TForeignTaskSource {
         uint64 TaskId = 1;

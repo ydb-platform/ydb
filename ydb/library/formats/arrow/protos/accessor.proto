@@ -1,5 +1,23 @@
 package NKikimrArrowAccessorProto;
 
+message TDataExtractor {
+    optional string ClassName = 1;
+
+    message TJsonScanner {
+        optional bool FirstLevelOnly = 1 [default = false];
+        optional bool ForceSIMDJsonParsing = 2 [default = false];
+    }
+
+    message TSIMDJsonScanner {
+        optional bool FirstLevelOnly = 1 [default = false];
+    }
+
+    oneof Implementation {
+        TJsonScanner JsonScanner = 20;
+        TSIMDJsonScanner SIMDJsonScanner = 21;
+    }
+}
+
 message TRequestedConstructor {
     optional string ClassName = 1;
 
@@ -9,9 +27,35 @@ message TRequestedConstructor {
     message TSparsed {
     }
 
+    message TDictionary {
+    }
+
+    message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
+            optional double OthersAllowedFraction = 4 [default = 0.05];
+            optional TDataExtractor DataExtractor = 5;
+            // Apply dictionary encoding to subcolumn with string storage (BinaryJson ones or with deduced string type)
+            // if the fraction of unique values (<unique count> / <total present count>) <= this value.
+            // Value of `1` means always dictionary-encode; `0` (default) - never dictionary-encode.
+            optional double DictionaryUniqueFraction = 6 [default = 0];
+            // Store a separated sub-column whose present values are all scalars of one type in the corresponding
+            // native Arrow array instead of per-value BinaryJson blobs. `false` (default) - always BinaryJson.
+            optional bool EnableNativeColumns = 7 [default = false];
+            // On-disk encoding of the sub-column offset/index streams. A new encoding is a new
+            // version here - never a new setting. 0 = legacy arrow IPC.
+            optional uint32 DenseEncodingVersion = 8 [default = 0];
+        }
+        optional TSettings Settings = 1;
+    }
+
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
+        TDictionary Dictionary = 13;
     }
 }
 
@@ -23,8 +67,56 @@ message TConstructor {
 
     message TSparsed {
     }
+
+    message TDictionary {
+    }
+
+    message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
+            optional double OthersAllowedFraction = 4 [default = 0.05];
+            optional TDataExtractor DataExtractor = 5;
+            optional double DictionaryUniqueFraction = 6 [default = 0];
+            optional bool EnableNativeColumns = 7 [default = false];
+            // On-disk encoding of the sub-column offset/index streams. A new encoding is a new
+            // version here - never a new setting. 0 = legacy arrow IPC.
+            optional uint32 DenseEncodingVersion = 8 [default = 0];
+        }
+        optional TSettings Settings = 1;
+    }
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
+        TDictionary Dictionary = 13;
     }
+}
+
+message TDictionaryAccessor {
+    optional uint32 DictionaryBlobSize = 1;
+    optional uint32 PositionsBlobSize = 2;
+}
+
+// Accessor-specific metadata attached to a column/chunk. Passed through to the accessor at
+// read/assembly time (e.g. the dictionary/positions blob split for DICTIONARY encoding).
+message TAdditionalAccessorData {
+    oneof Accessor {
+        TDictionaryAccessor DictionaryAccessorData = 1;
+    }
+}
+
+message TSubColumnsAccessor {
+    optional uint32 ColumnStatsSize = 1;
+    optional uint32 OtherStatsSize = 2;
+    message TColumn {
+        optional uint32 Size = 1;
+        // Set only for DICTIONARY-encoded key columns (see NDictionary): the accessor's extra
+        // metadata, e.g. the split of the column blob into the dictionary and positions blobs.
+        optional TAdditionalAccessorData AdditionalAccessorData = 2;
+    }
+    repeated TColumn KeyColumns = 3;
+    repeated TColumn OtherColumns = 4;
+    optional uint32 OtherRecordsCount = 5;
 }

@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <yt/yt/core/bus/tcp/public.h>
+
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 
 namespace NYT::NRpc::NBus {
@@ -16,12 +17,12 @@ IChannelPtr CreateBusChannel(
 
 //! Creates a factory for creating TCP Bus channels.
 IChannelFactoryPtr CreateTcpBusChannelFactory(
-    NYT::NBus::TBusConfigPtr config,
+    NYT::NBus::NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
 //! Creates a factory for creating Unix domain socket (UDS) Bus channels.
 IChannelFactoryPtr CreateUdsBusChannelFactory(
-    NYT::NBus::TBusConfigPtr config,
+    NYT::NBus::NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,3 +26,7 @@ END()
 RECURSE(
     interface
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -2,7 +2,11 @@
 #include "datashard_integrity_trails.h"
 #include "datashard_tli.h"
 #include "datashard_locks_db.h"
+#include "datashard_user_db.h"
+#include "const.h"
 #include "setup_sys_locks.h"
+
+#include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 
 #include <util/string/escape.h>
 
@@ -26,6 +30,11 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Result.Reset();
+        MvccVersion.reset();
+        Changes.clear();
+        CommittingOpRegistered = false;
+
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
@@ -79,18 +88,92 @@ public:
             return true;
         }
 
-        auto& source = EnsureSource(txc, fullTableId.PathId, msg.GetSource());
+        if (userTable.HasAsyncIndexes() && Self->CheckChangesQueueOverflow()) {
+            Self->IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED,
+                "Change queue overflow");
+            return true;
+        }
 
-        for (const auto& change : msg.GetChanges()) {
-            if (!ApplyChange(txc, fullTableId, userTable, source, change)) {
-                Y_ENSURE(Result);
-                break;
+        auto* replicatedTable = Self->EnsureReplicatedTable(fullTableId.PathId);
+        Y_ENSURE(replicatedTable);
+        const bool sourceCreated = !replicatedTable->Sources.contains(msg.GetSource());
+        const ui64 savedNextSourceId = replicatedTable->NextSourceId;
+        TReplicationSourceOffsetsDb rdb(txc);
+        auto& source = replicatedTable->EnsureSource(rdb, msg.GetSource());
+
+        if (userTable.HasAsyncIndexes()) {
+            // Index collection may fault while reading the old row. Restore the
+            // in-memory source state together with the database transaction.
+            const ui64 sourceId = source.Id;
+            const TString sourceName = source.Name;
+            auto savedOffsets = source.OffsetBySplitKeyId;
+            const ui64 savedNextSplitKeyId = source.NextSplitKeyId;
+            const ui64 savedStatBytes = source.StatBytes;
+            txc.DB.OnRollback([replicatedTable, &source, sourceCreated, sourceId, sourceName, savedNextSourceId,
+                    savedOffsets = std::move(savedOffsets), savedNextSplitKeyId, savedStatBytes]() mutable
+            {
+                if (sourceCreated) {
+                    replicatedTable->Sources.erase(sourceName);
+                    replicatedTable->SourceById.erase(sourceId);
+                    if (replicatedTable->NextSourceId == sourceId + 1) {
+                        replicatedTable->NextSourceId = savedNextSourceId;
+                    }
+                    return;
+                }
+                source.Offsets.clear();
+                source.OffsetBySplitKeyId = std::move(savedOffsets);
+                for (auto& [_, state] : source.OffsetBySplitKeyId) {
+                    source.Offsets.insert(&state);
+                }
+                source.NextSplitKeyId = savedNextSplitKeyId;
+                source.StatBytes = savedStatBytes;
+            });
+        }
+
+        NMiniKQL::TEngineHostCounters counters;
+        TDataShardUserDb userDb(*Self, txc.DB, 0, Self->GetMvccVersion(), counters, ctx.Now());
+        TDataShardChangeGroupProvider groupProvider(*Self, txc.DB);
+        THolder<IDataShardChangeCollector> collector;
+        if (userTable.HasAsyncIndexes()) {
+            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable));
+            // Previously staged base writes are the logical pre-image for new
+            // global-consistency stream records, including after a shard reboot.
+            for (ui64 openTxId : txc.DB.GetOpenTxs(userTable.LocalTid)) {
+                userDb.AddCommitTxId(fullTableId, openTxId);
             }
+        }
+
+        try {
+            for (const auto& change : msg.GetChanges()) {
+                if (!ApplyChange(txc, fullTableId, userTable, source, change, userDb, collector.Get())) {
+                    Y_ENSURE(Result);
+                    break;
+                }
+            }
+        } catch (const TNotReadyTabletException&) {
+            txc.Reschedule();
+            return false;
+        } catch (const TKeySizeConstraintException&) {
+            // Reject the whole batch, including previously applied rows and offsets.
+            txc.DB.RollbackChanges();
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
+            return true;
+        }
+
+        if (collector) {
+            Changes = std::move(collector->GetCollected());
         }
 
         if (MvccVersion) {
             Self->PromoteImmediatePostExecuteEdges(*MvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
             Pipeline.AddCommittingOp(*MvccVersion);
+            CommittingOpRegistered = true;
         }
 
         if (!Result) {
@@ -107,16 +190,10 @@ public:
         return true;
     }
 
-    TReplicationSourceState& EnsureSource(TTransactionContext& txc, const TPathId& pathId, const TString& sourceName) {
-        TReplicationSourceOffsetsDb rdb(txc);
-        auto* table = Self->EnsureReplicatedTable(pathId);
-        Y_ENSURE(table);
-        return table->EnsureSource(rdb, sourceName);
-    }
-
     bool ApplyChange(
             TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
-            TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
+            TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change,
+            TDataShardUserDb& userDb, IDataShardChangeCollector* collector)
     {
         Y_ENSURE(userTable.IsReplicated() || Self->IsIncrementalRestore());
 
@@ -197,7 +274,18 @@ public:
         }
 
         if (writeTxId) {
+            if (collector) {
+                if (!MvccVersion) {
+                    MvccVersion = Self->GetMvccVersion();
+                }
+                if (!collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
+                    throw TNotReadyTabletException();
+                }
+            }
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
+            if (collector) {
+                userDb.AddCommitTxId(tableId, writeTxId);
+            }
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccVersion) {
@@ -205,6 +293,9 @@ public:
             }
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
+            if (collector && !collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
+                throw TNotReadyTabletException();
+            }
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
@@ -257,11 +348,16 @@ public:
         Y_ENSURE(Ev);
         Y_ENSURE(Result);
 
-        if (MvccVersion) {
+        if (CommittingOpRegistered) {
+            Y_ENSURE(MvccVersion);
             Pipeline.RemoveCommittingOp(*MvccVersion);
             Self->SendImmediateWriteResult(*MvccVersion, Ev->Sender, Result.Release(), Ev->Cookie);
         } else {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
+        }
+
+        if (Changes) {
+            Self->EnqueueChangeRecords(std::move(Changes));
         }
     }
 
@@ -270,6 +366,8 @@ private:
     TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
     THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
     std::optional<TRowVersion> MvccVersion;
+    bool CommittingOpRegistered = false;
+    TVector<IDataShardChangeCollector::TChange> Changes;
 }; // TTxApplyReplicationChanges
 
 void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {

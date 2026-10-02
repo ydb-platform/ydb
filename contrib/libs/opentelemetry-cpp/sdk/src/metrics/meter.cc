@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/metrics/noop.h"
 #include "opentelemetry/metrics/sync_instruments.h"
@@ -495,7 +494,7 @@ const sdk::instrumentationscope::InstrumentationScope *Meter::GetInstrumentation
 std::unique_ptr<SyncWritableMetricStorage> Meter::RegisterSyncMetricStorage(
     InstrumentDescriptor &instrument_descriptor)
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(storage_lock_);
+  std::lock_guard<std::mutex> guard(storage_lock_);
   auto ctx = meter_context_.lock();
   if (!ctx)
   {
@@ -547,7 +546,7 @@ std::unique_ptr<SyncWritableMetricStorage> Meter::RegisterSyncMetricStorage(
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
               exemplar_filter_type,
               GetExemplarReservoir(view.GetAggregationType(), view.GetAggregationConfig(),
-                                   view_instr_desc),
+                                   view_instr_desc, exemplar_filter_type),
 #endif
               view.GetAggregationConfig()));
           storage_registry_.insert({view_instr_desc, sync_storage});
@@ -569,7 +568,7 @@ std::unique_ptr<SyncWritableMetricStorage> Meter::RegisterSyncMetricStorage(
 std::unique_ptr<AsyncWritableMetricStorage> Meter::RegisterAsyncMetricStorage(
     InstrumentDescriptor &instrument_descriptor)
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(storage_lock_);
+  std::lock_guard<std::mutex> guard(storage_lock_);
   auto ctx = meter_context_.lock();
   if (!ctx)
   {
@@ -620,7 +619,7 @@ std::unique_ptr<AsyncWritableMetricStorage> Meter::RegisterAsyncMetricStorage(
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
               exemplar_filter_type,
               GetExemplarReservoir(view.GetAggregationType(), view.GetAggregationConfig(),
-                                   view_instr_desc),
+                                   view_instr_desc, exemplar_filter_type),
 #endif
               view.GetAggregationConfig()));
           storage_registry_.insert({view_instr_desc, async_storage});
@@ -655,7 +654,7 @@ std::vector<MetricData> Meter::Collect(CollectorHandle *collector,
                             << "The metric context is invalid");
     return std::vector<MetricData>{};
   }
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(storage_lock_);
+  std::lock_guard<std::mutex> guard(storage_lock_);
   for (auto &metric_storage : storage_registry_)
   {
     metric_storage.second->Collect(collector, ctx->GetCollectors(), ctx->GetSDKStartTime(),

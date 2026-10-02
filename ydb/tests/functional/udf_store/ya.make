@@ -9,6 +9,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_KV_VOLUME_TOOL_PATH="ydb/tests/stress/kv_volume_tool/kv_volume_tool")
 ENV(YDB_DICTS_UDF_PATH="yql/essentials/udfs/examples/dicts/libdicts_udf.so")
 ENV(YDB_UPLOAD_UDF_PATH="ydb/tests/functional/udf_store/upload_udf/upload_udf")
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
 
 TEST_SRCS(
     test_udf_store.py
@@ -17,12 +18,14 @@ TEST_SRCS(
 SPLIT_FACTOR(10)
 
 DEPENDS(
+    ydb/apps/ydb/experimental/ydb
     ydb/tests/stress/kv_volume_tool
     yql/essentials/udfs/examples/dicts
     ydb/tests/functional/udf_store/upload_udf
 )
 
 PEERDIR(
+    contrib/python/PyYAML
     ydb/public/api/grpc
     ydb/public/api/protos
     contrib/python/grpcio

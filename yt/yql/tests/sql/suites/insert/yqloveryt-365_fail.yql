@@ -1,0 +1,9 @@
+/* custom error:Anonymous table "@a" must be materialized. Use COMMIT before reading from it*/
+use plato;
+
+INSERT INTO @a SELECT JUST("{a=b}");
+COMMIT;
+$b = SELECT * FROM @a;
+$a = CAST($b as String);
+INSERT INTO Output WITH USER_ATTRS=$a SELECT 1;
+

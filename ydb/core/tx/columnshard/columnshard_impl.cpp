@@ -305,6 +305,12 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            NIceDb::TNiceDb db(txc.DB);
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(body.GetTruncateTable());
+            TablesManager.TruncateTableProgress(db, version, schemeShardLocalPathId);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -1800,16 +1806,30 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
     };
 
     for (const auto& [portion, columns] : ev->Get()->GetRequests()) {
+        const NOlap::TPortionAddress& address = portion.GetPortionAddress();
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-        auto portionInfo = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
-                               .GetGranuleVerified(portion.GetPortionAddress().GetPathId())
-                               .GetPortionVerifiedPtr(portion.GetPortionAddress().GetPortionId(), false);
+        const auto granule = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetGranuleOptional(address.GetPathId());
+        const auto portionInfo = granule ? granule->GetPortionOptional(address.GetPortionId(), false) : nullptr;
+        if (!portionInfo) {
+            // The request may outlive the scan that made it, and cleanup may have dropped the portion by now.
+            YDB_LOG_WARN("",
+                {"event", "column_data_for_missing_portion"},
+                {"portion", address.DebugString()},
+                {"consumer", portion.GetConsumer()});
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
+            for (const ui32 columnId : columns) {
+                errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(SelfId(), address, columnId),
+                    TStringBuilder() << "portion " << address.DebugString() << " not found");
+            }
+            ev->Get()->GetCallback()->OnReceiveData(SelfId(), {}, {}, std::move(errorAddresses));
+            continue;
+        }
         NOlap::NDataFetcher::TRequestInput rInput({ portionInfo }, actualIndexInfo, portion.GetConsumer(), "", nullptr, TabletID());
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
-            std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(),
+            std::make_shared<TExecutor>(ev->Get()->GetCallback(), address, SelfId(),
                 std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
             NConveyorComposite::ESpecialTaskCategory::Deduplication);
     }
@@ -1953,6 +1973,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);
         HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+        HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
         HFunc(TEvPrivate::TEvContinueCutHistory, Handle);
@@ -2050,7 +2071,7 @@ void TColumnShard::OnTieringModified(const std::optional<TInternalPathId> pathId
 
 const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
     Y_ABORT_UNLESS(!!Tiers);
-    return Tiers->GetManagerOptional(tierId);
+    return Tiers->GetManagerOptional(NTiers::TExternalStorageId::FromString(tierId));
 }
 
 }   // namespace NKikimr::NColumnShard

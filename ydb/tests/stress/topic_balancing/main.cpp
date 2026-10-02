@@ -548,6 +548,7 @@ int main(int argc, const char* argv[]) {
     workers.Join();
     sessions.CloseAll();
     driver.Stop(true);
+    handlersExecutor->Stop();
 
     Cerr << "Stress finished sessionsOpened=" << opened.load()
         << " sessionsClosed=" << closed.load() << Endl << Flush;

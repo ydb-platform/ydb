@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
+#include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 
@@ -142,7 +143,8 @@ public:
             runtimeSettings.RlPath = args.RlPath;
         }
 
-        runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [state=args.State, query=args.QueryQuotaManager, initialMemoryLimit=args.InitialMemoryLimit,
+                txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 YDB_LOG_DEBUG("Compute actor terminated",
                     {"problem", "finish_compute_actor"},
@@ -150,6 +152,10 @@ public:
                     {"taskId", taskId},
                     {"success", success},
                     {"message", issues.ToOneLineString()});
+                if (query) {
+                    // the task memory is freed by now, the task quota manager returns what it grew by when it dies
+                    query->FreeTasks(1, initialMemoryLimit);
+                }
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);
                 }

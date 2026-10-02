@@ -6,6 +6,14 @@ Yt {
 }
 SqlCore {
     ExtendedTranslationFlags {
+        Name: "Antlr4"
+    }
+}
+@@;
+
+$cfg_patch = @@
+SqlCore {
+    ExtendedTranslationFlags {
         Name: "ForceYqlSelect"
     }
 }
@@ -17,5 +25,5 @@ SELECT
     YqlLang::Sql2Yql("SELECT 1;", "2026.02", $cfg),
     YqlLang::Sql2Yql("SELECT * FROM plato.x", "2026.02", $cfg),
     YqlLang::Sql2Yql("SELECT * FROM plato.x", "2025.02", $cfg),
-    YqlLang::Sql2Yql("SELECT a, b FROM plato.x FLATTEN BY (a);", "2026.02", $cfg),
+    YqlLang::Sql2Yql("SELECT a, b FROM plato.x FLATTEN BY (a);", "2026.02", $cfg, $cfg_patch),
 ;

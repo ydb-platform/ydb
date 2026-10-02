@@ -32,5 +32,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    download
     ut
 )

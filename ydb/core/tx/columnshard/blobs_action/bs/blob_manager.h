@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tablet_flat/util_channel.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
@@ -144,6 +145,10 @@ private:
     class TGCContext;
     const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+    const bool WeightedDataChannelSelection = false;
+    NUtil::TChannelsShares ChannelsShares;
+    // Data channel ids (tablet channels with index >= 2), filled once in the constructor.
+    TVector<ui8> DataChannels;
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
@@ -179,7 +184,15 @@ private:
     [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 
 public:
-    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+    TBlobManager(
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId, bool weightedDataChannelSelection = false);
+
+    // Raw ApproximateFreeSpaceShare from TEvPutResult. 0 means unknown.
+    void UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare);
+
+    bool IsWeightedDataChannelSelectionEnabled() const {
+        return WeightedDataChannelSelection;
+    }
 
     TPendingGCBlobGenerations GetPendingGCBlobGenerations() const;
 
@@ -253,6 +266,8 @@ private:
     TGenStep EdgeGenStep() const {
         return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
+
+    ui32 PickDataChannel() const;
 };
 
 }   // namespace NKikimr::NOlap

@@ -85,6 +85,9 @@ TCommandLine::TCommandLine(bool ddisk)
     opts.AddLongOption("force-ddisk-pdisk-fallback",
             "force DDisk direct I/O through the PDisk actor instead of io_uring")
         .StoreTrue(&ForcePDiskFallback);
+    opts.AddLongOption("ddisk-devnull",
+            "acknowledge DDisk data I/O without device reads/writes (zero-filled reads; router-attaching slots on a PDisk must agree)")
+        .StoreTrue(&DDiskDevNullMode);
     opts.AddLongOption("log-level", "log level for BS_LOAD_TEST/BS_DDISK: warn|info|debug|trace (default warn). INTERCONNECT is floored at INFO; BS_DEVICE/BS_PDISK at WARN")
         .RequiredArgument("LEVEL").DefaultValue("warn");
     opts.AddLongOption("server", DDisk
@@ -113,7 +116,7 @@ TCommandLine::TCommandLine(bool ddisk)
     }
 
     AddOptionSection(opts, "DDisk options", {
-        "disable-ddisk-checksums", "ddisk-checksums-cache-size", "force-ddisk-pdisk-fallback",
+        "disable-ddisk-checksums", "ddisk-checksums-cache-size", "force-ddisk-pdisk-fallback", "ddisk-devnull",
     });
     if (DDisk) {
         AddOptionSection(opts, "DDisk workload options (without --cfg)", WorkloadOptions);
@@ -202,6 +205,17 @@ void ValidateDDiskTests(const NDevicePerfTest::TPerfTests& tests) {
             Y_ENSURE(record.HasDDiskLoad(), "ddisk --cfg requires DDiskLoad records");
         }
     }
+}
+
+void ValidateDDiskOptions(const NLastGetopt::TOptsParseResult& res) {
+    if (!res.Has("ddisk-devnull")) {
+        return;
+    }
+    Y_ENSURE(!res.Has("force-ddisk-pdisk-fallback"),
+        "--ddisk-devnull cannot be combined with --force-ddisk-pdisk-fallback");
+    // Only the process owning the DDisks can select the router's mode.
+    Y_ENSURE(!res.Has("client") || res.Has("server"),
+        "--ddisk-devnull has no effect on the client; pass it to the server process");
 }
 
 NDevicePerfTest::TPerfTests LoadTests(const NLastGetopt::TOptsParseResult& res, bool ddisk) {

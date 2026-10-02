@@ -138,14 +138,24 @@ TUnifiedBlobId TBlobBatch::AllocateNextBlobId(const TString& blobData) {
     return BatchInfo->NextBlobId(blobData.size());
 }
 
-TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId)
+TBlobManager::TBlobManager(
+    TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId, bool weightedDataChannelSelection)
     : SelfTabletId(selfTabletId)
     , TabletInfo(tabletInfo)
+    , WeightedDataChannelSelection(weightedDataChannelSelection)
     , CurrentGen(gen)
     , CurrentStep(0)
 {
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
+    if (TabletInfo && TabletInfo->Channels.size() > 2) {
+        DataChannels.reserve(TabletInfo->Channels.size() - 2);
+        for (size_t i = 2; i < TabletInfo->Channels.size(); ++i) {
+            const ui32 channel = TabletInfo->Channels[i].Channel;
+            Y_ENSURE(channel <= Max<ui8>());
+            DataChannels.push_back(static_cast<ui8>(channel));
+        }
+    }
 }
 
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
@@ -412,15 +422,27 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     return result;
 }
 
+ui32 TBlobManager::PickDataChannel() const {
+    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    if (!WeightedDataChannelSelection) {
+        return TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2].Channel;
+    }
+
+    return ChannelsShares.Select(DataChannels);
+}
+
+void TBlobManager::UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare) {
+    ChannelsShares.Update(channel, approximateFreeSpaceShare);
+}
+
 TBlobBatch TBlobManager::StartBlobBatch() {
     AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
-    AFL_VERIFY(TabletInfo->Channels.size() > 2);
-    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
+    const ui32 channel = PickDataChannel();
     ++CountersUpdate.BatchesStarted;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
-    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel.Channel, BlobsManagerCounters);
+    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel, BlobsManagerCounters);
     return TBlobBatch(std::move(batchInfo));
 }
 

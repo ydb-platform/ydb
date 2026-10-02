@@ -3,12 +3,14 @@ import functools
 import inspect
 import random
 import time
-from typing import Any, Callable, Generator, Optional, Union
+from typing import Any, Callable, Generator, Optional, TypeVar, Union, cast
 
 from . import issues
 from ._errors import check_retriable_error
 from .observability.metrics import observe_retry_metrics
 from .observability.tracing import SpanName, create_span as _create_span
+
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 def _try_span_attrs(backoff_ms: Optional[int]):
@@ -125,7 +127,9 @@ def retry_operation_impl(
             yield result
 
             if result.exc is not None:
-                raise result.exc
+                exc = result.exc
+                result.exc = None
+                raise exc
 
         except issues.Error as e:
             status = e
@@ -234,7 +238,7 @@ def ydb_retry(
     slow_backoff_settings: Optional[BackoffSettings] = None,
     idempotent: bool = False,
     retry_cancelled: bool = False,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+) -> Callable[[CallableT], CallableT]:
     """
     Decorator for automatic function retry in case of YDB errors.
 
@@ -252,7 +256,7 @@ def ydb_retry(
     :param retry_cancelled: Whether to retry cancelled operations (default: False)
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: CallableT) -> CallableT:
         retry_settings = RetrySettings(
             max_retries=max_retries,
             max_session_acquire_timeout=max_session_acquire_timeout,
@@ -272,13 +276,13 @@ def ydb_retry(
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return await retry_operation_async(func, retry_settings, *args, **kwargs)
 
-            return async_wrapper
+            return cast(CallableT, async_wrapper)
         else:
 
             @functools.wraps(func)
             def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return retry_operation_sync(func, retry_settings, *args, **kwargs)
 
-            return sync_wrapper
+            return cast(CallableT, sync_wrapper)
 
     return decorator

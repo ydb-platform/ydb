@@ -42,7 +42,7 @@ It uses scalar quantization to speedup ANN search:
 
 #### Create Flat Bit Index
 
-It creates index table, with two columns: `primary_key` and `embedding`, `embedding` will be trasformed from `<table>` `<embedding>`
+It creates index table, with two columns: `primary_key` and `embedding`, `embedding` will be transformed from `<table>` `<embedding>`
 
 ```
 ./vector_index --endpoint=<endpoint> --database=<database> --command=RecreateIndex --table=<table> --index_type=flat --index_quantizer=bit --primary_key=<primary_key> --embedding=<embedding> --distance=CosineDistance --rows=490000 --top_k=0 --data="" --target=""

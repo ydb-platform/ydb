@@ -185,7 +185,10 @@ bool MultiLogRecordProcessor::InternalShutdown(std::chrono::microseconds timeout
   }
   for (auto &processor : processors_)
   {
-    result |= processor->Shutdown(timeout);
+    if (!processor->Shutdown(timeout))
+    {
+      result = false;
+    }
     start_time = std::chrono::system_clock::now();
     if (expire_time > start_time)
     {

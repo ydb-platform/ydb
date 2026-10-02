@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_compaction_arbiter.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
@@ -32,6 +33,7 @@
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
+#include <array>
 
 #include <atomic>
 #include <functional>
@@ -132,10 +134,19 @@ public:
     // sensors. Can be toggled via ICB without a cluster restart to revert to the
     // old algorithm if something goes wrong with the new one.
     TControlWrapper UseDeviceOverestimationRatioMerged;
+    // Seconds without successful physical I/O before issuing a one-sector
+    // health read. Zero disables the probe; the ICB default is zero.
+    TControlWrapper IdleDeviceProbeIntervalSeconds;
     i64 SemiStrictSpaceIsolationCached = 0;
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
+    TControlWrapper CompactionAdmissionColor;
+    TControlWrapper SystemReserveChunks;
+    TControlWrapper MaintenanceReserveChunks;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> AllocatedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> RefusedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> HeadroomByPurpose;
     std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
         if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
             if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
@@ -240,9 +251,9 @@ public:
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
 #if defined(__linux__)
-    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
-    // it during Stop() only when no clients remain; otherwise the final owner
-    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    // Created and used by the PDisk worker. Normal Stop() joins that worker
+    // before retiring the router; error stop runs on the worker. DDisk/PB may
+    // retain client references, but StopSync closes the duplicated device fd.
     std::shared_ptr<TUringRouter> SharedUringRouter;
 #endif
     bool SharedUringCreateAttempted = false;
@@ -259,6 +270,12 @@ public:
     volatile ui64 InitialNonceJumpSize = 0;
     TAtomic IsStarted = false;
     TMutex StopMutex;
+
+    ui64 ObservedDeviceIoCompletionGeneration = 0;
+    NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
+    // The generic device-halt watchdog detects an accepted probe that does not
+    // complete. Keep one probe in flight so its buffer remains uniquely owned.
+    std::atomic<bool> IdleDeviceProbeInFlight = false;
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
@@ -320,6 +337,7 @@ public:
     // Destruction
     virtual ~TPDisk();
     void Stop(); // Called by actor
+    void StopDeviceIo(bool isError);
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
@@ -399,7 +417,8 @@ public:
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
             bool forHousekeeping = false,
             NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
-            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr);
+            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery);
     void ChunkReserve(TChunkReserve &evChunkReserve);
     bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
@@ -429,12 +448,23 @@ public:
     ui32 ReleaseUncommittedChunks(TOwner owner);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
-    void EnsureSharedUringRouter(ui32 idleSpinUs);
+    void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
 #if defined(__linux__)
     TDeviceIoSampleSink MakeUringSampleSink() const;
+    TIoCompletionSink MakeUringCompletionSink() const;
 #endif
     void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Planned level compaction (EnableVDiskPlannedCompaction); all of it runs under StateMutex
+    std::unique_ptr<TCompactionArbiter> CompactionArbiter; // set when the feature is enabled
+    struct TCompactionArbiterSpace;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> CompactionArbiterForcedColor;
+    i64 CompactionAdmissionColorCached = 0;
+    void ProcessCompactionBidder(TCompactionBidder& req);
+    void UpdateCompactionArbiter(); // Called by the PDisk worker
+    void DropCompactionBidders(TOwner owner);
+    void SendCompactionArbiterOutbox(TCompactionArbiter::TOutbox& out);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
     void NormalizeExpectedSlotSettings();
     i64 GetExpectedOwnerSizeInChunks() const;
@@ -532,6 +562,9 @@ public:
     void EnqueueAll();
     void GetJobsFromForsetti();
     void Update() override;
+    // The result is used by tests to observe submission without racing its
+    // completion; production intentionally needs no action on successful submit.
+    bool MaybeScheduleIdleDeviceProbe();
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // External interface

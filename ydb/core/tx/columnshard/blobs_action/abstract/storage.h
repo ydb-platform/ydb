@@ -131,6 +131,9 @@ public:
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
 
+    virtual void UpdateChannelApproximateFreeSpace(ui32 /*channel*/, float /*approximateFreeSpaceShare*/) {
+    }
+
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY(IsReady());
         auto result = DoStartWritingAction();

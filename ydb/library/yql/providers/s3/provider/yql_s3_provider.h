@@ -29,7 +29,7 @@ class ISecuredServiceAccountCredentialsFactory;
 struct TS3State : public TThrRefBase {
     using TPtr = TIntrusivePtr<TS3State>;
 
-    TS3State();
+    explicit TS3State(bool strictConfigValidation = false);
 
     struct TTableMeta {
         const TStructExprType* ItemType = nullptr;

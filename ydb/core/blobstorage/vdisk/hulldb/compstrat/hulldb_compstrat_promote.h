@@ -39,6 +39,7 @@ namespace NKikimr {
                 EAction action = PromoteSsts();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::PromoteSsts;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

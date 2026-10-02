@@ -1,4 +1,5 @@
 #include <cmath>
+#include <algorithm>
 
 #include "flat_executor.h"
 #include "flat_executor_bootlogic.h"
@@ -270,6 +271,8 @@ void TExecutor::Broken(EBrokenReason reason) {
 
 void TExecutor::RecreatePrivateCache()
 {
+    // Sticky notifications from the old cache may have been discarded during boot.
+    const bool replayStickyWalks = bool(PrivatePageCache);
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
 
     Stats->PacksMetaBytes = 0;
@@ -277,8 +280,9 @@ void TExecutor::RecreatePrivateCache()
     for (const auto &it : Database->GetScheme().Tables) {
         auto subset = Database->Subset(it.first, NTable::TEpoch::Max(), { }, { });
         const auto& cacheModes = GetCacheModes(it.first);
+        const auto stickyColumns = GetStickyColumns(it.first);
         for (auto &partView : subset->Flatten) {
-            AddPartStorePageCollections(partView, cacheModes);
+            AddPartStorePageCollections(partView, cacheModes, stickyColumns, replayStickyWalks);
         }
     }
 
@@ -699,7 +703,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     if (pageCollection) {
         auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
-            auto inserted = pinnedCollection.insert(std::make_pair(loaded.PageId, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
+            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
             Y_ENSURE(inserted.second);
         }
     }
@@ -746,9 +750,73 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
     }
 }
 
-void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes)
+namespace {
+
+// The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
+TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartStore& partStore,
+    size_t groupIndex, const TVector<bool>& stickyGroups)
+{
+    const auto& indexes = partStore.IndexPages;
+    if (!indexes.HasBTree()) {
+        return {};
+    }
+
+    const bool sticky = stickyGroups[groupIndex];
+    const bool keepIndexPages = partStore.PageCollections[0]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool keepDataPages = partStore.PageCollections[groupIndex]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    if (!keepIndexPages && !keepDataPages && !sticky && !stickyGroups[0]) {
+        return {};
+    }
+
+    TVector<NSharedCache::TEvAttach::TBtreeSeed> seeds;
+    // At most two seeds per group, always current then historic.
+    for (bool historic : {false, true}) {
+        const auto& metas = historic ? indexes.BTreeHistoric : indexes.BTreeGroups;
+        if (groupIndex >= metas.size()) {
+            continue;
+        }
+        const auto& meta = metas[groupIndex];
+        if (!meta.HasRootV2()) {
+            continue;
+        }
+        seeds.push_back({
+            .IndexCollectionId = partStore.PageCollections[0]->Id,
+            .DataCollectionId = partStore.PageCollections[groupIndex]->Id,
+            .Root = meta.RootV2,
+            .LevelCount = meta.LevelCount(),
+            .QueueDataPages = keepDataPages || sticky,
+            .Sticky = sticky,
+            .IndexCollectionSticky = stickyGroups[0],
+        });
+    }
+    return seeds;
+}
+
+// The groups the owner keeps stickily, i.e. the groups with a column of a sticky family.
+TVector<bool> MakeStickyGroups(const NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
+    TVector<bool> stickyGroups(Reserve(partView->GroupsCount));
+
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        bool sticky = false;
+        for (const auto& column : partView->Scheme->Groups[groupIndex].Columns) {
+            if (stickyColumns.contains(column.Tag)) {
+                sticky = true;
+                break;
+            }
+        }
+        stickyGroups.push_back(sticky);
+    }
+
+    return stickyGroups;
+}
+
+} // namespace
+
+void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+    const THashSet<NTable::TTag>& stickyColumns, bool replayStickyWalks)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
+    const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
 
     {
         ui32 room = 0;
@@ -763,18 +831,27 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
         );
     }
 
-    for (auto &cache : partStore->PageCollections) {
-        AddPageCollection(cache);
+    for (size_t groupIndex = 0; groupIndex < partStore->PageCollections.size(); ++groupIndex) {
+        auto& cache = partStore->PageCollections[groupIndex];
+        auto seeds = groupIndex < partView->GroupsCount
+            ? MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)
+            : TVector<NSharedCache::TEvAttach::TBtreeSeed>{};
+        const bool replayStickyWalk = replayStickyWalks && std::any_of(seeds.begin(), seeds.end(), [](const auto& seed) {
+            return seed.Sticky || seed.IndexCollectionSticky;
+        });
+        AddPageCollection(cache, std::move(seeds), replayStickyWalk);
     }
 
     if (const auto &blobs = partStore->Pseudo)
         AddPageCollection(blobs);
 }
 
-void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection)
+void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection,
+    TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds, bool replayStickyWalk)
 {
     auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
+        std::move(btreeSeeds), replayStickyWalk));
 
     if (syncPages) {
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
@@ -825,7 +902,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
             auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
             for (auto& partView: subset->Flatten) {
                 if (updateCacheModes) {
-                    UpdateCacheModesForPartStore(partView, cacheModes);
+                    UpdateCacheModesForPartStore(partView, cacheModes, stickyColumns);
                 }
                 if (requestStickyColumns) {
                     RequestStickyPagesForPartStore(partView, stickyColumns);
@@ -1507,35 +1584,54 @@ bool TExecutor::ApplyReadyPartSwitches() {
     return true;
 }
 
-void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+    const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(cacheModes);
+
+    auto* partStore = partView.As<NTable::TPartStore>();
+    const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
+    TVector<bool> modeChanged(Reserve(partView->GroupsCount));
+    bool indexModeChanged = false;
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
-        auto* pageCollection = partView.As<NTable::TPartStore>()->PageCollections[groupIndex].Get();
+        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
 
-        if (PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection)) {
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
+        modeChanged.push_back(PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection));
+        if (groupIndex == 0) {
+            indexModeChanged = modeChanged.back();
         }
+    }
+
+    // The B-trees of all groups live in the main collection, so its mode change re-seeds them all.
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        if (!modeChanged[groupIndex] && !indexModeChanged) {
+            continue;
+        }
+
+        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
+            MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)));
     }
 }
 
 void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
+    auto partStore = partView.As<NTable::TPartStore>();
+    const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
+
+    // The V2 trees are not enumerable from the part, so the shared cache walks the sticky groups.
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        bool stickyGroup = false;
-        for (const auto &column : partView->Scheme->Groups[groupIndex].Columns) {
-            if (stickyColumns.contains(column.Tag)) {
-                stickyGroup = true;
-                break;
-            }
+        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
+        if (auto seeds = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups); seeds) {
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection,
+                pageCollection->GetCacheMode(), std::move(seeds)));
         }
 
-        if (stickyGroup) {
-            auto partStore = partView.As<NTable::TPartStore>();
+        if (stickyGroups[groupIndex]) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
+                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(groupIndex)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
@@ -1596,7 +1692,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
-        AddPartStorePageCollections(stage->PartView, cacheModes);
+        AddPartStorePageCollections(stage->PartView, cacheModes, stickyColumns);
         if (stickyColumns) {
             RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
         }
@@ -2253,20 +2349,16 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
     auto toLoad = env.ObtainToLoad();
-    for (auto &[pageCollectionId, pages] : toLoad) {
-        Y_DEBUG_ABORT_UNLESS(pages);
+    for (auto &[pageCollectionId, locations] : toLoad) {
+        Y_DEBUG_ABORT_UNLESS(locations);
 
         if (auto logl = Logger->Log(ELnLev::Dbg03)) {
             logl
                 << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " request page collection " << pageCollectionId
-                << " pages [ ";
-            for (auto pageId : pages) {
-                logl << pageId << " ";
-            }
-            logl << "]";
+                << " pages " << locations;
         }
 
-        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(pages));
+        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(locations));
         request->TraceId = waitPad->GetWaitingTraceId();
         request->WaitPad = waitPad;
         ++waitPad->PendingRequests;
@@ -2406,34 +2498,43 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        // Generate a special part switch for removed row versions
+        // Limit the number of ranges per switch and verify the exact protobuf
+        // size below before passing it to the single-blob writer. Currently, one RemovedRanges element in
+        // RowVersionChanges takes at most 50 bytes in the protobuf wire format.
+        static constexpr size_t MaxRemovedRangesPerSwitch = 64 * 1024;
         for (auto& xpair : change->RemovedRowVersions) {
             const auto tableId = xpair.first;
+            const auto& ranges = xpair.second;
 
             CompactionLogic->ReflectRemovedRowVersions(tableId);
 
-            NKikimrExecutorFlat::TTablePartSwitch proto;
-            proto.SetTableId(tableId);
+            for (size_t offset = 0; offset < ranges.size();) {
+                NKikimrExecutorFlat::TTablePartSwitch proto;
+                proto.SetTableId(tableId);
 
-            auto *changesProto = proto.MutableRowVersionChanges();
-            changesProto->SetTable(tableId);
+                auto *changesProto = proto.MutableRowVersionChanges();
+                changesProto->SetTable(tableId);
 
-            for (auto& range : xpair.second) {
-                auto *rangeProto = changesProto->AddRemovedRanges();
+                const size_t end = Min(ranges.size(), offset + MaxRemovedRangesPerSwitch);
+                for (; offset < end; ++offset) {
+                    const auto& range = ranges[offset];
+                    auto *rangeProto = changesProto->AddRemovedRanges();
 
-                auto *lower = rangeProto->MutableLower();
-                lower->SetStep(range.Lower.Step);
-                lower->SetTxId(range.Lower.TxId);
+                    auto *lower = rangeProto->MutableLower();
+                    lower->SetStep(range.Lower.Step);
+                    lower->SetTxId(range.Lower.TxId);
 
-                auto *upper = rangeProto->MutableUpper();
-                upper->SetStep(range.Upper.Step);
-                upper->SetTxId(range.Upper.TxId);
+                    auto *upper = rangeProto->MutableUpper();
+                    upper->SetStep(range.Upper.Step);
+                    upper->SetTxId(range.Upper.TxId);
+                }
+
+                auto body = proto.SerializeAsString();
+                Y_DEBUG_ABORT_UNLESS(body.size() < NBlockIO::BlockSize);
+                auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+
+                Y_UNUSED(glob);
             }
-
-            auto body = proto.SerializeAsString();
-            auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
-
-            Y_UNUSED(glob);
         }
 
         for (auto num : xrange(change->Deleted.size())) {
@@ -2799,13 +2900,14 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
 
             const auto &cacheModes = GetCacheModes(attachTableId);
+            const auto stickyColumns = GetStickyColumns(attachTableId);
             auto *snap = proto.MutableIntroducedParts();
             auto *bySwitchAux = aux.AddBySwitchAux();
 
             for (size_t i = 0; i < result->Parts.size(); ++i) {
                 auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
 
-                AddPartStorePageCollections(partView, cacheModes);
+                AddPartStorePageCollections(partView, cacheModes, stickyColumns);
 
                 auto *partStore = partView.As<NTable::TPartStore>();
                 Y_ENSURE(partStore, "Direct write produced an unexpected part type");
@@ -2950,7 +3052,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap);
+    LogicAlter->SnapToLog(snap, *commit);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
@@ -3160,11 +3262,11 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
+                    PrivatePageCache->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page), pageCollection);
                 }
             } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
+                    PrivatePageCache->AddPage(loaded.Offset, loaded.Size, loaded.Page, pageCollection);
                 }
                 if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
@@ -3240,10 +3342,20 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
 
     for (auto &kv : msg->DroppedPages) {
         if (auto *pageCollection = PrivatePageCache->FindPageCollection(kv.first)) {
-            for (ui32 pageId : kv.second) {
-                PrivatePageCache->DropPage(pageId, pageCollection);
+            for (auto offset : kv.second) {
+                PrivatePageCache->DropPage(offset, pageCollection);
             }
         }
+    }
+}
+
+void TExecutor::Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev) {
+    const auto *msg = ev->Get();
+
+    if (auto *pageCollection = PrivatePageCache->FindPageCollection(msg->CollectionId)) {
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, msg->Locations),
+            0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -3808,11 +3920,12 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     if (results) {
         auto &gcDiscovered = commit->GcDelta.Created;
         const auto& cacheModes = GetCacheModes(tableId);
+        const auto stickyColumns = GetStickyColumns(tableId);
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            AddPartStorePageCollections(newPart, cacheModes);
+            AddPartStorePageCollections(newPart, cacheModes, stickyColumns);
 
             auto *partStore = newPart.As<NTable::TPartStore>();
 
@@ -4476,6 +4589,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvents::TEvFlushLog, Handle);
         hFunc(NSharedCache::TEvResult, Handle);
         hFunc(NSharedCache::TEvUpdated, Handle);
+        hFunc(NSharedCache::TEvStickyCollectionPages, Handle);
         HFunc(TEvTablet::TEvDropLease, Handle);
         HFunc(TEvTablet::TEvCommitResult, Handle);
         HFunc(TEvTablet::TEvSnapshotConfirmed, Handle);
@@ -4512,6 +4626,7 @@ STFUNC(TExecutor::StateFollower) {
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(NSharedCache::TEvResult, Handle);
         hFunc(NSharedCache::TEvUpdated, Handle);
+        hFunc(NSharedCache::TEvStickyCollectionPages, Handle);
         HFunc(TEvBlobStorage::TEvGetResult, Handle);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
         HFunc(NOps::TEvScanStat, Handle);
@@ -4966,7 +5081,9 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     { // Check B-Tree index existence
-        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && !partView->IndexPages.HasBTree()) {
+        if ((AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() ||
+             AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) &&
+            !partView->IndexPages.HasBTree()) {
             return true;
         }
     }
@@ -5035,9 +5152,15 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
     // commit time to sit below the table's mutable memtable (see AttachPart).
     cfg.Epoch = NTable::TEpoch::Zero() + 1;
     cfg.Layout.Final = false;
-    cfg.Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    cfg.Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    cfg.Writer.StickyFlatIndex = !cfg.Layout.WriteBTreeIndex;
+    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    cfg.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    cfg.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
+    // V2 b-tree index replaces the flat index
+    cfg.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    cfg.Writer.StickyFlatIndex = !(writeBTreeIndexV1 || writeBTreeIndexV2);
+    cfg.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    cfg.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         cfg.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
     }
@@ -5136,9 +5259,16 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
-    comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
+    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
+    comp->Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    comp->Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
+    // V2 b-tree index replaces the flat index
+    comp->Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    comp->Writer.StickyFlatIndex = !writeBTreeIndex;
+    comp->Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    comp->Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});

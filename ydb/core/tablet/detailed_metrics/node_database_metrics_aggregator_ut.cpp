@@ -1275,19 +1275,13 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * respective trees and never merged, even on the same node.
      *
      * This is deliberate on the node: a leaf is single-owner and passes through
-     * verbatim, and there is no on-node rollup at partition granularity. However,
-     * the leader-only filter for leaf series is an open decision owned by steps 09/13,
-     * not by this class. The rectified plans state the per-metric role selection only
-     * at the table level.
+     * verbatim, and there is no on-node rollup at partition granularity. The node keeps
+     * both roles' raw leaves verbatim. The leader-only filter for leaf series is applied
+     * at publication: the SysView Processor publishes follower leaves without the
+     * LeaderOnly metrics, and the rollup takes those metrics from leaders only.
      *
-     * Consequence: until that decision is made, a consumer summing published leaves
-     * across roles will double-count the eight leader-only metrics (the raw DataShard
-     * subset), exactly as in the role-split test above. The difference is that here
-     * the arithmetic is unavoidable on the consumer side, because the leaves are the
-     * published units and have no aggregation on the node to apply the filter to.
-     *
-     * This test documents the boundary rather than asserting a behaviour we have not
-     * chosen.
+     * This test documents the boundary: the two roles land on the shared tablet_id=
+     * node as separate follower_id= leaves, never merged.
      */
     Y_UNIT_TEST(PartitionLeavesCarryBothRolesByDesign) {
         TRoleTrees trees;

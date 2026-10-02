@@ -1,12 +1,16 @@
 LIBRARY()
 
 SRCS(
+    base.cpp
+    path_aliasing.cpp
     base_service.h
     base.h
+    request_paths.h
     http_database_access_verdict.h
 )
 
 PEERDIR(
+    ydb/core/path_aliasing
     ydb/library/grpc/server
     library/cpp/string_utils/quote
     ydb/core/base
@@ -23,3 +27,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(http_database_access_verdict.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -112,35 +112,43 @@ public:
                 partStore->Label.ToString());
             return {true, nullptr};
         }
-        return {true, GetPage(partStore->Locate(lob, ref), ref)};
+        auto* collection = partStore->Locate(lob, ref);
+        if (!collection || !collection->PageCollection) {
+            return {true, nullptr};
+        }
+        // Extern and outer pages are addressed by page index: those collections have no byte offsets
+        // to be addressed by, so the reference is turned into a location by the collection itself.
+        return {true, GetPage(collection, collection->PageCollection->GetLocation(ref))};
     }
 
-    const TSharedData* TryGetPage(const NTable::TPart* part, TPageId pageId, TGroupId groupId) override {
+    const TSharedData* TryGetPage(const NTable::TPart* part, const TPageLocation& location,
+            TGroupId groupId) override
+    {
         const auto* partStore = dynamic_cast<const NTable::TPartStore*>(part);
         if (!partStore || groupId.Index >= partStore->PageCollections.size()) {
             return nullptr;
         }
-        return GetPage(partStore->PageCollections[groupId.Index].Get(), pageId);
+        return GetPage(partStore->PageCollections[groupId.Index].Get(), location);
     }
 
-    const TSharedData* GetPage(const TPrivateCollection* collection, ui64 pageId) {
+    const TSharedData* GetPage(const TPrivateCollection* collection, const TPageLocation& location) {
         if (!collection || !collection->PageCollection) {
             return nullptr;
         }
-        return GetPage(collection->Id, *collection->PageCollection, pageId);
+        return GetPage(collection->Id, *collection->PageCollection, location);
     }
 
     const TSharedData* GetPage(const TLogoBlobID& label,
-            const NPageCollection::IPageCollection& pageCollection, ui64 pageId)
+            const NPageCollection::IPageCollection& pageCollection, const TPageLocation& location)
     {
         auto& perCollection = Cache[label];
-        if (const auto it = perCollection.find(pageId); it != perCollection.end()) {
+        if (const auto it = perCollection.find(location.Offset); it != perCollection.end()) {
             return it->second ? &it->second : nullptr;
         }
 
         TSharedData page;
-        const bool ok = Read(pageCollection, label, pageId, page);
-        auto& slot = perCollection[pageId];
+        const bool ok = Read(pageCollection, label, location, page);
+        auto& slot = perCollection[location.Offset];
         if (!ok) {
             return nullptr; // the empty slot remembers that this page is not coming
         }
@@ -153,11 +161,11 @@ private:
     // A page lives on a run of blobs, the first one entered at an offset; this is the walk the block IO
     // layer does, with the blob bodies coming from the input directories instead of BlobStorage.
     bool Read(const NPageCollection::IPageCollection& pageCollection, const TLogoBlobID& label,
-            ui64 pageId, TSharedData& out)
+            const TPageLocation& location, TSharedData& out)
     {
         NPageCollection::TBorder bound;
         try {
-            bound = pageCollection.Bounds(pageId);
+            bound = pageCollection.Bounds(location);
         } catch (...) {
             ++Stats.PagesCorrupt;
             Repeated.Add("Page collection has no bounds for a page it is asked for", label.ToString());
@@ -205,7 +213,7 @@ private:
 
         bool verified = false;
         try {
-            verified = pageCollection.Verify(pageId, body);
+            verified = pageCollection.Verify(location, body);
         } catch (...) {
         }
         if (!verified) {
@@ -224,7 +232,7 @@ private:
     TTabletBootStats& Stats;
     TRepeatedIssues& Repeated;
     // Node based, so the pointers handed out through IPages survive later insertions.
-    THashMap<TLogoBlobID, THashMap<ui64, TSharedData>> Cache;
+    THashMap<TLogoBlobID, THashMap<TPageOffset, TSharedData>> Cache;
 };
 
 } // namespace
@@ -747,8 +755,15 @@ bool TTabletBoot::TImpl::LoadBundle(ui32 table, TSwitch::TBundle& bundle) {
         return false;
     }
 
-    NTable::TLoader loader(std::move(collections), bundle.Legacy, bundle.Opaque, bundle.Deltas,
-        bundle.Epoch);
+    // The collections are built here from the raw metas, so the loader gets them prebuilt and only the
+    // bundle-wide parts of the description.
+    NTable::TPartComponents parts{
+        .Legacy = bundle.Legacy,
+        .Opaque = bundle.Opaque,
+        .Deltas = bundle.Deltas,
+        .Epoch = bundle.Epoch,
+    };
+    NTable::TLoader loader(std::move(parts), std::move(collections));
 
     // Each round hands the loader everything it asked for, so a well formed part needs a handful of
     // them; the cap is only there to stop a damaged one from spinning.
@@ -760,15 +775,16 @@ bool TTabletBoot::TImpl::LoadBundle(ui32 table, TSwitch::TBundle& bundle) {
         }
         TVector<NSharedCache::TEvResult::TLoaded> loaded;
         loaded.reserve(fetch.Pages.size());
-        for (const auto pageId : fetch.Pages) {
+        for (const auto& location : fetch.Pages) {
             const TSharedData* page = Env.GetPage(fetch.PageCollection->Label(), *fetch.PageCollection,
-                pageId);
+                location);
             if (!page) {
                 Repeated.Add("A part cannot be read far enough to be usable, so it is dropped whole",
                     bundle.LargeGlobIds[0].Lead.ToString());
                 return false;
             }
-            loaded.emplace_back(pageId, NSharedCache::TSharedPageRef::MakePrivate(*page));
+            loaded.emplace_back(location.Offset, location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(*page));
         }
         loader.Save(std::move(loaded));
     }
@@ -907,8 +923,9 @@ void TTabletBoot::TImpl::LoadAnnex() {
                     complete = false;
                     break;
                 }
-                pages[page].PageId = page;
                 pages[page].Data = TSharedData::Copy(body->data(), body->size());
+                // Annex pages are addressed by page index: the memtable looks the blob up by it.
+                pages[page].Location = TPageLocation::FromPageIndex(page, pages[page].Data.size());
                 ++page;
                 ++Stats_.AnnexBlobs;
             }

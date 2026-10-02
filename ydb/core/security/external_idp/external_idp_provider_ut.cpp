@@ -10,6 +10,7 @@
 #include <ydb/library/security/util.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
@@ -446,6 +447,106 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         UNIT_ASSERT_VALUES_EQUAL(r->Get()->User, "user1");
     }
 
+    Y_UNIT_TEST_F(JwksRsaParametersWithoutCertificate, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        std::unique_ptr<BIO, decltype(&BIO_free)> bio(
+            BIO_new_mem_buf(keys.PublicKeyPem.data(), keys.PublicKeyPem.size()), BIO_free);
+        UNIT_ASSERT(bio != nullptr);
+        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(
+            PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr), EVP_PKEY_free);
+        UNIT_ASSERT(key != nullptr);
+        const auto* rsa = EVP_PKEY_get0_RSA(key.get());
+        const auto encode = [](const BIGNUM* number) {
+            std::string bytes(BN_num_bytes(number), '\0');
+            UNIT_ASSERT_VALUES_EQUAL(BN_bn2bin(number,
+                reinterpret_cast<unsigned char*>(bytes.data())), bytes.size());
+            return Base64EncodeUrlNoPadding(bytes);
+        };
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildJwksJson(KID, keys.X5cBase64), &jwks, true);
+        auto& jwk = jwks["keys"][0];
+        jwk.EraseValue("x5c");
+        jwk["n"] = encode(RSA_get0_n(rsa));
+        jwk["e"] = encode(RSA_get0_e(rsa));
+
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(keys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->User, "user1");
+    }
+
+    Y_UNIT_TEST_F(JweKeysCannotVerifySignatures, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildJwksJson(KID, keys.X5cBase64), &jwks, true);
+        jwks["keys"][0]["alg"] = "RSA-OAEP-256";
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(keys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST_F(JweKeyCannotOverwriteSigningKey, TSetup) {
+        const auto signingKeys = GenerateRsaKeyPair();
+        const auto encryptionKeys = GenerateRsaKeyPair();
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildMultiKeyJwksJson({
+            {KID, signingKeys.X5cBase64}, {KID, encryptionKeys.X5cBase64}}), &jwks, true);
+        jwks["keys"][1]["alg"] = "RSA-OAEP";
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(signingKeys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST_F(NonSigningJwkUsageCannotVerifySignatures, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildJwksJson(KID, keys.X5cBase64), &jwks, true);
+        auto& jwk = jwks["keys"][0];
+        jwk.EraseValue("alg");
+        jwk["use"] = "enc";
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(keys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST_F(NonSigningJwkKeyOpsCannotVerifySignatures, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildJwksJson(KID, keys.X5cBase64), &jwks, true);
+        auto& jwk = jwks["keys"][0];
+        jwk.EraseValue("alg");
+        jwk["key_ops"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        jwk["key_ops"].AppendValue("decrypt");
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(keys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
     Y_UNIT_TEST_F(JwksInvalidResponse, TSetup) {
         const auto keys = GenerateRsaKeyPair();
         const auto id = RegProvider(MakeConfig(ISS));
@@ -809,6 +910,23 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         SendAuth(id, "k1", token);
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST_F(JweTokenAlgorithmReturnsBadRequestBeforeKeyLookup, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        const auto id = RegProvider(MakeConfig(ISS));
+        DoDiscoveryAndJwks(ISS, JWKS, "other-key", keys.X5cBase64);
+        const auto signedToken = CreateJwt(keys, KID, ISS, "user1", {});
+        for (const auto* algorithm : {"RSA-OAEP-256", "ECDH-ES"}) {
+            NJson::TJsonValue header;
+            header["alg"] = algorithm;
+            header["kid"] = KID;
+            const TString token = Base64EncodeUrlNoPadding(NJson::WriteJson(header, false))
+                + "." + TStringBuf(signedToken).After('.');
+            SendAuth(id, "k1", token);
+            const auto response = WaitAuth();
+            UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::BAD_REQUEST);
+        }
     }
 
     Y_UNIT_TEST_F(Ps256TokenAuthenticates, TSetup) {

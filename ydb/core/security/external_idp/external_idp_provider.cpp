@@ -31,6 +31,7 @@
 
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <functional>
@@ -538,7 +539,9 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     }
 
     NSecurity::EJwkAlg alg;
-    if (!TryFromString(decoded->get_algorithm(), alg)) {
+    if (!TryFromString(decoded.value().get_algorithm(), alg)
+        || !SUPPORTED_ALGOS<decltype(jwt::verify())>.contains(alg))
+    {
         return ReplyError(
             ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
@@ -874,10 +877,19 @@ void TExternalIdpProvider::HandleJwksResponse(
     }
 
     THashMap<TString, TString> newKeys;
-    for (const auto& jwk : arr->Keys) {
+    for (const auto& jwk : arr.value().Keys) {
+        // The JWK parser also accepts encryption keys; they must not be used
+        // for JWT signatures or overwrite a signing key with the same kid.
+        if ((jwk.Usage.has_value() && jwk.Usage.value() == NSecurity::EJwkUsage::ENC)
+            || (jwk.Algorithm.has_value() && !SUPPORTED_ALGOS<decltype(jwt::verify())>.contains(jwk.Algorithm.value()))
+            || (!jwk.KeyOperations.empty() && std::find(jwk.KeyOperations.begin(), jwk.KeyOperations.end(),
+                NSecurity::EJwkKeyOps::VERIFY) == jwk.KeyOperations.end()))
+        {
+            continue;
+        }
         auto pubkey = jwk.CalculatePublicKey();
         if (!pubkey.has_value()) {
-            YDB_LOG_WARN("Skipping JWKS key: unsupported key format (no x5c)",
+            YDB_LOG_WARN("Skipping JWKS key: invalid or unsupported public key",
                 {"jwkKeyId", jwk.KeyId}
             );
             continue;

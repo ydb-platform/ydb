@@ -675,11 +675,20 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         testNodesSubset(
             {8},
-            {9},
+            {8},
             {
-                {{1, 1}, 0},
+                {{1, 1}, 1},
             },
-            "DBG with an already locked node");
+            "Request for an already locked node");
+
+        testNodesSubset(
+            {5},
+            {},
+            {
+                {{0, 1}, 0},
+                {{1, 0}, 1},
+            },
+            "Already locked offline node");
     }
 }
 

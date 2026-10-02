@@ -91,6 +91,8 @@ class TJsonNodes : public TViewerPipeClient {
     bool DatabaseBoardInfoProcessed = false;
     bool ResourceBoardInfoProcessed = false;
     bool PDisksProcessed = false;
+    bool DDiskStoragePoolsProcessed = false;
+    bool DDiskGroupsProcessed = false;
 
     THashMap<std::pair<ui64, ui64>, TString> DDiskStoragePoolNames;
     THashMap<ui32, std::pair<ui64, ui64>> DDiskGroupPools;
@@ -2252,6 +2254,23 @@ public:
             HiveNodeStatsProcessed = true;
         }
 
+        if (IncludeDDisks && StoragePoolsResponse && StoragePoolsResponse->IsDone() && !DDiskStoragePoolsProcessed) {
+            if (StoragePoolsResponse->IsOk()) {
+                for (const auto& entry : StoragePoolsResponse->Get()->Record.GetEntries()) {
+                    DDiskStoragePoolNames[std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId())] = entry.GetInfo().GetName();
+                }
+            }
+            DDiskStoragePoolsProcessed = true;
+        }
+        if (IncludeDDisks && GroupsResponse && GroupsResponse->IsDone() && !DDiskGroupsProcessed) {
+            if (GroupsResponse->IsOk()) {
+                for (const auto& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                    DDiskGroupPools[entry.GetKey().GetGroupId()] = {entry.GetInfo().GetBoxId(), entry.GetInfo().GetStoragePoolId()};
+                }
+            }
+            DDiskGroupsProcessed = true;
+        }
+
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
             if (StoragePoolsResponse->IsOk()) {
                 for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {
@@ -3076,11 +3095,6 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        if (IncludeDDisks) {
-            for (const auto& entry : ev->Get()->Record.GetEntries()) {
-                DDiskStoragePoolNames[std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId())] = entry.GetInfo().GetName();
-            }
-        }
         if (StoragePoolsResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
@@ -3088,11 +3102,6 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        if (IncludeDDisks) {
-            for (const auto& entry : ev->Get()->Record.GetEntries()) {
-                DDiskGroupPools[entry.GetKey().GetGroupId()] = {entry.GetInfo().GetBoxId(), entry.GetInfo().GetStoragePoolId()};
-            }
-        }
         if (GroupsResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();

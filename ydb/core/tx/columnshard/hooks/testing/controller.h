@@ -369,6 +369,8 @@ public:
         return shard;
     }
 
+    ui64 GetPortionsCount() const;
+
     ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;
 
     void DisableBackground(const EBackground id) {

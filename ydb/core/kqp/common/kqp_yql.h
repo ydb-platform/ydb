@@ -29,7 +29,10 @@ enum class EPhysicalTxType {
     Compute,
     Data,
     Scan,
-    Generic
+    Generic,
+    // TRUNCATE TABLE ... WITH (unsafe = true). Carries no stages: the whole transaction is the
+    // table path, which a dedicated executer turns into its own 2PC over the shards.
+    UnsafeTruncate
 };
 
 struct TKqpPhyTxSettings {
@@ -38,6 +41,9 @@ struct TKqpPhyTxSettings {
 
     static constexpr std::string_view WithEffectsSettingName = "with_effects"sv;
     bool WithEffects = false;
+
+    static constexpr std::string_view UnsafeTruncatePathSettingName = "unsafe_truncate_path"sv;
+    TString UnsafeTruncatePath;
 
     static TKqpPhyTxSettings Parse(const NNodes::TKqpPhysicalTx& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;

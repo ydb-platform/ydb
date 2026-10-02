@@ -6,7 +6,6 @@ SRCS(
     blob_cache.cpp
     columnshard.cpp
     columnshard_move_data.cpp
-    columnshard_move_data_driver.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp

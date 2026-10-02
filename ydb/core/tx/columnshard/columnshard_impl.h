@@ -1,6 +1,7 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
+#include "columnshard_move_data.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -189,19 +190,6 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
-
-// Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
-struct TMoveDataState {
-    TActorId HiveSender;
-    THashSet<ui32> TargetGroups;
-    bool Active = false;
-    // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
-    bool VacuumCompleted = false;
-    // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
-    ui64 ReportedRejections = 0;
-    // The driver restarts the actualizer for the new set before any gate check may pass.
-    bool TargetsChanged = false;
-};
 
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSyncTransactionOperator;

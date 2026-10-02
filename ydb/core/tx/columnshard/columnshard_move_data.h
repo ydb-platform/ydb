@@ -9,6 +9,19 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
+// Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
+struct TMoveDataState {
+    TActorId HiveSender;
+    THashSet<ui32> TargetGroups;
+    bool Active = false;
+    // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
+    bool VacuumCompleted = false;
+    // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
+    ui64 ReportedRejections = 0;
+    // The driver restarts the actualizer for the new set before any gate check may pass.
+    bool TargetsChanged = false;
+};
+
 // Owns the move loop (relaunch, metadata re-arm, rewrites, gate) on its own cadence; same mailbox as the tablet, so not CPU offload.
 class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
 private:

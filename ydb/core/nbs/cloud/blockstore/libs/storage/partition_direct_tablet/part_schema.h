@@ -47,13 +47,22 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
         };
 
+        // Set while a RemoveHost is in flight, cleared when it commits.
+        struct RemoveHostInProgress
+            : public Column<6, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
             DirectBlockGroupsConnections,
-            AddHostInProgress>;
+            AddHostInProgress,
+            RemoveHostInProgress>;
     };
 
     // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks
@@ -90,7 +99,25 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using TColumns = TableColumns<VChunkIndex, State>;
     };
 
-    using TTables = SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates>;
+    // Persisted masks of touched vchunks. A mask covers 1024 consecutive
+    // vchunks and can only gain set bits.
+    struct TouchedVChunks: public TTableSchema<4>
+    {
+        struct VChunkStartIndex
+            : public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Mask: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+        };
+
+        using TKey = TableKey<VChunkStartIndex>;
+        using TColumns = TableColumns<VChunkStartIndex, Mask>;
+    };
+
+    using TTables =
+        SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates, TouchedVChunks>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

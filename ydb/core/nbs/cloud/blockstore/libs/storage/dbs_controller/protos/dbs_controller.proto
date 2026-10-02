@@ -13,6 +13,12 @@ option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
 // API DDiskMap
 // =============================================================================
 
+enum EHostHealth {
+  ONLINE = 0;
+  TEMPORARY_OFFLINE = 1;
+  OFFLINE = 2;
+}
+
 //
 // Структура с описанием зависимостей Partition от DDisk-ов (включая PBuffer-ы)
 // Уважает DirectBlockGroup-ы
@@ -21,6 +27,7 @@ message TDirectBlockGroupDDisks {
   message TDDiskIds {
     NKikimrBlobStorage.NDDisk.TDDiskId DDisk = 1;
     NKikimrBlobStorage.NDDisk.TDDiskId PersistentBuffer = 2;
+    EHostHealth Health = 3;
   }
   repeated TDDiskIds DDiskIds = 1;
 }

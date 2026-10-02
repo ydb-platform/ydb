@@ -289,6 +289,13 @@ bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
             return false;
         }
 
+        auto isGoingToMaintenance = [&nodeIdsSet](const auto& logicalNode)
+        {
+            return nodeIdsSet.contains(logicalNode.GetDDisk().GetNodeId()) ||
+                   nodeIdsSet.contains(
+                       logicalNode.GetPersistentBuffer().GetNodeId());
+        };
+
         for (const auto& key: ExtractGroups(it)) {
             NProto::TDirectBlockGroupDDisks record;
             if (!LoadDirectRecord(key, record)) {
@@ -296,10 +303,9 @@ bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
             }
             auto& logicalNodes = *record.MutableDDiskIds();
             for (int i = 0; i < logicalNodes.size(); ++i) {
-                if (nodeIdsSet.contains(
-                        logicalNodes.Get(i).GetDDisk().GetNodeId()) ||
-                    nodeIdsSet.contains(
-                        logicalNodes.Get(i).GetPersistentBuffer().GetNodeId()))
+                if (isGoingToMaintenance(logicalNodes.Get(i)) ||
+                    logicalNodes.Get(i).GetHealth() !=
+                        NProto::EHostHealth::ONLINE)
                 {
                     logicalNodes.SwapElements(i, logicalNodes.size() - 1);
                     logicalNodes.RemoveLast();

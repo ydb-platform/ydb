@@ -60,7 +60,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -90,7 +90,7 @@ void TBaseFixture::Init()
         (ui32 vChunkIndex,
          THostIndex hostIndex,
          TPBufferKey pBufferKey,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -118,7 +118,7 @@ void TBaseFixture::Init()
         (ui32 vChunkIndex,
          THostIndex hostIndex,
          TPBufferKey pBufferKey,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -153,7 +153,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {

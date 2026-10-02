@@ -1192,7 +1192,7 @@ def build_html_dashboard(
         }});
         const heavyBody = heavyTestsFlat.map((x, i) => {{
           const durTip = 'Test duration ' + x.duration_sec.toFixed(1) + 's (' + (x.duration_sec / 60).toFixed(1) + ' min). Near SIZE timeout → consider more SPLIT_FACTOR or larger SIZE.';
-          const thrTip = 'Heavy test threshold: 97% of SIZE timeout ≈ ' + x.threshold_sec.toFixed(0) + 's.';
+          const thrTip = 'Heavy test threshold: 97% of the chunk timeout budget (98% of SIZE timeout) ≈ ' + x.threshold_sec.toFixed(0) + 's.';
           return (
             '<tr>' +
               '<td>' + (i + 1) + '</td>' +
@@ -1218,11 +1218,11 @@ def build_html_dashboard(
         }}
         if (heavyWrap) {{
           if (!heavyTestsFlat.length) {{
-            heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of size timeout threshold in current filter.</div>';
+            heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of the chunk timeout budget in current filter.</div>';
             if (heavyDetails) heavyDetails.open = false;
           }} else {{
             heavyWrap.innerHTML =
-              '<b>Long/heavy tests near timeout (>=97% of size timeout)</b>' +
+              '<b>Long/heavy tests near timeout (>=97% of the chunk timeout budget)</b>' +
               '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
               '<thead><tr><th>#</th><th data-hcol=\"1\" style=\"cursor:pointer;user-select:none;\">suite_path' + heavyMarker(1) + '</th><th data-hcol=\"2\" style=\"cursor:pointer;user-select:none;\">ya_size' + heavyMarker(2) + '</th><th data-hcol=\"3\" style=\"cursor:pointer;user-select:none;\">threshold' + heavyMarker(3) + '</th><th data-hcol=\"4\" style=\"cursor:pointer;user-select:none;\">test' + heavyMarker(4) + '</th><th data-hcol=\"5\" style=\"cursor:pointer;user-select:none;\">duration' + heavyMarker(5) + '</th><th data-hcol=\"6\" style=\"cursor:pointer;user-select:none;\">chunk' + heavyMarker(6) + '</th></tr></thead>' +
               '<tbody>' + heavyBody + '</tbody></table>';
@@ -1494,11 +1494,13 @@ def build_html_dashboard(
         if (!Number.isFinite(y)) continue;
         if (y > bestY) {{
           bestY = y;
-          bestX = Number(tr.x[i]);
+          bestX = tr.x[i];
         }}
       }}
-      if (!Number.isFinite(bestY) || bestY <= 0 || !Number.isFinite(Number(bestX))) return null;
-      return xFromDisplay(Number(bestX));
+      if (!Number.isFinite(bestY) || bestY <= 0 || bestX == null) return null;
+      const peakMs = _toMs(bestX);
+      if (peakMs == null) return null;
+      return xFromDisplay(peakMs);
     }}
 
     function applyMarkersToCharts() {{

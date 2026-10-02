@@ -12,7 +12,7 @@ from _paths import METRICS, add_product_paths
 
 add_product_paths(METRICS)
 
-from monitor_resources import cpu_delta_jiffies, io_delta_bytes, process_identity
+from monitor_resources import apply_io_sample, cpu_delta_jiffies, io_delta_bytes, process_identity
 
 
 class ProcessAccountingTest(unittest.TestCase):
@@ -36,6 +36,23 @@ class ProcessAccountingTest(unittest.TestCase):
 
     def test_vanished_pid_does_not_make_negative_io(self):
         self.assertEqual(io_delta_bytes((200, 80), (10, 5)), (0, 0))
+
+    def test_failed_io_read_does_not_baseline_at_zero(self):
+        ident = (1, 10)
+        prev: dict = {}
+        nxt: dict = {}
+        self.assertEqual(apply_io_sample(ident, None, prev, nxt), (0, 0))
+        self.assertIsNone(nxt[ident])
+        nxt2: dict = {}
+        self.assertEqual(apply_io_sample(ident, (500, 20), nxt, nxt2), (0, 0))
+        self.assertEqual(nxt2[ident], (500, 20))
+        nxt3: dict = {}
+        self.assertEqual(apply_io_sample(ident, (540, 25), nxt2, nxt3), (40, 5))
+
+    def test_first_good_io_read_still_counts_lifetime(self):
+        nxt: dict = {}
+        self.assertEqual(apply_io_sample((2, 1), (8, 2), {}, nxt), (8, 2))
+        self.assertEqual(nxt[(2, 1)], (8, 2))
 
 
 if __name__ == "__main__":

@@ -79,6 +79,40 @@ def _has_sanitizer(sanitizer: Optional[str]) -> bool:
     return bool(sanitizer and str(sanitizer).strip() and str(sanitizer).strip().lower() not in ("none", "off", "false", "0"))
 
 
+def _strip_ya_make_comment(line: str) -> str:
+    """Drop a trailing # comment. Quoted # is kept."""
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(line):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            return line[:i].rstrip()
+    return line
+
+
+_EVAL_WORDS = frozenset({"True", "False", "and", "or", "not"})
+
+
+def _unknown_names_to_false(expr: str) -> str:
+    """Bare identifiers we don't model (HOST_OS_LINUX, ...) are false, not a failed eval."""
+    parts = re.split(r'("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\')', expr)
+
+    def repl(match: re.Match[str]) -> str:
+        name = match.group(0)
+        return name if name in _EVAL_WORDS else "False"
+
+    out: list[str] = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            out.append(part)
+        else:
+            out.append(re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", repl, part))
+    return "".join(out)
+
+
 def eval_ya_make_condition(cond: str, sanitizer: Optional[str] = None) -> bool:
     has_san = _has_sanitizer(sanitizer)
     san = (sanitizer or "").strip().lower()
@@ -95,10 +129,11 @@ def eval_ya_make_condition(cond: str, sanitizer: Optional[str] = None) -> bool:
     expr = re.sub(r"\bOR\b", "or", expr)
     expr = re.sub(r"\bAND\b", "and", expr)
     expr = re.sub(r"\bNOT\b", "not", expr)
+    expr = _unknown_names_to_false(expr)
     try:
         return _safe_eval_bool(expr)
     except Exception:
-        return has_san if "SANITIZER_TYPE" in cond else False
+        return False
 
 
 def _safe_eval_bool(expr: str) -> bool:
@@ -138,7 +173,7 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
     i = 0
     while i < len(raw_lines):
         raw = raw_lines[i]
-        line = raw.strip()
+        line = _strip_ya_make_comment(raw.strip())
         if not line:
             i += 1
             continue

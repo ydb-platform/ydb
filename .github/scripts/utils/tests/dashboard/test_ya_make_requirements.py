@@ -170,6 +170,36 @@ END()
     assert _parse_active_attrs(content, sanitizer=None) == {"cpu_cores": 4, "size": "MEDIUM"}
 
 
+def test_inline_comment_does_not_stick_the_if_stack():
+    content = """UNITTEST()
+IF (SANITIZER_TYPE == "address")  # asan only
+    REQUIREMENTS(cpu:8)
+ENDIF() # IF (SANITIZER_TYPE == "address")
+REQUIREMENTS(ram:4)
+SIZE(SMALL)
+END()
+"""
+    plain = _parse_active_attrs(content, sanitizer=None)
+    assert plain.get("cpu_cores") is None
+    assert plain["ram_gb"] == 4
+    assert plain["size"] == "SMALL"
+    asan = _parse_active_attrs(content, sanitizer="address")
+    assert asan["cpu_cores"] == 8
+    assert asan["ram_gb"] == 4
+
+
+def test_unknown_condition_name_is_not_treated_as_sanitizer_match():
+    content = """UNITTEST()
+IF (HOST_OS_LINUX AND SANITIZER_TYPE == "address" AND NOT OPENSOURCE)
+    REQUIREMENTS(cpu:32)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
+END()
+"""
+    assert _parse_active_attrs(content, sanitizer="address")["cpu_cores"] == 2
+
+
 def test_commented_out_test_srcs_are_not_counted():
     content = """PY3TEST()
 FORK_TEST_FILES()
@@ -195,6 +225,8 @@ _ALL_TESTS = (
     test_get_requirements_normalizes_partitioned_suite_path,
     test_cpu_all_sentinel_is_preserved,
     test_opensource_condition_is_active,
+    test_inline_comment_does_not_stick_the_if_stack,
+    test_unknown_condition_name_is_not_treated_as_sanitizer_match,
     test_commented_out_test_srcs_are_not_counted,
 )
 

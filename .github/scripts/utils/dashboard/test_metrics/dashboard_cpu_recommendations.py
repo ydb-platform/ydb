@@ -150,6 +150,8 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     peak_cpu_at: dict[str, float] = {}
     peak_ram: dict[str, float] = defaultdict(float)
     peak_ram_at: dict[str, float] = {}
+    # suite_count keeps zero keys forever; only walk suites that are running now.
+    active_suites: set[str] = set()
 
     for time_us, delta, suite, dcpu, dram in events:
         suite_count[suite] += delta
@@ -170,10 +172,13 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
             peak_self_ram_at[suite] = time_us
         if delta > 0 and dram > max_chunk_ram_kb[suite]:
             max_chunk_ram_kb[suite] = dram
+        if suite_count[suite] > 0:
+            active_suites.add(suite)
+        else:
+            active_suites.discard(suite)
 
-        for s, cnt in suite_count.items():
-            if cnt <= 0:
-                continue
+        for s in active_suites:
+            cnt = suite_count[s]
             others = total_count - cnt
             if others > peak_others[s]:
                 peak_others[s] = others

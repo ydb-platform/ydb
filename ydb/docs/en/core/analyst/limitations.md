@@ -118,20 +118,6 @@ SELECT * FROM $base WHERE event_ts > CurrentUtcTimestamp()
 
 {{ ydb-short-name }} guarantees that when a named expression is used multiple times within a single transaction, the same data will be read. This is ensured by the transaction isolation level [Serializable](../concepts/transactions.md#modes).
 
-### Correlated subqueries are not supported
-
-<<<<<<< HEAD
-A correlated subquery is a subquery that references columns from an external query. In YQL, such subqueries are not supported.
-Most cases of using correlated subqueries can be replaced with `JOIN` and aggregate functions.
-
-#### EXISTS
-
-Conversion of `EXISTS` → `INNER JOIN` using `DISTINCT`.
-
-Original query:
-
-```sql
-=======
 ### Lack of support for correlated subqueries
 
 A correlated subquery is a subquery that references columns from an outer query. Such subqueries are not supported in YQL.
@@ -147,17 +133,11 @@ Original query:
 
 
 ```yql
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 SELECT a.* FROM A a WHERE EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
 ```
 
-<<<<<<< HEAD
-##### Solution
-
-```sql
-=======
 
 ##### Solution with LEFT SEMI JOIN
 
@@ -183,7 +163,6 @@ several matching rows from duplicating a row from the left side. Applying
 from the outer input.
 
 ```yql
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 $B_match = (
   SELECT key
   FROM B
@@ -197,30 +176,24 @@ INNER JOIN $B_match AS b
 ON b.key = a.key;
 ```
 
+
 #### Subquery with an aggregate
 
 Scalar subquery with an aggregate → aggregation + JOIN
 
 Original query:
 
-<<<<<<< HEAD
-```sql
-=======
 
 ```yql
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 SELECT a.*, (SELECT MAX(ts) FROM B b WHERE b.user_id = a.user_id) AS last_ts
 FROM A a;
 ```
 
+
 ##### Solution
 
-<<<<<<< HEAD
-```sql
-=======
 
 ```yql
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 $B_last = (
   SELECT user_id, MAX(ts) AS last_ts
   FROM B
@@ -233,33 +206,23 @@ LEFT JOIN $B_last AS bl
 ON bl.user_id = a.user_id;
 ```
 
+
 #### NOT EXISTS
 
-<<<<<<< HEAD
-`NOT EXISTS` → anti-JOIN
-=======
 Transformation of correlated `NOT EXISTS` → `LEFT ONLY JOIN`.
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 
 Original query:
 
-<<<<<<< HEAD
-```sql
-=======
 
 ```yql
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 SELECT a.* FROM A a WHERE NOT EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
 ```
 
+
 ##### Solution
 
-<<<<<<< HEAD
-```sql
-$B_keys = (SELECT DISTINCT key FROM B);
-=======
 
 ```yql
 $B_match = (
@@ -267,7 +230,6 @@ $B_match = (
   FROM B
   WHERE flag = 1
 );
->>>>>>> 2237022c3f7 (docs: explain correlated subqueries and EXISTS (#54021))
 
 SELECT a.*
 FROM A AS a

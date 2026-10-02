@@ -59,11 +59,13 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
 private:
     TOperation::TPtr ActiveOp;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Rescheduled = false;
     bool WaitComplete = false;
 };
@@ -81,6 +83,7 @@ public:
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
@@ -96,6 +99,7 @@ protected:
     ui64 TxId;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;
@@ -114,6 +118,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_WRITE; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
@@ -122,6 +127,7 @@ protected:
     ui64 TxId;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;

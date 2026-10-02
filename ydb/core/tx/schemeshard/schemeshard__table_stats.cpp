@@ -235,6 +235,9 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.LocksBroken = tableStats.GetLocksBroken();
 
     newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
+    newStats.SetSplitCpuUsage(
+        tableStats.HasCPUWithKeys() ? std::make_optional(tableStats.GetCPUWithKeys()) : std::nullopt,
+        tableStats.HasCPUWithoutKeys() ? std::make_optional(tableStats.GetCPUWithoutKeys()) : std::nullopt);
     newStats.Memory = tabletMetrics.GetMemory();
     newStats.Network = tabletMetrics.GetNetwork();
     newStats.Storage = tabletMetrics.GetStorage();
@@ -406,7 +409,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         TString splitReason;
 
-        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason))) {
+        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetSplitCpuUsage(), mainTableForIndex, splitReason))) {
             YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet by the CPU load from the follower",
                 {"tabletId", datashardId},
                 {"followerId", followerId},
@@ -645,7 +648,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             {"maxPartitions", table->GetMaxPartitionsCount()},
         );
         return true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetSplitCpuUsage(), mainTableForIndex, reason)) {
         YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet by load",
             {"datashard", datashardId},
             {"reason", reason},

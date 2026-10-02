@@ -11,6 +11,10 @@ TAllocationCache<TTag>* TAllocationCache<TTag>::GetCurrent() noexcept {
     if (!context) {
         return nullptr;
     }
+    if constexpr (SystemAllocationCacheFamilyId<TTag>() < SystemAllocationCacheFamilyCount) {
+        return static_cast<TAllocationCache<TTag>*>(
+            context->AllocationCachePointers.System[SystemAllocationCacheFamilyId<TTag>()]);
+    }
     const size_t family = TAllocationCacheFamily<TTag>::FamilyId();
     return family < context->AllocationCachePointers.size()
         ? static_cast<TAllocationCache<TTag>*>(context->AllocationCachePointers[family])

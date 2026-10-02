@@ -8,7 +8,7 @@ namespace NActors {
 
 namespace {
     thread_local TAllocationCacheWorker* CurrentWorker = nullptr;
-    std::atomic<size_t> FamilyCounter = 0;
+    std::atomic<size_t> FamilyCounter = SystemAllocationCacheFamilyCount;
 }
 
 size_t TAllocationCacheFamilyRegistry::NextId() noexcept {
@@ -22,7 +22,7 @@ TAllocationCacheWorker* TAllocationCacheWorker::GetCurrent() noexcept {
 void TAllocationCacheWorker::SetCurrent(TAllocationCacheWorker* worker) noexcept {
     CurrentWorker = worker;
     if (TlsThreadContext) {
-        TlsThreadContext->AllocationCachePointers = worker ? worker->CachePointers : std::vector<void*>{};
+        TlsThreadContext->AllocationCachePointers = worker ? worker->CachePointers : TAllocationCachePointers{};
     }
 }
 

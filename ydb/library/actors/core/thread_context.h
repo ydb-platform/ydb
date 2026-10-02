@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/library/actors/core/allocation_cache_families.h>
 #include "mailbox.h"
 
 #include <atomic>
@@ -84,7 +85,7 @@ namespace NActors {
         TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
         // Borrowed family caches, populated by the allocation-cache subsystem.
-        std::vector<void*> AllocationCachePointers;
+        TAllocationCachePointers AllocationCachePointers;
 
         bool IsEnoughCpu = true;
         TWaitingStats<ui64> *WaitingStats = nullptr;

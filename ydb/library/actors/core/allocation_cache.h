@@ -19,7 +19,6 @@
 
 namespace NActors {
 
-// Legacy counter names are preserved; CachedFrames counts raw idle blocks.
 struct TAllocationCacheStats {
     size_t SizeClasses = 0;
     size_t CachedFrames = 0;
@@ -38,8 +37,9 @@ struct TAllocationCacheProcessStats {
     }
 };
 
-// Read-only view of counters embedded in a cache. The subsystem registers this
-// view and removes it under its statistics mutex before destroying the cache.
+// Read-only view of counters embedded in a cache. Registered worker caches and
+// their counter views remain alive until subsystem destruction; readers must
+// finish before destruction starts.
 struct TAllocationCacheCounters {
     const std::atomic<size_t>* Counts = nullptr;
     size_t BinCount = 0;

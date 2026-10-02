@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/allocation_cache.h>
+#include <ydb/library/actors/core/allocation_cache_families.h>
 #include <ydb/library/actors/core/subsystem.h>
 
 #include <util/generic/string.h>
@@ -52,7 +53,7 @@ public:
 
     // Scoped bindings borrow the prior table; the prior worker must outlive them.
     explicit TAllocationCacheWorker(const TAllocationCacheWorker* previous)
-        : CachePointers(previous ? previous->CachePointers : std::vector<void*>{})
+        : CachePointers(previous ? previous->CachePointers : TAllocationCachePointers{})
     {}
 
     template<class TTag>
@@ -78,7 +79,7 @@ private:
     friend class TAllocationCacheSubSystem;
     TAllocationCacheWorkerCounters Counters;
     std::vector<TLocalAllocationCache> Caches;
-    std::vector<void*> CachePointers;
+    TAllocationCachePointers CachePointers;
 };
 
 class TAllocationCacheSubSystem final : public ISubSystem {
@@ -127,8 +128,12 @@ public:
     }
 
     static size_t FamilyId() noexcept {
-        static const size_t id = TAllocationCacheFamilyRegistry::NextId();
-        return id;
+        if constexpr (SystemAllocationCacheFamilyId<TTag>() < SystemAllocationCacheFamilyCount) {
+            return SystemAllocationCacheFamilyId<TTag>();
+        } else {
+            static const size_t id = TAllocationCacheFamilyRegistry::NextId();
+            return id;
+        }
     }
 
     TSubSystemDependencies GetDependencies() const override {

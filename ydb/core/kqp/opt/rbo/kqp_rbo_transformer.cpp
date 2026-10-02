@@ -187,6 +187,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 }
 
                 if (Roots.size() > 1) {
+                    if (KqpCtx.Config->GetEnableFallbackOnMultipleStatements()) {
+                        Y_ENSURE(false, "Fallback due to multiple statements flag");
+                    }
                     ResetTypes = true;
                 }
 

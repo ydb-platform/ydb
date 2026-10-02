@@ -111,8 +111,10 @@ std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input, bool verbose
         }
         return nullptr; // BOM found and skipped, return nullptr to use original stream
     }
-    TString bomData(bom, read);
-    auto bomStream = std::make_shared<TMemoryInput>(bomData.data(), bomData.size());
+    // bomStream views the bytes of bomData, so the very same object must live as long as the
+    // returned stream: keep it on the heap and share it with the deleter (a copy would not do)
+    auto bomData = std::make_shared<TString>(bom, read);
+    auto bomStream = std::make_shared<TMemoryInput>(bomData->data(), bomData->size());
 
     // Create a multiInput that will use the streams and manage the lifetime of bomStream and bomData
     return std::shared_ptr<IInputStream>(

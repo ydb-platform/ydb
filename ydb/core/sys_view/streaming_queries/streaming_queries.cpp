@@ -592,19 +592,20 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         }
     };
 
-    using TExtractorValue = std::pair<TString, TQueryInfo>;
+    using TQueriesBatch = std::unordered_map<TString, TQueryInfo>;
+    using TExtractorValue = TQueriesBatch::value_type;
 
     class TExtractorsMap : public THashMap<NTable::TTag, std::function<TCell(const TExtractorValue&)>> {
     public:
         TExtractorsMap() {
-            AddString<TSchema::Path>([](const TExtractorValue& p) { return p.first; });
-            AddString<TSchema::Status>([](const TExtractorValue& p) { return p.second.Status; });
-            AddString<TSchema::Issues>([](const TExtractorValue& p) { return p.second.Issues; });
-            AddString<TSchema::Plan>([](const TExtractorValue& p) { return p.second.Plan; });
-            AddString<TSchema::Ast>([](const TExtractorValue& p) { return p.second.Ast; });
-            AddString<TSchema::Text>([](const TExtractorValue& p) { return p.second.Text; });
+            AddString<TSchema::Path>([](const TExtractorValue& p) -> const TString& { return p.first; });
+            AddString<TSchema::Status>([](const TExtractorValue& p) -> const TString& { return p.second.Status; });
+            AddString<TSchema::Issues>([](const TExtractorValue& p) -> const TString& { return p.second.Issues; });
+            AddString<TSchema::Plan>([](const TExtractorValue& p) -> const TString& { return p.second.Plan; });
+            AddString<TSchema::Ast>([](const TExtractorValue& p) -> const TString& { return p.second.Ast; });
+            AddString<TSchema::Text>([](const TExtractorValue& p) -> const TString& { return p.second.Text; });
             Add<TSchema::Run, bool>([](const TExtractorValue& p) { return p.second.Run; });
-            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) { return p.second.ResourcePool; });
+            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) -> const TString& { return p.second.ResourcePool; });
             Add<TSchema::RetryCount, ui64>([](const TExtractorValue& p) { return p.second.RetryCount; });
             AddOpt<TSchema::LastFailAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
                 if (p.second.LastFailAt) {
@@ -618,8 +619,8 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
                 }
                 return std::nullopt;
             });
-            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
-            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
+            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) -> const TString& { return p.second.LastExecutionId; });
+            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) -> const TString& { return p.second.PreviousExecutionIds; });
         }
 
     private:
@@ -641,7 +642,7 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         }
 
         template <typename TCol>
-        void AddString(std::function<TString(const TExtractorValue& p)> textExtractor) {
+        void AddString(std::function<const TString&(const TExtractorValue& p)> textExtractor) {
             insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
                 const auto& value = textExtractor(p);
                 return TCell(value.data(), value.size());
@@ -1175,7 +1176,7 @@ private:
     ui64 InflightScriptExecutionInfoResolve = 0;
     ui64 ResolvedQueriesCount = 0;
     ui64 UsedSpace = 0;
-    std::unordered_map<TString, TQueryInfo> QueriesBatch;
+    TQueriesBatch QueriesBatch;
 };
 
 } // anonymous namespace

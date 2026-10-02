@@ -185,6 +185,13 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
         queryServiceConfig.SetEnableMatchRecognize(true);
 
+        if (ConnectorClient) {
+            auto& connector = *queryServiceConfig.MutableGeneric()->MutableConnector();
+            connector.AddDatabaseNames("test_db");
+            connector.MutableEndpoint()->set_host("localhost");
+            connector.MutableEndpoint()->set_port(1234);
+        }
+
         AppConfig->MutableTableServiceConfig()->SetDqChannelVersion(DqChannelsVersion);
 
         auto& authConfig = *AppConfig->MutableAuthConfig();
@@ -688,6 +695,9 @@ void TStreamingTestFixture::CreateS3Source(const std::string& bucket, const std:
 }
 
 void TStreamingTestFixture::CreateYdbSource(const std::string& ydbSourceName) {
+    // Use a fixed non-empty database name that matches DatabaseNames in the
+    // connector config, so YDB EDS is routed to the connector (table access).
+    constexpr char YDB_TEST_DATABASE[] = "test_db";
     ExecQuery(fmt::format(
         R"sql(
             CREATE SECRET ydb_source_secret WITH (value = "{token}");
@@ -702,7 +712,7 @@ void TStreamingTestFixture::CreateYdbSource(const std::string& ydbSourceName) {
         )sql",
         "ydb_source"_a = ydbSourceName,
         "ydb_location"_a = YDB_ENDPOINT,
-        "ydb_database_name"_a = YDB_DATABASE,
+        "ydb_database_name"_a = YDB_TEST_DATABASE,
         "token"_a = BUILTIN_ACL_ROOT
     ));
 }
@@ -1137,7 +1147,7 @@ TString TStreamingTestFixture::GetStreamingQueryIssues(const TString& queryName)
 NYql::TGenericDataSourceInstance TStreamingTestFixture::GetMockConnectorSourceInstance() {
     NYql::TGenericDataSourceInstance dataSourceInstance;
     dataSourceInstance.set_kind(NYql::YDB);
-    dataSourceInstance.set_database(YDB_DATABASE);
+    dataSourceInstance.set_database("test_db");
     dataSourceInstance.set_use_tls(false);
     dataSourceInstance.set_protocol(NYql::NATIVE);
 

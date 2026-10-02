@@ -418,6 +418,30 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->Columns.size(), 2);
     }
 
+    Y_UNIT_TEST(TestLoadYdbDataSourceWithoutExternalPath) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        TKikimrRunner kikimr{NKqp::TKikimrSettings(appCfg)};
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        const TString path = "/Root/YdbDataSource";
+        TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
+            {"source_type", "Ydb"},
+            {"location", kikimr.GetEndpoint()},
+            {"database_name", "/Root"},
+            {"auth_method", "NONE"}
+        });
+        const auto entry = TestCreateObjectCommon(*kikimr.GetTestServer().GetRuntime(), gateway, settings, path);
+        UNIT_ASSERT_VALUES_EQUAL(entry.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+
+        auto response = gateway->LoadTableMetadata(TestCluster, path,
+            IKikimrGateway::TLoadTableMetadataSettings()).GetValueSync();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT(response.Metadata->IsExternalDataSource());
+        UNIT_ASSERT(response.Metadata->ExternalDataSource().IsYdb());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalDataSource().GetDatabaseName(), "/Root");
+    }
+
     Y_UNIT_TEST(TestLoadYdbDataSourceWithoutLocation) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");

@@ -22,7 +22,15 @@ using ECategory = NConveyorComposite::ESpecialTaskCategory;
 const NConveyorComposite::NConfig::TWorkersPool& Pool(
     const NConveyorComposite::NConfig::TConfig& config, ECategory category)
 {
+    // A category also uses the shared schedulable pool. Check the legacy
+    // configuration on its named service pool, independent of vector order.
+    const TString poolName = "WP::" + ::ToString(category);
     for (const auto& pool : config.GetWorkerPools()) {
+        if (pool.GetName() != poolName) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSchedulingMode(),
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable);
         for (const auto& link : pool.GetLinks()) {
             if (link.GetCategory() == category) {
                 return pool;
@@ -48,6 +56,39 @@ void AssertFractions(NKikimrConfig::TAppConfig& config, double comp, double inse
 }
 
 Y_UNIT_TEST_SUITE(ColumnShardServiceConfiguration) {
+
+    Y_UNIT_TEST(PreserveManagedAndLegacyCategoryPools) {
+        NKikimrConfig::TAppConfig config;
+        const auto built = Build(config);
+        const NConveyorComposite::NConfig::TWorkersPool* managed = nullptr;
+        for (const auto& pool : built.GetWorkerPools()) {
+            if (pool.GetName() == "WP::DEFAULT_SCHEDULABLE") {
+                UNIT_ASSERT(!managed);
+                managed = &pool;
+            }
+        }
+        UNIT_ASSERT(managed);
+        UNIT_ASSERT_VALUES_EQUAL(managed->GetSchedulingMode(),
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable);
+        UNIT_ASSERT(!managed->GetWorkersCountInfo().GetCount());
+        UNIT_ASSERT(managed->GetWorkersCountInfo().GetFraction());
+        UNIT_ASSERT_DOUBLES_EQUAL(*managed->GetWorkersCountInfo().GetFraction(), 1.0, 1e-9);
+        UNIT_ASSERT_VALUES_EQUAL(managed->GetWorkersCount(100), 100);
+        for (const auto category : {ECategory::Compaction, ECategory::Insert,
+                ECategory::Scan, ECategory::Deduplication, ECategory::Normalizer}) {
+            const auto& legacy = Pool(built, category);
+            const auto& categoryConfig = built.GetCategoryConfig(category);
+            UNIT_ASSERT_VALUES_EQUAL(categoryConfig.GetWorkerPools().size(), 2);
+            bool usesManaged = false;
+            bool usesLegacy = false;
+            for (const auto poolId : categoryConfig.GetWorkerPools()) {
+                usesManaged |= poolId == managed->GetWorkersPoolId();
+                usesLegacy |= poolId == legacy.GetWorkersPoolId();
+            }
+            UNIT_ASSERT(usesManaged);
+            UNIT_ASSERT(usesLegacy);
+        }
+    }
 
     Y_UNIT_TEST(ApplyConfiguredCacheLimitsToRunningServices) {
         for (ui64 limit : {0ull, 1048576ull}) {

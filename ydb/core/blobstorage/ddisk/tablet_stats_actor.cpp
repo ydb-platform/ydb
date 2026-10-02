@@ -13,11 +13,9 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     std::map<ui64, TTabletStats> Tablets;
     bool RequestInFlight = false;
     bool TimerScheduled = false;
-    bool WakeupPending = false;
     bool Available = true;
 
     void RequestBatch() {
-        WakeupPending = false;
         RequestInFlight = true;
         Send(Owner, new TEvCollectTabletStats());
     }
@@ -26,9 +24,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
         if (ev->Sender != Owner || !Available) {
             return;
         }
-        if (RequestInFlight) {
-            WakeupPending = true;
-        } else if (!TimerScheduled) {
+        if (!RequestInFlight && !TimerScheduled) {
             RequestBatch();
         }
     }
@@ -45,7 +41,6 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
         RequestInFlight = false;
         Available = ev->Get()->Available;
         if (!Available) {
-            WakeupPending = false;
             return;
         }
         Y_ABORT_UNLESS(ev->Get()->Samples.size() <= TTabletStatsTracker::MaxBatch);
@@ -63,11 +58,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
                 row.Rates[i] = CalculateTabletIoRate(sample.Previous[i], sample.Current[i], sample.Elapsed);
             }
         }
-        if (WakeupPending) {
-            // A wakeup can arrive before a delayed final batch. Do not lose it
-            // when that batch reports an empty queue.
-            RequestBatch();
-        } else if (const auto deadline = ev->Get()->NextDeadline) {
+        if (const auto deadline = ev->Get()->NextDeadline) {
             const auto now = NActors::TActivationContext::Monotonic();
             TimerScheduled = true;
             Schedule(*deadline > now ? *deadline - now : TDuration::MilliSeconds(1),

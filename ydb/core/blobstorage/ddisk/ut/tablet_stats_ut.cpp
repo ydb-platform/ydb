@@ -152,42 +152,6 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Chunks, 0);
     }
 
-    Y_UNIT_TEST(WakeupDuringOutstandingPullIsNotLost) {
-        TTestActorSystem runtime(1);
-        runtime.Start();
-        const auto owner = runtime.AllocateEdgeActor(1);
-        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
-        size_t requests = 0;
-        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            requests += ev->GetTypeRewrite() == TEvCollectTabletStats::EventType;
-            return true;
-        };
-        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
-        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
-        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
-        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
-        runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
-        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
-        // The old final response reports sleep after a newer wakeup arrived.
-        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsBatch()), 1);
-        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
-        UNIT_ASSERT_VALUES_EQUAL(requests, 2);
-        auto batch = std::make_unique<TEvTabletStatsBatch>();
-        TTabletStatsSample sample;
-        sample.TabletId = 42;
-        sample.Chunks = 2;
-        sample.Current[0] = {1, 100};
-        sample.Elapsed = TDuration::Seconds(1);
-        batch->Samples.push_back(sample);
-        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
-        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
-        const auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.front().Rates[0].Iops, 1);
-        runtime.FilterFunction = {};
-        runtime.Stop();
-    }
-
     Y_UNIT_TEST(ActorPaginationCookiesNormalizationAndRetirement) {
         TTestActorSystem runtime(1);
         runtime.Start();

@@ -58,6 +58,26 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
     return true;
 }
 
+THashSet<TString> GetRequiredNotNullDocumentIdColumns(const TTableIndexInfo& index, const TTableInfo& table) {
+    const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+        &index.SpecializedIndexDescription);
+    // Row-id mode requires NOT NULL even for non-compact indexes.
+    if (fulltext && fulltext->GetUseRowIdAsDocId()) {
+        return {NTableIndex::NFulltext::RowIdColumn};
+    }
+    // Compact posting lists encode integer document ids, with no NULL representation.
+    THashSet<TString> columns;
+    if (index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact)
+    {
+        for (const auto columnId : table.KeyColumnIds) {
+            columns.insert(table.Columns.at(columnId).Name);
+        }
+    }
+    return columns;
+}
+
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
@@ -76,6 +96,22 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             errStr = "Adding or dropping columns in index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
+        }
+
+        if (alter.ColumnsSize() != 0 && path.IsInsideTableIndexPath()) {
+            // Internal requests may also arrive directly, bypassing base-table decomposition.
+            const TPath indexPath = path.Parent();
+            const auto& index = context.SS->Indexes.at(indexPath.Base()->PathId);
+            const auto& baseTable = context.SS->Tables.at(indexPath.Parent().Base()->PathId);
+            const auto requiredColumns = GetRequiredNotNullDocumentIdColumns(*index, *baseTable);
+            for (const auto& column : alter.GetColumns()) {
+                if (requiredColumns.contains(column.GetName())) {
+                    errStr = TStringBuilder() << "Cannot drop NOT NULL on column '" << column.GetName()
+                        << "': index '" << indexPath.LeafName() << "' requires a non-null document id";
+                    status = NKikimrScheme::StatusPreconditionFailed;
+                    return nullptr;
+                }
+            }
         }
 
         if (alter.HasTTLSettings()) {
@@ -979,7 +1015,8 @@ static void CollectIndexImplTableMetricsAlters(TIndexImplTableAlters& alters,
 
 // Validate DROP NOT NULL before any Propose: TAlterTable cannot roll back its DB writes.
 // This collector has no dependency on detailed metrics or their feature flag.
-static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlters& alters, TOperationId id,
+static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlters& alters,
+        THashSet<TPathId>& pathsToCheck, TOperationId id,
         const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
     TVector<TString> columns;
@@ -1007,22 +1044,13 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
 
         const TPath indexPath = TPath::Init(childPathId, context.SS);
         const auto& index = context.SS->Indexes.at(childPathId);
+        const auto requiredColumns = GetRequiredNotNullDocumentIdColumns(*index, *table);
         bool affectsIndex = false;
         for (const auto& column : columns) {
-            const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
-                &index->SpecializedIndexDescription);
-            const bool usesRowId = fulltext && fulltext->GetUseRowIdAsDocId();
-            const bool compact = index->Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
-                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
-                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
             const auto columnId = table->GetColumnIdByNameSlow(column);
             const bool primaryKey = columnId != TTableInfo::InvalidColumnId
                 && table->Columns.at(columnId).KeyOrder != Max<ui32>();
-            // Compact posting lists encode integer document ids, with no NULL representation.
-            // Row-id mode requires NOT NULL even for non-compact indexes.
-            if ((usesRowId && column == NTableIndex::NFulltext::RowIdColumn)
-                || (compact && !usesRowId && primaryKey))
-            {
+            if (requiredColumns.contains(column)) {
                 return CreateReject(id, NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "Cannot drop NOT NULL on column '" << column
                         << "': index '" << indexPath.LeafName() << "' requires a non-null document id");
@@ -1031,9 +1059,7 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
                 || Find(index->IndexDataColumns, column) != index->IndexDataColumns.end();
         }
         if (affectsIndex) {
-            if (auto reject = CheckIndexAlterPath(id, indexPath, context)) {
-                return reject;
-            }
+            pathsToCheck.insert(childPathId);
         }
         for (const auto& [_, implTablePathId] : indexPath.Base()->GetChildren()) {
             const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
@@ -1050,15 +1076,11 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
                     implColumn->SetNotNull(false);
                 }
             }
-            // Reject during decomposition: TAlterTable::Propose cannot be rolled back.
-            // The caller must return only this rejection, discarding all prepared parts.
+            // Validate affected indexes even when the source column is transformed and
+            // has no counterpart in an implementation table (e.g. tokenized text).
             if (affectsIndex || implTableAlter.ColumnsSize() != 0) {
-                if (auto reject = CheckIndexAlterPath(id, indexPath, context)) {
-                    return reject;
-                }
-                if (auto reject = CheckIndexAlterPath(id, implTablePath, context)) {
-                    return reject;
-                }
+                pathsToCheck.insert(childPathId);
+                pathsToCheck.insert(implTablePathId);
             }
             if (implTableAlter.ColumnsSize() != 0) {
                 alters[implTablePathId].MergeFrom(implTableAlter);
@@ -1072,22 +1094,28 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
     TIndexImplTableAlters alters;
-    if (auto reject = CollectIndexImplTableNotNullAlters(alters, id, tx, tablePath, context)) {
+    THashSet<TPathId> pathsToCheck;
+    if (auto reject = CollectIndexImplTableNotNullAlters(alters, pathsToCheck, id, tx, tablePath, context)) {
         return reject;
     }
     CollectIndexImplTableMetricsAlters(alters, tx, tablePath, context);
+
+    for (const auto& [implTablePathId, _] : alters) {
+        pathsToCheck.insert(implTablePathId);
+        pathsToCheck.insert(context.SS->PathsById.at(implTablePathId)->ParentPathId);
+    }
+    // Check each path once before any Propose: TAlterTable cannot roll back its DB writes.
+    for (const auto& pathId : pathsToCheck) {
+        if (auto reject = CheckIndexAlterPath(id, TPath::Init(pathId, context.SS), context)) {
+            return reject;
+        }
+    }
 
     THashSet<TPathId> alteredIndexes;
     for (auto& [implTablePathId, alter] : alters) {
         const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
         const TPath indexPath = implTablePath.Parent();
-        if (auto reject = CheckIndexAlterPath(id, implTablePath, context)) {
-            return reject;
-        }
         if (alteredIndexes.insert(indexPath.Base()->PathId).second) {
-            if (auto reject = CheckIndexAlterPath(id, indexPath, context)) {
-                return reject;
-            }
             // Republish index metadata so schema-cache clients see the new impl-table versions.
             auto indexScheme = TransactionTemplate(tablePath.PathString(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);

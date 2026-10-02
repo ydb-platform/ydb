@@ -91,19 +91,23 @@ void TestDropNotNullWithIndex(const TString& kind, bool compact = false) {
         UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
         return result;
     };
-    auto checkAsyncIndex = [&](const TString& column, const TString& expected) {
-        if (kind != "async") {
+    auto checkIndex = [&](const TString& column, const TString& expected) {
+        if (kind != "async" && kind != "sync" && kind != "unique") {
             return;
         }
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         TString actual;
         do {
             auto result = client.ExecuteQuery("SELECT COUNT(*) FROM TestTable VIEW idx WHERE " + column + " IS NULL;",
-                TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+                TTxControl::BeginTx(kind == "async" ? TTxSettings::StaleRO() : TTxSettings::SerializableRW())
+                    .CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             actual = FormatResultSetYson(result.GetResultSet(0));
             if (actual == expected) {
                 return;
+            }
+            if (kind != "async") {
+                break;
             }
             Sleep(TDuration::MilliSeconds(100));
         } while (TInstant::Now() < deadline);
@@ -144,7 +148,7 @@ void TestDropNotNullWithIndex(const TString& kind, bool compact = false) {
         execute(write);
         auto result = execute("SELECT COUNT(*) FROM TestTable VIEW PRIMARY KEY WHERE " + column + " IS NULL;");
         CompareYson("[[2u]]", FormatResultSetYson(result.GetResultSet(0)));
-        checkAsyncIndex(column, "[[2u]]");
+        checkIndex(column, "[[2u]]");
     }
     if (fulltext || json) {
         auto result = execute(TStringBuilder() << "SELECT Key FROM TestTable VIEW idx WHERE "
@@ -170,7 +174,13 @@ void TestDropNotNullWithIndex(const TString& kind, bool compact = false) {
         execute(nullKeyWrite);
         auto result = execute("SELECT COUNT(*) FROM TestTable VIEW PRIMARY KEY WHERE Key IS NULL;");
         CompareYson("[[1u]]", FormatResultSetYson(result.GetResultSet(0)));
-        checkAsyncIndex("Key", "[[1u]]");
+        checkIndex("Key", "[[1u]]");
+        if (vector) {
+            auto result = execute(TStringBuilder()
+                << "SELECT Key, Payload FROM TestTable VIEW idx WHERE Prefix = 30 "
+                << "ORDER BY Knn::CosineDistance(Value, " << value << ") LIMIT 10;");
+            CompareYson("[[#;[7]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 
@@ -2094,6 +2104,49 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = execute("SELECT Key, Value, Other FROM " + source + " ORDER BY Key;");
             CompareYson("[[1;#;20];[2;#;30]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST_TWIN(DropNotNullWithCompositeCoverIndex, CoveredColumn) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto execute = [&](const TString& query, bool ddl = false) {
+            auto result = client.ExecuteQuery(query,
+                ddl ? TTxControl::NoTx() : TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        execute(R"(
+            CREATE TABLE t (
+                key1 Int32 NOT NULL, key2 Int32 NOT NULL,
+                col1 Int32 NOT NULL, col2 Int32 NOT NULL,
+                col3 Int32 NOT NULL, col4 Int32 NOT NULL,
+                PRIMARY KEY (key1, key2)
+            );
+        )", true);
+        execute("UPSERT INTO t (key1, key2, col1, col2, col3, col4) VALUES (1, 1, 10, 20, 30, 40);");
+        execute("ALTER TABLE t ADD INDEX i GLOBAL SYNC ON (col1, col2) COVER (col3, col4);", true);
+
+        const TString column = CoveredColumn ? "col4" : "col2";
+        const TString values = CoveredColumn ? "10, 20, 30, NULL" : "10, NULL, 30, 40";
+        // Update an existing row and insert a row differing only in the second PK component.
+        const TString write = "UPSERT INTO t (key1, key2, col1, col2, col3, col4) VALUES (1, 1, "
+            + values + "), (1, 2, " + values + ");";
+        auto rejected = client.ExecuteQuery(write, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(!rejected.IsSuccess(), column << " accepted NULL before DROP NOT NULL");
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Failed to convert type");
+
+        auto checkRows = [&](const TString& expected) {
+            for (const TString& source : {TString("t VIEW PRIMARY KEY"), TString("t VIEW i")}) {
+                auto result = execute("SELECT key1, key2, col1, col2, col3, col4 FROM "
+                    + source + " ORDER BY key1, key2;");
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        };
+        checkRows("[[1;1;10;20;30;40]]");
+        execute("ALTER TABLE t ALTER COLUMN " + column + " DROP NOT NULL;", true);
+        execute(write);
+        checkRows(CoveredColumn ? "[[1;1;10;20;30;#];[1;2;10;20;30;#]]"
+            : "[[1;1;10;#;30;40];[1;2;10;#;30;40]]");
     }
 
     Y_UNIT_TEST(DropNotNullLocalRowBloomIndex) {

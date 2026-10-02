@@ -627,7 +627,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
-    // Bounded history for DDisk and actor-system metrics, shared by all slots on this node.
     setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
         .MemoryBytes = 8ull << 20,
         .MaxLines = 4096,

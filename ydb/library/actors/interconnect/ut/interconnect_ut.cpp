@@ -1081,6 +1081,83 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
 }
 
+<<<<<<< HEAD
+=======
+void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
+    if (useSessionV2 && !TUringContext::IsAvailable()) {
+        Cerr << "io_uring not available; skipping" << Endl;
+        return;
+    }
+
+    auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
+        settings.SubscriberLivenessCheckInterval = checkInterval;
+        settings.EnableInterconnectSessionV2 = useSessionV2;
+        settings.V2.Threads = useSessionV2 ? 4 : 0; // non-zero Threads is what starts the v2 engine
+    };
+    auto logState = std::make_shared<TSubscriberLivenessLogState>();
+    auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+        TActorId(0, "logger"),
+        static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+        NLog::PRI_DEBUG,
+        NLog::PRI_DEBUG,
+        0U);
+    loggerSettings->Append(
+        NActorsServices::EServiceCommon_MIN,
+        NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name);
+    loggerSettings->SetAllowDrop(false);
+    loggerSettings->SetThrottleDelay(TDuration::Zero());
+    auto logBackendFactory = [logState] {
+        return TAutoPtr<TLogBackend>(new TSubscriberLivenessLogBackend(logState));
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings,
+        useSessionV2 ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
+
+    auto* subscriber = new TConnectionSubscriberActor(1);
+    const TActorId subscriberId = cluster.RegisterActor(subscriber, 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return subscriber->IsConnected();
+    }, "subscriber connected");
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 1;
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "live subscriber registered");
+
+    if (checkInterval != TDuration::Zero()) {
+        Sleep(3 * checkInterval);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+
+    cluster.KillActor(2, subscriberId);
+    if (checkInterval != TDuration::Zero()) {
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "dead subscriber removed");
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return logState->Warnings.load(std::memory_order_acquire) == 1;
+        }, "leaked subscriber warning");
+        with_lock (logState->Mutex) {
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "activity# manual");
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "actors# 1");
+        }
+    } else {
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+}
+
+>>>>>>> 8ac7e0aa637 (Revert "Fix Interconnect liveness test after ICv2 settings rename (#48001)")
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {

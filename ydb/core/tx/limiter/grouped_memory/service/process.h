@@ -306,8 +306,13 @@ public:
         }
     }
 
-    bool AllocationUpdated(const ui64 allocationId) {
-        GetAllocationInfoVerified(allocationId);
+    bool AllocationUpdated(const ui64 allocationId, const ui64 volume) {
+        auto& info = GetAllocationInfoVerified(allocationId);
+        if (info.GetAllocatedVolume() == volume) {
+            return false;
+        }
+        info.SetAllocatedVolume(volume);
+        ReaccountAdmittedGroup(info.GetAllocationExternalGroupId());
         return true;
     }
 
@@ -453,9 +458,9 @@ public:
         return PriorityProcessFlag;
     }
 
-    bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId) {
+    bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
         auto& scope = GetAllocationScopeVerified(externalScopeId);
-        if (scope.AllocationUpdated(allocationId)) {
+        if (scope.AllocationUpdated(allocationId, volume)) {
             UpdateWaitingScopes(&scope);
             RefreshMemoryUsage();
             return true;

@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             UNIT_ASSERT(!alloc2->IsAllocated());
 
             alloc1->Guard->Update(10);
-            manager->AllocationUpdated(0, 0, alloc1->GetIdentifier());
+            manager->AllocationUpdated(0, 0, alloc1->GetIdentifier(), 10);
             UNIT_ASSERT(alloc2->IsAllocated());
 
             manager->UnregisterGroup(0, 0, 3);
@@ -536,10 +536,12 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         fresh->Tag = 2;
         limiter.Manager->RegisterAllocation(1, 0, 1, fresh, {});
         UNIT_ASSERT(!fresh->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 180u);
 
         head->Guard->Update(140);
-        limiter.Manager->AllocationUpdated(0, 0, head->GetIdentifier());
+        limiter.Manager->AllocationUpdated(0, 0, head->GetIdentifier(), 140);
         UNIT_ASSERT(fresh->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 200u);
         UNIT_ASSERT(held->IsAllocated());
         UNIT_ASSERT_VALUES_EQUAL(order.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(order[0], 2);

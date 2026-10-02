@@ -61,7 +61,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev)
     }
     LWPROBE(TaskUpdated, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
     Managers[*index]->AllocationUpdated(
-        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
+        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {

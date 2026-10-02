@@ -56,8 +56,7 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
 }
 
 void TAllocationInfo::SetAllocatedVolume(const ui64 value) {
-    AFL_VERIFY(GetAllocationStatus() != EAllocationStatus::Failed);
-    Stage->UpdateVolume(AllocatedVolume, value, GetAllocationStatus() == EAllocationStatus::Allocated);
+    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Allocated);
     AllocatedVolume = value;
 }
 

@@ -44,12 +44,12 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
     RefreshSignals();
 }
 
-void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
+void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     bool updated = false;
     {
         auto g = BuildProcessOrderGuard(process);
-        updated = process.AllocationUpdated(externalScopeId, allocationId);
+        updated = process.AllocationUpdated(externalScopeId, allocationId, volume);
         if (!updated) {
             g.Release();
         }

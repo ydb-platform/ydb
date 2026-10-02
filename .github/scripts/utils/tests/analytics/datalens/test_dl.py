@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -150,11 +151,35 @@ class ChecksTest(unittest.TestCase):
         errors = checks.check_texts({"gantt-ds": {"sql": sql}})
         self.assertTrue(any("YYYY-MM-DD" in item or "icon" in item or "attempt" in item for item in errors))
 
+    def test_job_status_default_must_be_success_and_failure(self):
+        def dash(values):
+            return json.dumps({"id": "seljobstatus", "source": {"defaultValue": values}})
+
+        self.assertEqual(checks.check_texts({"dashboard": {"dashboard": dash(["success", "failure"])}}), [])
+        errors = checks.check_texts({"dashboard": {"dashboard": dash(["success"])}})
+        self.assertTrue(any("success+failure" in item for item in errors))
+        errors = checks.check_texts({"dashboard": {"dashboard": dash(["success", "failure", "in_progress"])}})
+        self.assertTrue(any("success+failure" in item for item in errors))
+
 
 class RpcHelpersTest(unittest.TestCase):
     def test_walk_rev_id_prefers_entry(self):
         self.assertEqual(rpc.walk_rev_id({"entry": {"revId": "draft", "publishedId": "old"}}), "draft")
         self.assertEqual(rpc.walk_rev_id({"savedId": "s"}), "s")
+
+    def test_publish_dashboard_uses_draft_revid(self):
+        calls = []
+
+        def fake_update(token, org_id, entry, mode, rev_id=None, workbook_id=None, dashboard_id=None):
+            calls.append((mode, rev_id))
+            if mode == "save":
+                return {"entry": {"revId": "draft-1"}}
+            return {"entry": {"revId": "pub-1"}}
+
+        with mock.patch.object(rpc, "update_dashboard", side_effect=fake_update):
+            result = rpc.publish_dashboard("t", "org", {"entryId": "d"})
+        self.assertEqual(result["revId"], "draft-1")
+        self.assertEqual(calls, [("save", None), ("publish", "draft-1")])
 
 
 class CliTest(unittest.TestCase):
@@ -166,12 +191,13 @@ class CliTest(unittest.TestCase):
     def test_publish_without_apply_does_not_call_api(self):
         with mock.patch.object(dl, "check_texts", return_value=[]), mock.patch.object(
             dl, "iam_token", return_value="t"
-        ), mock.patch.object(dl, "publish_editor_chart") as pub, mock.patch.object(
+        ) as token, mock.patch.object(dl, "publish_editor_chart") as pub, mock.patch.object(
             dl, "chart_entry", return_value={"entryId": "x"}
         ):
             code = dl.main(["publish", "duration"])
         self.assertEqual(code, 0)
         pub.assert_not_called()
+        token.assert_not_called()
 
     def test_local_objects_pass_check_when_present(self):
         dest = store.OBJECT_DIRS["duration-ds"] / "query.sql"

@@ -63,6 +63,91 @@ const statuses = paramList('job_conclusion');
 if (statuses.length) {
     where.push({column: 'job_conclusion', operation: 'IN', values: statuses});
 }
+function pad2(n) {
+    return (n < 10 ? '0' : '') + n;
+}
+function boundMs(token, endOfDay) {
+    if (!token) {
+        return null;
+    }
+    if (token.indexOf('__relative_') === 0) {
+        const match = token.slice('__relative_'.length).match(/^([+-]?\d+)([dwMyh])/);
+        if (!match) {
+            return null;
+        }
+        const amount = Number(match[1]);
+        const unit = match[2];
+        const date = new Date();
+        if (unit === 'h') {
+            date.setUTCHours(date.getUTCHours() + amount);
+            return date.getTime();
+        }
+        if (unit === 'd') {
+            date.setUTCDate(date.getUTCDate() + amount);
+        } else if (unit === 'w') {
+            date.setUTCDate(date.getUTCDate() + amount * 7);
+        } else if (unit === 'M') {
+            date.setUTCMonth(date.getUTCMonth() + amount);
+        } else if (unit === 'y') {
+            date.setUTCFullYear(date.getUTCFullYear() + amount);
+        }
+        if (endOfDay) {
+            date.setUTCHours(23, 59, 59, 999);
+        } else {
+            date.setUTCHours(0, 0, 0, 0);
+        }
+        return date.getTime();
+    }
+    const parsed = Date.parse(token.length <= 10 ? token + (endOfDay ? 'T23:59:59.999Z' : 'T00:00:00Z') : token);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+function splitInterval(raw) {
+    const value = String(raw || '');
+    if (value.indexOf('__interval_') !== 0) {
+        return null;
+    }
+    const body = value.slice('__interval_'.length);
+    const marker = '__relative_';
+    const first = body.indexOf(marker);
+    const second = first >= 0 ? body.indexOf(marker, first + marker.length) : -1;
+    let startToken = '';
+    let endToken = '';
+    if (first === 0 && second >= 0) {
+        startToken = body.slice(0, second).replace(/_+$/, '');
+        endToken = body.slice(second);
+    } else if (first > 0) {
+        startToken = body.slice(0, first).replace(/_+$/, '');
+        endToken = body.slice(first);
+    } else {
+        const splitAt = body.indexOf('_', body.indexOf('T'));
+        if (splitAt < 0) {
+            return null;
+        }
+        startToken = body.slice(0, splitAt);
+        endToken = body.slice(splitAt + 1);
+    }
+    return {start: boundMs(startToken, false), end: boundMs(endToken, true)};
+}
+function ymd(ms) {
+    const date = new Date(ms);
+    return date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate());
+}
+const interval = splitInterval(firstParam('interval', ''));
+const dateFrom = firstParam('tl_from', '');
+const dateTo = firstParam('tl_to', '');
+let fromMs = interval ? interval.start : (dateFrom ? Date.parse(dateFrom + 'T00:00:00Z') : null);
+let toMs = interval ? interval.end : (dateTo ? Date.parse(dateTo + 'T23:59:59.999Z') : null);
+if (Number.isFinite(fromMs) && Number.isFinite(toMs) && fromMs > toMs) {
+    const swap = fromMs;
+    fromMs = toMs;
+    toMs = swap;
+}
+if (Number.isFinite(fromMs)) {
+    where.push({column: 'event_date', operation: 'GTE', values: [ymd(fromMs)]});
+}
+if (Number.isFinite(toMs)) {
+    where.push({column: 'event_date', operation: 'LTE', values: [ymd(toMs)]});
+}
 const source = buildSource({
     datasetId: datasetId,
     columns: [

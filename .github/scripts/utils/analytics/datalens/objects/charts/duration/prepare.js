@@ -228,28 +228,24 @@ function splitInterval(raw) {
         return null;
     }
     const body = value.slice('__interval_'.length);
+    const marker = '__relative_';
+    const first = body.indexOf(marker);
+    const second = first >= 0 ? body.indexOf(marker, first + marker.length) : -1;
     let startToken = '';
     let endToken = '';
-    if (body.indexOf('__relative_') === 0) {
-        const second = body.indexOf('__', 2);
-        if (second < 0) {
+    if (first === 0 && second >= 0) {
+        startToken = body.slice(0, second).replace(/_+$/, '');
+        endToken = body.slice(second);
+    } else if (first > 0) {
+        startToken = body.slice(0, first).replace(/_+$/, '');
+        endToken = body.slice(first);
+    } else {
+        const splitAt = body.indexOf('_', body.indexOf('T'));
+        if (splitAt < 0) {
             return null;
         }
-        startToken = body.slice(0, second - 1);
-        endToken = body.slice(second);
-    } else {
-        const relative = body.indexOf('___relative_');
-        if (relative >= 0) {
-            startToken = body.slice(0, relative);
-            endToken = body.slice(relative + 1);
-        } else {
-            const splitAt = body.indexOf('_', body.indexOf('T'));
-            if (splitAt < 0) {
-                return null;
-            }
-            startToken = body.slice(0, splitAt);
-            endToken = body.slice(splitAt + 1);
-        }
+        startToken = body.slice(0, splitAt);
+        endToken = body.slice(splitAt + 1);
     }
     return {start: boundMs(startToken, false), end: boundMs(endToken, true)};
 }

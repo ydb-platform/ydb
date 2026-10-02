@@ -251,7 +251,8 @@ struct TSlowHandshakeTest : public TSessionTest {
         // the peer streams to us, the data replayed by the test at its pace
         Debug0->PauseChannelData();
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 10, .MaxMessageSize = 100 };
-        ConsumerSettings = ProducerSettings;
+        // with a push during the probe the give-up fails this channel too
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 10, .MaxMessageSize = 100, .ExpectAbort = PushDuringProbe };
         StartInboundChannel(1, true);
         UNIT_ASSERT_C(WaitFor([&]() { return Debug0->PendingDataCount.load() >= 50; }, TDuration::Seconds(10)),
             "the data of the peer did not arrive");
@@ -284,9 +285,13 @@ struct TSlowHandshakeTest : public TSessionTest {
         if (PushDuringProbe) {
             UNIT_ASSERT_C(Debug0->Terminating.load(), TStringBuilder() << "the session did not give up with something to deliver, " << details);
             UNIT_ASSERT_C(GetReconciliationLog(Debug0).EndsWith("X"), details);
-            // the give-up fails the descriptors of both halves
-            auto producer = WaitFinished(Control0, NodeIndex0, "the producer");
-            UNIT_ASSERT_C(producer.Aborted && producer.Reason.Contains("has not answered"), producer.Reason);
+            // the give-up fails the descriptors of both halves, whose workers report to Control0 in whichever order
+            WaitFinishes(Control0, NodeIndex0, 2, "the producer of channel 2 and the consumer of channel 1");
+            auto producer = FindFinished(2, TEvTestPrivate::ERole::Producer);
+            auto consumer = FindFinished(1, TEvTestPrivate::ERole::Consumer);
+            UNIT_ASSERT(producer && consumer);
+            UNIT_ASSERT_C(producer->Aborted && producer->Reason.Contains("has not answered"), producer->Reason);
+            UNIT_ASSERT_C(consumer->Aborted && consumer->Reason.Contains("has not answered"), consumer->Reason);
             serviceLock.unlock();
             Destroy();
             CheckQuota();

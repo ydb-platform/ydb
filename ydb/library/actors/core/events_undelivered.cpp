@@ -2,27 +2,6 @@
 #include "actorsystem.h"
 
 namespace NActors {
-    namespace {
-        std::unique_ptr<IEventHandle> CreateActorLivenessResponse(
-                std::unique_ptr<IEventHandle> ev,
-                ui32 responseType) {
-            static_assert(
-                TEvents::TEvCheckActorLiveness::RequestFlags ==
-                (IEventHandle::FlagTrackDelivery |
-                    IEventHandle::FlagSystemMessage));
-
-            return std::make_unique<IEventHandle>(
-                responseType,
-                0,
-                ev->Sender,
-                ev->Recipient,
-                nullptr,
-                ev->Cookie,
-                nullptr,
-                std::move(ev->TraceId));
-        }
-    }
-
     TString TEvents::TEvUndelivered::ToStringHeader() const {
         return "TSystem::Undelivered";
     }
@@ -71,18 +50,7 @@ namespace NActors {
         }
 
         if (ev->Flags & FlagTrackDelivery) {
-            if (ev->Type == TEvents::TSystem::CheckActorLiveness) {
-                const ui32 responseType = reason == TEvents::TEvUndelivered::ReasonActorUnknown
-                    ? TEvents::TSystem::ActorDead
-                    : TEvents::TSystem::ActorLivenessUnsure;
-                return CreateActorLivenessResponse(std::move(ev), responseType);
-            }
-
-            const ui32 updatedFlags = ev->Flags & ~(
-                FlagTrackDelivery |
-                FlagSubscribeOnSession |
-                FlagGenerateUnsureUndelivered |
-                FlagSystemMessage);
+            const ui32 updatedFlags = ev->Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
             return std::unique_ptr<IEventHandle>(new IEventHandle(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
                 ev->Cookie, nullptr, std::move(ev->TraceId)));
         }

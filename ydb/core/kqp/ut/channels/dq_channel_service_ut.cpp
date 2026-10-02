@@ -267,9 +267,13 @@ struct TSlowHandshakeTest : public TSessionTest {
         Runtime->Send(Debug0->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(peerNodeId), NodeIndex0, true);
 
         if (PushDuringProbe) {
+            // a push before the reconciliation has started would go to the queue of the session
+            UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() != 0; }, TDuration::Seconds(5)),
+                "the session did not start a reconciliation");
             ProducerSettings = TWorkerSettings{ .MessageCount = 3, .MinMessageSize = 10, .MaxMessageSize = 100, .ExpectAbort = true };
             ConsumerSettings = ProducerSettings;
-            StartChannel(2, true);
+            // the consumer is not started, its bind would block a thread of the peer on the locked service
+            StartChannel(2, false);
             UNIT_ASSERT_C(WaitFor([&]() { return GetWaitersQueueSize(Debug0) > 0; }, TDuration::Seconds(5)), "nothing waits");
         }
 

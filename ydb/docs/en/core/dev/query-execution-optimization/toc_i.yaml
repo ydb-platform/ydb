@@ -3,3 +3,5 @@ items:
   href: query-plans-optimization.md
 - name: Optimizer hints
   href: query-hints.md
+- name: Parameterized queries and recompilation
+  href: parameterized-queries.md

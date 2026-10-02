@@ -15,6 +15,7 @@
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md);
 - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md);
 - [Планы запросов](../../dev/query-execution-optimization/query-plans-optimization.md);
+- [Параметризованные запросы и повторная компиляция](../../dev/query-execution-optimization/parameterized-queries.md);
 - Сторонние инструменты мониторинга.
 
 ## Классификация проблем с производительностью {{ ydb-short-name }}

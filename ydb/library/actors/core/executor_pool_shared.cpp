@@ -462,14 +462,6 @@ namespace NActors {
         }
     }
 
-    void TSharedExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
-        for (i16 i = 0; i < PoolThreads; ++i) {
-            if (Threads[i].Thread) {
-                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
-            }
-        }
-    }
-
     void TSharedExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         poolState.CurrentLimit = GetThreadCount();
         poolState.MaxLimit = GetMaxThreadCount();
@@ -502,6 +494,7 @@ namespace NActors {
                     PoolName,
                     SoftProcessingDurationTs
                     ));
+            Threads[i].Thread->Prepare();
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 

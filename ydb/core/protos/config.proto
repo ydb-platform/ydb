@@ -3063,7 +3063,8 @@ message TColumnShardConfig {
     optional bool EnableWeightedDataChannelSelection = 77 [default = false];
 
     message TCutHistoryConfig {
-        optional uint32 PreparationBatchSize = 1 [default = 1024];
+        reserved 1;
+        reserved "PreparationBatchSize";
         optional uint32 ScanBatchSize = 2 [default = 32];
         optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
         optional uint32 ContinuationDelayMs = 4 [default = 1];

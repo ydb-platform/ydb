@@ -31,10 +31,6 @@ struct TCutHistoryScan {
     size_t Position = 0;
     size_t Pending = 0;
     NActors::TActorId PreparationActor;
-    ui64 BootLastPortion = 0;
-    std::pair<ui64, ui64> PreparationCursor{ 0, 0 };
-    std::optional<std::pair<ui64, ui64>> PreparationMaxKey;
-    bool PreparationPending = false;
     bool SavePending = false;
     bool RetryDelivery = false;
     TInstant Started;

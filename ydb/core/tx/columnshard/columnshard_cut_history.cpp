@@ -63,138 +63,22 @@ class TCutHistoryPreparationActor: public NActors::TActorBootstrapped<TCutHistor
     const TActorId Owner;
     std::vector<std::pair<TInternalPathId, ui64>> Portions;
 
-    void Handle(TEvPrivate::TEvCutHistoryPortionsBatch::TPtr& ev) {
-        if (ev->Sender != Owner) {
-            return;
-        }
-        auto& chunk = *ev->Get();
-        Portions.reserve(Portions.size() + chunk.Portions.size());
-        std::move(chunk.Portions.begin(), chunk.Portions.end(), std::back_inserter(Portions));
-        if (chunk.Finished) {
-            SortBy(Portions, [](const auto& address) {
-                return std::make_pair(address.second, address.first);
-            });
-            Send(Owner, new TEvPrivate::TEvCutHistoryPortionsReady(std::move(Portions)));
-            PassAway();
-        }
-    }
-
-    STRICT_STFUNC(StateWork, hFunc(TEvPrivate::TEvCutHistoryPortionsBatch, Handle) cFunc(TEvents::TEvPoisonPill::EventType, PassAway))
-
 public:
-    explicit TCutHistoryPreparationActor(const TActorId owner)
+    TCutHistoryPreparationActor(const TActorId owner, std::vector<std::pair<TInternalPathId, ui64>>&& portions)
         : Owner(owner)
+        , Portions(std::move(portions))
     {
     }
 
     void Bootstrap() {
-        Become(&TThis::StateWork);
+        SortBy(Portions, [](const auto& address) {
+            return std::make_pair(address.second, address.first);
+        });
+        Send(Owner, new TEvPrivate::TEvCutHistoryPortionsReady(std::move(Portions)));
+        PassAway();
     }
 };
 }   // namespace
-
-class TTxPrepareCutHistory: public TTransactionBase<TColumnShard> {
-    struct TPortions: Schema::IndexPortions {
-        using Precharge = NIceDb::Schema::NoAutoPrecharge;
-    };
-
-    const TActorId PreparationActor;
-    const ui64 BootLastPortion;
-    const std::pair<ui64, ui64> StartCursor;
-    const std::optional<std::pair<ui64, ui64>> StartMaxKey;
-    std::pair<ui64, ui64> Cursor;
-    std::optional<std::pair<ui64, ui64>> MaxKey;
-    std::vector<std::pair<TInternalPathId, ui64>> Portions;
-    bool Finished = false;
-
-public:
-    explicit TTxPrepareCutHistory(TColumnShard* self)
-        : TBase(self)
-        , PreparationActor(self->CutHistoryScan->PreparationActor)
-        , BootLastPortion(self->CutHistoryScan->BootLastPortion)
-        , StartCursor(self->CutHistoryScan->PreparationCursor)
-        , StartMaxKey(self->CutHistoryScan->PreparationMaxKey)
-    {
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Portions.clear();
-        Cursor = StartCursor;
-        MaxKey = StartMaxKey;
-        Finished = false;
-        NIceDb::TNiceDb db(txc.DB);
-        if (!MaxKey) {
-            auto last = db.Table<TPortions>().Reverse().Range().Select<TPortions::PathId, TPortions::PortionId>();
-            if (!last.IsReady()) {
-                return false;
-            }
-            if (last.EndOfSet()) {
-                Finished = true;
-                return true;
-            }
-            MaxKey = std::make_pair(last.GetValue<TPortions::PathId>(), last.GetValue<TPortions::PortionId>());
-        }
-        const size_t batchSize = Max<ui32>(1, Self->ColumnShardConfig->GetCutHistory().GetPreparationBatchSize());
-        size_t visited = 0;
-        while (visited < batchSize && !Finished) {
-            auto rows = db.Table<TPortions>().GreaterOrEqual(Cursor.first, Cursor.second).Select<TPortions::PathId, TPortions::PortionId>();
-            if (!rows.IsReady()) {
-                return false;
-            }
-            while (!rows.EndOfSet() && visited < batchSize) {
-                const std::pair<ui64, ui64> key{ rows.GetValue<TPortions::PathId>(), rows.GetValue<TPortions::PortionId>() };
-                if (key > *MaxKey) {
-                    Finished = true;
-                    break;
-                }
-                ++visited;
-                if (key.second <= BootLastPortion) {
-                    Portions.emplace_back(TInternalPathId::FromRawValue(key.first), key.second);
-                }
-                if (key == *MaxKey) {
-                    Finished = true;
-                    break;
-                }
-                if (key.second > BootLastPortion || key.second == Max<ui64>()) {
-                    if (key.first == Max<ui64>()) {
-                        Finished = true;
-                    } else {
-                        Cursor = { key.first + 1, 0 };
-                    }
-                    break;
-                }
-                Cursor = { key.first, key.second + 1 };
-                if (visited == batchSize) {
-                    break;
-                }
-                if (!rows.Next()) {
-                    return false;
-                }
-            }
-            Finished |= rows.EndOfSet();
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        if (!Self->CutHistoryScan || Self->CutHistoryScan->PreparationActor != PreparationActor) {
-            return;
-        }
-        if (!Self->SharingSessionsManager->CanCutHistory()) {
-            Self->AbortCutHistoryScan();
-            return;
-        }
-        auto& scan = *Self->CutHistoryScan;
-        // Read-only Complete follows prior cleanup commits and their GC bookkeeping publication.
-        scan.PreparationCursor = Cursor;
-        scan.PreparationMaxKey = MaxKey;
-        scan.PreparationPending = Finished;
-        ctx.Send(PreparationActor, new TEvPrivate::TEvCutHistoryPortionsBatch(std::move(Portions), Finished));
-        if (!Finished) {
-            ScheduleCutHistoryContinuation(*Self->ColumnShardConfig, ctx);
-        }
-    }
-};
 
 class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
     const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
@@ -292,15 +176,7 @@ void TColumnShard::InitCutHistoryScan() {
     if (scan.Intervals.empty()) {
         return;
     }
-    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
-    EraseIf(scan.Intervals, [&](const auto& interval) {
-        return NOlap::HasPendingGCBlobsInRange(pendingGenerations, interval.Channel, interval.From, interval.To);
-    });
-    if (!scan.Intervals.empty()) {
-        CutHistoryScan = std::move(scan);
-    }
+    CutHistoryScan = std::move(scan);
 }
 
 void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
@@ -324,9 +200,25 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
     }
     scan.Started = ctx.Now();
     if (HasIndex()) {
-        scan.BootLastPortion = *MutableIndexAs<NOlap::TColumnEngineForLogs>().GetLastPortionPointer();
-        scan.PreparationActor = ctx.Register(new TCutHistoryPreparationActor(SelfId()), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
+        const auto& tables = GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables();
+        size_t portionCount = 0;
+        for (const auto& [_, granule] : tables) {
+            portionCount += granule->GetPortions().size() + granule->GetInsertedPortions().size();
+        }
+        std::vector<std::pair<TInternalPathId, ui64>> portions;
+        portions.reserve(portionCount);
+        for (const auto& [pathId, granule] : tables) {
+            for (const auto& [portionId, _] : granule->GetPortions()) {
+                portions.emplace_back(pathId, portionId);
+            }
+            for (const auto& [_, portion] : granule->GetInsertedPortions()) {
+                portions.emplace_back(pathId, portion->GetPortionId());
+            }
+        }
+        scan.PreparationActor =
+            ctx.Register(new TCutHistoryPreparationActor(SelfId(), std::move(portions)), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
         ActorsToStop.push_back(scan.PreparationActor);
+        return;
     }
     ScheduleCutHistoryContinuation(*ColumnShardConfig, ctx);
 }
@@ -348,7 +240,6 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, cons
         return;
     }
     CutHistoryScan->PreparationActor = {};
-    CutHistoryScan->PreparationPending = false;
     CutHistoryScan->Portions = std::move(ev->Get()->Portions);
     ScheduleCutHistoryContinuation(*ColumnShardConfig, ctx);
 }
@@ -363,10 +254,6 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActor
     }
     auto& scan = *CutHistoryScan;
     if (scan.PreparationActor) {
-        if (!scan.PreparationPending) {
-            scan.PreparationPending = true;
-            Execute(new TTxPrepareCutHistory(this), ctx);
-        }
         return;
     }
     if (scan.Position == scan.Portions.size()) {

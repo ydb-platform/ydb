@@ -216,7 +216,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
-    friend class TTxPrepareCutHistory;
     friend class TTxSaveCutHistoryRequests;
     friend class TCutHistoryResultProcessor;
     friend class TTxRemoveSharedBlobs;

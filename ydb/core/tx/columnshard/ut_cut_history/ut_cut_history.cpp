@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(cutFrom.front(), 0u);
     }
 
-    Y_UNIT_TEST(PendingGCIntervalsStaySkippedUntilReboot) {
+    Y_UNIT_TEST(PendingGCCheckedAfterScan) {
         TFixture f;
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
@@ -401,7 +401,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(metadataRequests, 0u);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "queued old blob must be the sole remaining cut blocker");
         holdScan = true;
-        f.Restart(OldGroup);
         f.Restart();
         UNIT_ASSERT(continuation);
         storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
@@ -419,18 +418,13 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         holdScan = false;
         f.Runtime.Send(continuation.Release(), 0, true);
         f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "startup pending work stays excluded after GC drains during the scan");
-        f.Controller->DisableBackground(EBackground::GC);
-        f.Restart();
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "next boot may accept the interval after its pending work has drained");
+        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "GC drained before the scan finishes must not require another reboot");
     }
 
     Y_UNIT_TEST(ColdCacheBatchingAndMetadataFailure) {
         constexpr ui64 portionCount = 7;
         TFixture f;
         auto* config = f.Runtime.GetAppData().ColumnShardConfig.MutableCutHistory();
-        config->SetPreparationBatchSize(3);
         config->SetScanBatchSize(2);
         config->SetContinuationDelayMs(3);
         config->SetContinuationJitterMs(2);
@@ -448,7 +442,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         bool cutSent = false;
         bool failMetadata = false;
-        ui32 preparationBatches = 0;
         ui32 scanBatches = 0;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
@@ -460,9 +453,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
                 cutSent = true;
                 ev.Reset();
-            } else if (auto* batch = dynamic_cast<TEvPrivate::TEvCutHistoryPortionsBatch*>(ev->GetBase())) {
-                UNIT_ASSERT(batch->Portions.size() <= Max<ui32>(1, config->GetPreparationBatchSize()));
-                ++preparationBatches;
             } else if (auto* info = dynamic_cast<TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
                 auto result = info->ExtractResult();
                 auto data = result.ExtractValue();
@@ -485,7 +475,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             f.Drive(1);
         }
         UNIT_ASSERT(cutSent);
-        UNIT_ASSERT(preparationBatches >= 3);
         UNIT_ASSERT(scanBatches >= 4);
         UNIT_ASSERT(!f.ContinuationDelays.empty());
         for (const auto delay : f.ContinuationDelays) {
@@ -496,7 +485,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
         cutSent = false;
         failMetadata = true;
-        config->SetPreparationBatchSize(0);
         config->SetScanBatchSize(0);
         config->SetScanMemoryLimitBytes(0);
         config->SetContinuationDelayMs(0);

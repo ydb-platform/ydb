@@ -33,9 +33,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     }
 
     void Handle(TEvTabletStatsBatch::TPtr ev) {
-        if (ev->Sender != Owner || !RequestInFlight) {
-            return;
-        }
+        Y_ABORT_UNLESS(ev->Sender == Owner && RequestInFlight);
         RequestInFlight = false;
         Available = ev->Get()->Available;
         if (!Available) {

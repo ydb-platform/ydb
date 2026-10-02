@@ -20,9 +20,7 @@ void TDDiskActor::CountTabletChunks(ui64 tabletId, i64 delta) {
 }
 
 void TDDiskActor::Handle(TEvCollectTabletStats::TPtr ev) {
-    if (ev->Sender != TabletStatsActor) {
-        return;
-    }
+    Y_ABORT_UNLESS(ev->Sender == TabletStatsActor);
     auto batch = std::make_unique<TEvTabletStatsBatch>();
     batch->Available = !Stopping;
     if (!Stopping) {

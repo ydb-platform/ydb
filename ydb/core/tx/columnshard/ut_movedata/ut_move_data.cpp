@@ -571,6 +571,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         static constexpr ui32 KeepCount = 500001;
 
         TBlobManagerFixture f(TabletId, TabletGen);
+        // The repeated broadcast is part of the MoveData contract and stays behind its flag.
+        f.ActorSystemStub.AppData.FeatureFlags.SetEnableColumnshardMoveData(true);
         TRecoveredGcDb db;
         db.Last = TGenStep(4, 0);
         db.Prepared = TGenStep(4, 1);

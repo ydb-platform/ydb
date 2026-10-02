@@ -381,8 +381,9 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
-            // A recovered barrier below this generation proves nothing about it: keep broadcasting until one from it goes out.
-            FirstGC = CollectGenStepInFlight->Generation() < CurrentGen;
+            // Under MoveData a recovered barrier below this generation proves nothing about it: keep broadcasting until one from it goes out.
+            const bool moveDataEnabled = HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardMoveData();
+            FirstGC = moveDataEnabled && CollectGenStepInFlight->Generation() < CurrentGen;
         }
         if (!BlobsToKeep.IsEmpty()) {
             AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)(

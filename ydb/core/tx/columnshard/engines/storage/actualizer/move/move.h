@@ -42,7 +42,7 @@ private:
     void RemoveFromActiveQueue(ui64 portionId);
 
 protected:
-    // Membership bookkeeping for the seeded set only: new portions land in active groups and are ignored here.
+    // Needed only for bookkeeping of the seeded set (a move finishing, failing, or a seeded write committing); nothing new is adopted, since new portions land in active groups.
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
     virtual void DoExtractTasks(

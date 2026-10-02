@@ -85,6 +85,7 @@ void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
 }
 
 void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
+    // Bookkeeping only: a seeded portion coming back after a commit or an aborted move re-enters the queues.
     const ui64 portionId = info.GetPortionId();
     // A seeded uncommitted portion has committed, so from here on it moves like any other.
     UncommittedPortionIds.erase(portionId);
@@ -105,6 +106,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 }
 
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
+    // Bookkeeping only: a seeded portion leaving the index (moved, compacted, cleaned up) leaves every queue, or the gate never drains.
     // InitialPortionIds is kept: a level move removes and re-adds the same portion, which stays ours.
     PendingPortionIds.erase(portionId);
     RequestedAt.erase(portionId);

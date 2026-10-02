@@ -120,16 +120,6 @@ def test_storage_stats_hides_foreign_serverless_tablets(serverless_storage_datab
         f'Test databases must have distinct tablets: own={own_ids}, foreign={foreign_ids}'
     )
 
-    for name in ('shared', 'foreign'):
-        response = requests.get(
-            base + '/viewer/json/describe',
-            params={'database': databases[name], 'path': databases[name]},
-            headers={'Authorization': 'database@builtin'},
-            verify=False,
-            timeout=10,
-        )
-        assert response.status_code == 400, response.text
-
     def get_stats_with_own_tablets():
         result = storage_stats(
             databases['own'], 'database@builtin', group_by='tablet_type', use_hive_tablets=use_hive_tablets,

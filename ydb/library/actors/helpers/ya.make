@@ -3,8 +3,6 @@ LIBRARY()
 SRCS(
     activeactors.cpp
     activeactors.h
-    actor_liveness_checker.cpp
-    actor_liveness_checker.h
     collector_counters.cpp
     future_callback.h
     mon_histogram_helper.h

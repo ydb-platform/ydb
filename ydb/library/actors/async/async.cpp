@@ -42,10 +42,7 @@ namespace NActors::NDetail {
                 TActorRunnableQueue::Schedule(this);
             } else {
                 // Send an event using the actor system
-                ActorSystem->Send(
-                    SelfId,
-                    new TEvents::TEvResumeRunnable(this),
-                    TEvents::TEvResumeRunnable::EventFlags);
+                ActorSystem->Send(SelfId, new TEvents::TEvResumeRunnable(this));
             }
         }
 
@@ -120,10 +117,7 @@ namespace NActors::NDetail {
                     TActorRunnableQueue::Schedule(this);
                 } else {
                     // Send an event using the actor system
-                    Self.ActorSystem->Send(
-                        Self.SelfId,
-                        new TEvents::TEvResumeRunnable(this),
-                        TEvents::TEvResumeRunnable::EventFlags);
+                    Self.ActorSystem->Send(Self.SelfId, new TEvents::TEvResumeRunnable(this));
                 }
             }
 

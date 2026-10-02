@@ -1,6 +1,7 @@
 #include "interconnect_uring_engine.h"
 
-#include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
+#include "uring_recv_buffer_pool.h"
+#include "uring_context.h" // for TUringContext::IsSupported() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
 #include "v2_probes.h"
@@ -248,30 +249,6 @@ namespace NActors {
                 Terminated = true;
             }
 
-            template <typename TFn>
-            bool TryProtocol(TFn&& fn) {
-                try {
-                    fn();
-                    return true;
-                } catch (const TExEventFormatError&) {
-                    if (!Terminated) {
-                        Disconnect(TDisconnectReason::FormatError());
-                    }
-                    return false;
-                } catch (const TExEventTooLarge&) {
-                    if (!Terminated) {
-                        Disconnect(TDisconnectReason::EventTooLarge());
-                    }
-                    return false;
-                }
-            }
-
-            void PushIncoming(TRcBuf buffer) {
-                TryProtocol([&] {
-                    Deserializer.Push(std::move(buffer), this, SessionId);
-                });
-            }
-
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // deserialization/receiving
 
@@ -289,10 +266,11 @@ namespace NActors {
                 Y_DEBUG_ABORT_UNLESS(num <= size);
                 NSan::Unpoison(ReadBuffer.data(), num);
                 if (num == size) {
-                    PushIncoming(std::move(ReadBuffer));
+                    Deserializer.Push(std::move(ReadBuffer), this, SessionId);
                     ReadBuffer = {};
                 } else {
-                    PushIncoming(TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer));
+                    Deserializer.Push(TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
+                        this, SessionId);
                     const size_t remain = size - num;
                     ReadBuffer.TrimFront(remain - remain % 64); // keep the tail cache-line aligned
                 }
@@ -305,7 +283,7 @@ namespace NActors {
             void ApplyBytesReadCopy(const char *data, size_t num, size_t poolBufSize) {
                 BytesReceived += num;
                 NSan::Unpoison(data, num);
-                PushIncoming(TRcBuf::Copy({data, num}));
+                Deserializer.Push(TRcBuf::Copy({data, num}), this, SessionId);
 
                 Y_DEBUG_ABORT_UNLESS(num <= poolBufSize);
                 ReadTarget.OnPoolCompletion(num, poolBufSize);
@@ -383,15 +361,10 @@ namespace NActors {
                     const size_t xdcScratchBefore = XdcWriteBuffer.size();
                     const ui64 mainBefore = Serializer.GetCumulativeProducedMain();
                     const ui64 xdcBefore = Serializer.GetCumulativeProducedXdc();
-                    size_t numBytesProduced = 0;
-                    if (!TryProtocol([&] {
-                            numBytesProduced = XdcSocket
-                                ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
-                                    &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
-                                : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
-                        })) {
-                        return;
-                    }
+                    const size_t numBytesProduced = XdcSocket
+                        ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
+                            &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
+                        : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
 
                     if (!numBytesProduced) {
                         break;
@@ -1898,9 +1871,6 @@ namespace NActors {
                         && (windowHasRoom || session.Serializer.HasOutOfBandTraffic())) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
-                        if (session.Terminated) {
-                            return;
-                        }
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
                         LastActivitySwitchTimestamp += serializeEventTime;
                         *SerializeEventTotalTime += serializeEventTime * Freq;

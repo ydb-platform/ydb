@@ -94,7 +94,7 @@ namespace NActors {
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
-        bool EnableExternalDataChannel = true;
+        bool EnableExternalDataChannel = false;
         bool EnableKernelLiveness = false;
         TDuration KernelKeepAliveIdle = TDuration::Seconds(5);
         TDuration KernelKeepAliveInterval = TDuration::Seconds(1);
@@ -115,7 +115,8 @@ namespace NActors {
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
-        TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
+        bool UseUring = false;
+        bool EnableUringSQPOLL = false; // only effective when UseUring is set
 
         struct TV2 {
             // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).

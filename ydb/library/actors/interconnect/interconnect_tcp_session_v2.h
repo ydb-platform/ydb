@@ -72,7 +72,6 @@ namespace NActors {
         struct TEvPrivate {
             enum {
                 EvTerminate = EventSpaceBegin(TEvents::ES_PRIVATE),
-                EvCheckSubscriberLiveness,
             };
 
             struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {
@@ -80,9 +79,6 @@ namespace NActors {
 
                 TEvTerminate(TDisconnectReason reason) : Reason(reason) {}
             };
-
-            struct TEvCheckSubscriberLiveness
-                : TEventLocal<TEvCheckSubscriberLiveness, EvCheckSubscriberLiveness> {};
         };
 
         STATEFN(StateFunc) {
@@ -92,7 +88,6 @@ namespace NActors {
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvUnsubscribe::EventType, HandleUnsubscribe)
-                cFunc(TEvPrivate::TEvCheckSubscriberLiveness::EventType, CheckSubscriberLiveness)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 cFunc(TEvInterconnect::EvForwardDelayed, IgnoreForwardDelayed)
                 hFunc(TEvPrivate::TEvTerminate, [&](auto& ev) { Terminate(ev->Get()->Reason); });
@@ -103,13 +98,12 @@ namespace NActors {
         void ForwardWithSubscribe(STATEFN_SIG);
         void HandleSubscribe(STATEFN_SIG);
         void HandleUnsubscribe(STATEFN_SIG);
-        void CheckSubscriberLiveness();
         void HandlePoison();
         void IgnoreForwardDelayed() {}
 
         void EnqueueOutgoing(TAutoPtr<IEventHandle> ev);
 
-        void AddSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>());
+        void AddSubscriber(const TActorId& actorId, ui64 cookie);
         IEventBase* MakeNodeConnectedEvent() const;
 
     private:
@@ -126,13 +120,8 @@ namespace NActors {
         // io_uring data plane
         ui64 EngineHandle = 0;
 
-        struct TSubscriberInfo {
-            ui64 Cookie = 0;
-            ui32 ActivityIndex = Max<ui32>();
-        };
-
-        // subscribers awaiting connection state notifications
-        THashMap<TActorId, TSubscriberInfo> Subscribers;
+        // subscribers awaiting connection state notifications (actor id -> cookie)
+        THashMap<TActorId, ui64> Subscribers;
 
         std::shared_ptr<std::atomic<int64_t>> ClockSkew = std::make_shared<std::atomic<int64_t>>();
         std::shared_ptr<std::atomic<uint64_t>> PingRTT = std::make_shared<std::atomic<uint64_t>>();

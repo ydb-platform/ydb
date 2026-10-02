@@ -154,9 +154,35 @@ void TManager::TryAllocateWaiting() {
     if (Config.IsUnrestrictedEnabled()) {
         while (ScheduleOneUnrestricted()) {
         }
+        ForceOneOnDeadlock();
     }
 
     RefreshSignals();
+}
+
+bool TManager::ForceOneOnDeadlock() {
+    if (!Config.IsUnrestrictedEnabled() || WaitingProcesses.empty() || !DefaultStage->GetUnrestrictedSoft()) {
+        return false;
+    }
+    // Memory must be the blocker: every holder waits and no waiting request fits the band.
+    // A request that fits but is held back by a slot waits for that slot instead.
+    for (const auto& [_, process] : Processes) {
+        if (!process.AllHoldersWait() || process.HasWaitingThatFits()) {
+            return false;
+        }
+    }
+    for (const auto& address : WaitingProcesses) {
+        auto it = ProcessesOrdered.find(address);
+        AFL_VERIFY(it != ProcessesOrdered.end());
+        TProcessMemory* process = it->second;
+        const auto step = process->ForceOneUnrestricted();
+        if (step == EUnrestrictedScheduleResult::Idle) {
+            continue;
+        }
+        RelinkProcess(*process, address);
+        return true;
+    }
+    return false;
 }
 
 void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {

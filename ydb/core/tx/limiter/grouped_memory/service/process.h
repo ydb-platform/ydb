@@ -52,18 +52,16 @@ private:
     }
 
     // Smallest waiting group that is not already admitted and whose request fits.
-    // An admitted group whose request does not fit is skipped: it holds a slot it cannot use.
-    // A smaller group that is not admitted and does not fit still blocks later groups.
+    // Groups whose request does not fit are passed over, admitted or not: granting a fitting request
+    // lets its holder finish and release memory, which is what the passed-over groups wait for.
     std::optional<ui64> NextUnadmittedFittingGroup() const {
         std::optional<ui64> found;
         WaitAllocations.ForEachGroup([&](const ui64 groupId) {
-            if (AdmittedGroupIds.contains(groupId)) {
-                return true;
-            }
-            if (WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
+            if (!AdmittedGroupIds.contains(groupId) && WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
                 found = groupId;
+                return false;
             }
-            return false;
+            return true;
         });
         return found;
     }
@@ -217,6 +215,22 @@ public:
         return !AdmittedGroupIds.empty();
     }
 
+    // Every group that holds allocated bytes also waits for another request. A group releases its
+    // buffers only after its next request is granted, so nothing will be freed without a grant.
+    bool AllHoldersWait() const {
+        for (const auto& [_, info] : AllocationInfo) {
+            if (info->GetAllocationStatus() == EAllocationStatus::Allocated && !WaitAllocations.HasWaiting(info->GetAllocationExternalGroupId())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Some waiting request fits the band at the current usage. It may be blocked by a slot, not by memory.
+    bool HasWaitingThatFits() const {
+        return WaitAllocations.AnyIf(FitsUnrestricted);
+    }
+
     bool CanScheduleUnrestricted() const {
         return UnrestrictedEnabled && (AdmittedGroupHasFittingAllocation() || CanGiveSlotToWaitingGroup());
     }
@@ -252,6 +266,48 @@ public:
         }
         AdmittedGroupIds.insert(*candidate);
         return AllocateTaken(allocation, *candidate);
+    }
+
+    // Last resort when every holder in the manager is waiting: grant one request above the band.
+    // The hard limit still applies, so the request is either granted or reported as impossible.
+    EUnrestrictedScheduleResult ForceOneUnrestricted() {
+        if (!UnrestrictedEnabled) {
+            return EUnrestrictedScheduleResult::Idle;
+        }
+        static const auto any = [](const TAllocationInfo&) {
+            return true;
+        };
+        std::optional<ui64> groupId;
+        std::shared_ptr<TAllocationInfo> allocation;
+        const std::vector<ui64> admitted(AdmittedGroupIds.begin(), AdmittedGroupIds.end());
+        for (const ui64 admittedGroupId : admitted) {
+            if ((allocation = WaitAllocations.TakeOne(admittedGroupId, any))) {
+                groupId = admittedGroupId;
+                break;
+            }
+        }
+        if (!allocation) {
+            groupId = WaitAllocations.GetMinExternalGroupId();
+            if (!groupId) {
+                return EUnrestrictedScheduleResult::Idle;
+            }
+            allocation = WaitAllocations.TakeOne(*groupId, any);
+            AFL_VERIFY(allocation);
+            if (HasFreeAdmissionSlot()) {
+                AdmittedGroupIds.insert(*groupId);
+            }
+        }
+        auto stage = allocation->GetStage();
+        LWPROBE(Allocated, "deadlock_forced", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocation->GetAllocationTime(), true, false);
+        YDB_LOG_WARN_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+            {"event", "deadlock_forced"},
+            {"allocationId", allocation->GetIdentifier()},
+            {"externalGroupId", *groupId},
+            {"processId", ExternalProcessId},
+            {"externalScopeId", ExternalScopeId},
+            {"volume", allocation->GetAllocatedVolume()},
+            {"usage", stage->GetUsage().Val()});
+        return AllocateTaken(allocation, *groupId);
     }
 
     void CollectAdmitted(ui64& groups, ui64& bytes) const {
@@ -609,6 +665,37 @@ public:
             scope->FailNeverFittingWaiting();
             UpdateWaitingScopes(scope.get());
         }
+    }
+
+    bool AllHoldersWait() const {
+        for (const auto& [_, scope] : AllocationScopes) {
+            if (!scope->AllHoldersWait()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool HasWaitingThatFits() const {
+        for (const ui64 scopeId : WaitingScopes) {
+            if (GetAllocationScopeVerified(scopeId).HasWaitingThatFits()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    EUnrestrictedScheduleResult ForceOneUnrestricted() {
+        for (const ui64 scopeId : WaitingScopes) {
+            auto& scope = GetAllocationScopeVerified(scopeId);
+            const auto result = scope.ForceOneUnrestricted();
+            if (result != EUnrestrictedScheduleResult::Idle) {
+                RefreshMemoryUsage();
+                UpdateWaitingScopes(&scope);
+                return result;
+            }
+        }
+        return EUnrestrictedScheduleResult::Idle;
     }
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {

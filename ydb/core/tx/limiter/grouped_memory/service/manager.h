@@ -28,6 +28,8 @@ private:
     void TryAllocateWaiting();
     // One admitted allocation. Scopes with no admission are served before scopes that already hold one.
     bool ScheduleOneUnrestricted();
+    // Nothing fits the band and every holder waits for its own next request: grant one above the band.
+    bool ForceOneOnDeadlock();
     void RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress);
     void RefreshSignals() const {
         Signals->ProcessesCount->Set(Processes.size());

@@ -137,6 +137,18 @@ public:
     }
 
     template <typename TPred>
+    bool AnyIf(TPred&& pred) const {
+        for (const auto& [_, group] : Groups) {
+            if (FindIfPtr(group.GetAllocations(), [&pred](const auto& item) {
+                    return pred(*item.second);
+                })) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename TPred>
     bool ContainsIf(const ui64 externalGroupId, TPred&& pred) const {
         auto groupIt = Groups.find(externalGroupId);
         if (groupIt == Groups.end()) {

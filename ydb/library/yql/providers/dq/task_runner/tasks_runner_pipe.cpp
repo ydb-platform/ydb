@@ -29,6 +29,7 @@
 #include <util/stream/length.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
+#include <util/generic/scope.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 #include <util/string/builder.h>
@@ -59,15 +60,31 @@ struct TPipeFactoryCounters {
     explicit TPipeFactoryCounters(const NMonitoring::TDynamicCounterPtr& root)
         : ProcessesInPool(root->GetCounter("ProcessesInPool"))
         , ProcessesPendingStop(root->GetCounter("ProcessesPendingStop"))
+        , PoolAcquireHits(root->GetCounter("PoolAcquireHits", /*derivative=*/true))
+        , PoolAcquireMisses(root->GetCounter("PoolAcquireMisses", /*derivative=*/true))
+        , PoolEvictedOnKeyMismatch(root->GetCounter("PoolEvictedOnKeyMismatch", /*derivative=*/true))
+        , PoolStopDelayCount(root->GetCounter("PoolStopDelayCount", /*derivative=*/true))
+        , PoolStopDelayTotalUs(root->GetCounter("PoolStopDelayTotalUs", /*derivative=*/true))
         , PortoContainersAlive(root->GetCounter("PortoContainersAlive"))
         , PortoContainersStarted(root->GetCounter("PortoContainersStarted", /*derivative=*/true))
         , PortoContainersDestroyed(root->GetCounter("PortoContainersDestroyed", /*derivative=*/true))
         , PortoContainerDestroyErrors(root->GetCounter("PortoContainerDestroyErrors", /*derivative=*/true))
+        , PortoCleanupCallsInFlight(root->GetCounter("PortoCleanupCallsInFlight"))
+        , PortoCleanupCount(root->GetCounter("PortoCleanupCount", /*derivative=*/true))
+        , PortoCleanupTotalUs(root->GetCounter("PortoCleanupTotalUs", /*derivative=*/true))
+        , PortoOwnerReleasedWithoutDestroyAttempt(root->GetCounter("PortoOwnerReleasedWithoutDestroyAttempt", /*derivative=*/true))
+        , PortoOwnerReleasedAfterDestroyFailure(root->GetCounter("PortoOwnerReleasedAfterDestroyFailure", /*derivative=*/true))
     {
     }
 
     const NMonitoring::TDynamicCounters::TCounterPtr ProcessesInPool;
     const NMonitoring::TDynamicCounters::TCounterPtr ProcessesPendingStop;
+
+    const NMonitoring::TDynamicCounters::TCounterPtr PoolAcquireHits;
+    const NMonitoring::TDynamicCounters::TCounterPtr PoolAcquireMisses;
+    const NMonitoring::TDynamicCounters::TCounterPtr PoolEvictedOnKeyMismatch;
+    const NMonitoring::TDynamicCounters::TCounterPtr PoolStopDelayCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr PoolStopDelayTotalUs;
 
     // Best-effort count of Porto containers owned by live TPortoProcess objects.
     // It intentionally does not query Porto and therefore cannot detect orphaned containers.
@@ -75,6 +92,12 @@ struct TPipeFactoryCounters {
     const NMonitoring::TDynamicCounters::TCounterPtr PortoContainersStarted;
     const NMonitoring::TDynamicCounters::TCounterPtr PortoContainersDestroyed;
     const NMonitoring::TDynamicCounters::TCounterPtr PortoContainerDestroyErrors;
+
+    const NMonitoring::TDynamicCounters::TCounterPtr PortoCleanupCallsInFlight;
+    const NMonitoring::TDynamicCounters::TCounterPtr PortoCleanupCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr PortoCleanupTotalUs;
+    const NMonitoring::TDynamicCounters::TCounterPtr PortoOwnerReleasedWithoutDestroyAttempt;
+    const NMonitoring::TDynamicCounters::TCounterPtr PortoOwnerReleasedAfterDestroyFailure;
 };
 
 using TPipeFactoryCountersPtr = std::shared_ptr<TPipeFactoryCounters>;
@@ -334,6 +357,9 @@ struct TProcessHolder {
     {
         Running.clear();
         Watcher->Join();
+        if (!Processes.empty()) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Releasing unused pool processes on shutdown (Count: " << Processes.size() << ")";
+        }
     }
 
     i64 Size() {
@@ -358,6 +384,12 @@ struct TProcessHolder {
                 break;
             }
             stopList->push_back(std::move(first.second));
+            ++*Counters->PoolEvictedOnKeyMismatch;
+        }
+        if (result) {
+            ++*Counters->PoolAcquireHits;
+        } else {
+            ++*Counters->PoolAcquireMisses;
         }
         UpdatePoolSize();
         return result;
@@ -459,8 +491,20 @@ public:
     ~TPortoProcess() {
         if (Started) {
             --*Counters->PortoContainersAlive;
+            if (!DestroyReported) {
+                // Pool shutdown also releases unused owners without destroy; this does not prove a live-container leak.
+                if (DestroyAttempted) {
+                    ++*Counters->PortoOwnerReleasedAfterDestroyFailure;
+                } else {
+                    ++*Counters->PortoOwnerReleasedWithoutDestroyAttempt;
+                }
+            }
         }
         try {
+            if (Started && !DestroyReported) {
+                YQL_CLOG(DEBUG, ProviderDq) << "Porto owner released without successful destroy (Container: " << ContainerName
+                    << ", DestroyAttempted: " << DestroyAttempted << ")";
+            }
             NFs::RemoveRecursive(TmpDir);
         } catch (...) {
             YQL_CLOG(DEBUG, ProviderDq) << "Error on TmpDir cleanup: " << CurrentExceptionMessage();
@@ -488,6 +532,12 @@ private:
 
     void Kill() override {
         const auto startedAt = TInstant::Now();
+        ++*Counters->PortoCleanupCallsInFlight;
+        Y_DEFER {
+            *Counters->PortoCleanupTotalUs += (TInstant::Now() - startedAt).MicroSeconds();
+            ++*Counters->PortoCleanupCount;
+            --*Counters->PortoCleanupCallsInFlight;
+        };
         if (EnablePortoAnonLimitRaiseBeforeDestroy && MemoryLimit) {
             try {
                 // see YQL-13760
@@ -513,6 +563,7 @@ private:
 
         const auto destroyStartedAt = TInstant::Now();
         bool destroyed = false;
+        DestroyAttempted = true;
         try {
             TShellCommand cmd(PortoCtl, {"destroy", ContainerName});
             cmd.Run().Wait();
@@ -606,6 +657,7 @@ private:
     const TPipeFactoryCountersPtr Counters;
     bool Started = false;
     bool DestroyReported = false;
+    bool DestroyAttempted = false;
     TString ContainerName;
 
     const TString InternalWorkDir_;
@@ -2074,6 +2126,7 @@ class TPipeFactory: public IProxyFactory {
     struct TStopJob: public TTaskScheduler::ITask {
         TList<THolder<TChildProcess>> StopList;
         const TPipeFactoryCountersPtr Counters;
+        const TInstant ScheduledAt = TInstant::Now();
 
         TStopJob(TList<THolder<TChildProcess>>&& stopList, TPipeFactoryCountersPtr counters)
             : StopList(std::move(stopList))
@@ -2081,7 +2134,13 @@ class TPipeFactory: public IProxyFactory {
         { }
 
         TInstant Process() override {
+            if (!StopList.empty()) {
+                YQL_CLOG(DEBUG, ProviderDq) << "Stopping evicted pool processes (Count: " << StopList.size()
+                    << ", QueueDelayMs: " << (TInstant::Now() - ScheduledAt).MilliSeconds() << ")";
+            }
             for (const auto& job : StopList) {
+                *Counters->PoolStopDelayTotalUs += (TInstant::Now() - ScheduledAt).MicroSeconds();
+                ++*Counters->PoolStopDelayCount;
                 job->Kill();
                 job->Wait(TDuration::Seconds(1));
                 --*Counters->ProcessesPendingStop;

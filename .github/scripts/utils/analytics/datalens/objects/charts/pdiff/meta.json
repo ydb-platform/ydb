@@ -1,0 +1,12 @@
+{
+  "type": "advanced-chart_node",
+  "annotation": {
+    "description": "Selected percentile at the start and end of the filtered interval."
+  },
+  "meta": {},
+  "data": {
+    "meta": "{\n    \"links\": {\n        \"dataset\": \"z11tcvkyw21gi\"\n    }\n}\n",
+    "params": "module.exports = {\n    step: ['checkout'],\n    metric: ['checkout'],\n    wf: [''],\n    workflow: [''],\n    branch: ['main'],\n    tl_branch: ['main'],\n    tl_preset: [''],\n    kind: [''],\n    interval: [''],\n    tl_from: [''],\n    tl_to: [''],\n    p_q: ['90'],\n    p90_step: ['hour'],\n    selected_id: [''],\n};\n",
+    "controls": "module.exports = {\n    controls: [],\n};\n"
+  }
+}

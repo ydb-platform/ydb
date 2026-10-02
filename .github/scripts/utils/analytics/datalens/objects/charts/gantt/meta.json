@@ -1,0 +1,12 @@
+{
+  "type": "advanced-chart_node",
+  "annotation": {
+    "description": "Gantt follows GitHub job graph. ya_phase under Build and test via github_job_id."
+  },
+  "meta": {},
+  "data": {
+    "meta": "{\n    \"links\": {\n        \"dataset\": \"tvvegjgj046oc\"\n    }\n}\n",
+    "params": "module.exports = {\n    wf: [''],\n    workflow: [''],\n    branch: [''],\n    pr_number: [''],\n    pr: [''],\n    job_name: [''],\n    build_preset: [''],\n    run_id: [''],\n    run: [''],\n    run_label: [''],\n    gantt_run: [''],\n    max_rows: ['3000'],\n};\n",
+    "controls": "module.exports = {\n    controls: [],\n};\n"
+  }
+}

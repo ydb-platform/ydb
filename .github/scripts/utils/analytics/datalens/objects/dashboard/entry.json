@@ -1,0 +1,754 @@
+{
+  "entryId": "135ob2ntmr0ok",
+  "type": "",
+  "annotation": {
+    "description": ""
+  },
+  "meta": {},
+  "data": {
+    "salt": "73ee45001aa24643",
+    "tabs": [
+      {
+        "id": "citab01",
+        "items": [
+          {
+            "id": "ciselect01",
+            "data": {
+              "group": [
+                {
+                  "id": "selstep",
+                  "title": "Step",
+                  "width": "",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "step",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "job"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "total · job",
+                        "value": "job"
+                      },
+                      {
+                        "title": "job · Queue",
+                        "value": "queue"
+                      },
+                      {
+                        "title": "job · Checkout",
+                        "value": "checkout"
+                      },
+                      {
+                        "title": "- step · clean ya cache",
+                        "value": "clean_ya_cache"
+                      },
+                      {
+                        "title": "- step · init",
+                        "value": "init"
+                      },
+                      {
+                        "title": "- step · setup cache",
+                        "value": "setup_cache"
+                      },
+                      {
+                        "title": "job · Build and test",
+                        "value": "Build and test"
+                      },
+                      {
+                        "title": "- step · graph_compare",
+                        "value": "graph_compare"
+                      },
+                      {
+                        "title": "- step · checkout head",
+                        "value": "checkout_head"
+                      },
+                      {
+                        "title": "- step · prepare ya make try 1",
+                        "value": "prepare_ya_make_try_1"
+                      },
+                      {
+                        "title": "- step · ya_make --try 1",
+                        "value": "ya_make_try_1"
+                      },
+                      {
+                        "title": "-- substep · ya cache download try 1",
+                        "value": "ya_cache_download_try_1"
+                      },
+                      {
+                        "title": "-- substep · ya build try 1",
+                        "value": "ya_build_try_1"
+                      },
+                      {
+                        "title": "-- substep · tests try 1",
+                        "value": "ya_tests_try_1"
+                      },
+                      {
+                        "title": "-- substep · ya cache upload try 1",
+                        "value": "ya_cache_upload_try_1"
+                      },
+                      {
+                        "title": "-- substep · postprocess try 1",
+                        "value": "postprocess_try_try_1"
+                      },
+                      {
+                        "title": "-- substep · transform_build_results try 1",
+                        "value": "transform_build_results_try_1"
+                      },
+                      {
+                        "title": "-- substep · fail_checker try 1",
+                        "value": "fail_checker_try_1"
+                      },
+                      {
+                        "title": "-- substep · generate_summary try 1",
+                        "value": "generate_summary_try_1"
+                      },
+                      {
+                        "title": "-- substep · s3 sync try 1",
+                        "value": "s3_sync_try_1"
+                      },
+                      {
+                        "title": "-- substep · upload_tests_results try 1",
+                        "value": "upload_tests_results_try_1"
+                      },
+                      {
+                        "title": "- step · prepare ya make try 2",
+                        "value": "prepare_ya_make_try_2"
+                      },
+                      {
+                        "title": "- step · ya_make --try 2",
+                        "value": "ya_make_try_2"
+                      },
+                      {
+                        "title": "-- substep · ya cache download try 2",
+                        "value": "ya_cache_download_try_2"
+                      },
+                      {
+                        "title": "-- substep · ya build try 2",
+                        "value": "ya_build_try_2"
+                      },
+                      {
+                        "title": "-- substep · tests try 2",
+                        "value": "ya_tests_try_2"
+                      },
+                      {
+                        "title": "-- substep · ya cache upload try 2",
+                        "value": "ya_cache_upload_try_2"
+                      },
+                      {
+                        "title": "-- substep · postprocess try 2",
+                        "value": "postprocess_try_try_2"
+                      },
+                      {
+                        "title": "-- substep · transform_build_results try 2",
+                        "value": "transform_build_results_try_2"
+                      },
+                      {
+                        "title": "-- substep · fail_checker try 2",
+                        "value": "fail_checker_try_2"
+                      },
+                      {
+                        "title": "-- substep · generate_summary try 2",
+                        "value": "generate_summary_try_2"
+                      },
+                      {
+                        "title": "-- substep · s3 sync try 2",
+                        "value": "s3_sync_try_2"
+                      },
+                      {
+                        "title": "-- substep · upload_tests_results try 2",
+                        "value": "upload_tests_results_try_2"
+                      },
+                      {
+                        "title": "- step · prepare ya make try 3",
+                        "value": "prepare_ya_make_try_3"
+                      },
+                      {
+                        "title": "- step · ya_make --try 3",
+                        "value": "ya_make_try_3"
+                      },
+                      {
+                        "title": "-- substep · ya cache download try 3",
+                        "value": "ya_cache_download_try_3"
+                      },
+                      {
+                        "title": "-- substep · ya build try 3",
+                        "value": "ya_build_try_3"
+                      },
+                      {
+                        "title": "-- substep · tests try 3",
+                        "value": "ya_tests_try_3"
+                      },
+                      {
+                        "title": "-- substep · ya cache upload try 3",
+                        "value": "ya_cache_upload_try_3"
+                      },
+                      {
+                        "title": "-- substep · postprocess try 3",
+                        "value": "postprocess_try_try_3"
+                      },
+                      {
+                        "title": "-- substep · transform_build_results try 3",
+                        "value": "transform_build_results_try_3"
+                      },
+                      {
+                        "title": "-- substep · fail_checker try 3",
+                        "value": "fail_checker_try_3"
+                      },
+                      {
+                        "title": "-- substep · generate_summary try 3",
+                        "value": "generate_summary_try_3"
+                      },
+                      {
+                        "title": "-- substep · s3 sync try 3",
+                        "value": "s3_sync_try_3"
+                      },
+                      {
+                        "title": "-- substep · upload_tests_results try 3",
+                        "value": "upload_tests_results_try_3"
+                      },
+                      {
+                        "title": "- step · ydbd_cached_build",
+                        "value": "ydbd_cached_build"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "step": [
+                      "job"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "seldates",
+                  "title": "Dates",
+                  "width": "340px",
+                  "source": {
+                    "isRange": true,
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "interval",
+                    "fieldType": "genericdatetime",
+                    "showTitle": true,
+                    "elementType": "date",
+                    "defaultValue": "__interval___relative_-4d___relative_+0d",
+                    "titlePlacement": "left"
+                  },
+                  "defaults": {
+                    "interval": "__interval___relative_-4d___relative_+0d"
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selbranch",
+                  "title": "Target branch",
+                  "width": "",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "z11tcvkyw21gi",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "main"
+                    ],
+                    "datasetFieldId": "branch",
+                    "titlePlacement": "left",
+                    "multiselectable": true,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "branch": [
+                      "main"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selwf",
+                  "title": "Workflow",
+                  "width": "",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "z11tcvkyw21gi",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "PR-check"
+                    ],
+                    "datasetFieldId": "workflow",
+                    "titlePlacement": "left",
+                    "multiselectable": true,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "workflow": [
+                      "PR-check"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "seljob",
+                  "title": "Job",
+                  "width": "",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "z11tcvkyw21gi",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [],
+                    "datasetFieldId": "job_name",
+                    "titlePlacement": "left",
+                    "multiselectable": true,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "job_name": []
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "seljobstatus",
+                  "title": "Job status",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "z11tcvkyw21gi",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "success",
+                      "failure"
+                    ],
+                    "datasetFieldId": "job_conclusion",
+                    "titlePlacement": "left",
+                    "multiselectable": true,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "job_conclusion": [
+                      "success",
+                      "failure"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selpq",
+                  "title": "p",
+                  "width": "120px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "p_q",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "90"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "p50",
+                        "value": "50"
+                      },
+                      {
+                        "title": "p75",
+                        "value": "75"
+                      },
+                      {
+                        "title": "p90",
+                        "value": "90"
+                      },
+                      {
+                        "title": "p95",
+                        "value": "95"
+                      },
+                      {
+                        "title": "p99",
+                        "value": "99"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "p_q": [
+                      "90"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selp90",
+                  "title": "window",
+                  "width": "140px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "p90_step",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "hour"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "Hour",
+                        "value": "hour"
+                      },
+                      {
+                        "title": "Day",
+                        "value": "day"
+                      },
+                      {
+                        "title": "Week",
+                        "value": "week"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "p90_step": [
+                      "hour"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selview",
+                  "title": "view",
+                  "width": "170px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "tl_view",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "all"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "All",
+                        "value": "all"
+                      },
+                      {
+                        "title": "Points",
+                        "value": "points"
+                      },
+                      {
+                        "title": "p only",
+                        "value": "p"
+                      },
+                      {
+                        "title": "dist count",
+                        "value": "dist_count"
+                      },
+                      {
+                        "title": "dist time",
+                        "value": "dist_time"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "tl_view": [
+                      "all"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                }
+              ],
+              "autoHeight": true,
+              "buttonApply": false,
+              "buttonReset": false,
+              "showGroupName": false,
+              "updateControlsOnChange": true
+            },
+            "type": "group_control",
+            "namespace": "default"
+          },
+          {
+            "id": "pdiffw01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tpdiff01",
+                  "title": "p diff",
+                  "params": {},
+                  "chartId": "svm2b1l1s15yb",
+                  "isDefault": true,
+                  "autoHeight": false,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": true
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "ckoutw01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tckout01",
+                  "title": "Duration",
+                  "params": {},
+                  "chartId": "egg8s3g477lmx",
+                  "isDefault": true,
+                  "autoHeight": false,
+                  "enableActionParams": true
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "ganttw01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tgantt01",
+                  "title": "Gantt",
+                  "params": {},
+                  "chartId": "466sto4vl396n",
+                  "isDefault": true,
+                  "autoHeight": false,
+                  "enableActionParams": true
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "cigantt01",
+            "data": {
+              "group": [
+                {
+                  "id": "selpr",
+                  "title": "PR",
+                  "width": "220px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "nr9x5jtcy8xc6",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [],
+                    "datasetFieldId": "pr_number",
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "pr_number": []
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selrun",
+                  "title": "Run",
+                  "width": "520px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "datasetId": "nr9x5jtcy8xc6",
+                    "fieldType": "string",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [],
+                    "datasetFieldId": "run_label",
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "datasetFieldType": "DIMENSION"
+                  },
+                  "defaults": {
+                    "run_label": []
+                  },
+                  "namespace": "default",
+                  "sourceType": "dataset",
+                  "placementMode": "auto"
+                }
+              ],
+              "autoHeight": true,
+              "buttonApply": false,
+              "buttonReset": false,
+              "showGroupName": false,
+              "updateControlsOnChange": true
+            },
+            "type": "group_control",
+            "namespace": "default"
+          }
+        ],
+        "title": "CI",
+        "layout": [
+          {
+            "h": 4,
+            "i": "ciselect01",
+            "w": 36,
+            "x": 0,
+            "y": 2
+          },
+          {
+            "h": 17,
+            "i": "ckoutw01",
+            "w": 36,
+            "x": 0,
+            "y": 6
+          },
+          {
+            "h": 27,
+            "i": "ganttw01",
+            "w": 36,
+            "x": 0,
+            "y": 25
+          },
+          {
+            "h": 2,
+            "i": "pdiffw01",
+            "w": 20,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 2,
+            "i": "cigantt01",
+            "w": 36,
+            "x": 0,
+            "y": 23
+          }
+        ],
+        "aliases": {
+          "default": [
+            [
+              "branch",
+              "tl_branch"
+            ],
+            [
+              "build_preset",
+              "tl_preset"
+            ],
+            [
+              "step",
+              "metric"
+            ],
+            [
+              "wf",
+              "workflow"
+            ],
+            [
+              "pr_number",
+              "pr"
+            ],
+            [
+              "run_id",
+              "run"
+            ]
+          ]
+        },
+        "connections": []
+      }
+    ],
+    "counter": 19,
+    "settings": {
+      "hideTabs": true,
+      "expandTOC": false,
+      "globalParams": {
+        "pr": [
+          ""
+        ],
+        "wf": [
+          "PR-check"
+        ],
+        "p_q": [
+          "90"
+        ],
+        "run": [
+          ""
+        ],
+        "step": [
+          "job"
+        ],
+        "branch": [
+          "main"
+        ],
+        "metric": [
+          "job"
+        ],
+        "run_id": [
+          ""
+        ],
+        "interval": [
+          "__interval___relative_-4d___relative_+0d"
+        ],
+        "p90_step": [
+          "hour"
+        ],
+        "workflow": [
+          "PR-check"
+        ],
+        "gantt_run": [
+          ""
+        ],
+        "pr_number": [
+          ""
+        ],
+        "tl_branch": [
+          "main"
+        ],
+        "job_conclusion": [
+          "success",
+          "failure"
+        ]
+      },
+      "loadPriority": "charts",
+      "hideDashTitle": false,
+      "silentLoading": false,
+      "autoupdateInterval": null,
+      "dependentSelectors": true,
+      "loadOnlyVisibleCharts": true,
+      "maxConcurrentRequests": null
+    },
+    "schemeVersion": 8
+  }
+}

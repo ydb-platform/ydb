@@ -183,12 +183,12 @@ public:
     using TBase = typename TProxyRequestHandler::TBase;
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
-    TProxyRequestHandler(TRequest* request, TPromise<TResult> promise, TCallbackFunc callback)
-        : TBase(request, promise, callback) {}
+    TProxyRequestHandler(TRequest* request, TPromise<TResult> promise, TCallbackFunc callback, NWilson::TTraceId traceId)
+        : TBase(request, promise, callback, std::move(traceId)) {}
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
-        ctx.Send(txproxy, this->Request.Release());
+        ctx.Send(txproxy, this->Request.Release(), 0, 0, std::move(this->TraceId));
 
         this->Become(&TProxyRequestHandler::AwaitState);
     }
@@ -607,7 +607,7 @@ public:
     using TResult = IKqpGateway::TGenericResult;
 
     TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
-        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise)
+        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise, NWilson::TTraceId traceId)
         : PhyTx(std::move(phyTx))
         , QueryType(queryType)
         , Database(database)
@@ -616,12 +616,14 @@ public:
         , ClientAddress(std::move(clientAddress))
         , Promise(promise)
         , RequestType(requestType)
+        , TraceId(std::move(traceId))
     {}
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, nullptr, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* tempDirName */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, nullptr, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* tempDirName */, ctx,
+            false, nullptr, TActorId(), std::move(TraceId));
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -657,6 +659,7 @@ private:
     const TString ClientAddress;
     TPromise<TResult> Promise;
     const TMaybe<TString> RequestType;
+    NWilson::TTraceId TraceId;
 };
 
 class TKqpExecLiteralRequestHandler: public TActorBootstrapped<TKqpExecLiteralRequestHandler> {
@@ -1908,6 +1911,7 @@ public:
         auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
         NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest request(txAlloc);
         PrepareLiteralRequest(request, langVer, phyQuery, program, resultType);
+        request.TraceId = NWilson::TTraceId(WilsonTraceId);
 
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
         NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
@@ -2235,7 +2239,7 @@ private:
     {
         auto promise = NewPromise<TResult>();
         IActor* requestHandler = new TProxyRequestHandler<TRequest, TResponse, TResult>(request,
-            promise, callback);
+            promise, callback, NWilson::TTraceId(WilsonTraceId));
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
@@ -2302,7 +2306,7 @@ private:
     {
         auto promise = NewPromise<TResult>();
         IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(actorId, request,
-            promise, callback);
+            promise, callback, NWilson::TTraceId(WilsonTraceId));
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
@@ -2320,7 +2324,8 @@ private:
             successOnNotExist = modifyScheme.GetSuccessOnNotExist();
         }
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, actualFailedOnAlreadyExists, successOnNotExist);
+        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, actualFailedOnAlreadyExists, successOnNotExist,
+            NWilson::TTraceId(WilsonTraceId));
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
@@ -2328,14 +2333,16 @@ private:
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, ClientAddress, promise);
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, ClientAddress, promise,
+            NWilson::TTraceId(WilsonTraceId));
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
 
     template<typename TRpc>
     TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token, const TMaybe<TString>& requestType = {}) {
-        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, requestType, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
+        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, requestType, ActorSystem,
+            false, NWilson::TTraceId(WilsonTraceId)).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
 
             return NThreading::MakeFuture(GenericResultFromSyncOperation(future.GetValue().operation()));
         });

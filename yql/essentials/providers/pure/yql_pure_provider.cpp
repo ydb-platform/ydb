@@ -249,7 +249,7 @@ private:
         explorer.Walk(root.GetNode(), env.GetNodeStack());
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
-                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, /*inPlace=*/true, wereChanges);
+                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files, State_->Types->UserDataStorage->GetHoldingFileStorage().GetRawStorage()), env, /*inPlace=*/true, wereChanges);
         program = LiteralPropagationOptimization(program, env, /*inPlace=*/true);
         return program;
     }

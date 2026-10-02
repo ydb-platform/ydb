@@ -200,4 +200,27 @@ Y_UNIT_TEST(AfterCutoffAlwaysUsesFixup) {
 
 } // Y_UNIT_TEST_SUITE(TDecimalConversionMode)
 
+Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation) {
+
+Y_UNIT_TEST(StructWithFuzzingAndColumnOrder) {
+    TExprContext ctx;
+    TTypeAnnotationContext typesCtx;
+    typesCtx.DeriveColumnOrder = true;
+    typesCtx.FuzzUntypedLambda = true;
+    typesCtx.FuzzUniversal = true;
+    const TPositionHandle pos;
+    auto expr = ctx.NewCallable(pos, "MatchRecognizeParams", {
+                                                                 ctx.NewCallable(pos, "AsStruct", {}),
+                                                                 ctx.NewAtom(pos, "RowsPerMatch_OneRow"),
+                                                                 ctx.NewList(pos, {}),
+                                                                 ctx.NewList(pos, {}),
+                                                                 ctx.NewList(pos, {}),
+                                                             });
+
+    UNIT_ASSERT_C(InstantAnnotateTypes(expr, ctx, false, typesCtx), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(expr->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct);
+}
+
+} // Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation)
+
 } // namespace NYql

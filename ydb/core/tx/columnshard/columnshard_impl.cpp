@@ -303,6 +303,12 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            NIceDb::TNiceDb db(txc.DB);
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(body.GetTruncateTable());
+            TablesManager.TruncateTableProgress(db, version, schemeShardLocalPathId);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -1931,6 +1937,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);
         HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+        HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);

@@ -1795,6 +1795,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
                 }
 
+                if (lockTxId) {
+                    input.Meta.FullTextSourceSettings->SetLockTxId(*lockTxId);
+                }
+
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
             } else if (input.Meta.SysViewSourceSettings) {
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SysViewSourceSettings);

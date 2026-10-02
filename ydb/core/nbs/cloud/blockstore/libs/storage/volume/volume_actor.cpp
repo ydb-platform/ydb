@@ -97,6 +97,13 @@ STFUNC(TVolumeActor::StateWork)
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse,
             HandleUpdateVolumeConfigResponse);
 
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyRequest,
+            HandleWaitReady);
+
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_DEBUG_S(
@@ -265,6 +272,29 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
 
     // Cleanup request
     UpdateVolumeConfigRequests.erase(it);
+}
+
+void TVolumeActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "Handle StatVolume request");
+
+    auto response = std::make_unique<
+        NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse>();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TVolumeActor::HandleWaitReady(
+    const NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "Handle WaitReady request");
+
+    auto response = std::make_unique<
+        NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyResponse>();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
 }   // namespace NYdb::NBS::NStorage

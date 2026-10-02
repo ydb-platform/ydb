@@ -2954,7 +2954,7 @@ private:
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(lambdaCode, nodeCount,
-                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
+                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks, execCtx->FileStorage_));
                 fmrJob->SetLambdaCode(lambdaCode);
             }
 

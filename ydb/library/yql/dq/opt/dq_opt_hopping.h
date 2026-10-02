@@ -18,7 +18,8 @@ NNodes::TMaybeNode<NNodes::TExprBase> RewriteAsHoppingWindow(
     bool analyticsHopping,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode,
-    TMaybe<NYql::NHoppingWindow::EPolicy> defaultLatePolicy = Nothing()
+    TMaybe<NYql::NHoppingWindow::EPolicy> defaultLatePolicy = Nothing(),
+    const bool checkMinWindowStart = false
 );
 
 } // namespace NYql::NDq::NHopping

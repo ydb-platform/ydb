@@ -944,7 +944,7 @@ public:
             }
             res->Headroom = GetSpaceHeadroom();
         }
-        Send(ev->Sender, res.release());
+        Send(ev->Sender, res.release(), 0, msg->IsDDisk ? ev->Cookie : 0);
     }
 
     void Handle(NPDisk::TEvChunkRead::TPtr ev) {
@@ -1470,7 +1470,8 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
     }
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {

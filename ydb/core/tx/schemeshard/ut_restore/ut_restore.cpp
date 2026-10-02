@@ -25,6 +25,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/aws_init/aws.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -2752,6 +2753,39 @@ value {
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldCheckLowerBoundOfInterval, EnableDataShardDirectPartImport) {
+        // The minimum of i64 has no absolute value that is an i64, so a check
+        // of the absolute value cannot tell it from a value within the range.
+        const auto restore = [&](const TString& type, i64 value) {
+            TTestBasicRuntime runtime;
+
+            const auto data = TTestData(TStringBuilder() << "1," << value << "\n", EmptyYsonStr);
+            Restore(runtime, Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "%s" }
+                KeyColumnNames: ["key"]
+            )", type.c_str()), {data}, EnableDataShardDirectPartImport);
+
+            return ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        };
+
+        const TVector<std::pair<TString, i64>> lowest = {
+            {"Interval", -static_cast<i64>(NYql::NUdf::MAX_TIMESTAMP) + 1},
+            {"Interval64", -NYql::NUdf::MAX_INTERVAL64},
+        };
+        for (const auto& [type, value] : lowest) {
+            NKqp::CompareYson(
+                TStringBuilder() << "[[[[[[\"1\"];[\"" << value << "\"]]];%false]]]",
+                restore(type, value));
+
+            for (const i64 invalid : {value - 1, Min<i64>()}) {
+                Cerr << "Importing " << invalid << " as " << type << Endl;
+                NKqp::CompareYson(EmptyYsonStr, restore(type, invalid));
+            }
+        }
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldFailOnOutboundKey, EnableDataShardDirectPartImport) {

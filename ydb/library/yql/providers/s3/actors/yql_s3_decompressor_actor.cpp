@@ -207,9 +207,11 @@ private:
 };
 
 class TS3DecompressorCoroActor : public TActorCoro {
+    static constexpr char ActorName[] = "S3_DECOMPRESSOR";
+
 public:
     explicit TS3DecompressorCoroActor(THolder<TS3DecompressorCoroImpl> impl)
-        : TActorCoro(std::move(impl))
+        : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
 private:

@@ -26,6 +26,7 @@
 #include "legacy_dtype_implementation.h"
 #include "stringdtype/dtype.h"
 
+#include "alloc.h"
 #include "abstractdtypes.h"
 #include "convert_datatype.h"
 #include "_datetime.h"
@@ -1591,29 +1592,17 @@ PyArray_ResultType(
         return NPY_DT_CALL_ensure_canonical(result);
     }
 
-    void **info_on_heap = NULL;
-    void *_info_on_stack[NPY_MAXARGS * 2];
-    PyArray_DTypeMeta **all_DTypes;
-    PyArray_Descr **all_descriptors;
+    NPY_ALLOC_WORKSPACE(workspace, void *, 2 * 8, 2 * (narrs + ndtypes));
+    if (workspace == NULL) {
+        return NULL;
+    }
 
-    if (narrs + ndtypes > NPY_MAXARGS) {
-        info_on_heap = PyMem_Malloc(2 * (narrs+ndtypes) * sizeof(PyObject *));
-        if (info_on_heap == NULL) {
-            PyErr_NoMemory();
-            return NULL;
-        }
-        all_DTypes = (PyArray_DTypeMeta **)info_on_heap;
-        all_descriptors = (PyArray_Descr **)(info_on_heap + narrs + ndtypes);
-    }
-    else {
-        all_DTypes = (PyArray_DTypeMeta **)_info_on_stack;
-        all_descriptors = (PyArray_Descr **)(_info_on_stack + narrs + ndtypes);
-    }
+    PyArray_DTypeMeta **all_DTypes = (PyArray_DTypeMeta **)workspace; // borrowed references
+    PyArray_Descr **all_descriptors = (PyArray_Descr **)(&all_DTypes[narrs+ndtypes]);
 
     /* Copy all dtypes into a single array defining non-value-based behaviour */
     for (npy_intp i=0; i < ndtypes; i++) {
         all_DTypes[i] = NPY_DTYPE(descrs[i]);
-        Py_INCREF(all_DTypes[i]);
         all_descriptors[i] = descrs[i];
     }
 
@@ -1638,14 +1627,10 @@ PyArray_ResultType(
             all_descriptors[i_all] = PyArray_DTYPE(arrs[i]);
             all_DTypes[i_all] = NPY_DTYPE(all_descriptors[i_all]);
         }
-        Py_INCREF(all_DTypes[i_all]);
     }
 
     PyArray_DTypeMeta *common_dtype = PyArray_PromoteDTypeSequence(
             narrs+ndtypes, all_DTypes);
-    for (npy_intp i=0; i < narrs+ndtypes; i++) {
-        Py_DECREF(all_DTypes[i]);
-    }
     if (common_dtype == NULL) {
         goto error;
     }
@@ -1698,13 +1683,13 @@ PyArray_ResultType(
     }
 
     Py_DECREF(common_dtype);
-    PyMem_Free(info_on_heap);
+    npy_free_workspace(workspace);
     return result;
 
   error:
     Py_XDECREF(result);
     Py_XDECREF(common_dtype);
-    PyMem_Free(info_on_heap);
+    npy_free_workspace(workspace);
     return NULL;
 }
 

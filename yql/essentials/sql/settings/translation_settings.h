@@ -151,6 +151,8 @@ struct TTranslationSettings {
     bool ValidateViewStatement = true;
 
     TVector<TString> ExtraSystemColumnPrefixes;
+
+    bool StrictConfigValidation = false;
 };
 
 struct TParsedSettings {

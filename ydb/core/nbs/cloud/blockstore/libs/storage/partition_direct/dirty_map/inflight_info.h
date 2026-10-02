@@ -127,7 +127,7 @@ public:
         // Read from DDisk.
         PBufferErasing,
 
-        // The data is erased from the PBuffers.
+        // Erased from the PBuffers or covered by the restore barrier.
         // Read from DDisk.
         PBufferErased,
     };
@@ -171,9 +171,13 @@ public:
     void RequestErase(THostIndex host);
     void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
-    // Hosts where a write was requested but erase is not yet
+    // Enabled hosts where a write was requested but erase is not yet
     // requested/confirmed.
     [[nodiscard]] THostMask GetEraseNeeded() const;
+    [[nodiscard]] bool IsDataOnlyInPBuffers() const;
+    [[nodiscard]] bool CanBeCoveredByRestoreBarrier() const;
+    // Marks the record erased once the persisted restore barrier covers it.
+    void MarkCoveredByRestoreBarrier();
 
     // Update state according to the changed configuration.
     void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
@@ -207,6 +211,7 @@ private:
     void MaybeAdvanceToFlushed();
     void MaybeAdvanceToErased();
     void MaybeQueryErase();
+    [[nodiscard]] bool AllPBuffersErased() const;
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 

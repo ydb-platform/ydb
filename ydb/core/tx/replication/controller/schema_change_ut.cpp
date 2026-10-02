@@ -401,7 +401,7 @@ struct TSchemaAltererTestEnv {
             new TEvTxUserProxy::TEvAllocateTxIdResult(dstAlterTxId + 1, services, {}));
     }
 
-    void ReplyMatchingDescription() {
+    void ReplyMatchingDescription(bool withExtraFamily = false) {
         const auto request = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(PipeCache);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
@@ -416,6 +416,11 @@ struct TSchemaAltererTestEnv {
         }
         for (const auto& key : Schema.GetPrimaryKeyColumnNames()) {
             table->AddKeyColumnNames(key);
+        }
+        if (withExtraFamily) {
+            auto* family = table->MutablePartitionConfig()->AddColumnFamilies();
+            family->SetId(1);
+            family->SetName("manual");
         }
         Runtime.Send(Alterer, PipeCache, description.Release());
     }
@@ -486,6 +491,21 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         env.ExpectUnlink();
     }
 
+    Y_UNIT_TEST(ExtraUnusedDestinationFamilyDoesNotBlockAlter) {
+        TSchemaAltererTestEnv env(MakeFamilySchemaChange("ssd"), 100);
+        env.ReplyMatchingDescription(true);
+
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        const auto& transaction = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+            proposal->Get()->Ev.Get())->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetAlterTable().GetPartitionConfig().ColumnFamiliesSize(), 2);
+
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
+        env.ExpectUnlink();
+    }
+
     Y_UNIT_TEST(CombinedFamilyCreationAndReassignmentCompletes) {
         TEnv env;
         const auto info = StartReplication(env);
@@ -541,10 +561,29 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         CompleteSchemaChange(env, controllerId, worker, next);
 
-        auto withColumn = next;
-        withColumn.MutableVersion()->SetStep(300);
-        withColumn.MutableVersion()->SetTxId(30);
-        withColumn.SetSourceSchemaVersion(4);
+        auto withoutMedia = next;
+        withoutMedia.MutableVersion()->SetStep(300);
+        withoutMedia.MutableVersion()->SetTxId(30);
+        withoutMedia.SetSourceSchemaVersion(4);
+        withoutMedia.MutableFamilies(1)->ClearMedia();
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, withoutMedia));
+        const auto resetRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(resetRelease->Get()->Record.GetSchema().SerializeAsString(), withoutMedia.SerializeAsString());
+        const auto reset = env.GetDescription("/Root/replica1");
+        bool mediaReset = false;
+        for (const auto& family : reset.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies()) {
+            if (family.GetId() == archiveId) {
+                mediaReset = family.GetStorageConfig().GetData().GetAllowOtherKinds();
+            }
+        }
+        UNIT_ASSERT(mediaReset);
+        CompleteSchemaChange(env, controllerId, worker, withoutMedia);
+
+        auto withColumn = withoutMedia;
+        withColumn.MutableVersion()->SetStep(400);
+        withColumn.MutableVersion()->SetTxId(40);
+        withColumn.SetSourceSchemaVersion(5);
         auto* extra = withColumn.AddColumns();
         extra->SetName("extra");
         extra->SetType("Uint64");

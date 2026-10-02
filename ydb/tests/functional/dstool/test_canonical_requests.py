@@ -505,12 +505,16 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--scrub-periodicity', 'disable', with_grpc_calls=True),
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1000', with_grpc_calls=True),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'LIGHT_YELLOW', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--database-space-block-color', 'YELLOW',
+                        '--database-space-unblock-color', 'LIGHT_YELLOW', with_grpc_calls=True),
             self._trace('cluster', 'get', '-A', '--format=json', with_grpc_calls=True),
 
             # Errors:
             self._trace('cluster', 'set', '--enable-self-heal', '--enable-donor-mode'),
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1001'),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
+            self._trace('cluster', 'set', '--database-space-unblock-color', 'CYAN'),
+            self._trace('cluster', 'set', '--database-space-block-color', 'YELLOW', '--database-space-unblock-color', 'ORANGE'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
 

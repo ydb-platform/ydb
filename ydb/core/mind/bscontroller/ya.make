@@ -27,6 +27,8 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    database_space.cpp
+    database_space.h
     ddisk.cpp
     ddisk_info.cpp
     defs.h

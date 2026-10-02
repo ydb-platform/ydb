@@ -1,0 +1,13 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --database-space-unblock-color CYAN
+Exit Status: 1
+===== stdout =====
+To see more info run 'dstool cluster set --help'
+
+===== stderr =====
+dstool [global options ...] cluster set [set options ...]
+Expected one of the next options: --default-max-slots,--enable-self-heal,--
+disable-self-heal,--enable-donor-mode,--disable-donor-mode,--scrub-periodicity,
+--pdisk-space-margin-promille,--group-reserve-min,--group-reserve-part-ppm,--
+max-scrubbed-disks-at-once,--pdisk-space-color-border,--database-space-block-
+color,--disk-management-mode,--enable-self-heal-local-policy,--disable-self-
+heal-local-policy

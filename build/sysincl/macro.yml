@@ -119,13 +119,20 @@
     - HASH_MAP_H: $U/unordered_map
     - HASH_SET_H: $U/unordered_set
 
-- source_filter: "^contrib/libs/llvm(\\d+)"
+- source_filter: "^contrib/(deprecated|libs)/llvm(\\d+)"
   includes:
     - BACKTRACE_HEADER: $U/execinfo.h
+
+- source_filter: "^contrib/libs/llvm20"
+  includes:
     - GET_PASS_REGISTRY:
       - contrib/libs/llvm20/lib/Target/BPF/BPFPassRegistry.def
       - contrib/libs/llvm20/lib/Target/NVPTX/NVPTXPassRegistry.def
       - contrib/libs/llvm20/lib/Target/X86/X86PassRegistry.def
+
+- source_filter: "^contrib/libs/llvm22"
+  includes:
+    - GET_PASS_REGISTRY:
       - contrib/libs/llvm22/lib/Target/BPF/BPFPassRegistry.def
       - contrib/libs/llvm22/lib/Target/NVPTX/NVPTXPassRegistry.def
       - contrib/libs/llvm22/lib/Target/X86/X86PassRegistry.def

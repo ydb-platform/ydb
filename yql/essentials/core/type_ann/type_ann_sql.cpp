@@ -1050,7 +1050,8 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     TExprNode::TPtr* expandedColumns,
     TExtContext& ctx,
     THashMap<TString, TString> usedInUsing = {},
-    bool projectionRefsResolved = false)
+    bool projectionRefsResolved = false,
+    const TExprNode* windows = nullptr)
 {
     bool hasExternalInput = false;
     for (const auto& i : inputs) {
@@ -1083,7 +1084,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
         }
 
         if (node->IsCallable("YqlWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
-            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+            return RebuildLambdaYqlWin(node, argNode, windows, ctx.Expr);
         }
 
         if (node->IsCallable({"YqlStar", "PgStar"})) {
@@ -3065,7 +3066,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     auto expandedColumns = column->HeadPtr();
 
                                     TExprNode::TPtr newRoot;
-                                    auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx, repeatedColumnsInUsing);
+                                    const auto windows = GetSetting(options, "window");
+                                    auto status = RebuildLambdaColumns(
+                                        newLambda->TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx,
+                                        repeatedColumnsInUsing, /*projectionRefsResolved=*/false,
+                                        windows ? &windows->Tail() : nullptr);
                                     if (status == IGraphTransformer::TStatus::Error) {
                                         return IGraphTransformer::TStatus::Error;
                                     }
@@ -5314,6 +5319,7 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         }
     }
 
+    bool inResultIsOptional = false;
     if (linkType == "all" || linkType == "any") {
         if (input->Child(3)->IsCallable("Void")) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing test row expression"));
@@ -5359,14 +5365,20 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (isYql && input->ChildrenSize() == 6) {
+            if (isYql) {
                 const auto lookupType = lambda->Tail().Head().GetTypeAnn();
                 YQL_ENSURE(lookupType);
-                if (const auto status = ValidateYqlSublinkInCollectionItemsNullable(
-                        input, output, ctx, lookupType, collectionItemType);
-                    status != IGraphTransformer::TStatus::Ok)
-                {
-                    return status;
+                inResultIsOptional = lookupType->HasOptionalOrNull();
+
+                if (input->ChildrenSize() == 6) {
+                    inResultIsOptional |= HasSetting(*input->Child(5), "ansiIn") &&
+                        IsSqlInCollectionItemsNullable(lookupType, collectionItemType);
+                    if (const auto status = ValidateYqlSublinkInCollectionItemsNullable(
+                            input, output, ctx, lookupType, collectionItemType);
+                        status != IGraphTransformer::TStatus::Ok)
+                    {
+                        return status;
+                    }
                 }
             }
         }
@@ -5391,7 +5403,11 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         input->SetTypeAnn(valueType);
     } else {
         if (isYql) {
-            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+            const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
+            if (inResultIsOptional) {
+                resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
+            }
+            input->SetTypeAnn(resultType);
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId));
         }

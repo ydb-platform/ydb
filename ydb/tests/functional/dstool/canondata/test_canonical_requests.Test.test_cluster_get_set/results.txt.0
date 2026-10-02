@@ -12,7 +12,9 @@ Exit Status: 0
     "GroupReservePartPPM": 0,
     "MaxScrubbedDisksAtOnce": 4294967295,
     "EnableGroupLayoutSanitizer": true,
-    "PDiskSpaceColorBorder": "GREEN"
+    "PDiskSpaceColorBorder": "GREEN",
+    "DatabaseSpaceBlockColor": "GREEN",
+    "DatabaseSpaceUnblockColor": "GREEN"
   }
 ]
 ===== grpc_calls =====

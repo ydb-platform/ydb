@@ -61,11 +61,15 @@ bool HasFrameOffset(const TOpWindowFrame& frame) {
     return isOffset(frame.BeginKind) || isOffset(frame.EndKind);
 }
 
-bool IsIntegerType(const TTypeAnnotationNode* type) {
+bool IsRangeOffsetType(const TTypeAnnotationNode* type) {
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         type = type->Cast<TOptionalExprType>()->GetItemType();
     }
-    return type->GetKind() == ETypeAnnotationKind::Data && IsDataTypeIntegral(type->Cast<TDataExprType>()->GetSlot());
+    if (type->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+    const auto slot = type->Cast<TDataExprType>()->GetSlot();
+    return IsDataTypeIntegral(slot) || slot == EDataSlot::Float || slot == EDataSlot::Double;
 }
 
 bool IsRangeComparableType(const TTypeAnnotationNode* type) {
@@ -200,7 +204,7 @@ bool TPhysicalWindowBuilder::UsesRangeFrames(const TOpWindow& window) {
     }
 
     const auto* sortColumnType = SortColumnType(window, window.GetSortElements().Items().front().first);
-    if (!(HasFrameOffset(frame) ? IsIntegerType(sortColumnType) : IsRangeComparableType(sortColumnType))) {
+    if (!(HasFrameOffset(frame) ? IsRangeOffsetType(sortColumnType) : IsRangeComparableType(sortColumnType))) {
         return false;
     }
     return HasAggregate(window);

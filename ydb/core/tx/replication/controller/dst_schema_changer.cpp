@@ -135,9 +135,11 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         auto* changed = Alter.MutableAlterTable()->AddColumns();
         changed->SetName(column.GetName());
         changed->SetFamilyName(desired.GetFamily());
-        error = TStringBuilder() << "column '" << column.GetName() << "' family"
-            << ": expected " << desired.GetFamily()
-            << ", actual " << family->second;
+        if (error.empty()) {
+            error = TStringBuilder() << "column '" << column.GetName() << "' family"
+                << ": expected " << desired.GetFamily()
+                << ", actual " << family->second;
+        }
 
         return true;
     }
@@ -163,18 +165,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             return true;
         }
 
-        if (actual && actualSettings.Media && !expectedSettings.Media) {
-            error = TStringBuilder() << "column family '" << desired.GetName()
-                << "' has explicit destination media '" << actualSettings.Media << "' but source media is unspecified";
-            return false;
-        }
-
         auto* changed = Alter.MutableAlterTable()->MutablePartitionConfig()->AddColumnFamilies();
         changed->SetName(desired.GetName());
-        if (expectedSettings.Media && actualSettings.Media != expectedSettings.Media) {
+        if (actualSettings.Media != expectedSettings.Media) {
             auto* data = changed->MutableStorageConfig()->MutableData();
-            data->SetPreferredPoolKind(desired.GetMedia());
-            data->SetAllowOtherKinds(false);
+            if (expectedSettings.Media) {
+                data->SetPreferredPoolKind(desired.GetMedia());
+                data->SetAllowOtherKinds(false);
+            }
         }
 
         if (!actual || actualSettings.Compression != expectedSettings.Compression) {
@@ -186,6 +184,10 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             changed->SetColumnCacheMode(desired.GetCacheMode() == TFamily::CACHE_MODE_IN_MEMORY
                 ? NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory
                 : NKikimrSchemeOp::ColumnCacheModeRegular);
+        }
+
+        if (!error.empty()) {
+            return true;
         }
 
         if (!actual && desired.GetName() != DefaultFamilyName) {
@@ -221,11 +223,6 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const TString name(GetFamilyName(family));
             if (name.empty() || !currentFamilies.emplace(name, &family).second) {
                 error = "destination table has an invalid or duplicate column family";
-                return false;
-            }
-
-            if (!desiredFamilies.contains(name)) {
-                error = TStringBuilder() << "destination table has unexpected column family '" << name << "'";
                 return false;
             }
         }
@@ -297,7 +294,9 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                     return false;
                 }
                 Alter.MutableAlterTable()->AddDropColumns()->SetName(column.GetName());
-                error = TStringBuilder() << "unexpected destination column '" << column.GetName() << "'";
+                if (error.empty()) {
+                    error = TStringBuilder() << "unexpected destination column '" << column.GetName() << "'";
+                }
                 continue;
             }
             if (desired->second->GetType() != column.GetType()) {
@@ -323,7 +322,9 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                 added->SetFamilyName(desired.GetFamily());
             }
 
-            error = TStringBuilder() << "missing destination column '" << desired.GetName() << "'";
+            if (error.empty()) {
+                error = TStringBuilder() << "missing destination column '" << desired.GetName() << "'";
+            }
         }
 
         if (hasFamilies && !CheckAndBuildFamilies(current, error)) {

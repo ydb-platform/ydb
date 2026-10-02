@@ -69,18 +69,29 @@ def _slot_label(endpoint):
 
 def _fetch_one(fetched, endpoint):
     started = time.time()
-    _log("counters start %s:%s" % (endpoint.host, endpoint.mon_port))
-    monitor = endpoint.monitor.fetch(deadline=_SNAPSHOT_TTL_SECONDS)
-    readable = bool(monitor._by_sensor_name)
+    host = endpoint.host
+    port = endpoint.mon_port
+    _log("counters start %s:%s" % (host, port))
+    readable = False
+    try:
+        monitor = endpoint.monitor.fetch(deadline=_SNAPSHOT_TTL_SECONDS)
+        readable = bool(monitor._by_sensor_name)
+        fetched.put(endpoint, monitor, readable)
+    except Exception as exc:
+        # fetch() does not catch a connection reset while reading the body.
+        fetched.put(endpoint, None, False)
+        detail = " ".join(str(exc).split())
+        if len(detail) > 200:
+            detail = detail[:200]
+        _log("counters error %s:%s %s: %s" % (host, port, type(exc).__name__, detail))
     _log(
         "counters done %s:%s %s %.1fs" % (
-            endpoint.host,
-            endpoint.mon_port,
+            host,
+            port,
             "ok" if readable else "fail",
             time.time() - started,
         )
     )
-    fetched.put(endpoint, monitor, readable)
     return readable
 
 

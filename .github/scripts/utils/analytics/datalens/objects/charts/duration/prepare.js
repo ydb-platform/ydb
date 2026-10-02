@@ -74,6 +74,8 @@ const pChoices = {50: 0.5, 75: 0.75, 90: 0.9, 95: 0.95, 99: 0.99};
 const pKey = pChoices[Number(firstParam('p_q', '90'))] ? Number(firstParam('p_q', '90')) : 90;
 const pQuantile = pChoices[pKey];
 const pName = 'p' + pKey;
+const longRaw = firstParam('long_th', 'p');
+const longFixed = longRaw !== 'p' && Number(longRaw) > 0 ? Number(longRaw) : null;
 const viewRaw = firstParam('tl_view', 'all');
 const viewMode = (
     viewRaw === 'points' || viewRaw === 'p' || viewRaw === 'share_count' || viewRaw === 'share_time'
@@ -346,7 +348,8 @@ timelineRows.forEach(function(row, index) {
 });
 
 const p90All = percentile(points.map(function(p) { return p.minutes; }), pQuantile);
-const SLOW_MIN = p90All === null ? Infinity : p90All;
+const SLOW_MIN = longFixed !== null ? longFixed : (p90All === null ? Infinity : p90All);
+const slowByP = longFixed === null;
 
 const byBucket = {};
 points.forEach(function(p) {
@@ -441,6 +444,10 @@ const chartConfig = {
     viewMode: viewMode,
     pKey: String(pKey),
     slowMin: SLOW_MIN,
+    slowByP: slowByP,
+    slowLabel: slowByP
+        ? (pName + ' ' + formatMin(SLOW_MIN === Infinity ? null : SLOW_MIN))
+        : formatMin(SLOW_MIN),
     slowCount: slowCount,
     slowShareCount: slowShareCount,
     slowShareTime: slowShareTime,
@@ -560,7 +567,7 @@ module.exports = {
                     return Math.round(p) + '%';
                 }
                 const shareCaption = 'total ' + allPoints.length + ' ops  ·  ' +
-                    cfg.slowCount + ' ops ≥ ' + (cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin) + ' (' +
+                    cfg.slowCount + ' ops ≥ ' + (cfg.slowLabel || formatMin(cfg.slowMin)) + ' (' +
                     pct(cfg.slowShareCount) + ' count, ' + pct(cfg.slowShareTime) + ' time)';
 
                 let showPoints = cfg.viewMode !== 'p';
@@ -661,7 +668,7 @@ module.exports = {
                     g.append('text')
                         .attr('x', 4).attr('y', y(cfg.slowMin) - 6)
                         .attr('fill', '#E15759').attr('font-size', '11px')
-                        .text((cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin));
+                        .text(cfg.slowLabel || formatMin(cfg.slowMin));
                 }
 
                 const series = cfg.series || [];
@@ -988,7 +995,7 @@ module.exports = {
                         '<div style="color:#333;font-size:13px;font-weight:600">' + bucketInterval(bucket) + '</div>' +
                         '<div style="color:#777;font-size:12px;margin-top:2px">' +
                         (byTime ? 'time share' : 'count share') + ' · long ≥ ' +
-                        (cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin) + '</div>' +
+                        (cfg.slowLabel || formatMin(cfg.slowMin)) + '</div>' +
                         '<b style="display:block;margin-top:6px;font-size:18px">' + headline + '</b>' +
                         '<div style="margin-top:6px;color:#444">long ' + formatMin(bucket.slowMinutes) +
                         ' · total ' + formatMin(bucket.totalMinutes) + '</div>' +

@@ -359,8 +359,8 @@
                 },
                 {
                   "id": "selpq",
-                  "title": "p",
-                  "width": "120px",
+                  "title": "quantile",
+                  "width": "240px",
                   "source": {
                     "required": false,
                     "showHint": false,
@@ -405,9 +405,92 @@
                   "placementMode": "auto"
                 },
                 {
+                  "id": "sellong",
+                  "title": "threshold",
+                  "width": "280px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "long_th",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "p"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "Quantile",
+                        "value": "p"
+                      },
+                      {
+                        "title": "1m",
+                        "value": "1"
+                      },
+                      {
+                        "title": "2m",
+                        "value": "2"
+                      },
+                      {
+                        "title": "5m",
+                        "value": "5"
+                      },
+                      {
+                        "title": "10m",
+                        "value": "10"
+                      },
+                      {
+                        "title": "15m",
+                        "value": "15"
+                      },
+                      {
+                        "title": "20m",
+                        "value": "20"
+                      },
+                      {
+                        "title": "30m",
+                        "value": "30"
+                      },
+                      {
+                        "title": "45m",
+                        "value": "45"
+                      },
+                      {
+                        "title": "1h",
+                        "value": "60"
+                      },
+                      {
+                        "title": "1h 30m",
+                        "value": "90"
+                      },
+                      {
+                        "title": "2h",
+                        "value": "120"
+                      },
+                      {
+                        "title": "3h",
+                        "value": "180"
+                      },
+                      {
+                        "title": "4h",
+                        "value": "240"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "long_th": [
+                      "p"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
                   "id": "selp90",
                   "title": "window",
-                  "width": "140px",
+                  "width": "180px",
                   "source": {
                     "required": false,
                     "showHint": false,
@@ -446,7 +529,7 @@
                 {
                   "id": "selview",
                   "title": "view",
-                  "width": "180px",
+                  "width": "230px",
                   "source": {
                     "required": false,
                     "showHint": false,
@@ -627,26 +710,26 @@
             "i": "ciselect01",
             "w": 36,
             "x": 0,
-            "y": 2
+            "y": 4
           },
           {
             "h": 17,
             "i": "ckoutw01",
             "w": 36,
             "x": 0,
-            "y": 6
+            "y": 8
           },
           {
             "h": 27,
             "i": "ganttw01",
             "w": 36,
             "x": 0,
-            "y": 25
+            "y": 27
           },
           {
-            "h": 2,
+            "h": 4,
             "i": "pdiffw01",
-            "w": 20,
+            "w": 36,
             "x": 0,
             "y": 0
           },
@@ -655,7 +738,7 @@
             "i": "cigantt01",
             "w": 36,
             "x": 0,
-            "y": 23
+            "y": 25
           }
         ],
         "aliases": {

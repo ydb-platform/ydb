@@ -227,10 +227,14 @@ namespace NYdb::inline Dev::NPathAliasingTests {
                 "CREATE VIEW `" + A("view") + "` WITH (security_invoker = TRUE) AS " + Select(A("table")),
                 NQuery::TTxControl::NoTx())));
 
+            Check(Await(canonicalQuery.ExecuteQuery(
+                "CREATE VIEW `" + A("nested_view") + "` WITH (security_invoker = TRUE) AS " + Select(A("view")),
+                NQuery::TTxControl::NoTx())));
+
             NView::TViewClient views(*Alias);
             Check(Await(views.DescribeView(A("view"))));
             NQuery::TQueryClient aliasQuery(*Alias);
-            for (const auto& path : {A("table"), A("view"), P("view")}) {
+            for (const auto& path : {A("table"), A("view"), P("view"), A("nested_view"), P("nested_view")}) {
                 auto result = Await(aliasQuery.ExecuteQuery(
                     Select(path), NQuery::TTxControl::BeginTx().CommitTx()));
                 Check(result);

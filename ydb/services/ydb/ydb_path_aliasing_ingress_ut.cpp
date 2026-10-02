@@ -37,7 +37,7 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
             if (!enablePathAliasing) {
@@ -48,10 +48,11 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/discovery-boundary", "/Root/k");
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
-            AddRule(config, "/virtual/", "/Root");
-            AddRule(config, "/alternate-root", "/");
-            AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
-            AddRule(config, "/Root/kfront", "/Root/missing");
+            if (nestedAliasParent) {
+                AddRule(config, "/Root/virtual", "/Root/kfront");
+            } else {
+                AddRule(config, "/virtual/", "/Root");
+            }
             return config;
         }
 
@@ -105,8 +106,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true)
-                : Server(MakeConfig(useSimpleProxy, enablePathAliasing), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
                     settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
@@ -114,14 +115,16 @@ namespace NKikimr::NGRpcService {
                 })
                 , Channel(grpc::CreateChannel(TStringBuilder() << "localhost:" << Server.GetPort(), grpc::InsecureChannelCredentials()))
             {
-                Ydb::Cms::CreateDatabaseRequest request;
-                request.set_path("/Root/kfront");
-                auto* storage = request.mutable_resources()->add_storage_units();
-                storage->set_unit_kind("hdd");
-                storage->set_count(1);
-                Server.Tenants_->CreateTenant(std::move(request));
-                for (const auto node : Server.Tenants_->List("/Root/kfront")) {
-                    Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                if (createTenant) {
+                    Ydb::Cms::CreateDatabaseRequest request;
+                    request.set_path("/Root/kfront");
+                    auto* storage = request.mutable_resources()->add_storage_units();
+                    storage->set_unit_kind("hdd");
+                    storage->set_count(1);
+                    Server.Tenants_->CreateTenant(std::move(request));
+                    for (const auto node : Server.Tenants_->List("/Root/kfront")) {
+                        Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                    }
                 }
             }
         };
@@ -173,17 +176,28 @@ namespace NKikimr::NGRpcService {
             }
             UNIT_ASSERT(physicalChildren.contains("Root"));
             UNIT_ASSERT(!physicalChildren.contains("virtual"));
+        }
 
-            list.set_path("/alternate-root");
-            const auto alternateRoot = Result<Ydb::Scheme::ListDirectoryResult>(
-                Call(*stub, &TScheme::ListDirectory, list, "/virtual"));
-            UNIT_ASSERT_VALUES_EQUAL(alternateRoot.self().name(), "alternate-root");
-            std::set<std::string> alternateChildren;
-            for (const auto& child : alternateRoot.children()) {
-                alternateChildren.insert(child.name());
+        Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
+            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true);
+            auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::MakeDirectoryRequest make;
+            // Create the physical child through a different alias than the one under test.
+            make.set_path("/alias");
+            Success(Call(*stub, &TScheme::MakeDirectory, make, "/Root"));
+
+            Ydb::Scheme::ListDirectoryRequest list;
+            list.set_path("/Root/");
+            const auto result = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/Root/virtual"));
+
+            std::set<std::string> children;
+            for (const auto& child : result.children()) {
+                children.insert(child.name());
             }
-            UNIT_ASSERT(alternateChildren.contains("Root"));
-            UNIT_ASSERT(!alternateChildren.contains("virtual"));
+            UNIT_ASSERT(children.contains("virtual"));
+            UNIT_ASSERT(!children.contains("kfront"));
         }
 
         Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
@@ -191,8 +205,7 @@ namespace NKikimr::NGRpcService {
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             // The first request for this tenant is deferred while its database info
-            // is fetched, then re-enters ingress. The physical-name decoy rule must
-            // not see the cached result on replay.
+            // is fetched, then re-enters ingress.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
                 Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
             UNIT_ASSERT(!session.session_id().empty());

@@ -1,3 +1,4 @@
+#include "yaml_config.h"
 #include "yaml_config_parser.h"
 
 #include <ydb/core/path_aliasing/path_normalizer.h>
@@ -57,18 +58,42 @@ resource_path_prefix_mapping:
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/literal.x/table"), "/literal.x/table");
         }
 
-        Y_UNIT_TEST(RootDestinationReplacesThePrefix) {
+        Y_UNIT_TEST(RootDestinationIsRejected) {
             const auto config = Parse(R"(
 resource_path_prefix_mapping:
   rules:
     - src: '/prefix'
       dst: '/'
 )", false);
-            const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "/table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix//table///"), "/table");
+            UNIT_ASSERT_EXCEPTION(NPathAliasing::TPathNormalizer(config.GetResourcePathPrefixMapping()), yexception);
+        }
+
+        Y_UNIT_TEST(PathAliasChainsInSelectorsAreRejected) {
+            auto doc = NFyaml::TDocument::Parse(R"(
+config:
+  resource_path_prefix_mapping:
+    rules: [{src: /alias, dst: /local}]
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: alias chain
+  selector: {deployment: selected}
+  config:
+    resource_path_prefix_mapping:
+      rules: [{src: /alias, dst: /local}, {src: /local/nested, dst: /other}]
+)");
+            const auto validator = NYamlConfig::CreateDefaultConfigSwissKnife();
+            bool rejected = false;
+            NYamlConfig::ResolveUniqueDocs(doc, [&](NYamlConfig::TDocumentConfig&& config) {
+                const auto proto = NYamlConfig::YamlToProto(config.second, true, true);
+                std::vector<TString> errors;
+                if (validator->ValidateConfig(proto, errors) == NYamlConfig::EValidationResult::Error) {
+                    UNIT_ASSERT(!errors.empty());
+                    UNIT_ASSERT_STRING_CONTAINS(errors.front(), "alias chains and cycles are not allowed");
+                    rejected = true;
+                }
+            });
+            UNIT_ASSERT(rejected);
         }
 
         Y_UNIT_TEST(RejectsMissingEmptyAndRelativePrefixes) {

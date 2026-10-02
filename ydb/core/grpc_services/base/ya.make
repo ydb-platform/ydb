@@ -2,12 +2,14 @@ LIBRARY()
 
 SRCS(
     base.cpp
+    path_aliasing.cpp
     base_service.h
     base.h
     request_paths.h
 )
 
 PEERDIR(
+    ydb/core/path_aliasing
     ydb/library/grpc/server
     library/cpp/string_utils/quote
     ydb/core/base
@@ -22,3 +24,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

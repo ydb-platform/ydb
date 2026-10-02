@@ -1328,7 +1328,16 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             return;
         }
         TLoadTrace trace;
-        auto cluster = MakeV2Cluster();
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Enable = true;
+            settings.V2.Threads = 4;
+            settings.V2.ChecksumEvents = true;
+            settings.EnableExternalDataChannel = true;
+        };
+        auto cluster = std::make_unique<TTestICCluster>(
+            /*numNodes=*/2, TChannelsConfig(), /*tiSettings=*/nullptr, /*loggerSettings=*/nullptr,
+            TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
+            TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
         TTraceOnFailure traceOnFailure(&trace, "XdcPayloadRoundTrip");
         // Establish the session before sending an untracked, single-shot payload.
         UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));

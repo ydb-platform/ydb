@@ -78,6 +78,7 @@ IF (OS_LINUX)
     SRCS(
         uring_context.cpp
         uring_context.h
+        uring_recv_buffer_pool.h
         interconnect_uring_engine.cpp
     )
 ELSE()

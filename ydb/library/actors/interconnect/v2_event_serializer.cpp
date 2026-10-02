@@ -1,7 +1,52 @@
 #include "v2_event_serializer.h"
 
+<<<<<<< HEAD
 namespace NActors {
 
+=======
+#include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
+
+#include <cstring>
+#include <util/string/builder.h>
+#include <util/string/hex.h>
+
+namespace NActors {
+
+    TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment) {
+        // The geometry reaches here straight off the wire on the receive path, so the invariants the
+        // arithmetic below relies on are enforced unconditionally: a non-power-of-two alignment makes
+        // `extra - shift` wrap, and an oversized sum makes the allocation wrap.
+        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0, "alignment %zu is not a power of two", alignment);
+        Y_ABORT_UNLESS(size <= EventMaxByteSize && headroom <= EventMaxByteSize && tailroom <= EventMaxByteSize
+            && alignment <= EventMaxByteSize, "section geometry out of range: size# %zu headroom# %zu"
+            " tailroom# %zu alignment# %zu", size, headroom, tailroom, alignment);
+        if (alignment > 1) {
+            // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base
+            // buffer, but headroom may still shift the visible data away from the requested alignment, so
+            // we always keep up to alignment - 1 bytes of extra slack and spend part of it as additional
+            // headroom.
+            const size_t extra = alignment - 1;
+            TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
+            const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
+            const size_t misalignment = ptr & (alignment - 1);
+            const size_t shift = misalignment ? alignment - misalignment : 0;
+            tailroom += extra - shift;
+            buffer.TrimFront(size + tailroom);
+            buffer.TrimBack(size);
+            Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
+            return buffer;
+        }
+        return TRcBuf::Uninitialized(size, headroom, tailroom);
+    }
+
+    TEventSerializer::TEventSerializer(bool checksumming, bool useExternalDataChannel)
+        : Checksumming(checksumming)
+        , UseExternalDataChannel(useExternalDataChannel)
+    {}
+
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
     void TEventSerializer::Push(std::unique_ptr<IEventHandle> ev) {
         const ui16 channel = ev->GetChannel();
         TPerChannelQueue& queue = GetQueue(channel);
@@ -177,6 +222,21 @@ namespace NActors {
                         .Recipient = ev.Recipient,
                     };
                     ev.TraceId.Serialize(&queue.EventHeader.TraceId);
+<<<<<<< HEAD
+=======
+
+                    queue.UseXdcForEvent = UseExternalDataChannel && xdc && HasExternalSections(queue.EvSerInfo);
+                    // The peer applies the same rule off the transmitted header flag, so both ends digest
+                    // the same byte range. Old v2 peers never declare sections, so they always digest
+                    // everything and stay compatible.
+                    queue.ChecksumExternal = !(ev.Flags & IEventHandle::FlagDisablePayloadChecksums);
+                    queue.SectionIndex = 0;
+                    queue.SectionBytesRemain = 0;
+                    queue.XdcDeclareIndex = 0;
+                    if (queue.UseXdcForEvent) {
+                        queue.SerializeStage = ESerializeStage::kXdcDeclare;
+                    }
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
                     break;
 
                 case ESerializeStage::kBufferSerializer:
@@ -287,8 +347,179 @@ namespace NActors {
         return numBytesProduced;
     }
 
+<<<<<<< HEAD
     void TEventDeserializer::Push(TRcBuf buffer, IEventProcessor *eventProcessor) {
         // put incoming buffer to the queue's end
+=======
+    ui64 TEventSerializer::UpdateTimestamp() {
+        const ui64 prev = std::exchange(Timestamp, GetCycleCountFast());
+        return Timestamp - prev;
+    }
+
+    TEventDeserializer::TEventDeserializer(TScopeId peerScopeId)
+        : PeerScopeId(peerScopeId)
+    {}
+
+    TEventDeserializer::TPendingEvent& TEventDeserializer::CurrentEvent(TPerChannelQueue& queue) {
+        if (queue.Pending.empty() || queue.Pending.back().HeaderComplete) {
+            queue.Pending.emplace_back();
+        }
+        return queue.Pending.back();
+    }
+
+    void TEventDeserializer::ApplyXdcDeclare(TPendingEvent& ev, const char *data, size_t length) {
+        Y_ABORT_UNLESS(length % sizeof(TXdcSection) == 0, "XDC declare length %zu is not a multiple of section size",
+            length);
+        Y_ABORT_UNLESS(!ev.HeaderComplete);
+        Y_ABORT_UNLESS(!ev.InternalPayload);
+        Y_ABORT_UNLESS(!ev.EventHeaderOffset);
+
+        const size_t count = length / sizeof(TXdcSection);
+        for (size_t i = 0; i < count; ++i) {
+            TXdcSection rec;
+            memcpy(&rec, data + i * sizeof(TXdcSection), sizeof(rec));
+            const bool isInline = rec.Flags & TXdcSection::FlagInline;
+            ev.DeclaredSize += rec.Size;
+            Y_ABORT_UNLESS(ev.DeclaredSize <= EventMaxByteSize,
+                "declared section sizes total %zu, over the maximum event size", ev.DeclaredSize);
+            ev.EvSerInfo.Sections.push_back(TEventSectionInfo{
+                rec.Headroom, rec.Size, rec.Tailroom, rec.Alignment, isInline, false});
+            if (!isInline && rec.Size) {
+                TRcBuf buffer = AllocateXdcSectionBuffer(rec.Size, rec.Headroom, rec.Tailroom, rec.Alignment);
+                ev.XdcBuffers.push_back(buffer.UnsafeGetContiguousSpanMut());
+                ev.ExternalPayload.Insert(ev.ExternalPayload.End(), TRope(std::move(buffer)));
+                ev.XdcSizeLeft += rec.Size;
+            }
+        }
+        ev.Declared = true;
+        ev.EvSerInfo.IsExtendedFormat = true;
+    }
+
+    void TEventDeserializer::ApplyXdcPush(ui16 channel, TPendingEvent& ev, ui16 nbytes) {
+        Y_ABORT_UNLESS(nbytes);
+        Y_ABORT_UNLESS(ev.Declared);
+        size_t remain = nbytes;
+        while (remain) {
+            Y_ABORT_UNLESS(!ev.XdcBuffers.empty(), "XDC push exceeds declared external size");
+            auto& front = ev.XdcBuffers.front();
+            const size_t take = Min<size_t>(remain, front.size());
+            Y_ABORT_UNLESS(take);
+            XdcInputQ.push_back(TXdcInputItem{
+                .Channel = channel,
+                .Span = TMutableContiguousSpan(front.data(), take),
+            });
+            front = TMutableContiguousSpan(front.data() + take, front.size() - take);
+            if (!front.size()) {
+                ev.XdcBuffers.pop_front();
+            }
+            remain -= take;
+        }
+    }
+
+    TRope TEventDeserializer::Unshuffle(TPendingEvent& ev) {
+        if (ev.EvSerInfo.Sections.empty()) {
+            return std::exchange(ev.InternalPayload, {});
+        }
+
+        TRope payload;
+        auto flushAccumulated = [&](TRope*& prev, size_t& accumSize) {
+            if (accumSize) {
+                prev->ExtractFront(accumSize, &payload);
+                accumSize = 0;
+            }
+        };
+
+        TRope *prev = nullptr;
+        size_t accumSize = 0;
+        for (const auto& s : ev.EvSerInfo.Sections) {
+            TRope *rope = s.IsInline ? &ev.InternalPayload : &ev.ExternalPayload;
+            if (s.IsInline && s.Alignment > 1 && s.Size) {
+                flushAccumulated(prev, accumSize);
+                auto it = rope->Begin();
+                const bool alreadyAligned = it.Valid()
+                    && it.ContiguousSize() >= s.Size
+                    && reinterpret_cast<uintptr_t>(it.ContiguousData()) % s.Alignment == 0;
+                if (alreadyAligned) {
+                    rope->ExtractFront(s.Size, &payload);
+                } else {
+                    TRcBuf buffer = AllocateXdcSectionBuffer(s.Size, s.Headroom, s.Tailroom, s.Alignment);
+                    const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
+                    Y_ABORT_UNLESS(success);
+                    payload.Insert(payload.End(), TRope(std::move(buffer)));
+                }
+            } else {
+                if (rope != prev) {
+                    flushAccumulated(prev, accumSize);
+                    prev = rope;
+                }
+                accumSize += s.Size;
+            }
+        }
+        flushAccumulated(prev, accumSize);
+        Y_ABORT_UNLESS(!ev.InternalPayload);
+        Y_ABORT_UNLESS(!ev.ExternalPayload);
+        return payload;
+    }
+
+    void TEventDeserializer::TryDeliver(TPerChannelQueue& queue, IEventProcessor *eventProcessor, TActorId sessionId) {
+        while (!queue.Pending.empty()) {
+            auto& ev = queue.Pending.front();
+            if (!ev.HeaderComplete || ev.XdcSizeLeft) {
+                break;
+            }
+
+            TRope payload = Unshuffle(ev);
+
+            if (ev.EventHeader.Checksum) {
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
+                // Mirror of the sender: an event flagged FlagDisablePayloadChecksums keeps its external
+                // (XDC) sections out of the digest. Sections are only ever populated when the peer used
+                // XDC, so events from peers that digest everything take the plain path below.
+                if ((ev.EventHeader.Flags & IEventHandle::FlagDisablePayloadChecksums)
+                        && !ev.EvSerInfo.Sections.empty()) {
+                    auto iter = payload.begin();
+                    for (const auto& s : ev.EvSerInfo.Sections) {
+                        for (size_t remain = s.Size; remain; ) {
+                            Y_ABORT_UNLESS(iter.Valid());
+                            const size_t n = Min(remain, iter.ContiguousSize());
+                            if (s.IsInline) {
+                                XXH3_64bits_update(&state, iter.ContiguousData(), n);
+                            }
+                            iter += n;
+                            remain -= n;
+                        }
+                    }
+                } else {
+                    for (auto iter = payload.begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+                        XXH3_64bits_update(&state, iter.ContiguousData(), iter.ContiguousSize());
+                    }
+                }
+                const ui64 expected = std::exchange(ev.EventHeader.Checksum, 0);
+                XXH3_64bits_update(&state, &ev.EventHeader, sizeof(ev.EventHeader));
+                const ui64 calculated = XXH3_64bits_digest(&state);
+                Y_ABORT_UNLESS(calculated == expected);
+            }
+
+            ev.EvSerInfo.IsExtendedFormat = ev.EventHeader.Flags & IEventHandle::FlagExtendedFormat;
+            eventProcessor->PushEvent(std::make_unique<IEventHandle>(
+                sessionId,
+                ev.EventHeader.Type,
+                ev.EventHeader.Flags & ~IEventHandle::FlagExtendedFormat,
+                ev.EventHeader.Recipient,
+                ev.EventHeader.Sender,
+                MakeIntrusive<TEventSerializedData>(
+                    std::move(payload),
+                    std::move(ev.EvSerInfo)),
+                ev.EventHeader.Cookie,
+                PeerScopeId,
+                NWilson::TTraceId(ev.EventHeader.TraceId)));
+            queue.Pending.pop_front();
+        }
+    }
+
+    void TEventDeserializer::Push(TRcBuf buffer, IEventProcessor *eventProcessor, TActorId sessionId) {
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
         Accum.Insert(Accum.End(), std::move(buffer));
 
         // parse accumulator

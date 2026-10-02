@@ -61,6 +61,11 @@ SRCS(
     types.h
     v2_event_serializer.cpp
     v2_event_serializer.h
+<<<<<<< HEAD
+=======
+    v2_io_buffers.h
+    v2_serialize_window.h
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
     watchdog_timer.h
 )
 

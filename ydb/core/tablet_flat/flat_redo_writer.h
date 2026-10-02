@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_abi_evol.h"
 #include "flat_redo_layout.h"
 #include "flat_update_op.h"
 #include "flat_util_binary.h"
@@ -68,6 +69,12 @@ namespace NRedo {
         size_t Bytes() const noexcept
         {
             return TotalSize;
+        }
+
+        // The least ABI evolution required to read written events, 0 when any reader can
+        ui32 RequiredEvolution() const noexcept
+        {
+            return RequiredEvolution_;
         }
 
         TWriter& EvBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
@@ -161,7 +168,11 @@ namespace NRedo {
         TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId, ui32 savepointSeqNum = 0)
         {
             if (savepointSeqNum) {
-                // Only written when a savepoint seq num is present, so logs stay readable by older versions otherwise
+                // Older versions cannot read this event, so its redo chunk is labeled with a newer
+                // evolution and they fail with an explicit ABI error. After it is written a tablet
+                // cannot be downgraded to a version without savepoint support until all data with
+                // savepoint seq nums is compacted away. It is only written when savepoints are used.
+                RequiredEvolution_ = Max(RequiredEvolution_, SavepointSeqNumEvolution);
                 return EvUpdate(table, rop, key, ops, ERedo::UpdateTxSavepointSeqNum, sizeof(TEvUpdateTxSavepointSeqNum),
                     [&](auto& out) {
                         TEvUpdateTxSavepointSeqNum tail{ txId, savepointSeqNum };
@@ -229,6 +240,7 @@ namespace NRedo {
 
         TWriter& Join(TWriter &&log)
         {
+            RequiredEvolution_ = Max(RequiredEvolution_, std::exchange(log.RequiredEvolution_, 0));
             TotalSize += std::exchange(log.TotalSize, 0);
             Events.append(log.Events);
             log.Events.clear();
@@ -244,6 +256,7 @@ namespace NRedo {
             NSan::CheckMemIsInitialized(events.data(), events.size());
 
             TotalSize = 0;
+            RequiredEvolution_ = 0;
             return events;
         }
 
@@ -340,6 +353,7 @@ namespace NRedo {
 
     private:
         size_t TotalSize = 0;
+        ui32 RequiredEvolution_ = 0;
         TString Events;
     };
 

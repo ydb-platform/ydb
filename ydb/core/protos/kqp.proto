@@ -1028,6 +1028,10 @@ message TKqpFullTextSourceSettings {
     optional string Mode = 16;
 
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
+
+    // Transaction lock id. When set, index/main-table reads are executed in the context
+    // of this lock so the read observes uncommitted writes of the same transaction.
+    optional uint64 LockTxId = 20;
 };
 
 message TKqpSysViewSourceSettings {

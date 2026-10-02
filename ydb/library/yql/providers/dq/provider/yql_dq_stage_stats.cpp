@@ -30,6 +30,10 @@ std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOp
             continue;
         }
 
+        if (labels.size() != (labels.contains("Task") ? 2u : 1u)) {
+            continue;
+        }
+
         ui64 stageId = 0;
         if (!TryFromString(maybeStage->second, stageId) || !stageId) {
             continue;

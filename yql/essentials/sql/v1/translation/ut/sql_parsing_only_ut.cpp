@@ -4976,6 +4976,30 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
 }
 
+Y_UNIT_TEST(CreateTableAddHnswIndex) {
+    const auto result = SqlToYql(R"sql(USE ydb;
+                CREATE TABLE table (
+                    pk INT32 NOT NULL,
+                    embedding String,
+                    INDEX idx GLOBAL USING hnsw
+                        ON (embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=128,
+                              levels=1, clusters=10, min_rows=1, M=24, ef_construction=100, delta_rows=5),
+                    PRIMARY KEY (pk))
+                    )sql");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT(result.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        Y_UNUSED(word);
+        UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'globalHnsw)");
+    };
+
+    TWordCountHive elementStat({TString(R"('indexName '"idx")")});
+    VerifyProgram(result, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+}
+
 Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
     NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
                 ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE SYNC ON(col))sql");

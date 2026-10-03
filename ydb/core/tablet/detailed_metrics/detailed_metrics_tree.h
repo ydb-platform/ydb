@@ -21,10 +21,8 @@ namespace NKikimr::NDetailedMetrics {
 
     extern const TString DATABASE_LABEL;
     extern const TString TABLE_LABEL;
-    extern const TString DETAILED_METRICS_LABEL;
     extern const TString TABLET_ID_LABEL;
     extern const TString FOLLOWER_ID_LABEL;
-    extern const TString PER_PARTITION_VALUE;
 
     // The low level tablet counters use the same layout as the "tablets" group.
     extern const TString TYPE_LABEL;
@@ -39,9 +37,6 @@ namespace NKikimr::NDetailedMetrics {
     // aliases tablePath, including when it is outside the database and stays intact.
     TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath);
 
-    NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(
-        NMonitoring::TDynamicCounterPtr tableGroup);
-
     NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
         NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet);
 
@@ -50,10 +45,8 @@ namespace NKikimr::NDetailedMetrics {
 
     TSubgroupPath MakeTabletPath(const TTabletKey& tablet, TSubgroupPath prefix = {});
 
-    // Callers choose the removal root: the node prepends database/table to prune
-    // empty ancestors across its shared leader/follower tree; the processor starts
-    // at the table and manages table ownership separately.
-    TSubgroupPath MakeRawBucketPath(
-        const TBucketKey& key, TTabletTypes::EType tabletType, TSubgroupPath prefix = {});
+    // The path of the low level counters of a TABLE bucket. The caller chooses the removal
+    // root: the node prepends database/table to prune the ancestors the bucket leaves empty.
+    TSubgroupPath MakeRawBucketPath(TTabletTypes::EType tabletType, TSubgroupPath prefix = {});
 
 } // namespace NKikimr::NDetailedMetrics

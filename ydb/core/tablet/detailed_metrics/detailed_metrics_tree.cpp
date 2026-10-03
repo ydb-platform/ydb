@@ -6,10 +6,8 @@ namespace NKikimr::NDetailedMetrics {
 
     const TString DATABASE_LABEL = "database";
     const TString TABLE_LABEL = "table";
-    const TString DETAILED_METRICS_LABEL = "detailed_metrics";
     const TString TABLET_ID_LABEL = "tablet_id";
     const TString FOLLOWER_ID_LABEL = "follower_id";
-    const TString PER_PARTITION_VALUE = "per_partition";
 
     const TString TYPE_LABEL = "type";
     const TString CATEGORY_LABEL = "category";
@@ -28,12 +26,6 @@ namespace NKikimr::NDetailedMetrics {
             return relativePath;
         }
         return TStringBuf(tablePath);
-    }
-
-    NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(
-        NMonitoring::TDynamicCounterPtr tableGroup)
-    {
-        return tableGroup->GetSubgroup(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
     }
 
     NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
@@ -55,13 +47,7 @@ namespace NKikimr::NDetailedMetrics {
         return prefix;
     }
 
-    TSubgroupPath MakeRawBucketPath(
-        const TBucketKey& key, TTabletTypes::EType tabletType, TSubgroupPath prefix)
-    {
-        if (key) {
-            prefix.emplace_back(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
-            return MakeTabletPath(*key, std::move(prefix));
-        }
+    TSubgroupPath MakeRawBucketPath(TTabletTypes::EType tabletType, TSubgroupPath prefix) {
         prefix.emplace_back(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType));
         return prefix;
     }

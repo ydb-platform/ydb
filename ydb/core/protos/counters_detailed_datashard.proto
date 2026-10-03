@@ -11,6 +11,22 @@ option java_package = "ru.yandex.kikimr.proto";
 option (SourceCountersTabletTypeName) = "DataShard";
 
 /**
+ * The enum entries below are the wire slots of the detailed metrics channel:
+ * slot i of the public metric values, which the nodes report to the SysView Processor
+ * (TDbCounters in sys_view.proto), is the enum value i. Every enum here is therefore
+ * append-only: never remove or renumber an entry, a new metric is a new entry
+ * at the end of its enum, and a deprecated metric keeps its entry.
+ *
+ * The SourceCounters of a metric name the low level counters of the tablet:
+ * - a gauge (ESimpleDetailedCounters): "SUM(x)" or "MAX(x)" over a simple counter x,
+ *   the same wrapper for every source of the metric, a single source for "MAX(x)";
+ * - a rate (ECumulativeDetailedCounters): plain cumulative counters "x";
+ * - a histogram (EPercentileDetailedCounters): "HIST(x)" (the histogram of the counter x
+ *   over the tablets) or a plain percentile counter "x", with the public bucket bounds
+ *   in Ranges (+Inf is implicit).
+ */
+
+/**
  * Public detailed metrics (GAUGE), mapped from DataShard low level metrics.
  */
 enum ESimpleDetailedCounters {

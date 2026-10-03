@@ -154,26 +154,6 @@ void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
     }
 }
 
-void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
-    for (ui32 i : indices) {
-        if (i >= (ui32)dst->HistogramSize()) {
-            continue;
-        }
-        auto* values = dst->MutableHistogram(i)->MutableBuckets();
-        for (auto& v : *values) {
-            v = 0;
-        }
-    }
-}
-
-void MarkHistogramsNonDerivative(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
-    for (ui32 i : indices) {
-        if (i < (ui32)dst->HistogramSize()) {
-            dst->MutableHistogram(i)->SetNonDerivative(true);
-        }
-    }
-}
-
 void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     const NKikimrSysView::TDbCounters& current,
     NKikimrSysView::TDbCounters* prev)
@@ -184,20 +164,6 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     } else {
         CopyCounters(diff, current);
     }
-}
-
-void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
-    const NKikimrSysView::TDbTabletCounters& current,
-    NKikimrSysView::TDbTabletCounters* prev)
-{
-    diff->Clear();
-    diff->SetType(current.GetType());
-    CalculateCountersDiff(diff->MutableExecutorCounters(), current.GetExecutorCounters(),
-        prev && prev->HasExecutorCounters() ? prev->MutableExecutorCounters() : nullptr);
-    CalculateCountersDiff(diff->MutableAppCounters(), current.GetAppCounters(),
-        prev && prev->HasAppCounters() ? prev->MutableAppCounters() : nullptr);
-    CalculateCountersDiff(diff->MutableMaxExecutorCounters(), current.GetMaxExecutorCounters());
-    CalculateCountersDiff(diff->MutableMaxAppCounters(), current.GetMaxAppCounters());
 }
 
 void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
@@ -225,13 +191,6 @@ void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
     for (auto& [i, histogram] : nonDerivative) {
         current.MutableHistogram(i)->Swap(&histogram);
     }
-}
-
-void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,
-    const NKikimrSysView::TDbTabletCounters& pending)
-{
-    MergeCounterDeltas(*current.MutableExecutorCounters(), pending.GetExecutorCounters());
-    MergeCounterDeltas(*current.MutableAppCounters(), pending.GetAppCounters());
 }
 
 } // NSysView

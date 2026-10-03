@@ -29,8 +29,12 @@ SRCS(
     tablet_state_ut.cpp
     detailed_metrics/ut_helpers.cpp
     detailed_metrics/ut_helpers.h
+    detailed_metrics/detailed_metrics_binding_ut.cpp
+    detailed_metrics/detailed_metrics_descriptor_ut.cpp
+    detailed_metrics/detailed_values_accumulator_ut.cpp
     detailed_metrics/node_database_metrics_aggregator_ut.cpp
     detailed_metrics/processor_database_metrics_aggregator_ut.cpp
+    detailed_metrics/public_metrics_bucket_ut.cpp
     detailed_metrics/ydb_metrics_aggregator_ut.cpp
     detailed_metrics/ydb_metrics_ut.cpp
 )

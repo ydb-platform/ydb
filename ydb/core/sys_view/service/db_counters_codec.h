@@ -3,7 +3,6 @@
 #include <ydb/core/protos/sys_view.pb.h>
 
 #include <algorithm>
-#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -97,11 +96,6 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
 
 void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst);
 void ResetMaxCounters(NKikimrSysView::TDbCounters* dst);
-void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices);
-
-// Mark the histograms at the indices as non-derivative, to be encoded as their full
-// current values, see CalculateCountersDiff
-void MarkHistogramsNonDerivative(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices);
 
 // Clear output and encode the full values when prev is absent, or a delta
 // otherwise. Unsigned subtraction and addition reconstruct decreases modulo
@@ -112,21 +106,12 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     const NKikimrSysView::TDbCounters& current,
     NKikimrSysView::TDbCounters* prev = nullptr);
 
-// Executor/App use deltas; their MAX counterparts are always absolute.
-void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
-    const NKikimrSysView::TDbTabletCounters& current,
-    NKikimrSysView::TDbTabletCounters* prev = nullptr);
-
 // Both inputs contain encoded deltas. Add pending Cumulative and derivative histogram
 // increments modulo 2^64 into current, retaining current's latest Simple values.
 // Non-derivative histograms are not added: current's value replaces pending's.
 // The result remains encoded; pending is unchanged.
 void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
     const NKikimrSysView::TDbCounters& pending);
-
-// Merge only Executor/App increments; retain current's Type and MAX fields.
-void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,
-    const NKikimrSysView::TDbTabletCounters& pending);
 
 } // NSysView
 } // NKikimr

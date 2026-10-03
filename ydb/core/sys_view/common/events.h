@@ -20,6 +20,19 @@ public:
 
 class IDbDetailedCounters : public virtual TThrRefBase {
 public:
+    /**
+     * Append the public metric values of every live bucket, a TDetailedTableCounters entry
+     * per table and level with its TabletType and either TableMetrics (the TABLE bucket) or
+     * TLeaf.Metrics (each PARTITION leaf), plus the final values of the buckets retired since
+     * the previous call.
+     *
+     * @note A table can get both a TABLE and a PARTITION entry under the same TablePath:
+     *       while a metrics level change converges tablet by tablet, or when a bucket
+     *       of the other level was retired since the previous call.
+     *
+     * @note Destructive for the rate and the increment deltas: each delta is appended once,
+     *       the next call appends only what has accumulated since this one.
+     */
     virtual void Pack(
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };

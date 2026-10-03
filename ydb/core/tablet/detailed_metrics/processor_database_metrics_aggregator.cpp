@@ -1,22 +1,22 @@
 #include "processor_database_metrics_aggregator.h"
 
-#include "detailed_metrics_counter_set.h"
+#include "detailed_metrics_descriptor.h"
 #include "detailed_metrics_tree.h"
 #include "memory_tags.h"
+#include "public_metrics_bucket.h"
 #include "ydb_metrics_aggregator.h"
 #include "ydb_metrics_mapper.h"
 
 #include <ydb/core/protos/table_metrics_settings.pb.h>
-#include <ydb/core/sys_view/service/db_counters_codec.h>
-#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/prof/tag.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
@@ -35,191 +35,26 @@ namespace NKikimr {
             return key ? TStringBuilder() << key->first << ':' << key->second : TString("table");
         }
 
-        // A TABLE partial and a PARTITION leaf have the same publication pipeline.
-        // Cumulative and derivative histogram history survives removal of a node while
-        // the bucket remains live. Non-derivative histograms (the current state, not
-        // increments) arrive per node as their full current values, which every report
-        // replaces, and their totals are recomputed from the per-node values on each publish.
-        // Simple/MAX are recomputed from live snapshots; overlapping owners of a leaf
-        // use MAX for Simple, retaining the existing partition-move behavior.
-        class TPublishedBucket {
-        public:
-            TPublishedBucket(
-                NMonitoring::TDynamicCounterPtr rawGroup,
-                NMonitoring::TDynamicCounterPtr targetGroup,
-                TTabletTypes::EType type,
-                const TDetailedMetricsCounterNames& names,
-                const TTabletCountersBase* executorTemplate,
-                const TTabletCountersBase* appTemplate,
-                bool isPartitionBucket,
-                EYdbMetricNameScope nameScope,
-                bool isFollowerSource)
-                : IsPartitionBucket(isPartitionBucket)
-                , ExecutorCounters(GetOrCreateTypeGroup(rawGroup, type)
-                                       ->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY))
-                , AppCounters(GetOrCreateTypeGroup(rawGroup, type)
-                                  ->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY))
-                , Mapper(CreateYdbMetricsMapperByTabletType(type, targetGroup, rawGroup, nameScope, isFollowerSource))
-            {
-                ExecutorCounters.Initialize(executorTemplate, &names.ExecutorNames);
-                AppCounters.Initialize(appTemplate, &names.AppNames);
-                Total.SetType(type);
-            }
-
-            void Apply(ui32 nodeId, const NKikimrSysView::TDbTabletCounters& diff) {
-                NSysView::TAggregateCumulative<false>::Apply(Total.MutableExecutorCounters(), diff.GetExecutorCounters());
-                NSysView::TAggregateCumulative<false>::Apply(Total.MutableAppCounters(), diff.GetAppCounters());
-                auto& snapshot = PerNode[nodeId];
-                snapshot.Counters = diff;
-                ApplyNonDerivativeHistograms(snapshot.ExecutorNonDerivativeBucketCounts,
-                                             ExecutorCounters.GetNonDerivativeHistogramIndices(),
-                                             diff.GetExecutorCounters(), nodeId);
-                ApplyNonDerivativeHistograms(snapshot.AppNonDerivativeBucketCounts,
-                                             AppCounters.GetNonDerivativeHistogramIndices(),
-                                             diff.GetAppCounters(), nodeId);
-            }
-
-            bool DropNode(ui32 nodeId) {
-                PerNode.erase(nodeId);
-                return PerNode.empty();
-            }
-
-            void Publish() {
-                NSysView::ResetSimpleCounters(Total.MutableExecutorCounters());
-                NSysView::ResetSimpleCounters(Total.MutableAppCounters());
-                NSysView::ResetMaxCounters(Total.MutableMaxExecutorCounters());
-                NSysView::ResetMaxCounters(Total.MutableMaxAppCounters());
-                NSysView::ResetHistogramBuckets(Total.MutableExecutorCounters(),
-                                                ExecutorCounters.GetNonDerivativeHistogramIndices());
-                NSysView::ResetHistogramBuckets(Total.MutableAppCounters(),
-                                                AppCounters.GetNonDerivativeHistogramIndices());
-                for (const auto& [_, node] : PerNode) {
-                    const auto& snapshot = node.Counters;
-                    AggregateSimple(Total.MutableExecutorCounters(), snapshot.GetExecutorCounters());
-                    AggregateSimple(Total.MutableAppCounters(), snapshot.GetAppCounters());
-                    AggregateMax(Total.MutableMaxExecutorCounters(), snapshot.GetMaxExecutorCounters());
-                    AggregateMax(Total.MutableMaxAppCounters(), snapshot.GetMaxAppCounters());
-                    AddNonDerivativeBucketCounts(*Total.MutableExecutorCounters(),
-                                                 ExecutorCounters.GetNonDerivativeHistogramIndices(),
-                                                 node.ExecutorNonDerivativeBucketCounts);
-                    AddNonDerivativeBucketCounts(*Total.MutableAppCounters(),
-                                                 AppCounters.GetNonDerivativeHistogramIndices(),
-                                                 node.AppNonDerivativeBucketCounts);
-                }
-                ExecutorCounters.FromProto(*Total.MutableExecutorCounters(), *Total.MutableMaxExecutorCounters());
-                AppCounters.FromProto(*Total.MutableAppCounters(), *Total.MutableMaxAppCounters());
-                Mapper->TransferCounterValues();
-            }
-
-        private:
-            // Decoded bucket counts of the latest non-derivative histograms of the node.
-            // The outer index follows the corresponding non-derivative histogram indices;
-            // the inner index identifies a bucket within that histogram.
-            using TNonDerivativeBucketCounts = TVector<TVector<ui64>>;
-
-            struct TNodeSnapshot {
-                NKikimrSysView::TDbTabletCounters Counters;
-                TNonDerivativeBucketCounts ExecutorNonDerivativeBucketCounts;
-                TNonDerivativeBucketCounts AppNonDerivativeBucketCounts;
-            };
-
-            // A report holds the whole state of the node's non-derivative histograms, so it
-            // replaces the previous one: nothing depends on the receiver having seen the earlier reports
-            void ApplyNonDerivativeHistograms(
-                TNonDerivativeBucketCounts& bucketCounts, const TVector<ui32>& indices, const NKikimrSysView::TDbCounters& diff,
-                ui32 nodeId)
-            {
-                bucketCounts.resize(indices.size());
-                for (size_t i = 0; i < indices.size(); ++i) {
-                    auto& values = bucketCounts[i];
-                    values.clear();
-                    if (indices[i] >= diff.HistogramSize()) {
-                        continue;
-                    }
-                    const auto& histogram = diff.GetHistogram(indices[i]);
-                    if (!histogram.GetNonDerivative()) {
-                        // A delta cannot be applied without the baseline it was taken against
-                        if (!WarnedAboutUnmarkedNonDerivative) {
-                            WarnedAboutUnmarkedNonDerivative = true;
-                            YDB_LOG_WARN("Ignored a non-derivative histogram not marked NonDerivative",
-                                {"nodeId", nodeId},
-                                {"histogramIndex", indices[i]});
-                        }
-                        continue;
-                    }
-                    values.resize(histogram.GetBucketsCount(), 0);
-                    const auto& encoded = histogram.GetBuckets();
-                    for (int b = 0; b + 1 < encoded.size(); b += 2) {
-                        if (encoded[b] < values.size()) {
-                            values[encoded[b]] = encoded[b + 1];
-                        }
-                    }
-                }
-            }
-
-            static void AddNonDerivativeBucketCounts(
-                NKikimrSysView::TDbCounters& total, const TVector<ui32>& indices,
-                const TNonDerivativeBucketCounts& bucketCounts)
-            {
-                for (size_t i = 0; i < bucketCounts.size(); ++i) {
-                    if (bucketCounts[i].empty()) {
-                        continue;
-                    }
-                    if (indices[i] >= total.HistogramSize()) {
-                        continue;
-                    }
-                    auto* values = total.MutableHistogram(indices[i])->MutableBuckets();
-                    // FromProto trims histograms to the receiver's template. Ignore any
-                    // extra sender buckets that are no longer present in the total.
-                    for (size_t b = 0; b < bucketCounts[i].size() && b < static_cast<size_t>(values->size()); ++b) {
-                        (*values)[b] += bucketCounts[i][b];
-                    }
-                }
-            }
-
-            void AggregateSimple(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) const {
-                if (IsPartitionBucket) {
-                    NSysView::TAggregateSimple<true>::Apply(dst, src);
-                } else {
-                    NSysView::TAggregateSimple<false>::Apply(dst, src);
-                }
-            }
-
-            static void AggregateMax(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) {
-                NSysView::TAggregateSimple<true>::Apply(dst, src);
-                NSysView::TAggregateCumulative<true>::Apply(dst, src);
-            }
-
-            const bool IsPartitionBucket;
-            NPrivate::TAggregatedTabletCounters ExecutorCounters;
-            NPrivate::TAggregatedTabletCounters AppCounters;
-            TYdbMetricsMapperPtr Mapper;
-            NKikimrSysView::TDbTabletCounters Total;
-            THashMap<ui32, TNodeSnapshot> PerNode;
-            bool WarnedAboutUnmarkedNonDerivative = false;
-        };
-
+        /**
+         * Everything the processor keeps for a single table: the public metric values
+         * of every bucket (TABLE partials and PARTITION leaves) and the table rollup.
+         */
         struct TTableEntry {
             TTabletTypes::EType Type = TTabletTypes::TypeInvalid;
-            NMonitoring::TDynamicCounterPtr RawGroup;
+            const TDetailedMetricsDescriptor* Desc = nullptr;
             NMonitoring::TDynamicCounterPtr PublicGroup;
             TYdbMetricsAggregatorPtr Aggregator;
-            THashMap<TBucketKey, THolder<TPublishedBucket>> Buckets;
+            THashMap<TBucketKey, THolder<TPublicBucket>> Buckets;
         };
 
         class TProcessorDatabaseMetricsAggregatorImpl: public TProcessorDatabaseMetricsAggregator {
         public:
             TProcessorDatabaseMetricsAggregatorImpl(
-                NMonitoring::TDynamicCounterPtr rawCounterGroup,
                 NMonitoring::TDynamicCounterPtr targetCounterGroup,
-                const TString& databasePath,
-                THolder<TTabletCountersBase> executorCountersTemplate)
-                : RawCounterGroup(rawCounterGroup)
-                , TargetCounterGroup(targetCounterGroup)
+                const TString& databasePath)
+                : TargetCounterGroup(targetCounterGroup)
                 , DatabasePrefix(ChopTrailingSlash(databasePath))
-                , ExecutorCountersTemplate(std::move(executorCountersTemplate))
             {
-                Y_ABORT_UNLESS(ExecutorCountersTemplate, "executorCountersTemplate must not be null");
             }
 
             void ApplyFromNode(
@@ -229,14 +64,22 @@ namespace NKikimr {
                 NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
                 TContributions contributions;
                 for (const auto& table : tables) {
+                    // The tablet type defines the slots of the public metric values: an entry without it
+                    // is ignored, so the buckets the node reported for it before are retired below
+                    if (!table.HasTabletType()) {
+                        WarnMissingTabletType(nodeId, table.GetTablePath());
+                        continue;
+                    }
                     const TString path(MakeRelativeTablePath(DatabasePrefix, table.GetTablePath()));
+                    const auto type = table.GetTabletType();
                     if (table.GetLevel() == TMetricsSettings::MetricsLevelTable && !isFollowerRole) {
-                        ApplyContribution(nodeId, {path, Nothing()}, table.GetTableCounters(), contributions);
+                        const TContribution contribution(path, Nothing());
+                        ApplyContribution(nodeId, contribution, type, table.GetTableMetrics(), contributions);
                     } else if (table.GetLevel() == TMetricsSettings::MetricsLevelPartition) {
                         for (const auto& leaf : table.GetLeaves()) {
                             if ((leaf.GetFollowerId() != 0) == isFollowerRole) {
-                                ApplyContribution(nodeId, {path, TTabletKey(leaf.GetTabletId(), leaf.GetFollowerId())},
-                                                  leaf.GetCounters(), contributions);
+                                const TContribution contribution(path, TTabletKey(leaf.GetTabletId(), leaf.GetFollowerId()));
+                                ApplyContribution(nodeId, contribution, type, leaf.GetMetrics(), contributions);
                             }
                         }
                     }
@@ -263,49 +106,109 @@ namespace NKikimr {
             }
 
         private:
+            /**
+             * Apply the public metric values of a bucket reported by a node.
+             */
             void ApplyContribution(
                 ui32 nodeId,
                 const TContribution& contribution,
-                const NKikimrSysView::TDbTabletCounters& diff,
+                TTabletTypes::EType type,
+                const NKikimrSysView::TDbCounters& values,
                 TContributions& contributions) {
-                const auto& [path, key] = contribution;
-                const auto type = diff.GetType();
-                const auto* names = GetDetailedMetricsCounterNames(type);
-                if (path.empty() || !names) {
+                TPublicBucket* bucket = GetOrCreateBucket(contribution, type);
+                if (!bucket) {
                     return;
+                }
+                bucket->Apply(nodeId, values);
+                LogWarnings(nodeId, contribution.first, bucket->TakeWarnings());
+                contributions.insert(contribution);
+            }
+
+            /**
+             * Get the bucket of the contribution, creating its table and the bucket as needed.
+             *
+             * @return The bucket, or nullptr if the contribution is ignored: no table path,
+             *         a tablet type without detailed metrics, or a tablet type other than
+             *         the one of the table
+             */
+            TPublicBucket* GetOrCreateBucket(const TContribution& contribution, TTabletTypes::EType type) {
+                const auto& [path, key] = contribution;
+                const auto* descriptor = GetDetailedMetricsDescriptor(type);
+                if (path.empty() || !descriptor) {
+                    return nullptr;
                 }
                 auto& table = Tables[path];
                 if (table.Type == TTabletTypes::TypeInvalid) {
+                    ReportDescriptorErrors(*descriptor);
                     table.Type = type;
-                    table.RawGroup = RawCounterGroup->GetSubgroup(TABLE_LABEL, path);
+                    table.Desc = descriptor;
                     table.PublicGroup = TargetCounterGroup->GetSubgroup(TABLE_LABEL, path);
                     table.Aggregator = CreateYdbMetricsAggregatorByTabletType(
                         type, table.PublicGroup, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
                 } else if (table.Type != type) {
-                    return;
+                    return nullptr;
                 }
                 auto& bucket = table.Buckets[key];
                 if (!bucket) {
-                    auto rawGroup = table.RawGroup;
-                    auto mappedGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
-                    if (key) {
-                        rawGroup = GetOrCreateTabletGroup(GetOrCreatePerPartitionGroup(rawGroup), *key);
-                        mappedGroup = GetOrCreateTabletGroup(table.PublicGroup, *key);
-                    }
-                    // The partial's mapped group is detached: only the combined table
-                    // rollup is public, so partials and leaves never overwrite each other.
+                    // The partial's group is detached: only the combined table rollup
+                    // is public, so partials and leaves never overwrite each other.
+                    const auto group = key
+                        ? GetOrCreateTabletGroup(table.PublicGroup, *key)
+                        : MakeIntrusive<NMonitoring::TDynamicCounters>();
                     const EYdbMetricNameScope nameScope = key
                         ? EYdbMetricNameScope::Partition
                         : EYdbMetricNameScope::Aggregate;
                     const bool isFollowerSource = key && key->second != 0;
-                    auto appTemplate = CreateAppCountersByTabletType(type);
-                    bucket = MakeHolder<TPublishedBucket>(rawGroup, mappedGroup, type, *names,
-                                                          ExecutorCountersTemplate.Get(), appTemplate.Get(),
-                                                          key.Defined(), nameScope, isFollowerSource);
-                    table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, isFollowerSource, nameScope);
+                    // The bucket creates every target, which the rollup looks up below
+                    bucket = MakeHolder<TPublicBucket>(*table.Desc, group, key.Defined(), isFollowerSource);
+                    table.Aggregator->AddSourceCountersGroup(SourceId(key), group, isFollowerSource, nameScope);
                 }
-                bucket->Apply(nodeId, diff);
-                contributions.insert(contribution);
+                return bucket.Get();
+            }
+
+            /**
+             * Report the errors of the descriptor of a tablet type (see TDetailedMetricsDescriptor::Errors),
+             * each of which leaves a public metric publishing zero, once per tablet type: on the first
+             * table of the type.
+             */
+            void ReportDescriptorErrors(const TDetailedMetricsDescriptor& descriptor) {
+                if (descriptor.Errors.empty() || !TypesReportedDescriptorErrors.insert(descriptor.Type).second) {
+                    return;
+                }
+                for (const auto& error : descriptor.Errors) {
+                    YDB_LOG_CRIT("Invalid public detailed metric of the tablet type, it publishes zero",
+                        {"database", DatabasePrefix},
+                        {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)},
+                        {"error", error});
+                }
+            }
+
+            void LogWarnings(ui32 nodeId, const TString& path, const TVector<TString>& warnings) const {
+                for (const auto& warning : warnings) {
+                    YDB_LOG_WARN("Problem with the detailed metrics reported by a node",
+                        {"database", DatabasePrefix},
+                        {"table", path},
+                        {"nodeId", nodeId},
+                        {"warning", warning});
+                }
+            }
+
+            /**
+             * Warn about a table entry reported without the tablet type, once per node,
+             * so every node of an older version is visible in a mixed deployment.
+             *
+             * @note Every node sets the tablet type since the nodes report the public metric values.
+             *       The entries without it carried the low level counters, which were never released,
+             *       so such an entry comes from a node of an older trunk version only.
+             */
+            void WarnMissingTabletType(ui32 nodeId, const TString& tablePath) {
+                if (!NodesWarnedMissingTabletType.insert(nodeId).second) {
+                    return;
+                }
+                YDB_LOG_WARN("Ignored the detailed metrics of a table reported without the tablet type",
+                    {"database", DatabasePrefix},
+                    {"table", tablePath},
+                    {"nodeId", nodeId});
             }
 
             void ReconcileContributions(const TNodeRoleKey& nodeRole, TContributions contributions) {
@@ -338,35 +241,30 @@ namespace NKikimr {
                 bucketIt->second->Publish();
                 table.Aggregator->RemoveSourceCountersGroup(SourceId(key));
                 table.Buckets.erase(bucketIt);
-                table.RawGroup->RemoveSubgroupChain(MakeRawBucketPath(key, table.Type));
                 if (key) {
                     table.PublicGroup->RemoveSubgroupChain(MakeTabletPath(*key));
                 }
                 if (table.Buckets.empty()) {
-                    RawCounterGroup->RemoveSubgroup(TABLE_LABEL, path);
                     TargetCounterGroup->RemoveSubgroup(TABLE_LABEL, path);
                     Tables.erase(tableIt);
                 }
             }
 
-            NMonitoring::TDynamicCounterPtr RawCounterGroup;
             NMonitoring::TDynamicCounterPtr TargetCounterGroup;
             const TString DatabasePrefix;
-            THolder<TTabletCountersBase> ExecutorCountersTemplate;
             THashMap<TString, TTableEntry> Tables;
             THashMap<TNodeRoleKey, TContributions> ContributionsByNodeRole;
+            THashSet<ui32> NodesWarnedMissingTabletType;
+            THashSet<TTabletTypes::EType> TypesReportedDescriptorErrors;
         };
 
     } // namespace
 
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
-        NMonitoring::TDynamicCounterPtr rawCounterGroup,
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        const TString& databasePath,
-        THolder<TTabletCountersBase> executorCountersTemplate) {
+        const TString& databasePath) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-        return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(
-            rawCounterGroup, targetCounterGroup, databasePath, std::move(executorCountersTemplate));
+        return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(targetCounterGroup, databasePath);
     }
 
 } // namespace NKikimr

@@ -556,6 +556,22 @@ message TEvGetQueryStatsResponse {
 // cumulative and histogram values may be absolute or diffs depending on the context,
 // except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
+//
+// On the detailed metrics channel (TDetailedTableCounters.TableMetrics and
+// TDetailedTableCounters.TLeaf.Metrics) the message carries the public metric values
+// of one bucket: slot i of Simple / Cumulative / Histogram is the enum value i
+// of ESimpleDetailedCounters / ECumulativeDetailedCounters / EPercentileDetailedCounters
+// of the tablet type (counters_detailed_<type>.proto), so those enums are append-only:
+// - Simple: dense, the absolute value of every gauge (zero for a LeaderOnly gauge
+//   of a follower, which the receiver never reads);
+// - Cumulative: sparse (slot, delta since the previous report) pairs of the rates
+//   with non-zero deltas, CumulativeCount is the number of the rates;
+// - Histogram: one entry per histogram metric, BucketsCount is the public bucket count
+//   (the bounds of the metric plus the implicit +Inf bucket). A level histogram
+//   (HIST(x) or an integral percentile) is marked NonDerivative and holds sparse
+//   (bucket, count) pairs of its full current value, the entry is present even if empty.
+//   An increment histogram (a derivative percentile) is not marked and holds sparse
+//   (bucket, delta) pairs
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
@@ -583,21 +599,37 @@ message TDbTabletCounters {
     optional TDbCounters MaxAppCounters = 5;
 }
 
+// The detailed metrics of one table reported by a node:
+// the public metric values of its buckets (TableMetrics, TLeaf.Metrics)
 message TDetailedTableCounters {
     message TLeaf {
+        // 3 was Counters, the low level counters of the leaf
+        reserved 3;
+        reserved "Counters";
+
         optional uint64 TabletId = 1;
         optional uint32 FollowerId = 2;
-        optional TDbTabletCounters Counters = 3;
+
+        // The public metric values of the leaf (see TDbCounters)
+        optional TDbCounters Metrics = 4;
     }
+
+    // 1 and 2 were never used, 5 was TableCounters, the low level counters of the table
+    reserved 1, 2, 5;
+    reserved "TableCounters";
 
     optional string TablePath = 3;
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
 
-    // Set iff Level == MetricsLevelTable
-    optional TDbTabletCounters TableCounters = 5;
-
     // Set iff Level == MetricsLevelPartition
     repeated TLeaf Leaves = 6;
+
+    // The public metric values of the table (see TDbCounters), set iff Level == MetricsLevelTable
+    optional TDbCounters TableMetrics = 7;
+
+    // The tablet type of the table, whose detailed metrics define the slots
+    // of TableMetrics and TLeaf.Metrics. Required: an entry without it is ignored
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 8;
 }
 
 message TDbGRpcCounters {

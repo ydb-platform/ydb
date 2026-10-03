@@ -4,6 +4,68 @@
 
 namespace NKikimr::NPrivate {
 
+namespace {
+
+/**
+ * @return Whether the counter of the given name gets an aggregate (see TAggregatedTabletCounters::Initialize())
+ */
+bool IsPublished(const char* name, const THashSet<TString>* nameFilter) {
+    return name && (!nameFilter || nameFilter->empty() || nameFilter->contains(name));
+}
+
+bool IsSameName(const char* name, const char* otherName) {
+    if (!name || !otherName) {
+        return name == otherName;
+    }
+    return TStringBuf(name) == TStringBuf(otherName);
+}
+
+/**
+ * @return Whether both percentile counters have the same buckets and the same integral flag,
+ *         which is all the aggregate takes from the percentile counter of the layout
+ */
+bool IsSamePercentile(const TTabletPercentileCounter& counter, const TTabletPercentileCounter& other) {
+    if (counter.GetRangeCount() != other.GetRangeCount() || counter.GetIntegral() != other.GetIntegral()) {
+        return false;
+    }
+    for (ui32 i = 0; i < counter.GetRangeCount(); ++i) {
+        if (counter.GetRangeBound(i) != other.GetRangeBound(i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Check one kind of counters, see TAggregatedTabletCounters::IsPrefixLayout().
+ */
+template <typename TLayoutName, typename TName, typename TIsSameCounter>
+bool IsPrefix(
+    ui32 layoutSize,
+    ui32 size,
+    TLayoutName layoutName,
+    TName name,
+    TIsSameCounter isSameCounter,
+    const THashSet<TString>* nameFilter)
+{
+    if (layoutSize > size) {
+        return false;
+    }
+    for (ui32 i = 0; i < layoutSize; ++i) {
+        if (!IsSameName(layoutName(i), name(i)) || !isSameCounter(i)) {
+            return false;
+        }
+    }
+    for (ui32 i = layoutSize; i < size; ++i) {
+        if (IsPublished(name(i), nameFilter)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 TAggregatedTabletCounters::TAggregatedTabletCounters(
     ::NMonitoring::TDynamicCounterPtr counterGroup,
     ::NMonitoring::TCountableBase::EVisibility visibility)
@@ -18,10 +80,6 @@ TAggregatedTabletCounters::TAggregatedTabletCounters(
 void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter) {
     Y_ABORT_UNLESS(!IsInitialized);
 
-    const auto isPublished = [nameFilter](const char* name) {
-        return name && (!nameFilter || nameFilter->empty() || nameFilter->contains(name));
-    };
-
     if (counters) {
         THashMap<TString, THolder<THistogramCounter>> histogramAggregates;
 
@@ -29,20 +87,17 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
         FullSizePercentile = counters->Percentile().Size();
         AggregatedHistogramCounters.Reserve(FullSizePercentile);
         for (ui32 i = 0; i < FullSizePercentile; ++i) {
-            if (!isPublished(counters->PercentileCounterName(i))) {
+            if (!IsPublished(counters->PercentileCounterName(i), nameFilter)) {
                 DeprecatedPercentile.insert(i);
                 continue;
             }
 
             auto& percentileCounter = counters->Percentile()[i];
             const char* percentileCounterName = counters->PercentileCounterName(i);
-            const bool isDerivative = AggregatedHistogramCounters.AddCounter(
+            AggregatedHistogramCounters.AddCounter(
                 percentileCounterName,
                 percentileCounter,
                 histogramAggregates);
-            if (!isDerivative) {
-                NonDerivativePercentile.push_back(i);
-            }
         }
 
         // simple counters
@@ -50,7 +105,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
         AggregatedSimpleCounters.Reserve(FullSizeSimple);
         for (ui32 i = 0; i < FullSizeSimple; ++i) {
             const char* name = counters->SimpleCounterName(i);
-            if (!isPublished(name)) {
+            if (!IsPublished(name, nameFilter)) {
                 DeprecatedSimple.insert(i);
                 continue;
             }
@@ -67,7 +122,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
         AggregatedCumulativeCounters.Reserve(FullSizeCumulative);
         for (ui32 i = 0; i < FullSizeCumulative; ++i) {
             const char* name = counters->CumulativeCounterName(i);
-            if (!isPublished(name)) {
+            if (!IsPublished(name, nameFilter)) {
                 DeprecatedCumulative.insert(i);
                 continue;
             }
@@ -272,6 +327,45 @@ bool TAggregatedTabletCounters::Find(const TString& name, TVector<TTabletCounter
 
     return AggregatedSimpleCounters.Find(name, results)
         || AggregatedCumulativeCounters.Find(name, results);
+}
+
+std::array<ui32, 3> TAggregatedTabletCounters::GetLayoutSizes() const {
+    return {FullSizeSimple, FullSizeCumulative, FullSizePercentile};
+}
+
+bool TAggregatedTabletCounters::IsPrefixLayout(
+    const TTabletCountersBase& layout,
+    const TTabletCountersBase& counters,
+    const THashSet<TString>* nameFilter)
+{
+    const auto anyCounter = [](ui32) {
+        return true;
+    };
+
+    return IsPrefix(
+            layout.Simple().Size(),
+            counters.Simple().Size(),
+            [&layout](ui32 i) { return layout.SimpleCounterName(i); },
+            [&counters](ui32 i) { return counters.SimpleCounterName(i); },
+            anyCounter,
+            nameFilter)
+        && IsPrefix(
+            layout.Cumulative().Size(),
+            counters.Cumulative().Size(),
+            [&layout](ui32 i) { return layout.CumulativeCounterName(i); },
+            [&counters](ui32 i) { return counters.CumulativeCounterName(i); },
+            anyCounter,
+            nameFilter)
+        && IsPrefix(
+            layout.Percentile().Size(),
+            counters.Percentile().Size(),
+            [&layout](ui32 i) { return layout.PercentileCounterName(i); },
+            [&counters](ui32 i) { return counters.PercentileCounterName(i); },
+            // The buckets of an unnamed percentile counter are never read
+            [&layout, &counters](ui32 i) {
+                return !layout.PercentileCounterName(i) || IsSamePercentile(layout.Percentile()[i], counters.Percentile()[i]);
+            },
+            nameFilter);
 }
 
 } // namespace NKikimr::NPrivate

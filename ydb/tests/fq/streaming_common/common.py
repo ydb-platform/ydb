@@ -77,6 +77,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
+        "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
     if enable_shared_reading_in_streaming_queries:
@@ -665,6 +666,12 @@ class Kikimr:
 
 
 class StreamingTestBase(TestYdsBase):
+    def create_streaming_query(self, kikimr: Kikimr, name: str, text: str, stop_start: bool = True) -> None:
+        kikimr.ydb_client.query(text)
+        if stop_start:
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
         return kikimr.endpoint if local_topics else kikimr.external_endpoint
 
@@ -706,7 +713,25 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
+            diagnostics = "failed to retrieve Status / Issues"
+            try:
+                result_sets = kikimr.ydb_client.query(
+                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
+                    )
+                    if result_sets
+                    else []
+                )
+            except Exception as diagnostics_error:
+                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
+            raise AssertionError(f"{error}\n{diagnostics}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(

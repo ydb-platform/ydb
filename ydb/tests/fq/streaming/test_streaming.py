@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import pytest
@@ -545,7 +546,7 @@ class TestStreamingInYdb(StreamingTestBase):
             assert "Member not found: __ydb_user_attributes" in err
             return
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
@@ -780,7 +781,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         rows = [
@@ -825,7 +826,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         # Write and read before restart
@@ -874,7 +875,7 @@ LIMIT 1"""
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         rows = [
@@ -1023,7 +1024,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, name)
 
         data = ['{"time": "lunch time"}']
@@ -1069,8 +1070,8 @@ FROM `{table_name}`"""
 
         query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
         query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
 
         self.wait_completed_checkpoints(kikimr, query_name1)
 
@@ -1119,7 +1120,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
@@ -1180,7 +1181,7 @@ FROM `{table_name}`"""
             END DO;'''
 
         query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
@@ -1236,7 +1237,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT data FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, name)
 
         data = [
@@ -1343,7 +1344,7 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, name)
 
         message_count = 20
@@ -1408,7 +1409,11 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out))
+        self.create_streaming_query(
+            kikimr,
+            query_name,
+            sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out),
+        )
         self.write_stream(['{"time": "lunch time"}'], endpoint=endpoint)
         assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ['lunch time']
 
@@ -1433,7 +1438,7 @@ FROM `{table_name}`"""
                     INSERT INTO {out} SELECT CAST(field_name as String) FROM $in;
                 END DO;'''
 
-            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
+            self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
             self.write_stream([f"{{\"field_name\": {input}}}"], endpoint=endpoint)
             assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [expected_output]
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
@@ -1469,7 +1474,7 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1487,7 +1492,7 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1508,7 +1513,7 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
@@ -1534,7 +1539,7 @@ FROM `{table_name}`"""
 
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
         name = f"test_deduplication_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
         self.wait_completed_checkpoints(kikimr, name, checkpoints_count=1)
 
         data1 = 'value1'
@@ -1560,7 +1565,7 @@ FROM `{table_name}`"""
         # Enable deduplication
 
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10)
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
         self.wait_completed_checkpoints(kikimr, name, checkpoints_count=1)
 
         self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
@@ -1714,7 +1719,7 @@ FROM `{table_name}`"""
             expected_data2 = ["in2-value-p-row-value-j1-value-p-column:1", "in2-value-p-row-value-j2-value-p-column:2"]
 
         query_name = f"test_precompute_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA FeatureR010 = "prototype";
@@ -1823,7 +1828,7 @@ FROM `{table_name}`"""
         """)
 
         query_name = f"test_alter_query_with_precompute_query_{local_topics!s:.1}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -1906,8 +1911,8 @@ FROM `{table_name}`"""
 
         query_name1 = f"test_structured_json1_{local_topics!s:.1}"
         query_name2 = f"test_structured_json2_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
         path1 = f"{kikimr.get_database_name()}/{query_name1}"
         path2 = f"{kikimr.get_database_name()}/{query_name2}"
         self.wait_completed_checkpoints(kikimr, query_name1)
@@ -2069,7 +2074,7 @@ FROM `{table_name}`"""
         inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
 
         path = f"{kikimr.get_database_name()}/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, path, f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}
                 SELECT * FROM {inp}
@@ -2185,7 +2190,7 @@ FROM `{table_name}`"""
             expected_data2 = ["in2-value-j-row-value-j-column:1", "in2-value-j-row-value-j-column:2"]
 
         query_name = f"test_join_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA FeatureR010 = "prototype";
@@ -2297,7 +2302,7 @@ FROM `{table_name}`"""
         """)
 
         query_name = f"test_alter_query_with_join_query_{local_topics!s:.1}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -2364,7 +2369,7 @@ FROM `{table_name}`"""
 
         query_name = f"test_alter_query_outputs_query_{local_topics!s:.1}"
         # 1. Single output (topic)
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, query_name, f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out}
@@ -2438,7 +2443,7 @@ FROM `{table_name}`"""
         """)
 
         path = f"{kikimr.get_database_name()}/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
-        kikimr.ydb_client.query(f"""
+        self.create_streaming_query(kikimr, path, f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}
                 SELECT Unwrap(j.Value) FROM {inp} AS i
@@ -2588,6 +2593,12 @@ FROM `{table_name}`"""
             partitions_count=1,
         )
 
+        def total_pq_read_actor_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.nodes
+            )
+
         name = f"test_restart_after_part_inc_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -2600,8 +2611,13 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT value FROM $in;
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, name)
+
+        count_after_create = total_pq_read_actor_count()
+        assert count_after_create == 1, (
+            f"Expected exactly 1 DQ_PQ_READ_ACTOR after CREATE, got {count_after_create}"
+        )
 
         # Stop the query before altering the topic partition count
         logger.debug(f"stopping query {name}")
@@ -2627,10 +2643,221 @@ FROM `{table_name}`"""
                 endpoint=endpoint,
             )
 
+        count_after_alter = total_pq_read_actor_count()
+        assert count_after_alter > 1, (
+            f"Expected more than 1 DQ_PQ_READ_ACTOR after ALTER, got {count_after_alter}"
+        )
+
         expected_data = ["my_data" for _ in range(message_count)]
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
+    def test_partition_predicate_after_pq_source_rescaling(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        scale_up: bool,
+    ) -> None:
+        """Rescaling must redistribute selected partition IDs, not their dense indices."""
+        partitions_count = 32
+        selected = list(range(7, 27, 2))
+        query_name = entity_name("partition_predicate_after_pq_source_rescaling")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+        )
+        client = kikimr.ydb_client
+
+        def reader_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.slots
+            )
+
+        def check_reading(phase: str) -> None:
+            # Excluded partitions must not even reach the JSON parser. This also
+            # detects pruning being disabled while a residual filter hides it.
+            for partition_id in range(partitions_count):
+                if partition_id not in selected:
+                    client.topic_write(self.input_topic, ["not valid json"], partition_id=partition_id)
+            expected = [f"{phase}_{partition_id}" for partition_id in selected]
+            for partition_id, value in zip(selected, expected):
+                client.topic_write(
+                    self.input_topic, [json.dumps({"value": value})], partition_id=partition_id,
+                )
+            actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
+            assert sorted(actual) == sorted(expected), (actual, expected)
+            self.wait_completed_checkpoints(kikimr, query_name)
+
+        added_slots = []
+        client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                $input = SELECT value FROM {inp} WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (value String NOT NULL)
+                )
+                WHERE __ydb_partition_id IN ({", ".join(map(str, selected))});
+                INSERT INTO {out} SELECT value FROM $input;
+            END DO;
+        ''')
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
+            readers_before = reader_count()
+            assert 0 < readers_before < len(selected), readers_before
+            check_reading("before")
+
+            client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            assert wait_for(lambda: reader_count() == 0, timeout_seconds=120, step_seconds=1), (
+                "PQ readers did not stop"
+            )
+            if scale_up:
+                added_slots = kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3)
+                kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+
+            # Resume the saved graph without recompilation or changing the topic.
+            client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            expected_readers = min(len(selected), 2 * len(kikimr.cluster.slots)) if scale_up else readers_before
+            assert wait_for(lambda: reader_count() == expected_readers, timeout_seconds=120, step_seconds=1), (
+                f"Expected {expected_readers} readers, got {reader_count()}"
+            )
+            if scale_up:
+                assert expected_readers > readers_before
+            check_reading("after")
+        finally:
+            try:
+                client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            finally:
+                if added_slots:
+                    kikimr.cluster.unregister_and_stop_slots(added_slots)
+
+    @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
+    def test_hopping_state_after_pq_source_rescaling(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        scale_up: bool,
+    ) -> None:
+        """An unchanged hopping stage must retain its open window when readers scale up."""
+        partitions_count = 20
+        query_name = entity_name("hopping_state_after_pq_source_rescaling")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+        )
+        client = kikimr.ydb_client
+
+        # Keep event time ahead of wall-clock source watermarks throughout the test.
+        # The target window is [base, base + 20), with another overlapping window
+        # ending at base + 10. Only the target window is written to the output.
+        base = (int(time.time()) // 20) * 20 + 24 * 60 * 60
+
+        def timestamp(seconds: int) -> str:
+            return datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+        def event(seconds: int, value: int = 0, key: str = "clock") -> str:
+            return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
+
+        def reader_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.slots
+            )
+
+        def task_count() -> int:
+            return self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count")
+
+        def write_and_checkpoint(batches: dict[int, list[str]]) -> None:
+            before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.input.bytes")
+            for partition_id, messages in batches.items():
+                client.topic_write(self.input_topic, messages, partition_id=partition_id)
+            self.wait_streaming_query_metric(
+                kikimr, query_name, "streaming.query.input.bytes",
+                expected_value=before + sum(len(message.encode()) for messages in batches.values() for message in messages),
+            )
+            # A completed full-graph barrier after ingestion includes the open
+            # aggregation window, not merely the reader's offsets.
+            self.wait_completed_checkpoints(kikimr, query_name)
+
+        added_slots = []
+        self.create_streaming_query(kikimr, query_name, f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                $input = SELECT
+                    CAST(ts AS Timestamp) AS event_time,
+                    key,
+                    value
+                FROM {inp} WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (ts String NOT NULL, key String NOT NULL, value Uint64 NOT NULL),
+                    WATERMARK = CAST(ts AS Timestamp) - Interval('PT1S')
+                );
+
+                $windows = SELECT
+                    key,
+                    HOP_END() AS window_end,
+                    SUM(value) AS total
+                FROM $input
+                WHERE key = 'target'
+                GROUP BY key, HoppingWindow(event_time, 'PT10S', 'PT20S');
+
+                INSERT INTO {out}
+                SELECT Unwrap(CAST(total AS String)) FROM $windows
+                WHERE window_end = Timestamp('{timestamp(20)}');
+            END DO;
+        ''')
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
+            readers_before = reader_count()
+            tasks_before = task_count()
+            assert 0 < readers_before < partitions_count, readers_before
+            assert tasks_before > readers_before, (tasks_before, readers_before)
+
+            # Seed every partition, so no idle partition can hold back the final
+            # watermark. Clock records advance watermarks but do not aggregate.
+            batches = {partition_id: [event(1)] for partition_id in range(partitions_count)}
+            batches[0].extend([event(2, 10, "target"), event(3, 20, "target")])
+            write_and_checkpoint(batches)
+            assert self.get_streaming_query_metric(kikimr, query_name, "streaming.query.output.bytes") == 0, (
+                "The target window closed before the restart"
+            )
+
+            client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            assert wait_for(lambda: reader_count() == 0, timeout_seconds=120, step_seconds=1), (
+                "PQ readers did not stop"
+            )
+            if scale_up:
+                added_slots = kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3)
+                kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+
+            # Resume the saved graph, without changing/recompiling the query.
+            # The fixture leaves EnableStreamingQueryStateRecompute disabled,
+            # so history replay cannot mask a missing operator-state restore.
+            client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            expected_readers = min(partitions_count, 2 * len(kikimr.cluster.slots)) if scale_up else readers_before
+            assert wait_for(lambda: reader_count() == expected_readers, timeout_seconds=120, step_seconds=1), (
+                f"Expected {expected_readers} PQ readers after restart, got {reader_count()}"
+            )
+            self.wait_completed_checkpoints(kikimr, query_name)
+            if scale_up:
+                assert expected_readers > readers_before
+            # This plan has the reader stage followed by a keyed hopping stage.
+            # Only the reader count should change, not downstream parallelism.
+            assert task_count() - reader_count() == tasks_before - readers_before, (
+                "Downstream task count changed during PQ source rescaling"
+            )
+
+            write_and_checkpoint({0: [event(4, 5, "target")]})
+            write_and_checkpoint({partition_id: [event(40)] for partition_id in range(partitions_count)})
+            actual = client.topic_read(self.output_topic, self.consumer_name, 1)
+            assert actual == ["35"], (
+                f"Expected checkpointed sum 30 plus new value 5, got {actual}; "
+                "a sum of 5 means the hopping state was lost while PQ offsets were restored"
+            )
+        finally:
+            try:
+                client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            finally:
+                if added_slots:
+                    kikimr.cluster.unregister_and_stop_slots(added_slots)
 
     @pytest.mark.parametrize(
         "max_tasks_per_stage, expected_actor_count",

@@ -663,8 +663,7 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        // TODO: move graph restoration outside of executer
-        const bool graphRestored = RestoreTasksGraph();
+        const bool graphRestored = PatchAndRestoreTasksGraph(RescalingChangedTaskCount);
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -1352,6 +1351,9 @@ private:
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
+        const bool restoreOffsetsFromForeignCheckpoint =
+            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
+            || RescalingChangedTaskCount;
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
@@ -1380,7 +1382,8 @@ private:
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition
+            streamingDisposition,
+            restoreOffsetsFromForeignCheckpoint
         ).Release());
 
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
@@ -1538,6 +1541,8 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+
+    bool RescalingChangedTaskCount = false;
 };
 
 } // namespace

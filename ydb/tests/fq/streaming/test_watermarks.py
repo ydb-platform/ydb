@@ -166,7 +166,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             FROM $output;
             END DO;
         '''
-        kikimr.ydb_client.query(sql)
+        self.create_streaming_query(kikimr, query_name, sql)
         self.wait_completed_checkpoints(kikimr, query_name)
         return query_name
 
@@ -796,7 +796,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             FROM $output;
             END DO;
         '''
-        kikimr.ydb_client.query(sql)
+        self.create_streaming_query(kikimr, query_name, sql)
 
         query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         try:

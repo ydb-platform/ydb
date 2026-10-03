@@ -52,7 +52,7 @@ class TestStreamingLarge(StreamingTestBase):
                 INSERT INTO {out} SELECT * FROM $json;
                 END DO;"""
 
-            kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+            self.create_streaming_query(kikimr, name, sql.format(query_name=name, inp=inp, out=out))
             self.wait_completed_checkpoints(kikimr, name)
 
         for i, _ in enumerate(self.roll(kikimr)):
@@ -90,8 +90,8 @@ class TestStreamingLarge(StreamingTestBase):
 
         query_name1 = "test_restart_nodes1"
         query_name2 = "test_restart_nodes2"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name1)
         self.wait_completed_checkpoints(kikimr, query_name2)
 
@@ -160,8 +160,8 @@ class TestStreamingLarge(StreamingTestBase):
 
         query_name1 = "test_replace_node1"
         query_name2 = "test_replace_node2"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
-        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name1, sql.format(query_name=query_name1, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name2, sql.format(query_name=query_name2, inp=inp, out=out))
         time.sleep(2)
 
         message_count = 9

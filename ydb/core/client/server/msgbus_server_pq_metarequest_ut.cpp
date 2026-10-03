@@ -34,8 +34,11 @@ void MakeEmptyTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaR
 void MakeDuplicatedTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 void MakeDuplicatedPartition(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 
-const static TString topic1 = "rt3.dc1--topic1";
-const static TString topic2 = "rt3.dc1--topic2";
+const static TString topic1 = "topic1";
+const static TString topic2 = "topic2";
+// Metadata responses echo the synthesized clientside name, not the request name.
+const static TString topic1Clientside = "rt3.dc1--topic1";
+const static TString topic2Clientside = "rt3.dc1--topic2";
 // Base test class with useful helpers for constructing all you need to test pq requests.
 class TMessageBusServerPersQueueRequestTestBase: public TTestBase {
 protected:
@@ -180,6 +183,7 @@ protected:
         }
         tabletConfig->SetCacheSize(10*1024*1024);
         tabletConfig->SetTopicName(topic);
+        tabletConfig->SetDC("dc1");
         tabletConfig->SetVersion(version);
         auto config = tabletConfig->MutablePartitionConfig();
         config->SetMaxCountInPartition(20000000);
@@ -795,16 +799,16 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(res.TopicInfoSize(), 2, "Response: " << resp->Record);
 
         {
-            const auto& topic1Cfg = res.GetTopicInfo(0).GetTopic() == topic1 ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
-            UNIT_ASSERT_STRINGS_EQUAL_C(topic1Cfg.GetTopic(), topic1, "Response: " << resp->Record);
+            const auto& topic1Cfg = res.GetTopicInfo(0).GetTopic() == topic1Clientside ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
+            UNIT_ASSERT_STRINGS_EQUAL_C(topic1Cfg.GetTopic(), topic1Clientside, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Cfg.GetNumPartitions(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_C(topic1Cfg.HasConfig(), "Response: " << resp->Record);
             UNIT_ASSERT_C(topic1Cfg.GetConfig().HasVersion(), "Response: " << resp->Record);
         }
 
         {
-            const auto& topic2Cfg = res.GetTopicInfo(0).GetTopic() == topic2 ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
-            UNIT_ASSERT_STRINGS_EQUAL_C(topic2Cfg.GetTopic(), topic2, "Response: " << resp->Record);
+            const auto& topic2Cfg = res.GetTopicInfo(0).GetTopic() == topic2Clientside ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
+            UNIT_ASSERT_STRINGS_EQUAL_C(topic2Cfg.GetTopic(), topic2Clientside, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Cfg.GetNumPartitions(), 3, "Response: " << resp->Record);
             UNIT_ASSERT_C(topic2Cfg.HasConfig(), "Response: " << resp->Record);
             UNIT_ASSERT_C(topic2Cfg.GetConfig().HasVersion(), "Response: " << resp->Record);
@@ -912,8 +916,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
             const auto& partition1 = topic1Result.GetPartitionLocation(0);
             UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
@@ -922,8 +926,8 @@ public:
             UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionLocationSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -967,8 +971,8 @@ public:
             Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
                 const auto& partition1 = topic1Result.GetPartitionLocation(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
@@ -977,8 +981,8 @@ public:
                 UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionLocationSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1077,8 +1081,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
             UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
@@ -1086,8 +1090,8 @@ public:
             UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1131,8 +1135,8 @@ public:
             Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
                 UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
@@ -1140,8 +1144,8 @@ public:
                 UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1241,14 +1245,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1289,8 +1293,8 @@ public:
             Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 const auto& partition = topic1Result.GetPartitionResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition.GetPartition(), 0, "Response: " << resp->Record);
@@ -1298,8 +1302,8 @@ public:
                 UNIT_ASSERT_C(partition.HasLastInitDurationSeconds(), "Response: " << resp->Record); // Data was passed
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1390,14 +1394,14 @@ public:
         Cerr << "RESULT " << resp->Record.DebugString() << "\n";
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 3, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1444,8 +1448,8 @@ public:
             Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1Clientside ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1Clientside);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 const auto& partition = topic1Result.GetPartitionResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition.GetPartition(), 0, "Response: " << resp->Record);
@@ -1453,8 +1457,8 @@ public:
 
             }
             {
-                auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? *perTopicResults.Mutable(0) : *perTopicResults.Mutable(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
+                auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2Clientside ? *perTopicResults.Mutable(0) : *perTopicResults.Mutable(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2Clientside);
                 const size_t expectedPartitionsSize = 3;
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), expectedPartitionsSize, "Response: " << resp->Record);
 

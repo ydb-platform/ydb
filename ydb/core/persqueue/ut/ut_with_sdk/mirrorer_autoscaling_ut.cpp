@@ -34,7 +34,7 @@ namespace NKikimr::NPersQueueTests {
         NYdb::NTopic::TDescribeTopicResult GetTopicDescriptionSync(const TString& name, NPersQueue::TTestServer& server) {
             NYdb::NTopic::TTopicClient topicClient{
                 *server.AnnoyingClient->GetDriver()};
-            const TString name0 = "/Root/PQ/" + name;
+            const TString name0 = "/Root/" + name;
 
             auto descr = topicClient.DescribeTopic(name0).GetValueSync();
 
@@ -117,7 +117,7 @@ namespace NKikimr::NPersQueueTests {
                 Cerr << (TStringBuilder() << "ALTER_SCHEME: " << scheme << "\n") << Flush;
 
                 const auto sender = runtime.AllocateEdgeActor();
-                const auto request = CreateRequest(txId, CreateTransaction("/Root/PQ", scheme));
+                const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
                 runtime.Send(new IEventHandle(
                                 MakeTabletResolverID(),
                                 sender,
@@ -355,8 +355,8 @@ namespace NKikimr::NPersQueueTests {
             const ui32 finalPartitionsCount = 4;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -386,7 +386,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
@@ -468,8 +468,8 @@ namespace NKikimr::NPersQueueTests {
             const ui32 finalPartitionsCount = 4;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -502,7 +502,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
@@ -576,7 +576,7 @@ namespace NKikimr::NPersQueueTests {
                 .EndAlterAutoPartitioningSettings()
                 .EndAlterTopicPartitioningSettings();
 
-            auto alterResult = topicClient.AlterTopic("/Root/PQ/" + dstTopicFullName, alterSettings).GetValueSync();
+            auto alterResult = topicClient.AlterTopic("/Root/" + dstTopicFullName, alterSettings).GetValueSync();
 
             if (!alterResult.IsSuccess()) {
                 Cerr << "ALTER RES " << LabeledOutput(alterResult.GetIssues().ToString()) << "\n";
@@ -616,8 +616,8 @@ namespace NKikimr::NPersQueueTests {
             const ui32 finalPartitionsCount = 8;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -647,7 +647,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
@@ -759,8 +759,8 @@ namespace NKikimr::NPersQueueTests {
             const ui32 finalPartitionsCount = 3;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -790,7 +790,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
@@ -882,8 +882,8 @@ namespace NKikimr::NPersQueueTests {
 
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -913,7 +913,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
@@ -1015,8 +1015,8 @@ namespace NKikimr::NPersQueueTests {
             const ui32 finalPartitionsCount = 4;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
-            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+            const TString srcTopicFullName = srcTopic;
+            const TString dstTopicFullName = dstTopic;
 
             NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
             partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -1061,7 +1061,7 @@ namespace NKikimr::NPersQueueTests {
             NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
             mirrorFrom.SetEndpoint("localhost");
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
-            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetTopic("/Root/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,

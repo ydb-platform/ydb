@@ -42,17 +42,17 @@ TTopicNameConstructor::TTopicNameConstructor(const TString& dc,
 
 TString TTopicNameConstructor::GetTopicParent() const
 {
-    return Database + "/PQ";
+    return Database;
 }
 
 TString TTopicNameConstructor::GetTopicPath(const TString& topicName) const
 {
-    return GetTopicParent() + "/" + GetFullTopicName(topicName);
+    return GetTopicParent() + "/" + topicName;
 }
 
 TString TTopicNameConstructor::GetFullTopicName(const TString& topicName) const
 {
-    return "rt3." + Dc + "--" + topicName;
+    return topicName;
 }
 
 class TTxFixture : public NUnitTest::TBaseFixture {
@@ -96,10 +96,10 @@ protected:
     const TString CONSUMER = "user";
     const TString SHORT_TOPIC_NAME = "demo";
     const TString DC = "dc1";
-    const TString FULL_TOPIC_NAME = "rt3." + DC + "--" + SHORT_TOPIC_NAME;
+    const TString FULL_TOPIC_NAME = SHORT_TOPIC_NAME;
     const TString AUTH_TOKEN = "x-user-x@builtin";
     const TString DATABASE = "/Root";
-    const TString TOPIC_PARENT = DATABASE + "/PQ";
+    const TString TOPIC_PARENT = DATABASE;
     const TString TOPIC_PATH = TOPIC_PARENT + "/" + FULL_TOPIC_NAME;
 
     TMaybe<NPersQueue::TTestServer> Server;
@@ -138,7 +138,7 @@ void TTxFixture::CreateTopic(const TString& topicName)
     //
     // создать топик...
     //
-    Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);
+    Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1, true, true, "dc1", {"user"}, "lb");
 
     NACLib::TDiffACL acl;
     acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, AUTH_TOKEN);

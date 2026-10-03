@@ -65,9 +65,9 @@ void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorCont
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(
-            TabletActorId, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
+            TabletActorId, ctx, TabletId, TopicConverter->GetPrimaryPath(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
             cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
+            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetPrimaryPath() << " (ReadInfo) cookie " << cookie
         );
     }
     Die(ctx);
@@ -228,7 +228,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
 
 TStructuredMessage TAccountReadQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"topic", TopicConverter->GetClientsideName()},
+        {"topic", TopicConverter->GetPrimaryPath()},
         {"partition", Partition.ToString()},
         {"consumer", User});
 }
@@ -287,7 +287,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
 
 TStructuredMessage TAccountWriteQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"topic", TopicConverter->GetClientsideName()},
+        {"topic", TopicConverter->GetPrimaryPath()},
         {"partition", Partition.ToString()});
 }
 

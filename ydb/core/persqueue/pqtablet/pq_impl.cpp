@@ -147,7 +147,7 @@ public:
 
     TStructuredMessage LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"topicName", TopicName},
+            {"topicPath", TopicName},
             {"partition", Partition},
             {"requestId", ReqId});
     }
@@ -355,7 +355,7 @@ struct TPersQueue::TReplyToActor {
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
     ReplyPersQueueError(
-        ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
+        ctx.SelfID, ctx, TabletID(), TopicPath, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
         responseCookie, errorCode, error
     );
 }
@@ -383,7 +383,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                              ctx);
 
         PQ_ENSURE(TopicName.size())("description", "Need topic name here");
-        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
+        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicPath, cacheSize));
     } else {
         //AFL_ENSURE(TopicName == Config.GetTopicName())("reason", "Changing topic name is not supported");
         TopicPath = Config.GetTopicPath();
@@ -721,7 +721,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             cacheSize = Config.GetCacheSize();
 
         PQ_ENSURE(TopicName.size())("description", "Need topic name here");
-        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
+        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicPath, cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_D("No config, start with empty partitions and default config");
     } else {
@@ -1153,7 +1153,7 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
     SetCacheCounters(CacheCounters);
 
     LOG_D("Topic counters. CacheSize CachedBlobs",
-        {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+        {"topic", (TopicPath ? TopicPath : "Undefined")},
         {"cacheSizeBytes", CacheCounters.CacheSizeBytes},
         {"cacheSizeBlobs", CacheCounters.CacheSizeBlobs});
 }
@@ -1846,7 +1846,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 partNo++;
                 uncompressedSize = 0;
                 LOG_D("Got client PART message",
-                    {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+                    {"topic", (TopicPath ? TopicPath : "Undefined")},
                     {"partition", req.GetPartition()},
                     {"sourceId", EscapeC(msgs.back().SourceId)},
                     {"seqNo", msgs.back().SeqNo},
@@ -1908,7 +1908,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             FillBatchInfo(cmd, msgs.back());
         }
         LOG_D("Got client message",
-            {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+            {"topic", (TopicPath ? TopicPath : "Undefined")},
             {"partition", req.GetPartition()},
             {"sourceId", EscapeC(msgs.back().SourceId)},
             {"seqNo", msgs.back().SeqNo},
@@ -2583,9 +2583,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         }
         TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
             ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
-        ans = CreateResponseProxy(rr, TopicName, p, m, s, c, ResourceMetrics, ctx);
+        ans = CreateResponseProxy(rr, TopicPath, p, m, s, c, ResourceMetrics, ctx);
     } else {
-        ans = CreateResponseProxy(ev->Sender, TopicName, p, m, s, c, ResourceMetrics, ctx);
+        ans = CreateResponseProxy(ev->Sender, TopicPath, p, m, s, c, ResourceMetrics, ctx);
     }
 
     ResponseProxy[responseCookie] = ans;
@@ -2616,7 +2616,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     auto it = Partitions.find(partition);
 
     LOG_D("Got client message batch for topic partition",
-        {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+        {"topic", (TopicPath ? TopicPath : "Undefined")},
         {"partition", partition});
 
     if (it == Partitions.end()) {

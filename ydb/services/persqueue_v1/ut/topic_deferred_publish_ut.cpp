@@ -213,7 +213,7 @@ TMaybe<TString> TryReadFirstTopicMessage(
     TDuration timeout = TDuration::Seconds(30),
     ui32 partitionId = 0)
 {
-    const TString topic = "rt3.dc1--" + topicShortName;
+    const TString topic = topicShortName;
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
@@ -709,7 +709,7 @@ std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> MakeTopicServiceStub(
 }
 
 TString MakeLegacyStreamWriteTopicPath(const TString& topicShortName) {
-    return "/Root/PQ/rt3.dc1--" + topicShortName;
+    return "/Root/" + topicShortName;
 }
 
 void AssertPartitionsOnSameTablet(
@@ -737,22 +737,20 @@ void AssertPartitionsOnSameTablet(
 }
 
 void CreateLegacyStreamWriteTopic(NPersQueue::TTestServer& server, const TString& topicShortName, ui32 partitions = 2) {
-    const TString fullName = "rt3.dc1--" + topicShortName;
+    const TString fullName = topicShortName;
     auto pqClient = NYdb::NPersQueue::TPersQueueClient(*server.AnnoyingClient->GetDriver());
     auto settings = NYdb::NPersQueue::TCreateTopicSettings()
         .PartitionsCount(partitions)
         .PartitionsPerTablet(Max(partitions, 2u));
+    settings.FederationAccount("lb");
     settings.ReadRules({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("user")});
 
-    TString path = fullName;
-    if (!path.StartsWith("/Root")) {
-        path = TStringBuilder() << "/Root/PQ/" << fullName;
-    }
+    const TString path = "/Root/" + topicShortName;
 
     auto result = pqClient.CreateTopic(path, settings);
     result.Wait();
     UNIT_ASSERT_C(result.GetValue().IsSuccess(), result.GetValue().GetIssues().ToString());
-    server.AnnoyingClient->AddTopic(fullName);
+    server.AnnoyingClient->AddTopic(fullName, "dc1");
 
     if (partitions >= 2) {
         TVector<ui32> partitionIds(Reserve(partitions));

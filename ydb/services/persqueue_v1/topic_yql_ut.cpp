@@ -4,8 +4,8 @@
 namespace NKikimr::NPersQueueTests {
 
 namespace {
-    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
-    const static TString DLQ_TOPIC_PATH = "/Root/PQ/rt3.dc1--dead_letter_queue_97";
+    const static TString DEFAULT_TOPIC_NAME = "topic1";
+    const static TString DLQ_TOPIC_PATH = "/Root/dead_letter_queue_97";
 
     void CreateDlqTopic(NPersQueue::TTestServer& server) {
         server.AnnoyingClient->RunYqlSchemeQuery(TStringBuilder()
@@ -18,13 +18,13 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         NPersQueue::TTestServer server;
   //      Server->EnableLogs({NKikimrServices::FLAT_TX_SCHEMESHARD
         auto CheckPQChildrenSize = [&](const TString prefix) {
-            auto children = server.AnnoyingClient->Ls("/Root/PQ/")->Record.GetPathDescription().ChildrenSize();
+            auto children = server.AnnoyingClient->Ls("/Root")->Record.GetPathDescription().ChildrenSize();
             Cerr << prefix << ", children in PQ:" << children << Endl;
             return children;
         };
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
         auto before = CheckPQChildrenSize("before drop");
-        server.AnnoyingClient->RunYqlSchemeQuery(TStringBuilder() << "DROP TOPIC `/Root/PQ/" << DEFAULT_TOPIC_NAME << "`;");
+        server.AnnoyingClient->RunYqlSchemeQuery(TStringBuilder() << "DROP TOPIC `/Root/" << DEFAULT_TOPIC_NAME << "`;");
         auto after = CheckPQChildrenSize("after drop");
         UNIT_ASSERT_VALUES_EQUAL(after + 1, before);
     }
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         NPersQueue::TTestServer server(settings);
         {
             const char *query = R"__(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
+                CREATE TOPIC `/Root/legacy/topic1` (
                     CONSUMER c1
                 ) WITH (min_active_partitions = 2,
                         partition_count_limit = 5,
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             )__";
 
             server.AnnoyingClient->RunYqlSchemeQuery(query);
-            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/legacy/topic1")->Record.GetPathDescription()
                                                                                                 .GetPersQueueGroup();
             const auto& describeAfterCreate = pqGroup.GetPQTabletConfig();
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
@@ -65,13 +65,13 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         NPersQueue::TTestServer server(settings);
         auto CheckPQChildrenSize = [&](const TString prefix) {
-            auto children = server.AnnoyingClient->Ls("/Root/PQ/")->Record.GetPathDescription().ChildrenSize();
+            auto children = server.AnnoyingClient->Ls("/Root")->Record.GetPathDescription().ChildrenSize();
             Cerr << prefix << ", children in PQ:" << children << Endl;
             return children;
         };
         auto before = CheckPQChildrenSize("before create");
         const char *query = R"__(
-            CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
+            CREATE TOPIC `/Root/legacy/topic1` (
                 CONSUMER c1,
                 CONSUMER c2 WITH (important = true, read_from = 100, supported_codecs = 'RAW, LZOP, GZIP'),
                 CONSUMER c4 WITH (availability_period = Interval('PT9H'))
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         server.AnnoyingClient->RunYqlSchemeQuery(query);
         auto after = CheckPQChildrenSize("after create");
         UNIT_ASSERT_VALUES_EQUAL(after, before + 1);
-        auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+        auto pqGroup = server.AnnoyingClient->Ls("/Root/legacy/topic1")->Record.GetPathDescription()
                                         .GetPersQueueGroup();
 
         {
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
 
         const char *query2 = R"__(
-        ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+        ALTER TOPIC `/Root/legacy/topic1`
             ALTER CONSUMER c2 SET (read_from = Timestamp('2021-01-01T01:01:01Z')),
             ALTER CONSUMER c4 SET (availability_period = Interval('PT48H')),
             SET (min_active_partitions = 3,
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         )__";
         Cerr << "\nRun query: \n" << query2 << Endl;
         server.AnnoyingClient->RunYqlSchemeQuery(query2);
-        auto pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+        auto pqGroup2 = server.AnnoyingClient->Ls("/Root/legacy/topic1")->Record.GetPathDescription()
                                                                                              .GetPersQueueGroup();
         const auto& describeAfterAlter = pqGroup2.GetPQTabletConfig();
 
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         UNIT_ASSERT_VALUES_EQUAL(expectedDescr.DebugString(), describeAfterAlter.DebugString());
 
         const char *query3 = R"__(
-        ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+        ALTER TOPIC `/Root/legacy/topic1`
             DROP CONSUMER c1,
             ALTER CONSUMER c2 SET (important = false, read_from = Datetime('2021-01-01T01:01:01Z'), supported_codecs = 'RAW, GZIP'),
             ADD CONSUMER c3 WITH (important = true),
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         Cerr << "\nRun query: \n" << query3 << Endl;
         server.AnnoyingClient->RunYqlSchemeQuery(query3);
 
-        pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+        pqGroup2 = server.AnnoyingClient->Ls("/Root/legacy/topic1")->Record.GetPathDescription()
                                             .GetPersQueueGroup();
 
         {
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             const char *query = R"(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                CREATE TOPIC `/Root/legacy/topic1`
             )";
 
             server.AnnoyingClient->RunYqlSchemeQuery(query);
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                 SET (
                     min_active_partitions = 7,
                     max_active_partitions = 100,
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
 
         {
-            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription().GetPersQueueGroup();
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/legacy/topic1")->Record.GetPathDescription().GetPersQueueGroup();
             const auto& describe = pqGroup.GetPQTabletConfig();
 
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             const char *query = R"(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                CREATE TOPIC `/Root/topic_with_shared_consumer`
                     (CONSUMER c1 WITH (
                           type = 'shared'
                         , keep_messages_order = true
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                         , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/dead_letter_queue_97'
                     ))
             )";
 
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
 
         {
-            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
             const auto& describe = pqGroup.GetPQTabletConfig();
 
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             const char *query = R"(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                CREATE TOPIC `/Root/topic_with_shared_consumer`
                     (CONSUMER c1 WITH (
                           type = 'shared'
                     ))
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
 
         {
-            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
             const auto& describe = pqGroup.GetPQTabletConfig();
 
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
@@ -342,14 +342,14 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             const char *query = R"(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                ALTER TOPIC `/Root/topic_with_shared_consumer`
                     ALTER CONSUMER c1 SET (
                           default_processing_timeout = Interval('PT31S')
                         , receive_message_wait_time = Interval('PT5S')
                         , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/dead_letter_queue_97'
                     )
             )";
 
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
 
         {
-            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
             const auto& describe = pqGroup.GetPQTabletConfig();
 
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
@@ -381,18 +381,18 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         NPersQueue::TTestServer server;
         {
             const char *query = R"__(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (CONSUMER c1, CONSUMER c2);
+                CREATE TOPIC `/Root/legacy/topic1` (CONSUMER c1, CONSUMER c2);
             )__";
             server.AnnoyingClient->RunYqlSchemeQuery(query);
         }{
             const char *query = R"__(
-                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic2` (CONSUMER c1 with (read_from = today));
+                CREATE TOPIC `/Root/legacy/topic2` (CONSUMER c1 with (read_from = today));
             )__";
             server.AnnoyingClient->RunYqlSchemeQuery(query, false);
         }
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                     ADD CONSUMER c3,
                     ALTER CONSUMER c3 SET (important = true);
             )__";
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                     ALTER CONSUMER c2 SET (important = true),
                     DROP CONSUMER c2;
             )__";
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                     DROP CONSUMER c4,
                     ADD CONSUMER c4 WITH (important = true);
             )__";
@@ -416,14 +416,14 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                     ADD CONSUMER c4 WITH (availability_period = true);
             )__";
             server.AnnoyingClient->RunYqlSchemeQuery(query, false);
         }
         {
             const char *query = R"__(
-                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                ALTER TOPIC `/Root/legacy/topic1`
                     ADD CONSUMER c4 WITH (availability_period = Interval('PT9H'), important = true);
             )__";
             server.AnnoyingClient->RunYqlSchemeQuery(query, false);

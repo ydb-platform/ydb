@@ -375,6 +375,13 @@ NUdf::TUnboxedValue TPgCast::Calculate(NUdf::TUnboxedValue value, i32 typeMod, T
     }
 
     TPAllocScope call;
+    // Function caches must not retain allocations owned by this scope.
+    Y_DEFER {
+        state.CallInfo1.Ref().flinfo->fn_extra = nullptr;
+        if (FInfo2.fn_addr) {
+            state.CallInfo2.Ref().flinfo->fn_extra = nullptr;
+        }
+    };
     if (ArrayCast) {
         auto arr = (ArrayType*)DatumGetPointer(PointerDatumFromPod(value));
         auto ndim = ARR_NDIM(arr);

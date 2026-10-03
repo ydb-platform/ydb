@@ -2,32 +2,31 @@ LIBRARY()
 
 SRCS(
     kqp_data_executer.cpp
-    kqp_scan_executer.cpp
-    kqp_scheme_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
     kqp_literal_executer.cpp
     kqp_locks_helper.cpp
     kqp_partition_helper.cpp
+    kqp_partitioned_executer.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
     kqp_pq_topic_resolver.cpp
+    kqp_scan_executer.cpp
+    kqp_scheme_executer.cpp
     kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
-    kqp_partitioned_executer.cpp
     max_tasks_graph.cpp
     shard_key_ranges.cpp
 )
 
 PEERDIR(
-    ydb/core/kqp/tracing
     library/cpp/containers/absl
     library/cpp/html/pcdata
+    library/cpp/protobuf/interop
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/library/json_index
     ydb/core/client/minikql_compile
     ydb/core/formats
     ydb/core/fq/libs/checkpointing
@@ -39,17 +38,19 @@ PEERDIR(
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
+    ydb/core/kqp/tracing
     ydb/core/protos
     ydb/core/sys_view/common
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert
     ydb/library/actors/core
+    ydb/library/json_index
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
     ydb/library/plan2svg
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/dq/runtime
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/pq/gateway/abstract

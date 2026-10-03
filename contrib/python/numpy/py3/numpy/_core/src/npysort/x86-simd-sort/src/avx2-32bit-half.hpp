@@ -9,36 +9,6 @@
 
 #include "avx2-emu-funcs.hpp"
 
-/*
- * Constants used in sorting 8 elements in a ymm registers. Based on Bitonic
- * sorting network (see
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg)
- */
-
-// ymm                  7, 6, 5, 4, 3, 2, 1, 0
-#define NETWORK_32BIT_AVX2_1 4, 5, 6, 7, 0, 1, 2, 3
-#define NETWORK_32BIT_AVX2_2 0, 1, 2, 3, 4, 5, 6, 7
-#define NETWORK_32BIT_AVX2_3 5, 4, 7, 6, 1, 0, 3, 2
-#define NETWORK_32BIT_AVX2_4 3, 2, 1, 0, 7, 6, 5, 4
-
-/*
- * Assumes ymm is random and performs a full sorting network defined in
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg
- */
-template <typename vtype, typename reg_t = typename vtype::reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_ymm_32bit_half(reg_t ymm)
-{
-    using swizzle = typename vtype::swizzle_ops;
-
-    const typename vtype::opmask_t oxAA = vtype::seti(-1, 0, -1, 0);
-    const typename vtype::opmask_t oxCC = vtype::seti(-1, -1, 0, 0);
-
-    ymm = cmp_merge<vtype>(ymm, swizzle::template swap_n<vtype, 2>(ymm), oxAA);
-    ymm = cmp_merge<vtype>(ymm, vtype::reverse(ymm), oxCC);
-    ymm = cmp_merge<vtype>(ymm, swizzle::template swap_n<vtype, 2>(ymm), oxAA);
-    return ymm;
-}
-
 struct avx2_32bit_half_swizzle_ops;
 
 template <>
@@ -64,10 +34,19 @@ struct avx2_half_vector<int32_t> {
     {
         return _mm_set1_epi32(type_max());
     } // TODO: this should broadcast bits as is?
+    static opmask_t knot_opmask(opmask_t x)
+    {
+        auto allOnes = seti(-1, -1, -1, -1);
+        return _mm_xor_si128(x, allOnes);
+    }
     static opmask_t get_partial_loadmask(uint64_t num_to_read)
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_half(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_half(intMask);
     }
     static regi_t seti(int v1, int v2, int v3, int v4)
     {
@@ -150,7 +129,7 @@ struct avx2_half_vector<int32_t> {
     }
     static reg_t reverse(reg_t ymm)
     {
-        const __m128i rev_index = _mm_set_epi32(0, 1, 2, 3);
+        const __m128i rev_index = _mm_set_epi32(NETWORK_REVERSE_4LANES);
         return permutexvar(rev_index, ymm);
     }
     static type_t reducemax(reg_t v)
@@ -176,7 +155,7 @@ struct avx2_half_vector<int32_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_32bit_half<avx2_half_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_half_vector<type_t>>(x);
     }
     static reg_t cast_from(__m128i v)
     {
@@ -185,6 +164,10 @@ struct avx2_half_vector<int32_t> {
     static __m128i cast_to(reg_t v)
     {
         return v;
+    }
+    static bool all_false(opmask_t k)
+    {
+        return _mm_movemask_ps(_mm_castsi128_ps(k)) == 0;
     }
     static int double_compressstore(type_t *left_addr,
                                     type_t *right_addr,
@@ -218,10 +201,19 @@ struct avx2_half_vector<uint32_t> {
     {
         return _mm_set1_epi32(type_max());
     }
+    static opmask_t knot_opmask(opmask_t x)
+    {
+        auto allOnes = seti(-1, -1, -1, -1);
+        return _mm_xor_si128(x, allOnes);
+    }
     static opmask_t get_partial_loadmask(uint64_t num_to_read)
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_half(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_half(intMask);
     }
     static regi_t seti(int v1, int v2, int v3, int v4)
     {
@@ -295,7 +287,7 @@ struct avx2_half_vector<uint32_t> {
     }
     static reg_t reverse(reg_t ymm)
     {
-        const __m128i rev_index = _mm_set_epi32(0, 1, 2, 3);
+        const __m128i rev_index = _mm_set_epi32(NETWORK_REVERSE_4LANES);
         return permutexvar(rev_index, ymm);
     }
     static type_t reducemax(reg_t v)
@@ -321,7 +313,7 @@ struct avx2_half_vector<uint32_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_32bit_half<avx2_half_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_half_vector<type_t>>(x);
     }
     static reg_t cast_from(__m128i v)
     {
@@ -330,6 +322,10 @@ struct avx2_half_vector<uint32_t> {
     static __m128i cast_to(reg_t v)
     {
         return v;
+    }
+    static bool all_false(opmask_t k)
+    {
+        return _mm_movemask_ps(_mm_castsi128_ps(k)) == 0;
     }
     static int double_compressstore(type_t *left_addr,
                                     type_t *right_addr,
@@ -363,7 +359,11 @@ struct avx2_half_vector<float> {
     {
         return _mm_set1_ps(type_max());
     }
-
+    static opmask_t knot_opmask(opmask_t x)
+    {
+        auto allOnes = seti(-1, -1, -1, -1);
+        return _mm_xor_si128(x, allOnes);
+    }
     static regi_t seti(int v1, int v2, int v3, int v4)
     {
         return _mm_set_epi32(v1, v2, v3, v4);
@@ -388,6 +388,10 @@ struct avx2_half_vector<float> {
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_half(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_half(intMask);
     }
     static int32_t convert_mask_to_int(opmask_t mask)
     {
@@ -456,7 +460,7 @@ struct avx2_half_vector<float> {
     }
     static reg_t reverse(reg_t ymm)
     {
-        const __m128i rev_index = _mm_set_epi32(0, 1, 2, 3);
+        const __m128i rev_index = _mm_set_epi32(NETWORK_REVERSE_4LANES);
         return permutexvar(rev_index, ymm);
     }
     static type_t reducemax(reg_t v)
@@ -482,7 +486,7 @@ struct avx2_half_vector<float> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_32bit_half<avx2_half_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_half_vector<type_t>>(x);
     }
     static reg_t cast_from(__m128i v)
     {
@@ -491,6 +495,10 @@ struct avx2_half_vector<float> {
     static __m128i cast_to(reg_t v)
     {
         return _mm_castps_si128(v);
+    }
+    static bool all_false(opmask_t k)
+    {
+        return _mm_movemask_ps(_mm_castsi128_ps(k)) == 0;
     }
     static int double_compressstore(type_t *left_addr,
                                     type_t *right_addr,

@@ -193,6 +193,11 @@ struct TTabletInfo
     //! Contains the number of front rows that are trimmed and are not guaranteed to be accessible.
     i64 TrimmedRowCount = 0;
 
+    //! Only provided for ordered tablets.
+    //! Contains the number of front rows (including trimmed ones) that are flushed to chunks.
+    //! Never exceeds @flushed_row_count of the tablet at master.
+    std::optional<i64> FlushedRowCount;
+
     //! Only makes sense for replicated tablets.
     //! Contains the number of rows that are yet to be committed.
     i64 DelayedLocklessRowCount = 0;

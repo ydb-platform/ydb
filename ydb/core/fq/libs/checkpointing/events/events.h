@@ -2,11 +2,14 @@
 
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/yql/dq/proto/dq_state_load_plan.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <util/generic/hash.h>
 
 namespace NFq {
 
@@ -19,6 +22,7 @@ struct TEvCheckpointCoordinator {
         EvRunGraph,
         EvReadyState,
         EvRaiseTransientIssues,
+        EvPrepareStateLoadPlanResult,
         EvEnd,
     };
 
@@ -67,6 +71,18 @@ struct TEvCheckpointCoordinator {
         }
 
         NYql::TIssues TransientIssues;
+    };
+
+    struct TEvPrepareStateLoadPlanResult : public NActors::TEventLocal<TEvPrepareStateLoadPlanResult, EvPrepareStateLoadPlanResult> {
+        TEvPrepareStateLoadPlanResult(bool result, THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> plan, NYql::TIssues issues)
+            : Result(result)
+            , Plan(std::move(plan))
+            , Issues(std::move(issues))
+        {}
+
+        const bool Result = true;
+        const THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> Plan;
+        NYql::TIssues Issues;
     };
 };
 

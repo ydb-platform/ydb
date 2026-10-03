@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     parser_abstract.cpp
@@ -27,7 +27,5 @@ PEERDIR(
 CFLAGS(
     -Wno-assume
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

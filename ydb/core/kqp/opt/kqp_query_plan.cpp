@@ -1759,13 +1759,18 @@ private:
             const auto index = FromString<ui32>(key.Index().Value());
             YQL_ENSURE(index + 1 < expandLambda.ChildrenSize());
 
-            const auto member = TExprBase(expandLambda.ChildPtr(index + 1)).Cast<TCoMember>();
+            const TExprBase item(expandLambda.ChildPtr(index + 1));
             const auto ascending = FromString<bool>(key.Direction().Cast<TCoBool>().Literal().Value());
 
             if (sortBy.size()) {
                 sortBy << ", ";
             }
-            sortBy << member.Name().Value() << (ascending ? " asc" : " desc");
+            if (const auto member = item.Maybe<TCoMember>()) {
+                sortBy << member.Cast().Name().Value();
+            } else {
+                sortBy << NPlanUtils::PrettyExprStr(item);
+            }
+            sortBy << (ascending ? " asc" : " desc");
         }
 
         TOperator op;

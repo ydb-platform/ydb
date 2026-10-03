@@ -11,7 +11,7 @@
 #include <util/system/error.h>
 #include <util/system/info.h>
 
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/utils/exception_utils.h>
 
 #if defined(_win_)

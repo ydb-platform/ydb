@@ -27,6 +27,7 @@
 #include <vector>
 
 using namespace NKikimr::NArrow;
+using NKikimr::NKernels::BoolVecToArray;
 using NKikimr::NKernels::NumVecToArray;
 using EOperation = NKikimr::NKernels::EOperation;
 using EAggregate = NKikimr::NArrow::NSSA::NAggregation::EAggregate;

@@ -1411,6 +1411,20 @@
             "uri": "file://test.test_select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Results_/extracted"
         }
     ],
+    "test.test[select_yql-values_common_type-default.txt-Debug]": [
+        {
+            "checksum": "69fb007583d5f5538310190856c3b429",
+            "size": 3963,
+            "uri": "https://{canondata_backend}/1942278/a5f4957cef21c0b6927852e268304edb3bff4907/resource.tar.gz#test.test_select_yql-values_common_type-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-values_common_type-default.txt-Results]": [
+        {
+            "checksum": "b6c96f592a4d76c0123b7255339af75a",
+            "size": 10080,
+            "uri": "https://{canondata_backend}/1931696/e13bbe1fd5b77433717b510166ed00c6621c7b18/resource.tar.gz#test.test_select_yql-values_common_type-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-window_pg_tutorial_6-default.txt-Debug]": [
         {
             "checksum": "36964cc9db635115f7b47be123206795",

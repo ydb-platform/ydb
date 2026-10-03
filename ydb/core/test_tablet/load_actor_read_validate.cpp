@@ -23,6 +23,8 @@ namespace NKikimr::NTestShard {
         ui64 LastCookie = 0;
         std::deque<TString> KeysPending;
 
+        bool InitializationInFlight = false;
+
         bool IssueReadMode = false; // true - via EvRequest, false - via EvReadRequest
         bool IssueReadRangeMode = false; // true - via EvRequest, false - via EvReadRequest
 
@@ -406,7 +408,7 @@ namespace NKikimr::NTestShard {
                     ValidateState();
                     StateValidated = true;
                 }
-                if (TransitionInFlight.empty()) {
+                if (TransitionInFlight.empty() && !InitializationInFlight) {
                     YDB_LOG_INFO("Finished read&validate",
                         {"marker", "TS08"},
                         {"tabletId", TabletId});
@@ -438,8 +440,10 @@ namespace NKikimr::NTestShard {
             // data lost)
             for (auto& [key, info] : Keys) {
                 if (emptyState) {
-                    // key's state will switch to CONFIRMED eventually and this will happen before this actor terminates
-                    RegisterTransition(key, ::NTestShard::TStateServer::ABSENT, ::NTestShard::TStateServer::CONFIRMED);
+                    info.PendingState = ::NTestShard::TStateServer::CONFIRMED;
+                    if (!Settings.HasStorageServerHost()) {
+                        info.ConfirmedState = info.PendingState;
+                    }
                 } else if (const auto it = State.find(key); it != State.end()) {
                     info.ConfirmedState = info.PendingState = it->second;
                     switch (it->second) {
@@ -486,6 +490,22 @@ namespace NKikimr::NTestShard {
                         " TabletId# " << TabletId);
                 }
             }
+
+            if (emptyState && !Keys.empty() && Settings.HasStorageServerHost()) {
+                InitializeStateServer();
+            }
+        }
+
+        void InitializeStateServer() {
+            auto request = std::make_unique<TEvStateServerRequest>();
+            auto* initialize = request->Record.MutableInitialize();
+            initialize->SetTabletId(TabletId);
+            initialize->SetGeneration(Generation);
+            for (const auto& [key, info] : Keys) {
+                initialize->AddKeys(key);
+            }
+            InitializationInFlight = true;
+            Send(MakeStateServerInterfaceActorId(), request.release());
         }
 
         void RegisterTransition(TString key, ::NTestShard::TStateServer::EEntityState from, ::NTestShard::TStateServer::EEntityState to) {
@@ -533,10 +553,17 @@ namespace NKikimr::NTestShard {
                     Y_ABORT();
             }
 
-            Y_ABORT_UNLESS(!TransitionInFlight.empty());
-            auto& key = *TransitionInFlight.front();
-            TransitionInFlight.pop_front();
-            key.second.ConfirmedState = key.second.PendingState;
+            if (InitializationInFlight) {
+                InitializationInFlight = false;
+                for (auto& [key, info] : Keys) {
+                    info.ConfirmedState = info.PendingState;
+                }
+            } else {
+                Y_ABORT_UNLESS(!TransitionInFlight.empty());
+                auto& key = *TransitionInFlight.front();
+                TransitionInFlight.pop_front();
+                key.second.ConfirmedState = key.second.PendingState;
+            }
 
             if (TransitionInFlight.empty()) {
                 FinishIfPossible();

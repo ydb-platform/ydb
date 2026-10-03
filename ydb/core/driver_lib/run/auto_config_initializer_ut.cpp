@@ -4,6 +4,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
@@ -23,7 +24,7 @@ using namespace NAutoConfigInitializer;
 Y_UNIT_TEST(AsyncFrameCacheBudgetSurvivesAutoConfig) {
     NKikimrConfig::TActorSystemConfig defaults;
     UNIT_ASSERT_VALUES_EQUAL(defaults.GetAsyncFrameCacheSizeBytes(), 4194304);
-    UNIT_ASSERT_VALUES_EQUAL(NActors::TActorSystemSetup().AsyncFrameCacheSizeBytes,
+    UNIT_ASSERT_VALUES_EQUAL(NActors::TAsyncFrameCache::DefaultSizeBytes,
         defaults.GetAsyncFrameCacheSizeBytes());
     for (ui64 budget : {ui64(0), ui64(8192), ui64(4194304)}) {
         for (bool dynamic : {false, true}) {

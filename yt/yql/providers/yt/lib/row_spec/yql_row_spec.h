@@ -71,7 +71,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     // Returns true if sortness is changed
     bool KeepPureSortOnly(TExprContext& ctx);
     bool HasNonNativeDescendingSort() const;
-    bool HasNativeDescendingSort() const;
+    bool HasDifferentDescendingSortRepresentation(const TYqlRowSpecInfo& with) const;
     bool ClearNativeDescendingSort(TExprContext& ctx);
     const TSortedConstraintNode* MakeSortConstraint(TExprContext& ctx) const;
     const TDistinctConstraintNode* MakeDistinctConstraint(TExprContext& ctx) const;

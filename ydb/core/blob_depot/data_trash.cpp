@@ -306,6 +306,11 @@ namespace NKikimr::NBlobDepot {
         TrimChannelHistory(channel, groupId, std::move(trashDeleted));
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->CheckTrash();
+        }
     }
 
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
@@ -320,6 +325,11 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.HardGenStep = hardGenStep;
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->CheckTrash();
+        }
     }
 
     void TData::TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {

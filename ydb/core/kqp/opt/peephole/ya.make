@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_peephole_wide_read.cpp
@@ -12,7 +12,5 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/core/kqp/opt/physical
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

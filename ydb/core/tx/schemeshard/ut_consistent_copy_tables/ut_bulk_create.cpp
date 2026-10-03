@@ -119,6 +119,58 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Source"), {NLs::PathExist, NLs::IsTable});
     }
 
+    Y_UNIT_TEST(RetryWithTabletIdUsesOnlyOneSingleRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        THashMap<ui64, ui64> created;
+        ui64 retryIdx = 0;
+        size_t batches = 0;
+        size_t singles = 0;
+        auto requestObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTabletType() != TTabletTypes::DataShard) {
+                return;
+            }
+            if (TEvHive::TEvCreateTablet::IsBatch(record)) {
+                ++batches;
+            } else {
+                ++singles;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetOwnerIdx(), retryIdx);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), created.at(retryIdx));
+            }
+        });
+        auto replyObserver = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetIsBatch()) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResultsSize(), 4);
+                for (const auto& result : record.GetResults()) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                    created.emplace(result.GetOwnerIdx(), result.GetTabletID());
+                }
+                // Same contract for migration and unknown legacy follower fields:
+                // retain the existing TabletID when falling back for just this item.
+                auto* result = record.MutableResults(1);
+                retryIdx = result->GetOwnerIdx();
+                result->SetStatus(NKikimrProto::TRYLATER);
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+        UNIT_ASSERT_VALUES_EQUAL(singles, 1);
+        THashSet<ui64> expected;
+        for (const auto& [_, tabletId] : created) {
+            expected.insert(tabletId);
+        }
+        const auto table = DescribePath(runtime, "/MyRoot/Source", true);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPathDescription().TablePartitionsSize(), expected.size());
+        for (const auto& partition : table.GetPathDescription().GetTablePartitions()) {
+            UNIT_ASSERT(expected.erase(partition.GetDatashardId()));
+        }
+        UNIT_ASSERT(expected.empty());
+    }
+
     Y_UNIT_TEST(RetryBackoffResetsAfterProgress) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -338,6 +390,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
         runtime.WaitFor("batch reply", [&] { return !replies.empty(); });
         replies.Stop();
+        const auto before = ReadSystemTable(runtime, TTestTxConfig::SchemeShard,
+            "Shards", {"ShardIdx"}, {"ShardIdx", "TabletId"});
         const auto& original = replies.front();
         auto incomplete = MakeHolder<TEvHive::TEvCreateTabletReply>();
         incomplete->Record = original->Get()->Record;
@@ -345,6 +399,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         runtime.Send(new IEventHandle(original->GetRecipientRewrite(), original->Sender,
             incomplete.Release(), 0, original->Cookie));
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        const auto after = ReadSystemTable(runtime, TTestTxConfig::SchemeShard,
+            "Shards", {"ShardIdx"}, {"ShardIdx", "TabletId"});
+        UNIT_ASSERT_VALUES_EQUAL(after.SerializeAsString(), before.SerializeAsString());
         replies.Unblock();
         env.TestWaitNotification(runtime, 100);
     }

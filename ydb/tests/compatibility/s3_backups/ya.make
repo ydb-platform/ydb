@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_bulk_create_export.py
     test_export_import_s3.py
 )
 

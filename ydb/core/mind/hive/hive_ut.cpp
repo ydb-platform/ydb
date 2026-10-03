@@ -988,6 +988,153 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CheckBulkCreateLostReplyAndHiveReboot(true);
     }
 
+    Y_UNIT_TEST(TestSingleCreateAndUpdateThenBulkRetryAfterReboot) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hive = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hive, 0);
+
+        for (const bool update : {false, true}) {
+            auto single = MakeBulkCreate(update ? 1001 : 1000, 1);
+            single.ClearCount();
+            auto* group = single.AddFollowerGroups();
+            group->SetFollowerCount(1);
+            group->SetLocalNodeOnly(!update);
+            group->SetRequireDifferentNodes(!update);
+            const auto created = SendBulkCreate(runtime, single);
+            UNIT_ASSERT(!created.GetIsBatch());
+            UNIT_ASSERT_VALUES_EQUAL(created.GetStatus(), NKikimrProto::OK);
+
+            group->SetLocalNodeOnly(true);
+            group->SetRequireDifferentNodes(true);
+            if (update) {
+                const auto updated = SendBulkCreate(runtime, single);
+                UNIT_ASSERT_VALUES_EQUAL(updated.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(updated.GetTabletID(), created.GetTabletID());
+            }
+            // Replay after a lost single-create/update response, using the bulk API.
+            RebootTablet(runtime, hive, runtime.AllocateEdgeActor());
+            auto batch = single;
+            batch.SetCount(1);
+            const auto retry = SendBulkCreate(runtime, batch);
+            UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(0).GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(0).GetTabletID(), created.GetTabletID());
+
+            for (const bool localNodeOnly : {false, true}) {
+                auto conflict = batch;
+                if (localNodeOnly) {
+                    conflict.MutableFollowerGroups(0)->SetLocalNodeOnly(false);
+                } else {
+                    conflict.MutableFollowerGroups(0)->SetRequireDifferentNodes(false);
+                }
+                const auto reply = SendBulkCreate(runtime, conflict);
+                UNIT_ASSERT_VALUES_EQUAL(reply.GetResults(0).GetStatus(), NKikimrProto::ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(reply.GetResults(0).GetErrorReason(), NKikimrHive::ERROR_REASON_CREATE_CONFLICT);
+            }
+        }
+    }
+
+    class TLegacyFollowerMetadataHive : public NHive::TTestHive {
+        class TTxClearFollowerSettings : public NTabletFlatExecutor::TTransactionBase<TLegacyFollowerMetadataHive> {
+            using TBase = NTabletFlatExecutor::TTransactionBase<TLegacyFollowerMetadataHive>;
+            const ui64 TabletId;
+            const TActorId ReplyTo;
+
+        public:
+            TTxClearFollowerSettings(TLegacyFollowerMetadataHive* hive, ui64 tabletId, TActorId replyTo)
+                : TBase(hive)
+                , TabletId(tabletId)
+                , ReplyTo(replyTo)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                using TGroup = NHive::Schema::TabletFollowerGroup;
+                NIceDb::TNiceDb db(txc.DB);
+                const auto* tablet = Self->FindTablet(TabletId);
+                UNIT_ASSERT(tablet);
+                for (const auto& group : tablet->FollowerGroups) {
+                    // Reproduce rows written before single create persisted these fields.
+                    db.Table<TGroup>().Key(TabletId, group.Id)
+                        .UpdateToNull<TGroup::LocalNodeOnly, TGroup::RequireDifferentNodes>();
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ReplyTo, new TEvents::TEvWakeup());
+            }
+        };
+
+        STATEFN(StateClearFollowerSettings) {
+            if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                Execute(new TTxClearFollowerSettings(this, ev->Get<TEvents::TEvWakeup>()->Tag, ev->Sender));
+            } else {
+                THive::StateWork(ev);
+            }
+        }
+
+    public:
+        using TTestHive::TTestHive;
+
+        void ClearStoredFollowerSettings(TTestActorRuntime& runtime, ui64 tabletId) {
+            Become(&TLegacyFollowerMetadataHive::StateClearFollowerSettings);
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(SelfId(), sender, new TEvents::TEvWakeup(tabletId)));
+            runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+        }
+    };
+
+    Y_UNIT_TEST(TestBulkRetryOfLegacyFollowerMetadata) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hive = MakeDefaultHiveID();
+        TLegacyFollowerMetadataHive* testHive = nullptr;
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive),
+            [&](const TActorId& actor, TTabletStorageInfo* info) -> IActor* {
+                testHive = new TLegacyFollowerMetadataHive(info, actor);
+                return testHive;
+            });
+        MakeSureTabletIsUp(runtime, hive, 0);
+        auto batch = MakeBulkCreate(1000, 1);
+        auto* group = batch.AddFollowerGroups();
+        group->SetFollowerCount(1);
+        group->SetLocalNodeOnly(true);
+        group->SetRequireDifferentNodes(true);
+        auto single = batch;
+        single.ClearCount();
+        const auto created = SendBulkCreate(runtime, single);
+        UNIT_ASSERT_VALUES_EQUAL(created.GetStatus(), NKikimrProto::OK);
+        const ui64 tabletId = created.GetTabletID();
+        testHive->ClearStoredFollowerSettings(runtime, tabletId);
+        RebootTablet(runtime, hive, runtime.AllocateEdgeActor());
+
+        // Missing columns must not hide conflicts in known parameters.
+        auto conflict = batch;
+        conflict.SetObjectId(batch.GetObjectId() + 1);
+        const auto rejected = SendBulkCreate(runtime, conflict);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetResults(0).GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetResults(0).GetErrorReason(), NKikimrHive::ERROR_REASON_CREATE_CONFLICT);
+
+        const auto retry = SendBulkCreate(runtime, batch);
+        UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(0).GetStatus(), NKikimrProto::TRYLATER);
+        UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(0).GetTabletID(), tabletId);
+        // Bulk itself must not turn into an upsert of the loaded tablet.
+        UNIT_ASSERT(!testHive->FindTablet(tabletId)->FollowerGroups.front().LocalNodeOnly);
+        UNIT_ASSERT(!testHive->FindTablet(tabletId)->FollowerGroups.front().RequireDifferentNodes);
+
+        single.SetTabletID(tabletId);
+        const auto repaired = SendBulkCreate(runtime, single);
+        UNIT_ASSERT_VALUES_EQUAL(repaired.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(repaired.GetTabletID(), tabletId);
+        RebootTablet(runtime, hive, runtime.AllocateEdgeActor());
+        const auto recovered = SendBulkCreate(runtime, batch);
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetResults(0).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetResults(0).GetTabletID(), tabletId);
+    }
+
     Y_UNIT_TEST(TestBulkCreateDefaultStoragePoolAliasesAndReboot) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

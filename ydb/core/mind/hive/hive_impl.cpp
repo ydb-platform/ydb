@@ -4026,10 +4026,7 @@ void THive::RequestFreeSequence() {
 }
 
 void THive::IndexPendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, const TPendingCreateTabletBatch& batch) {
-    const auto& record = batch.CreateTablet;
-    const size_t count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
-    for (size_t i = 0; i < count; ++i) {
-        const ui64 idx = record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i);
+    for (const ui64 idx : TEvHive::TEvCreateTablet::GetBatchOwnerIdxs(batch.CreateTablet)) {
         if (!batch.CancelledOwnerIdxs.contains(idx)) {
             PendingCreateTabletBatchIndex[key.first][idx].insert(key.second);
         }
@@ -4041,10 +4038,7 @@ void THive::RemovePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& k
     Y_ABORT_UNLESS(pending != PendingCreateTabletBatches.end());
     auto owner = PendingCreateTabletBatchIndex.find(key.first);
     if (owner != PendingCreateTabletBatchIndex.end()) {
-        const auto& record = pending->second.CreateTablet;
-        const size_t count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
-        for (size_t i = 0; i < count; ++i) {
-            const ui64 idx = record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i);
+        for (const ui64 idx : TEvHive::TEvCreateTablet::GetBatchOwnerIdxs(pending->second.CreateTablet)) {
             auto entry = owner->second.find(idx);
             if (entry != owner->second.end()) {
                 entry->second.erase(key.second);

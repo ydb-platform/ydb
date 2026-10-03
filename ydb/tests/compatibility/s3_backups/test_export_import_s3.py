@@ -257,6 +257,13 @@ class TestExportImportS3(MixedClusterFixture):
                         imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
                         desc = session.describe_table(imported_table_name)
                         assert desc is not None, f"Table {imported_table_name} not found after import"
+                        result = session.transaction().execute(
+                            f"SELECT id, payload FROM `{imported_table_name}` ORDER BY id;",
+                            commit_tx=True,
+                        )
+                        assert [(row.id, row.payload) for row in result[0].rows] == [
+                            (key, f"Payload {key} for table {num}") for key in range(1, 6)
+                        ], f"Restored data differs in {imported_table_name}"
 
                     if self._is_topic_export_avaliable():
                         if "TOPIC" in scheme_objects:

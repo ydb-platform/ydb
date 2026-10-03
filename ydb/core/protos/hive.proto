@@ -155,6 +155,9 @@ message TEvCreateTabletReply {
     message TResult {
         optional uint64 OwnerIdx = 1;
         optional NKikimrProto.EReplyStatus Status = 2;
+        // TRYLATER with TabletID requires a legacy single-tablet retry with this
+        // id (Hive migration, or follower settings omitted by an older writer).
+        // TRYLATER without TabletID can be retried as part of another batch.
         optional fixed64 TabletID = 3;
         optional EErrorReason ErrorReason = 4;
         optional TForwardRequest ForwardRequest = 5;

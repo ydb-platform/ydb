@@ -316,39 +316,33 @@ void TCreateParts::SendBatch(TShardIdx anchor, TCreateBatch& batch, TOperationCo
     batch.RetryAt = TInstant::Zero();
 }
 
-bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TShardIdx anchor, TOperationContext& context) {
-    const auto& record = ev->Get()->Record;
-    auto& batch = CreateBatches.at(anchor);
-    if (record.HasOrigin() && TTabletId(record.GetOrigin()) != batch.Hive) {
-        return false;
-    }
-    auto& txState = *context.SS->FindTx(OperationId);
-
-    // A peer without batch support may have created just the first index of Count,
-    // or rejected OwnerIdxs entirely; finish the rest through the legacy protocol.
-    if (!record.GetIsBatch() || record.GetStatus() != NKikimrProto::OK) {
-        context.OnComplete.UnbindMsgFromPipe(OperationId, batch.Hive, anchor);
-        bool done = false;
-        for (const auto& shardIdx : batch.Shards) {
-            if (!txState.ShardsInProgress.contains(shardIdx)) {
-                continue;
-            }
-            if (!record.GetIsBatch() && record.HasOwnerIdx()
-                && record.GetOwnerIdx() == ui64(shardIdx.GetLocalId())
-                && (record.GetStatus() == NKikimrProto::OK || record.GetStatus() == NKikimrProto::ALREADY)) {
-                auto single = record;
-                single.SetOrigin(ui64(batch.Hive));
-                done |= HandleCreateReply(single, context);
-            } else {
-                auto request = CreateEvCreateTablet(context.SS->PathsById.at(txState.TargetPathId), shardIdx, context.SS);
-                context.OnComplete.BindMsgToPipe(OperationId, batch.Hive, shardIdx, request.Release());
-            }
+bool TCreateParts::FallBackToSingles(const NKikimrHive::TEvCreateTabletReply& record,
+        TShardIdx anchor, TOperationContext& context) {
+    const auto& batch = CreateBatches.at(anchor);
+    const auto& txState = *context.SS->FindTx(OperationId);
+    context.OnComplete.UnbindMsgFromPipe(OperationId, batch.Hive, anchor);
+    bool done = false;
+    for (const auto& shardIdx : batch.Shards) {
+        if (!txState.ShardsInProgress.contains(shardIdx)) {
+            continue;
         }
-        CreateBatches.erase(anchor);
-        return done;
+        if (!record.GetIsBatch() && record.HasOwnerIdx()
+            && record.GetOwnerIdx() == ui64(shardIdx.GetLocalId())
+            && (record.GetStatus() == NKikimrProto::OK || record.GetStatus() == NKikimrProto::ALREADY)) {
+            auto single = record;
+            single.SetOrigin(ui64(batch.Hive));
+            done |= HandleCreateReply(single, context);
+        } else {
+            auto request = CreateEvCreateTablet(context.SS->PathsById.at(txState.TargetPathId), shardIdx, context.SS);
+            context.OnComplete.BindMsgToPipe(OperationId, batch.Hive, shardIdx, request.Release());
+        }
     }
+    CreateBatches.erase(anchor);
+    return done;
+}
 
-    THashMap<ui64, const NKikimrHive::TEvCreateTabletReply::TResult*> results;
+bool TCreateParts::ValidateBatchReply(const NKikimrHive::TEvCreateTabletReply& record,
+        const TCreateBatch& batch, TBatchResults& results) const {
     bool valid = true;
     for (const auto& result : record.GetResults()) {
         if (!result.HasOwnerIdx() || !result.HasStatus()
@@ -371,28 +365,13 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
             valid = false;
         }
     }
-    if (!valid) {
-        // In particular, an old response may describe a different batch after recovery.
-        // Keep the current request bound and wait for its complete response.
-        YDB_LOG_WARN_CTX(context.Ctx, "Ignoring incomplete or invalid bulk-create response",
-            {"anchor", anchor},
-            {"hive", batch.Hive},
-            {"record", record.ShortDebugString()},
-        );
-        return false;
-    }
-    for (const auto& shardIdx : batch.Shards) {
-        if (results.at(ui64(shardIdx.GetLocalId()))->GetStatus() == NKikimrProto::BLOCKED) {
-            // Same semantics as a blocked single request: wait for tenant deletion.
-            Y_ABORT_UNLESS(!context.SS->IsDomainSchemeShard);
-            return false;
-        }
-    }
+    return valid;
+}
 
-    context.OnComplete.UnbindMsgFromPipe(OperationId, batch.Hive, anchor);
-    TVector<TShardIdx> retry;
-    bool done = false;
-    bool madeProgress = false;
+TCreateParts::TBatchProgress TCreateParts::ApplyBatchResults(const NKikimrHive::TEvCreateTabletReply& record,
+        const TCreateBatch& batch, const TBatchResults& results, TOperationContext& context) {
+    const auto& txState = *context.SS->FindTx(OperationId);
+    TBatchProgress progress;
     for (const auto& shardIdx : batch.Shards) {
         if (!txState.ShardsInProgress.contains(shardIdx)) {
             continue;
@@ -400,13 +379,13 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
         const auto& result = *results.at(ui64(shardIdx.GetLocalId()));
         if (result.GetStatus() == NKikimrProto::TRYLATER) {
             if (result.HasTabletID()) {
-                // A tablet being seized by another Hive needs its individual id for routing.
+                // Migration and old follower metadata require the single-tablet path.
                 auto request = CreateEvCreateTablet(context.SS->PathsById.at(txState.TargetPathId), shardIdx, context.SS);
                 request->Record.SetTabletID(result.GetTabletID());
                 context.OnComplete.BindMsgToPipe(OperationId, batch.Hive, shardIdx, request.Release());
                 continue;
             }
-            retry.push_back(shardIdx);
+            progress.Retry.push_back(shardIdx);
             continue;
         }
         if (result.GetStatus() != NKikimrProto::OK && result.GetStatus() != NKikimrProto::ALREADY
@@ -432,16 +411,21 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
             single.MutableForwardRequest()->CopyFrom(result.GetForwardRequest());
         }
         // These updates share the surrounding SchemeShard transaction; no per-item events.
-        done |= HandleCreateReply(single, context);
-        madeProgress |= result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ALREADY;
+        progress.Done |= HandleCreateReply(single, context);
+        progress.MadeProgress |= result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ALREADY;
     }
-    if (retry.empty()) {
+    return progress;
+}
+
+void TCreateParts::ScheduleBatchRetry(TShardIdx anchor, TBatchProgress& progress, TOperationContext& context) {
+    auto& batch = CreateBatches.at(anchor);
+    if (progress.Retry.empty()) {
         CreateBatches.erase(anchor);
     } else {
-        if (madeProgress) {
+        if (progress.MadeProgress) {
             batch.RetryDelay = TDuration::Seconds(1);
         }
-        batch.Shards = std::move(retry);
+        batch.Shards = std::move(progress.Retry);
         batch.Request.ClearCount();
         batch.Request.ClearOwnerIdx();
         batch.Request.ClearOwnerIdxs();
@@ -459,7 +443,39 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
             Y_ABORT_UNLESS(CreateBatches.emplace(retryAnchor, std::move(pending)).second);
         }
     }
-    return done;
+}
+
+bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TShardIdx anchor, TOperationContext& context) {
+    const auto& record = ev->Get()->Record;
+    const auto& batch = CreateBatches.at(anchor);
+    if (record.HasOrigin() && TTabletId(record.GetOrigin()) != batch.Hive) {
+        return false;
+    }
+    // Old peers may create just the first Count item or reject OwnerIdxs.
+    if (!record.GetIsBatch() || record.GetStatus() != NKikimrProto::OK) {
+        return FallBackToSingles(record, anchor, context);
+    }
+    TBatchResults results;
+    if (!ValidateBatchReply(record, batch, results)) {
+        // Do not acknowledge the pipe message until a complete response arrives.
+        YDB_LOG_WARN_CTX(context.Ctx, "Ignoring incomplete or invalid bulk-create response",
+            {"anchor", anchor},
+            {"hive", batch.Hive},
+            {"record", record.ShortDebugString()},
+        );
+        return false;
+    }
+    for (const auto& shardIdx : batch.Shards) {
+        if (results.at(ui64(shardIdx.GetLocalId()))->GetStatus() == NKikimrProto::BLOCKED) {
+            // Same semantics as a blocked single request: wait for tenant deletion.
+            Y_ABORT_UNLESS(!context.SS->IsDomainSchemeShard);
+            return false;
+        }
+    }
+    context.OnComplete.UnbindMsgFromPipe(OperationId, batch.Hive, anchor);
+    auto progress = ApplyBatchResults(record, batch, results, context);
+    ScheduleBatchRetry(anchor, progress, context);
+    return progress.Done;
 }
 
 THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
@@ -478,6 +494,40 @@ THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, 
     );
 
     return ev;
+}
+
+void TCreateParts::SendCreateBatches(TCreateBatch& group, TOperationContext& context) {
+    const auto* txState = context.SS->FindTx(OperationId);
+    Sort(group.Shards);
+    // Account conservatively for a full sparse retry, not just the compact range.
+    const ui64 bytesPerItem = group.Request.ByteSizeLong() + 32 + TEvHive::TEvCreateTablet::MaxBatchSize * 10;
+    const ui32 batchSize = Max<ui64>(1, Min<ui64>(TEvHive::TEvCreateTablet::MaxBatchSize,
+        TEvHive::TEvCreateTablet::MaxBatchMetadataBytes / bytesPerItem));
+    for (size_t offset = 0; offset < group.Shards.size(); offset += batchSize) {
+        TCreateBatch batch;
+        batch.Hive = group.Hive;
+        batch.Request.CopyFrom(group.Request);
+        const size_t end = Min(group.Shards.size(), offset + batchSize);
+        batch.Shards.assign(group.Shards.begin() + offset, group.Shards.begin() + end);
+        const auto anchor = batch.Shards.front();
+        if (group.Request.ByteSizeLong() + 32 > TEvHive::TEvCreateTablet::MaxBatchMetadataBytes) {
+            auto request = CreateEvCreateTablet(context.SS->PathsById.at(txState->TargetPathId), anchor, context.SS);
+            context.OnComplete.BindMsgToPipe(OperationId, batch.Hive, anchor, request.Release());
+            continue;
+        }
+        if (ui64(batch.Shards.back().GetLocalId()) - ui64(anchor.GetLocalId()) == batch.Shards.size() - 1) {
+            batch.Request.SetOwnerIdx(ui64(anchor.GetLocalId()));
+            batch.Request.SetCount(batch.Shards.size());
+        } else {
+            for (const auto& shardIdx : batch.Shards) {
+                batch.Request.AddOwnerIdxs(ui64(shardIdx.GetLocalId()));
+            }
+        }
+        Y_ABORT_UNLESS(TEvHive::TEvCreateTablet::ValidateBatch(batch.Request));
+        auto [it, inserted] = CreateBatches.emplace(anchor, std::move(batch));
+        Y_ABORT_UNLESS(inserted);
+        SendBatch(anchor, it->second, context);
+    }
 }
 
 bool TCreateParts::ProgressState(TOperationContext& context) {
@@ -560,36 +610,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     }
 
     for (auto& [_, group] : groups) {
-        Sort(group.Shards);
-        // Account conservatively for a full sparse retry, not just the compact range.
-        const ui64 bytesPerItem = group.Request.ByteSizeLong() + 32 + TEvHive::TEvCreateTablet::MaxBatchSize * 10;
-        const ui32 batchSize = Max<ui64>(1, Min<ui64>(TEvHive::TEvCreateTablet::MaxBatchSize,
-            TEvHive::TEvCreateTablet::MaxBatchMetadataBytes / bytesPerItem));
-        for (size_t offset = 0; offset < group.Shards.size(); offset += batchSize) {
-            TCreateBatch batch;
-            batch.Hive = group.Hive;
-            batch.Request.CopyFrom(group.Request);
-            const size_t end = Min(group.Shards.size(), offset + batchSize);
-            batch.Shards.assign(group.Shards.begin() + offset, group.Shards.begin() + end);
-            const auto anchor = batch.Shards.front();
-            if (group.Request.ByteSizeLong() + 32 > TEvHive::TEvCreateTablet::MaxBatchMetadataBytes) {
-                auto request = CreateEvCreateTablet(context.SS->PathsById.at(txState->TargetPathId), anchor, context.SS);
-                context.OnComplete.BindMsgToPipe(OperationId, batch.Hive, anchor, request.Release());
-                continue;
-            }
-            if (ui64(batch.Shards.back().GetLocalId()) - ui64(anchor.GetLocalId()) == batch.Shards.size() - 1) {
-                batch.Request.SetOwnerIdx(ui64(anchor.GetLocalId()));
-                batch.Request.SetCount(batch.Shards.size());
-            } else {
-                for (const auto& shardIdx : batch.Shards) {
-                    batch.Request.AddOwnerIdxs(ui64(shardIdx.GetLocalId()));
-                }
-            }
-            Y_ABORT_UNLESS(TEvHive::TEvCreateTablet::ValidateBatch(batch.Request));
-            auto [it, inserted] = CreateBatches.emplace(anchor, std::move(batch));
-            Y_ABORT_UNLESS(inserted);
-            SendBatch(anchor, it->second, context);
-        }
+        SendCreateBatches(group, context);
     }
 
     if (nothingToDo) {

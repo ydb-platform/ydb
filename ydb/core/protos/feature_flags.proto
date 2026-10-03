@@ -417,5 +417,5 @@ message TFeatureFlags {
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
     // Enable only after all SchemeShards and Hives support batch CreateTablet.
     // Drain in-flight schema operations before disabling it or downgrading SchemeShard.
-    optional bool EnableHiveBulkCreate = 356 [default = false];
+    optional bool EnableHiveBulkCreate = 357 [default = false];
 }

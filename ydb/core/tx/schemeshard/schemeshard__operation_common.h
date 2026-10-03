@@ -121,7 +121,20 @@ class TCreateParts: public TSubOperationState {
     THashMap<TShardIdx, TCreateBatch> CreateBatches;
     bool Started = false;
 
+    using TBatchResults = THashMap<ui64, const NKikimrHive::TEvCreateTabletReply::TResult*>;
+    struct TBatchProgress {
+        TVector<TShardIdx> Retry;
+        bool Done = false;
+        bool MadeProgress = false;
+    };
+
     void SendBatch(TShardIdx anchor, TCreateBatch& batch, TOperationContext& context);
+    void SendCreateBatches(TCreateBatch& group, TOperationContext& context);
+    bool FallBackToSingles(const NKikimrHive::TEvCreateTabletReply& record, TShardIdx anchor, TOperationContext& context);
+    bool ValidateBatchReply(const NKikimrHive::TEvCreateTabletReply& record, const TCreateBatch& batch, TBatchResults& results) const;
+    TBatchProgress ApplyBatchResults(const NKikimrHive::TEvCreateTabletReply& record, const TCreateBatch& batch,
+        const TBatchResults& results, TOperationContext& context);
+    void ScheduleBatchRetry(TShardIdx anchor, TBatchProgress& progress, TOperationContext& context);
     bool HandleBatchReply(TEvHive::TEvCreateTabletReply__HandlePtr& ev, TShardIdx anchor, TOperationContext& context);
     bool HandleCreateReply(const NKikimrHive::TEvCreateTabletReply& record, TOperationContext& context);
 

@@ -150,6 +150,19 @@ namespace NKikimr {
                 return record.HasCount() || record.OwnerIdxsSize() != 0;
             }
 
+            // Enumerate an already validated batch in request order.
+            static TVector<ui64> GetBatchOwnerIdxs(const NKikimrHive::TEvCreateTablet& record) {
+                if (!record.HasCount()) {
+                    return TVector<ui64>(record.GetOwnerIdxs().begin(), record.GetOwnerIdxs().end());
+                }
+                TVector<ui64> result;
+                result.reserve(record.GetCount());
+                for (ui32 i = 0; i < record.GetCount(); ++i) {
+                    result.push_back(record.GetOwnerIdx() + i);
+                }
+                return result;
+            }
+
             // Validate the entire envelope before making any changes in Hive.
             static bool ValidateBatch(const NKikimrHive::TEvCreateTablet& record) {
                 if (!IsBatch(record) || record.HasTabletID()) {

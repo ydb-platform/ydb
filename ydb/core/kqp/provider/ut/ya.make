@@ -2,9 +2,10 @@ UNITTEST_FOR(ydb/core/kqp/provider)
 
 SRCS(
     read_attributes_utils_ut.cpp
+    sql_path_aliases_ut.cpp
     yql_kikimr_gateway_ut.cpp
     yql_kikimr_provider_ut.cpp
-    sql_path_aliases_ut.cpp
+    yql_kikimr_provider_streaming_ut.cpp
 )
 
 PEERDIR(

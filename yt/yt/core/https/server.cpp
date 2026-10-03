@@ -1,22 +1,22 @@
 #include "server.h"
+
 #include "config.h"
 
-#include <yt/yt/core/http/server.h>
-#include <yt/yt/core/http/private.h>
+#include <yt/yt/library/profiling/sensor.h>
 
+#include <yt/yt/core/concurrency/periodic_executor.h>
+#include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
+#include <yt/yt/core/crypto/helpers.h>
 #include <yt/yt/core/crypto/tls.h>
+
+#include <yt/yt/core/http/private.h>
+#include <yt/yt/core/http/server.h>
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/fs.h>
-
 #include <yt/yt/core/net/address.h>
-
-#include <yt/yt/core/concurrency/poller.h>
-#include <yt/yt/core/concurrency/periodic_executor.h>
-#include <yt/yt/core/concurrency/thread_pool_poller.h>
-
-#include <yt/yt/library/profiling/sensor.h>
 
 namespace NYT::NHttps {
 
@@ -34,9 +34,9 @@ class TServer
     : public IServer
 {
 public:
-    TServer(IServerPtr underlying, TPeriodicExecutorPtr certificateUpdater, TPeriodicExecutorPtr certificateSensorsUpdater)
+    TServer(IServerPtr underlying, ISslCertificateUpdaterPtr certificateUpdater, TPeriodicExecutorPtr certificateSensorsUpdater)
         : Underlying_(std::move(underlying))
-        , CertificateUpdater_(certificateUpdater)
+        , CertificateUpdater_(std::move(certificateUpdater))
         , CertificateSensorsUpdater_(std::move(certificateSensorsUpdater))
     { }
 
@@ -96,7 +96,7 @@ public:
 
 private:
     const IServerPtr Underlying_;
-    const TPeriodicExecutorPtr CertificateUpdater_;
+    const ISslCertificateUpdaterPtr CertificateUpdater_;
     const TPeriodicExecutorPtr CertificateSensorsUpdater_;
     IPollerPtr OwnPoller_;
 };
@@ -114,42 +114,11 @@ IServerPtr CreateServer(
     sslContext->ApplyConfig(sslConfig);
     sslContext->Commit();
 
-    TPeriodicExecutorPtr certificateUpdater;
-    if (sslConfig &&
-        sslConfig->UpdatePeriod &&
-        sslConfig->CertificateChain->FileName &&
-        sslConfig->PrivateKey->FileName)
-    {
-        YT_VERIFY(controlInvoker);
-        certificateUpdater = New<TPeriodicExecutor>(
-            controlInvoker,
-            BIND([=] {
-                try {
-                    auto modificationTime = Max(
-                        NFS::GetPathStatistics(*sslConfig->CertificateChain->FileName).ModificationTime,
-                        NFS::GetPathStatistics(*sslConfig->PrivateKey->FileName).ModificationTime);
-
-                    // Detect fresh and stable updates.
-                    if (modificationTime > sslContext->GetCommitTime() &&
-                        modificationTime + sslConfig->UpdatePeriod <= TInstant::Now())
-                    {
-                        YT_TLOG_INFO("Updating TLS certificates")
-                            .With("ServerName", config->ServerName)
-                            .With("ModificationTime", modificationTime);
-                        sslContext->Reset();
-                        sslContext->ApplyConfig(sslConfig);
-                        sslContext->Commit(modificationTime);
-                        YT_TLOG_INFO("TLS certificates updated")
-                            .With("ServerName", config->ServerName);
-                    }
-                } catch (const std::exception& ex) {
-                    YT_TLOG_WARNING("Unexpected exception while updating TLS certificates")
-                        .With("ServerName", config->ServerName)
-                        .With(ex);
-                }
-            }),
-            sslConfig->UpdatePeriod);
-    }
+    auto certificateUpdater = CreateSslCertificateUpdater(
+        controlInvoker,
+        sslContext,
+        sslConfig,
+        Logger().WithTag("ServerName", config->ServerName));
 
     auto address = TNetworkAddress::CreateIPv6Any(config->Port);
     auto tlsListener = sslContext->CreateListener(address, poller, acceptor);

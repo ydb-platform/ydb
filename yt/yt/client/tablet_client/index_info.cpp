@@ -51,6 +51,13 @@ void FromProto(TUnfoldedColumns* original, const NProto::TUnfoldedColumns& seria
     FromProto(&original->IndexColumn, serialized.index_column());
 }
 
+void FormatValue(TStringBuilderBase* builder, const TUnfoldedColumns& unfoldedColumns, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("{TableColumn: %v, IndexColumn: %v}",
+        unfoldedColumns.TableColumn,
+        unfoldedColumns.IndexColumn);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TIndexInfo::Register(TRegistrar registrar)

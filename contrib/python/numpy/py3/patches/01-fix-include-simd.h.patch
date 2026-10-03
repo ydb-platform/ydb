@@ -53,8 +53,13 @@
 @@ -18,1 +18,1 @@
 -#include "simd/simd.h"
 +#include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
---- contrib/python/numpy/py3/numpy/_core/src/umath/loops_hyperbolic.dispatch.c	(index)
-+++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_hyperbolic.dispatch.c	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/src/umath/loops_half.dispatch.c	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_half.dispatch.c	(working tree)
+@@ -15,1 +15,1 @@
+-#include "simd/simd.h"
++#include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
+--- contrib/python/numpy/py3/numpy/_core/src/umath/loops_hyperbolic.dispatch.cpp	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_hyperbolic.dispatch.cpp	(working tree)
 @@ -15,1 +15,1 @@
 -#include "simd/simd.h"
 +#include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
@@ -83,8 +88,8 @@
 @@ -22 +22 @@
 -#include "simd/simd.h"
 +#include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
---- contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.c	(index)
-+++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.c	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.cpp	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.cpp	(working tree)
 @@ -22 +22 @@
 -#include "simd/simd.h"
 +#include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"

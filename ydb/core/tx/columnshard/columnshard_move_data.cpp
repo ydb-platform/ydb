@@ -6,6 +6,8 @@
 
 #include <util/generic/size_literals.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 namespace {
@@ -34,7 +36,7 @@ std::optional<ui32> FindLiveGroup(const TTabletStorageInfo* info, const THashSet
 
 void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 liveGroup, const TActorContext& ctx) {
     const TString reason = TStringBuilder() << "group " << liveGroup << " is still the latest history entry at tablet " << tabletId;
-    LOG_S_WARN("TColumnShard::Handle TEvMoveData: " << reason);
+    YDB_LOG_WARN("MoveData refused", {"tabletId", tabletId}, {"reason", reason});
     ctx.Send(sender, new TEvTablet::TEvMoveDataResponse(tabletId, NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch, reason));
 }
 
@@ -71,8 +73,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         // The vacuum leg belongs to the executor; everything else to the driver.
         Executor()->StartMoveDataVacuumFromOwner();
     }
-    LOG_S_INFO("TColumnShard::Handle TEvMoveData: groups=" << MoveDataState.TargetGroups.size() << " changed=" << changed << " at tablet "
-                                                           << TabletID());
+    YDB_LOG_INFO("MoveData requested", {"tabletId", TabletID()}, {"groups", MoveDataState.TargetGroups.size()}, {"changed", changed});
     // Marked synchronously: a gate check already queued must not answer for a stale target set.
     MoveDataState.TargetsChanged |= changed;
     StartMoveDataDriver(ctx);
@@ -148,31 +149,27 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (queues.GetTotal() != 0) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
         if (queues.Uncommitted) {
-            LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
-                       << queues.Uncommitted << " uncommitted writes hold blobs in the target groups, waiting for commit or abort at tablet "
-                       << TabletID());
+            YDB_LOG_INFO("MoveData gate waits for uncommitted writes", {"tabletId", TabletID()}, {"uncommitted", queues.Uncommitted});
         }
         return;
     }
     // A retired seeded portion still in the granule has not reached the GC queues, so its blobs can still sit in a target group.
     if (queues.Retired != 0) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
-        LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
-                   << queues.Retired << " retired portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
+        YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", TabletID()}, {"retired", queues.Retired});
         return;
     }
     if (!GetStoragesManager()->GetDefaultOperator()->HasCollectedBeforeCurrentGeneration()) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByFirstGCRound();
-        LOG_S_INFO(
-            "TColumnShard::CheckMoveDataGate: the first GC round of this incarnation has not committed a barrier yet at tablet " << TabletID());
+        YDB_LOG_INFO("MoveData gate waits for the first GC round", {"tabletId", TabletID()});
         return;
     }
     if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-        LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
+        YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", TabletID()});
         return;
     }
-    LOG_S_INFO("TColumnShard::CheckMoveDataGate: gate passed at tablet " << TabletID());
+    YDB_LOG_INFO("MoveData gate passed", {"tabletId", TabletID()});
 
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();

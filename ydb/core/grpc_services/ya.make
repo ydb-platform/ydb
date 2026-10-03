@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     ydb/public/sdk/cpp
@@ -266,8 +266,6 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/storage/core/libs/common
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

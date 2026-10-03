@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     downloader.cpp
@@ -52,7 +52,5 @@ PEERDIR(
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

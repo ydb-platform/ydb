@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     create_external_data_source_formatter.cpp
@@ -32,7 +32,5 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

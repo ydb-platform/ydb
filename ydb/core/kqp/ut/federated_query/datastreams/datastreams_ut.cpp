@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource(sourceName);
 
         const std::string topicName = "topicName";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}` WITH (
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "External source with type YdbTopics is disabled");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Couldn't determine external YDB entity type");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
@@ -227,6 +227,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database '/local'");
     }
 
+    Y_UNIT_TEST_F(ReadTableOutsideConnectorDatabaseNames, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.AddAvailableExternalDataSources("YdbTopics");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+        auto& connector = *cfg.MutableGeneric()->MutableConnector();
+        connector.AddDatabaseNames("test_db");
+        connector.MutableEndpoint()->set_host("localhost");
+        connector.MutableEndpoint()->set_port(1234);
+
+        ExecExternalQuery(R"(
+            CREATE TABLE regularTable (
+                id String,
+                PRIMARY KEY (id)
+            );
+        )");
+        Y_DEFER {
+            ExecExternalQuery(R"(DROP TABLE regularTable;)");
+        };
+        CreatePqSource("sourceName");
+
+        const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);
+        const auto& status = operation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+            "database is not configured for connector table access");
+    }
+
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
@@ -237,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const std::string topicName = "topicName";
         ui32 partitionCount = 10;
 
-        CreateTopic(topicName, NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(topicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
 
         CreatePqSource(sourceName);
@@ -266,6 +294,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
         });
+
+        const auto batchResults = ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            );
+        )", "source"_a = sourceName, "topic"_a = topicName));
+        CheckScriptResult(batchResults[0], 2, partitionCount, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
@@ -279,7 +321,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
         const std::string sourceName = "sourceName";
         const std::string topicName = "topicName";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         CreatePqSourceBasicAuth(sourceName);
 
@@ -310,8 +352,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
-        CreateTopic(outputTopicName);
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
 
         CreatePqSourceBasicAuth(sourceName);
 
@@ -352,7 +394,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(ReadTopicWithColumnOrder, TStreamingTestFixture) {
         constexpr char topicName[] = "readTopicWithColumnOrder";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -396,7 +438,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(ReadTopicWithDefaultSchema, TStreamingTestFixture) {
         constexpr char topicName[] = "readTopicWithDefaultSchema";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -422,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateBucket(writeBucket);
 
         const auto topicName = TStringBuilder() << Name_ << "Topic";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -472,8 +514,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
         const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
-        CreateTopic(sourceTopicName);
-        CreateTopic(sinkTopicName);
+        CreateScopedTopic(sourceTopicName);
+        CreateScopedTopic(sinkTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -535,7 +577,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateBucket(writeBucket);
 
         const auto topicName = TStringBuilder() << Name_ << "Topic";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -585,9 +627,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char inputTopicName[] = "inputTopicName";
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -642,8 +684,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -710,8 +752,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -823,7 +865,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -873,6 +915,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -907,8 +955,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(firstOutputTopic);
-        CreateTopic(secondOutputTopic);
+        CreateScopedTopic(firstOutputTopic);
+        CreateScopedTopic(secondOutputTopic);
         CreatePqSource(pqSource);
 
         constexpr char solomonSink[] = "solomonSinkName";
@@ -1122,8 +1170,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char outputTopic[] = "multipleWriteIntoTopicsDisabledOutputTopicName";
         CreateTopic(inputTopic, std::nullopt, /* local */ true);
         CreateTopic(outputTopic, std::nullopt, /* local */ true);
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
 
         constexpr char pqSource[] = "pqSourceName";
         CreatePqSource(pqSource);
@@ -1151,8 +1199,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
         constexpr char pqSource1[] = "pqSourceName1";
         constexpr char pqSource2[] = "pqSourceName2";
-        CreateTopic(firstOutputTopic);
-        CreateTopic(secondOutputTopic);
+        CreateScopedTopic(firstOutputTopic);
+        CreateScopedTopic(secondOutputTopic);
         CreatePqSource(pqSource1);
         CreatePqSource(pqSource2);
 
@@ -1270,7 +1318,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inReadSystemMetadataFields";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -1300,7 +1348,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inReadSystemColumnsWithoutRename";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -1341,7 +1389,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inWriteToSystemColumnsIsProhibited";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         // Attempt to insert into a topic referencing a system column should fail
         ExecQuery(fmt::format(R"(
@@ -1919,8 +1967,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";
-        CreateTopic(input1);
-        CreateTopic(input2);
+        CreateScopedTopic(input1);
+        CreateScopedTopic(input2);
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2053,8 +2101,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char input1[] = "streamingJoinConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingJoinConstraintsValidationSecondInputTopic";
-        CreateTopic(input1);
-        CreateTopic(input2);
+        CreateScopedTopic(input1);
+        CreateScopedTopic(input2);
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2253,9 +2301,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char input1[] = "streamingQueryJoinTypesFirstInputTopic";
         constexpr char input2[] = "streamingQueryJoinTypesSecondInputTopic";
         constexpr char outputTopic[] = "streamingQueryJoinTypesOutputTopic";
-        CreateTopic(outputTopic);
-        CreateTopic(input1);
-        CreateTopic(input2);
+        CreateScopedTopic(outputTopic);
+        CreateScopedTopic(input1);
+        CreateScopedTopic(input2);
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2507,7 +2555,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char sourceName[] = "forbidSysSourceStreaming";
         constexpr char topicName[] = "forbidSysTopicStreaming";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
         CreatePqSource(sourceName);
 
         // SystemMetadata callable should be rejected
@@ -2536,7 +2584,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
 
         constexpr char topicName[] = "forbidSysTableModeTopic";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, /*settings=*/std::nullopt, /*local=*/true);
 
         // SystemMetadata callable should be rejected in table mode too
         ExecQuery(fmt::format(R"(
@@ -2561,7 +2609,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
 
         constexpr char topicName[] = "forbidSysAllowYdbTopic";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, /*settings=*/std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -2589,7 +2637,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(YqlSysColumnsAccessInStreamingMode, TStreamingTestFixture) {
         constexpr char sourceName[] = "yqlSysColsStreamSource";
         constexpr char topicName[] = "yqlSysColsStreamTopic";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
         CreatePqSource(sourceName);
 
         for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
@@ -2657,7 +2705,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(outputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSource(pqSourceName);
 
         ExecQuery(fmt::format(R"(

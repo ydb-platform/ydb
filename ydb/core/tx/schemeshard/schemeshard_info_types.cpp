@@ -273,6 +273,16 @@ bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
     return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);
 }
 
+bool TSubDomainInfo::ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters) {
+    if (StorageSpaceExhausted == value) {
+        return false;
+    }
+    StorageSpaceExhausted = value;
+    counters->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, value ? +1 : -1);
+    ++DomainStateVersion;
+    return true;
+}
+
 bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
     const ui64 versionBefore = DomainStateVersion;
     const bool diskQuotaChanged = CheckDiskSpaceQuotas(counters);
@@ -440,7 +450,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const TSubDomainInfo& subDomain,
     const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
-    const THashSet<TString>& localSequences)
+    const THashSet<TString>& localSequences,
+    bool allowReplicationMode)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -1014,7 +1025,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-            if (source) {
+            if (source && !allowReplicationMode) {
                 errStr = "Cannot set replication mode";
                 return nullptr;
             }

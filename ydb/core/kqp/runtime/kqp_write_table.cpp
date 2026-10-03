@@ -1665,8 +1665,8 @@ public:
             : Memory(memory)
             , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
-            , Cookie(NextCookie++)
             , Closed(closed) {
+            AdvanceCookie();
         }
 
     public:
@@ -1711,24 +1711,25 @@ public:
         struct TBatchInfo {
             ui64 DataSize = 0;
         };
-        std::optional<TBatchInfo> PopBatches(const ui64 cookie) {
-            if (BatchesInFlight != 0 && Cookie == cookie) {
-                TBatchInfo result;
-                for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    const i64 batchMemory = Batches.front().GetMemory();
-                    result.DataSize += batchMemory;
-                    Memory -= batchMemory;
-                    PendingBatches--;
-                    Batches.pop_front();
-                }
 
-                Cookie = NextCookie++;
-                SendAttempts = 0;
-                BatchesInFlight = 0;
+        TBatchInfo PopBatches(const ui64 cookie) {
+            AFL_ENSURE(Cookie == cookie);
+            AFL_ENSURE(BatchesInFlight != 0);
 
-                return result;
+            TBatchInfo result;
+            for (size_t index = 0; index < BatchesInFlight; ++index) {
+                const i64 batchMemory = Batches.front().GetMemory();
+                result.DataSize += batchMemory;
+                Memory -= batchMemory;
+                PendingBatches--;
+                Batches.pop_front();
             }
-            return std::nullopt;
+
+            AdvanceCookie();
+            SendAttempts = 0;
+            BatchesInFlight = 0;
+
+            return result;
         }
 
         void PushBatch(TBatchWithMetadata&& batch) {
@@ -1740,6 +1741,11 @@ public:
         }
 
         ui64 GetCookie() const {
+            return Cookie;
+        }
+
+        ui64 AllocateMessageCookie() {
+            AdvanceCookie();
             return Cookie;
         }
 
@@ -1778,6 +1784,10 @@ public:
         }
 
     private:
+        void AdvanceCookie() {
+            Cookie = NextCookie++;
+        }
+
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
@@ -1807,7 +1817,13 @@ public:
 
     TShardInfo* FindShard(const ui64 shard) {
         auto it = ShardsInfo.find(shard);
-        return it == std::end(ShardsInfo) ? nullptr : &it->second;
+        return it != std::end(ShardsInfo) ? &it->second : nullptr;
+    }
+
+    ui64 AllocateMessageCookie(const ui64 shardId) {
+        auto* const shardInfo = FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        return shardInfo->AllocateMessageCookie();
     }
 
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
@@ -2190,33 +2206,33 @@ public:
     }
 
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
         if (shardInfo->IsEmpty()) {
             return {};
         }
+        return MakeMetadata(*shardInfo);
+    }
+
+    TMessageMetadata PrepareMessageMetadata(ui64 shardId) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
         BuildBatchesForShard(*shardInfo);
+        return MakeMetadata(*shardInfo);
+    }
 
-        TMessageMetadata meta;
-        meta.Cookie = shardInfo->GetCookie();
-        meta.OperationsCount = shardInfo->GetBatchesInFlight();
-        meta.IsFinal = shardInfo->IsClosed() && shardInfo->Size() == shardInfo->GetBatchesInFlight();
-        meta.SendAttempts = shardInfo->GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo->GetOverloadSeqNo();
-
-        return meta;
+    ui64 AllocateMessageCookie(ui64 shardId) override {
+        return ShardsInfo.AllocateMessageCookie(shardId);
     }
 
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
-        const auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
-            return result;
-        }
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
 
-        for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
-            const auto& inFlightBatch = shardInfo.GetBatch(index);
+        for (size_t index = 0; index < shardInfo->GetBatchesInFlight(); ++index) {
+            const auto& inFlightBatch = shardInfo->GetBatch(index);
             if (inFlightBatch.Data) {
                 AFL_ENSURE(!inFlightBatch.Data->IsEmpty());
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
@@ -2241,28 +2257,26 @@ public:
                     operation.SetOriginalShard(inFlightBatch.OriginalShard);
                 }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
+                AFL_ENSURE(index + 1 == shardInfo->GetBatchesInFlight());
             }
         }
 
         return result;
     }
 
-    std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        auto* shardInfo = ShardsInfo.FindShard(shardId);
+    TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
+        AFL_ENSURE(cookie != 0);
         const auto result = shardInfo->PopBatches(cookie);
-        if (result) {
-            return TMessageAcknowledgedResult {
-                .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo->IsEmpty(),
-            };
-        }
-        return std::nullopt;
+        return TMessageAcknowledgedResult {
+            .DataSize = result.DataSize,
+            .IsShardEmpty = shardInfo->IsEmpty(),
+        };
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
-        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
         AFL_ENSURE(!shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
         shardInfo->IncSendAttempts();
@@ -2270,7 +2284,7 @@ public:
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
-        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
         if (shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
@@ -2388,6 +2402,16 @@ private:
         }
     }
 
+    static TMessageMetadata MakeMetadata(const TShardsInfo::TShardInfo& shard) {
+        TMessageMetadata meta;
+        meta.Cookie = shard.GetCookie();
+        meta.OperationsCount = shard.GetBatchesInFlight();
+        meta.IsFinal = shard.IsClosed() && shard.Size() == shard.GetBatchesInFlight();
+        meta.SendAttempts = shard.GetSendAttempts();
+        meta.NextOverloadSeqNo = shard.GetOverloadSeqNo();
+        return meta;
+    }
+
     TShardedWriteControllerSettings Settings;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -2418,6 +2442,24 @@ IShardedWriteControllerPtr CreateShardedWriteController(
         const TShardedWriteControllerSettings& settings,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TShardedWriteController>(settings, std::move(alloc));
+}
+
+bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata) {
+    AFL_ENSURE(cookie != 0);
+    return !metadata || metadata->Cookie != cookie;
+}
+
+bool IsIgnorableSupersededStatus(const NKikimrDataEvents::TEvWriteResult::EStatus status) {
+    switch (status) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 }

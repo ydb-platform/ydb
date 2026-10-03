@@ -46,6 +46,7 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
+    public:
         struct TEvMoveDataContinue
             : TEventLocal<TEvMoveDataContinue, TEvPrivate::EvMoveDataContinue>
         {};
@@ -53,15 +54,24 @@ namespace NKikimr::NBlobDepot {
         struct TEvMoveDataBlobCopied
             : TEventLocal<TEvMoveDataBlobCopied, TEvPrivate::EvMoveDataBlobCopied>
         {
-            NKikimrProto::EReplyStatus Status;
+            enum class EResult {
+                OK,
+                NODATA,
+                YELLOW_STOP,
+            };
+            EResult Result;
             NKikimrBlobDepot::TBlobLocator NewLocator;
-            TString ErrorReason;
+            TVector<ui32> YellowMoveChannels;
+            TVector<ui32> YellowStopChannels;
 
-            TEvMoveDataBlobCopied(NKikimrProto::EReplyStatus status,
-                    NKikimrBlobDepot::TBlobLocator newLocator, TString errorReason = {})
-                : Status(status)
+            TEvMoveDataBlobCopied(EResult result,
+                    NKikimrBlobDepot::TBlobLocator newLocator,
+                    TVector<ui32>&& yellowMoveChannels,
+                    TVector<ui32>&& yellowStopChannels)
+                : Result(result)
                 , NewLocator(std::move(newLocator))
-                , ErrorReason(std::move(errorReason))
+                , YellowMoveChannels(std::move(yellowMoveChannels))
+                , YellowStopChannels(std::move(yellowStopChannels))
             {}
         };
 
@@ -79,6 +89,9 @@ namespace NKikimr::NBlobDepot {
         TTabletCountersBase* const TabletCounters;
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
+
+        // Upper bound on how many blob sequence numbers one TEvAllocateIds may claim; agents ask for 100 at a time
+        static constexpr ui32 MaxBlobSeqIdsPerAllocation = 1000;
 
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
@@ -98,8 +111,16 @@ namespace NKikimr::NBlobDepot {
             };
 
             std::optional<TConnection> Connection;
+            // Retained after disconnect to reject delayed registrations from older pipe servers.
+            ui64 LastConnectionSequence = 0;
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
+            bool SupportsIdRangeExpiry = false;
+
+            // Channel -> highest step whose blob sequence numbers were reclaimed while this agent was away. Handed
+            // to the agent in every TEvRegisterAgentResult (not just the first one after the expiry: the result may
+            // be lost with the pipe, and re-applying it is a no-op) and kept for the rest of this generation.
+            THashMap<ui8, ui32> ExpiredSteps;
 
             THashMap<ui8, TGivenIdRange> GivenIdRanges;
 
@@ -115,9 +136,19 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
+
+            bool HasGivenIdRanges() const {
+                for (const auto& [channel, range] : GivenIdRanges) {
+                    if (!range.IsEmpty()) {
+                        return true;
+                    }
+                }
+                return false;
+            }
         };
 
         struct TPipeServerContext {
+            ui64 ConnectionSequence = 0;
             std::optional<ui32> NodeId; // as reported by RegisterAgent
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
@@ -125,6 +156,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;
+        ui64 NextConnectionSequence = 0;
         THashMap<ui32, TAgent> Agents; // NodeId -> Agent
 
         struct TChannelKind : NBlobDepot::TChannelKind {
@@ -143,6 +175,16 @@ namespace NKikimr::NBlobDepot {
             std::set<ui64> SequenceNumbersInFlight; // of blobs being committed
             std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
+
+            // Ensure future allocations are strictly above the invalidated step.
+            void AdvanceNextBlobSeqId(ui32 generation, ui32 invalidatedStep) {
+                auto next = TBlobSeqId::FromSequentalNumber(Index, generation, NextBlobSeqId);
+                if (next.Step <= invalidatedStep) {
+                    next.Step = invalidatedStep + 1;
+                    next.Index = 0;
+                    NextBlobSeqId = next.ToSequentialNumber();
+                }
+            }
 
             // Same as GetLeastExpectedBlobId, but without the monotonicity bookkeeping -- for monitoring only
             TBlobSeqId PeekLeastExpectedBlobId(ui32 generation) const {
@@ -188,6 +230,10 @@ namespace NKikimr::NBlobDepot {
         // gone or has been superseded by a newer connection of the same agent
         TAgent *FindAgent(const TActorId& pipeServerId);
         void ResetAgent(ui32 nodeId, TAgent& agent);
+        void ScheduleCheckExpiredAgents();
+        void HandleCheckExpiredAgents();
+        void ExpireAgent(ui32 nodeId, TAgent& agent);
+        bool CheckExpiredAgentsScheduled = false;
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
@@ -308,13 +354,16 @@ namespace NKikimr::NBlobDepot {
                 ScanningIndex,
                 CopyingBlob,
                 UpdatingIndex,
+                PreparingTrashCheck,
                 CheckingTrash,
                 Vacuum,
             };
 
             EPhase Phase = EPhase::Idle;
-            TSet<ui32> Groups;
+            THashSet<ui32> Groups;
             TActorId RequestSender;
+
+            static constexpr ui32 MaxMoveDataKeysPerTx = 10'000;
 
             std::optional<TString> Key;
             ui32 ValueChainIndex = 0;
@@ -331,24 +380,43 @@ namespace NKikimr::NBlobDepot {
             TSet<TBlobSeqId> ProtectedBlobSeqIds;
             bool ApplyingIndexUpdate = false;
 
+            enum class ETrashStatus {
+                WaitingForGC,
+                Finished,
+            };
+            std::unordered_set<std::tuple<ui8, ui32>> ChannelGroups;
+
             bool IsInProgress() const {
                 return Phase != EPhase::Idle;
             }
+
+            bool IsBlobMovingInProgress() const {
+                return Phase == EPhase::ScanningIndex ||
+                    Phase == EPhase::CopyingBlob ||
+                    Phase == EPhase::UpdatingIndex;
+            }
         };
 
+        ui64 MoveDataOperationId = 0;
         TMoveDataState MoveData;
         TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+        TActorId CopyBlobActorId;
 
         void Handle(TEvTablet::TEvMoveData::TPtr ev);
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
-        bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
+
+        bool ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const;
         bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
-        void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
+        void StartMoveData(THashSet<ui32>&& moveDataGroups, const TActorId& sender);
         void ContinueMoveData();
-        void StartMoveDataBlobCopy();
+        TMoveDataState::ETrashStatus GetTrashStatus();
+        void CheckTrash();
+        bool StartMoveDataBlobCopy();
         void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
+        void ProcessMoveDataQueue();
         void FinishMoveData(const TActorContext& ctx);
+        void CancelMoveData();
 
         class TTxMoveDataScan;
         class TTxMoveDataUpdateIndex;
@@ -476,6 +544,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
+        void UpdateAgentsBlockingGC();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

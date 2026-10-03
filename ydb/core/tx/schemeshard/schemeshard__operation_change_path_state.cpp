@@ -44,7 +44,7 @@ public:
     using TSubOperationWithContext::TSubOperationWithContext;
     using TSubOperationWithContext::SelectStateFunc;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
 
@@ -93,7 +93,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
         // TMemoryChanges restores the path and removes the staged transaction.
     }

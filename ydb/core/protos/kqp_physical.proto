@@ -648,6 +648,13 @@ message TKqpPhyMetadataOperation {
     optional bool SuccessOnAlreadyExists = 3;
 }
 
+message TKqpKillSession {
+    oneof Target {
+        string SessionId = 1;
+        string SessionIdParameter = 2;
+    }
+}
+
 message TKqpSchemeOperation {
     enum EFlags {
         FLAG_UNSPECIFIED = 0;
@@ -725,6 +732,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
         NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
+        TKqpKillSession KillSession = 64;
     }
 }
 

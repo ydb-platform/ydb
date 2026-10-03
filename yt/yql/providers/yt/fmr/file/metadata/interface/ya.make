@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_file_metadata_interface.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     library/cpp/threading/future
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -164,7 +164,6 @@ public:
     NCommon::TConfSetting<TDuration, Static> QueryCacheTtl;
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
-    NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
     NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
@@ -201,6 +200,7 @@ public:
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
     NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
     NCommon::TConfSetting<bool, Static> _ReplaceEmptyOpWithTouch;
+    NCommon::TConfSetting<bool, Static> _PruneSync;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

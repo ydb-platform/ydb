@@ -1031,7 +1031,8 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         const TCreateAlterDataFeatureFlags& featureFlags,
-        TString& errStr, const THashSet<TString>& localSequences = {});
+        TString& errStr, const THashSet<TString>& localSequences = {},
+        bool allowReplicationMode = false);
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
         if (descr.HasUniformPartitionsCount()) {
@@ -2346,6 +2347,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
         AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+        AlterData->StorageSpaceExhausted = StorageSpaceExhausted;
 
         // Update usage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
@@ -2733,6 +2735,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         SmallBlobsQuotaExceeded = value;
     }
 
+    // storage pools of the database are running out of space, as reported by BS_CONTROLLER
+    bool GetStorageSpaceExhausted() const {
+        return StorageSpaceExhausted;
+    }
+
+    void SetStorageSpaceExhausted(bool value) {
+        StorageSpaceExhausted = value;
+    }
+
+    // Returns true when the value has changed and needs to be persisted and pushed to scheme board.
+    bool ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters);
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2791,6 +2805,7 @@ private:
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
     bool SmallBlobsQuotaExceeded = false;
+    bool StorageSpaceExhausted = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
 
@@ -4536,6 +4551,7 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+    TActorId OperationOwnerActorId;
 };
 
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {

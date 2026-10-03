@@ -6,8 +6,6 @@ namespace NYT::NHttps {
 
 void TServerCredentialsConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("update_period", &TThis::UpdatePeriod)
-        .Optional();
     registrar.Parameter("cert_sensors_update_period", &TThis::CertSensorsUpdatePeriod)
         .Default(TDuration::Minutes(5))
         .GreaterThan(TDuration::Zero());

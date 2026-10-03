@@ -75,6 +75,7 @@ ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_pars
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_from_time[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk

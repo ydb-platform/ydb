@@ -1,5 +1,5 @@
 #pragma once
-#include "counters.h"
+#include <ydb/core/tx/limiter/grouped_memory/usage/counters.h>
 #include "process.h"
 
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>

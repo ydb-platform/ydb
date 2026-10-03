@@ -1,7 +1,7 @@
 #pragma once
 #include "stage_features.h"
 
-#include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
+#include "counters.h"
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/positive_integer.h>

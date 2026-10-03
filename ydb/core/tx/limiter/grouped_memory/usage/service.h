@@ -4,12 +4,14 @@
 #include "events.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
-#include <ydb/core/tx/limiter/grouped_memory/service/actor.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+void ProbeAllocationDisabled(const ui64 identifier);
 
 template <class TMemoryLimiterPolicy>
 class TServiceOperatorImpl {
@@ -17,6 +19,8 @@ private:
     TAtomicCounter LastProcessId = 0;
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
     using TSelf = TServiceOperatorImpl<TMemoryLimiterPolicy>;
+
+public:
     static void Register(const TConfig& serviceConfig) {
         Singleton<TSelf>()->ServiceConfig = serviceConfig;
     }
@@ -33,7 +37,6 @@ private:
         return TMemoryLimiterPolicy::HardLimitMultiplier;
     }
 
-public:
     static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
         if (!IsEnabled()) {
             return nullptr;
@@ -67,7 +70,7 @@ public:
         } else {
             for (auto&& i : tasks) {
                 if (!i->IsAllocated()) {
-                    LWPROBE(Allocated, "disabled", i->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, true);
+                    ProbeAllocationDisabled(i->GetIdentifier());
                     AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, 0, NActors::TActorId(), i->GetMemory(), nullptr), i));
                 }
             }
@@ -83,10 +86,6 @@ public:
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcMlmt" + GetMemoryLimiterName());
-    }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
-        Register(config);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), signals, GetConsumerKind(), GetHardLimitMultiplier());
     }
 };
 

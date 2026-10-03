@@ -99,7 +99,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
             auto* truncate = tx.MutableTruncateTable();
             truncate->SetPathId(txState->TargetPathId.LocalPathId);
-            
+
             TString txBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
 
@@ -213,98 +213,6 @@ public:
     }
 };
 
-class TTruncateTableProposedWaitParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    const char* Name() const override {
-        return "TTruncateTableProposedWaitParts";
-    }
-
-public:
-    TTruncateTableProposedWaitParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType,
-                        TEvColumnShard::TEvProposeTransactionResult::EventType,
-                        TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    template<typename TEvent>
-    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context) {
-        const auto& evRecord = ev->Get()->Record;
-
-        YDB_LOG_INFO_CTX(context.Ctx, "");
-        YDB_LOG_DEBUG_CTX(context.Ctx, "",
-            {"message", evRecord.ShortDebugString()},
-        );
-
-        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
-            YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged: false");
-            return false;
-        }
-
-        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
-        TTxState& txState = *context.SS->FindTx(OperationId);
-
-        if (!txState.ReadyForNotifications) {
-            YDB_LOG_DEBUG_CTX(context.Ctx, "ReadyForNotifications: false");
-            return false;
-        }
-
-        return true;
-    }
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
-    }
-
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        return HandleReplyImpl(ev, context);
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-
-        YDB_LOG_INFO_CTX(context.Ctx, "");
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        txState->ClearShardsInProgress();
-        for (TTxState::TShardOperation& shard : txState->Shards) {
-            if (shard.Operation < TTxState::ProposedWaitParts) {
-                shard.Operation = TTxState::ProposedWaitParts;
-                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
-            }
-
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-            TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
-
-            const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
-
-            if (shardInfo.TabletType == ETabletType::ColumnShard) {
-                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
-                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
-            }
-
-            context.OnComplete.RouteByTablet(OperationId, tablet);
-        }
-
-        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
-
-        txState->AcceptPendingSchemeNotification();
-
-        if (txState->ShardsInProgress.empty()) {
-            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
-            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            return true;
-        }
-
-        return false;
-    }
-};
-
 class TTruncateTable: public TSubOperation {
     virtual const char* Name() const override final { return "TTruncateTable"; }
 
@@ -336,7 +244,7 @@ public:
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<TTruncateTableProposedWaitParts>(OperationId);
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:

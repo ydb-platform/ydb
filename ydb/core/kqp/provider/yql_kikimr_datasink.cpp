@@ -282,6 +282,11 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        Y_UNUSED(node, ctx);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         Y_UNUSED(ctx, node);
         return TStatus::Ok;
@@ -705,7 +710,8 @@ public:
             || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
             || node.IsCallable(TKiAlterObject::CallableName())
-            || node.IsCallable(TKiDropObject::CallableName()))
+            || node.IsCallable(TKiDropObject::CallableName())
+            || node.IsCallable(TKiKillSession::CallableName()))
         {
             return true;
         }
@@ -2166,6 +2172,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropObject>(input)) {
         return HandleDropObject(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiKillSession>(input)) {
+        return HandleKillSession(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiModifyPermissions>(input)) {

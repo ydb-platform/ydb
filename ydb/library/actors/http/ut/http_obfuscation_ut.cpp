@@ -10,7 +10,6 @@ constexpr TStringBuf SensitiveHeaders[] = {
     "Cookie",
     "Set-Cookie",
     "X-Ydb-Auth-Ticket",
-    "X-Ydb-Iam-Token",
     "X-YaCloud-SubjectToken",
 };
 
@@ -57,8 +56,6 @@ Y_UNIT_TEST_SUITE(HttpObfuscation) {
                             "sEt-CoOkIe: first-cookie\r\n"
                             "SET-COOKIE: second-cookie\r\n"
                             "x-YdB-aUtH-tIcKeT: ticket-secret\r\n"
-                            "x-ydb-iam-token: first-iam-secret\r\n"
-                            "X-YdB-IaM-ToKeN: second-iam-secret\r\n"
                             "x-YaClOuD-sUbJeCtToKeN: subject-secret\r\n";
         const TString expected = "aUtHoRiZaTiOn: <obfuscated>\r\n"
                                     "AUTHORIZATION: <obfuscated>\r\n"
@@ -66,8 +63,6 @@ Y_UNIT_TEST_SUITE(HttpObfuscation) {
                                     "sEt-CoOkIe: <obfuscated>\r\n"
                                     "SET-COOKIE: <obfuscated>\r\n"
                                     "x-YdB-aUtH-tIcKeT: <obfuscated>\r\n"
-                                    "x-ydb-iam-token: <obfuscated>\r\n"
-                                    "X-YdB-IaM-ToKeN: <obfuscated>\r\n"
                                     "x-YaClOuD-sUbJeCtToKeN: <obfuscated>\r\n";
         UNIT_ASSERT_VALUES_EQUAL(GetObfuscatedData(raw), expected);
     }
@@ -107,12 +102,10 @@ Y_UNIT_TEST_SUITE(HttpObfuscation) {
         const TString headers = "Content-Type: text/plain\r\n"
                                 "Content-Length: 4\r\n"
                                 "X-Ydb-Auth-Ticket: Bearer example-secret-suffix\r\n"
-                                "x-ydb-iam-token: iam-secret\r\n"
                                 "Authorization: Bearer example-secret\r\n\r\nbody";
         const TString expected = "Content-Type: text/plain\r\n"
                                     "Content-Length: 4\r\n"
                                     "X-Ydb-Auth-Ticket: <obfuscated>\r\n"
-                                    "x-ydb-iam-token: <obfuscated>\r\n"
                                     "Authorization: <obfuscated>\r\n\r\nbody";
         const TString request = "GET / HTTP/1.1\r\n" + headers;
         const TString response = "HTTP/1.1 200 OK\r\n" + headers;

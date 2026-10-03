@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_log_effects.cpp
@@ -27,7 +27,5 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     minirun_lib.cpp
@@ -14,8 +14,6 @@ PEERDIR(
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/sql/pg
 )
-
-YQL_LAST_ABI_VERSION()
 
 RESOURCE(
     yql/essentials/cfg/tests/gateways.conf gateways.conf

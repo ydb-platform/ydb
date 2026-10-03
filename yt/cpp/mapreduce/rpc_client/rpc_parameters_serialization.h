@@ -192,6 +192,9 @@ NApi::TTableReaderOptions SerializeOptionsForReadTable(
 NApi::TReadTablePartitionOptions SerializeOptionsForReadTablePartition(
     const TTablePartitionReaderOptions& options = {});
 
+NApi::TReadFilePartitionOptions SerializeOptionsForReadFilePartition(
+    const TFilePartitionReaderOptions& options = {});
+
 NApi::TAlterTableOptions SerializeOptionsForAlterTable(
     TMutationId& mutationId,
     const TTransactionId& transactionId,
@@ -216,6 +219,12 @@ NApi::TGetColumnarStatisticsOptions SerializeOptionsForGetTableColumnarStatistic
 NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TGetTablePartitionsOptions& options);
+
+std::vector<NApi::TFileReadRange> SerializeFileReadRanges(const TVector<TFileReadRange>& ranges);
+
+NApi::TPartitionFileOptions SerializeOptionsForGetFilePartitions(
+    const TTransactionId& transactionId,
+    const TGetFilePartitionsOptions& options);
 
 NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
     const TCheckClusterLivenessOptions& options);

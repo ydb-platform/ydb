@@ -619,4 +619,10 @@ message TTableServiceConfig {
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];
+
+    // Fallback to legacy optimizer on data manipulation queries
+    optional bool EnableFallbackOnDML = 150 [default = false];
+
+    // Fallback to legacy optimizer on multiple statements in a query
+    optional bool EnableFallbackOnMultipleStatements = 151 [default = false];
 };

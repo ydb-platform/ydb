@@ -469,6 +469,8 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
 }
 
 // sysview processor tablet -> node
@@ -551,12 +553,20 @@ message TEvGetQueryStatsResponse {
 
 // generic set of counters with stable enumeration order in each category
 // simple values are absolute
-// cumulative and histogram values may be absolute or diffs depending on the context
+// cumulative and histogram values may be absolute or diffs depending on the context,
+// except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
         optional uint64 BucketsCount = 2; // total number of buckets in diff mode
+        // Set for a non-derivative histogram (an Integral percentile counter or a HIST(x)
+        // aggregate, published as monlib HIST): bucket counts go up and down, so Buckets hold
+        // the full current value of every non-empty bucket rather than a delta, and the receiver
+        // replaces its copy instead of adding. Set by the detailed metrics channel only.
+        // Unset: Buckets are a delta to add (derivative histograms, monlib HIST_RATE, and every
+        // histogram of the regular tablet counters channel)
+        optional bool NonDerivative = 3;
     }
 
     repeated uint64 Simple = 1;

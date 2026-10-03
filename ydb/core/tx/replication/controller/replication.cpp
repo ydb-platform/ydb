@@ -279,6 +279,7 @@ public:
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
+        config.SetSkipInitialScan(Config.GetSkipInitialScan());
         Config = config;
     }
 

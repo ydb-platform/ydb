@@ -51,11 +51,18 @@ message TStateServer {
         uint32 Generation = 2;
     }
 
+    message TInitialize {
+        uint64 TabletId = 1;
+        uint32 Generation = 2;
+        repeated string Keys = 3;
+    }
+
     message TRequest {
         oneof Command {
             TWrite Write = 1;
             TRead Read = 2;
             TTabletInfo TabletInfo = 3; // recovery log only
+            TInitialize Initialize = 4; // replies with TWriteResult
         }
     }
 }

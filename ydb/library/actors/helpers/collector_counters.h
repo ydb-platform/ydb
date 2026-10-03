@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/async_frame_cache.h>
+#include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -14,6 +14,7 @@ struct TExecutorThreadStats;
 struct TExecutorPoolStats;
 struct THarmonizerStats;
 struct TLogHistogram;
+struct TAllocationCacheFamilyStats;
 
 struct THistogramCounters {
     void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal);
@@ -125,7 +126,8 @@ struct TActorSystemCounters {
     NMonitoring::TDynamicCounters::TCounterPtr AsyncFrameCacheCachedBytes;
 
     void Init(NMonitoring::TDynamicCounters* group);
-    void Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats);
+    void SetAllocationCacheStats(const std::vector<TAllocationCacheFamilyStats>& stats);
+    void Set(const THarmonizerStats& harmonizerStats);
 };
 
 } // NActors

@@ -402,6 +402,20 @@ def bulk_upsert_request_factory(table, rows, column_types):
     return request
 
 
+def read_rows_request_factory(table_path, keys, key_types, columns=None):
+    request = _apis.ydb_table.ReadRowsRequest()
+    request.path = table_path
+    request.keys.MergeFrom(convert.to_typed_value_from_native(types.ListType(key_types).proto, keys))
+    if columns:
+        request.columns.extend(list(columns))
+    return request
+
+
+def wrap_read_rows_response(rpc_state, response_pb, table_client_settings=None):
+    issues._process_response(response_pb)
+    return convert.ResultSet.from_message(response_pb.result_set, table_client_settings)
+
+
 def wrap_read_table_response(response):
     issues._process_response(response)
     snapshot = response.snapshot if response.HasField("snapshot") else None

@@ -3064,14 +3064,55 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+// The struct type canonicalizes field order. Positional renames must use the
+// explicit projection, including through aliases and row-preserving operators.
+TVector<TString> GetOpProjection(const TExprNode::TPtr& input) {
+    TVector<TString> columns;
+    if (auto map = TMaybeNode<TKqpOpMap>(input)) {
+        if (!map.Cast().Project()) {
+            columns = GetOpProjection(map.Cast().Input().Ptr());
+        }
+        for (const auto& element : map.Cast().MapElements()) {
+            columns.push_back(element.Variable().StringValue());
+        }
+    } else if (auto alias = TMaybeNode<TKqpOpReplaceAlias>(input)) {
+        columns = GetOpProjection(alias.Cast().Input().Ptr());
+        for (auto& name : columns) {
+            const auto dot = name.find('.');
+            name = alias.Cast().Alias().StringValue() + "." + name.substr(dot == TString::npos ? 0 : dot + 1);
+        }
+    } else if (TKqpOpReplaceColumns::Match(input.Get()) || TKqpOpProject::Match(input.Get())) {
+        for (const auto& column : input->Child(1)->Children()) {
+            columns.emplace_back(column->Content());
+        }
+    } else if (auto read = TMaybeNode<TKqpOpRead>(input)) {
+        const auto alias = read.Cast().Alias().StringValue();
+        for (const auto& column : read.Cast().Columns()) {
+            columns.push_back(alias.empty() ? column.StringValue() : alias + "." + column.StringValue());
+        }
+    } else if (TKqpOpLimit::Match(input.Get()) || TKqpOpSort::Match(input.Get()) ||
+        TKqpOpFilter::Match(input.Get()) || TKqpInfuseDependents::Match(input.Get()) ||
+        TKqpOpSetOp::Match(input.Get())) {
+        columns = GetOpProjection(input->HeadPtr());
+    } else {
+        Y_ENSURE(TKqpOpEmptySource::Match(input.Get()) && !input->ChildrenSize(),
+            "Missing projection for positional column replacement: " << input->Content());
+    }
+    return columns;
+}
+
 TStatus AnnotateOpReplaceColumns(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto structType = input->ChildPtr(TKqpOpReplaceColumns::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TVector<const TItemExprType*> structItemTypes;
     auto typeItems = structType->GetItems();
     auto columns = input->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
+    const auto projection = GetOpProjection(input->ChildPtr(TKqpOpReplaceColumns::idx_Input));
+    Y_ENSURE(projection.size() == columns->ChildrenSize());
 
-    for (size_t i=0; i<typeItems.size(); i++) {
-        auto item = typeItems[i];
+    for (size_t i = 0; i < projection.size(); i++) {
+        const auto index = structType->FindItem(projection[i]);
+        Y_ENSURE(index, "Unknown projection column " << projection[i]);
+        auto item = typeItems[*index];
         auto newName = columns->ChildPtr(i)->Content();
         structItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, item->GetItemType()));
     }

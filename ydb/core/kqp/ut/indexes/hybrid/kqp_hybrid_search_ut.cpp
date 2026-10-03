@@ -10,10 +10,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
-<<<<<<< HEAD
 #include <array>
-=======
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 #include <cmath>
 #include <limits>
 
@@ -152,9 +149,6 @@ void AddVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const
     )sql", table.c_str(), name.c_str(), metric.c_str()));
 }
 
-<<<<<<< HEAD
-// A prefixed vector index (a prefix column before the vector column).
-=======
 void AddManhattanVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
         const TString& name = "manhattan_idx") {
     ExecOk(db, Sprintf(R"sql(
@@ -185,9 +179,7 @@ void AddInnerProductVectorIndex(TQueryClient& db, const TString& table = "/Root/
     )sql", table.c_str(), name.c_str()));
 }
 
-// A prefixed vector index (a prefix column before the vector column). HybridRank does not support these
-// yet (the kmeans-tree lowering needs an OptionalIf prefix predicate the rewrite doesn't build).
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
+// A prefixed vector index (a prefix column before the vector column).
 void AddPrefixedVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const TString& name = "vp_idx") {
     ExecOk(db, Sprintf(R"sql(
         ALTER TABLE `%s` ADD INDEX %s
@@ -274,7 +266,6 @@ void SetupDocs(TQueryClient& db) {
     AddVectorIndex(db);
 }
 
-<<<<<<< HEAD
 void SetupLargeDocs(TQueryClient& db, ui32 count) {
     ExecOk(db, R"sql(
         CREATE TABLE `/Root/LargeDocs` (
@@ -307,21 +298,10 @@ void SetupTiedScoreDocs(TQueryClient& db) {
             Key Uint64,
             Text Utf8,
             Embedding String,
-=======
-void SetupMultiBranchDocs(TQueryClient& db) {
-    ExecOk(db, R"sql(
-        CREATE TABLE `/Root/MultiDocs` (
-            Key Uint64,
-            TextA Utf8,
-            TextB Utf8,
-            EmbeddingA String,
-            EmbeddingB String,
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
             PRIMARY KEY (Key)
         );
     )sql");
     ExecOk(db, Sprintf(R"sql(
-<<<<<<< HEAD
         UPSERT INTO `/Root/TiedDocs` (Key, Text, Embedding) VALUES
             (1u, "same", %s),
             (2u, "same", %s),
@@ -379,7 +359,20 @@ void SetupHybridPrefixMatrixFixture(TQueryClient& db, const THybridPrefixMatrixS
             ON (%s)
             WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
     )sql", table.c_str(), indexColumns.c_str()));
-=======
+}
+
+void SetupMultiBranchDocs(TQueryClient& db) {
+    ExecOk(db, R"sql(
+        CREATE TABLE `/Root/MultiDocs` (
+            Key Uint64,
+            TextA Utf8,
+            TextB Utf8,
+            EmbeddingA String,
+            EmbeddingB String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    ExecOk(db, Sprintf(R"sql(
         UPSERT INTO `/Root/MultiDocs` (Key, TextA, TextB, EmbeddingA, EmbeddingB) VALUES
             (1u, "alpha alpha alpha", "plain", %s, %s),
             (2u, "plain", "beta beta beta", %s, %s),
@@ -446,7 +439,6 @@ void UpdateHybridSearchConfig(TKikimrRunner& kikimr, bool enabled) {
             edgeActor, TDuration::Seconds(10));
         UNIT_ASSERT_C(response, "KQP service must acknowledge the runtime TableServiceConfig update");
     }
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 }
 
 // The kmeans-tree search-probe pragma. Widens the probe to cover all clusters at every level

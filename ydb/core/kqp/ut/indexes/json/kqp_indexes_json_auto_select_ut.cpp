@@ -123,25 +123,6 @@ void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predic
         "Expected exactly one of (" + idxA + ", " + idxB + ") to be auto-selected for: " + predicate + ", got " + std::to_string(count));
 }
 
-<<<<<<< HEAD
-=======
-TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t expectedIndexNodes, const TString& expectedYson,
-    TParams params = TParamsBuilder().Build(), const TString& indexName = "json_idx")
-{
-    const auto settings = TExecuteQuerySettings().StatsMode(EStatsMode::Full);
-    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params, settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan(), "Execution plan is missing");
-
-    NJson::TJsonValue planJson;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true), "Failed to parse execution plan JSON");
-    UNIT_ASSERT_VALUES_EQUAL_C(CountPlanNodesByKv(planJson, "Index", indexName), expectedIndexNodes, sql);
-
-    const TString actual = FormatResultSetYson(result.GetResultSet(0));
-    CompareYson(expectedYson, actual, sql);
-    return actual;
-}
-  
 TString ExecuteKeys(TQueryClient& db, const std::string& view = {}) {
     const auto query = std::format(R"(
         SELECT Key FROM TestTable{} WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;
@@ -583,7 +564,6 @@ void TestGeneratedJsonPropertyCorpus(const std::string& jsonType, bool compact, 
     }
 }
 
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
@@ -1414,62 +1394,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateAutoSelect(db, "UserId=100 AND JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
         ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx", "TestTable");
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST(PrefixedMultiColumn) {
-        auto kikimr = KikimrJsonPrefix(true);
-        auto db = kikimr.GetQueryClient();
-
-        {
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Tenant Utf8,
-                    UserId Uint64,
-                    Text JsonDocument,
-                    PRIMARY KEY (Key),
-                    INDEX json_idx GLOBAL USING json ON (Tenant, UserId, Text)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = db.ExecuteQuery(R"(
-                UPSERT INTO TestTable (Key, Tenant, UserId, Text) VALUES
-                    (1, "acme"u,   100, JsonDocument('{"kind":"cats","score":10}')),
-                    (2, "acme"u,   100, JsonDocument('{"kind":"dogs","score":20}')),
-                    (3, "acme"u,   200, JsonDocument('{"kind":"cats","score":20}')),
-                    (4, "globex"u, 100, JsonDocument('{"kind":"cats","score":30}'));
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        ValidateAutoSelect(db,
-            R"(Tenant = "acme"u AND UserId = 100 AND JSON_EXISTS(Text, '$.kind'))",
-            "json_idx", "TestTable");
-        ValidateAutoSelect(db,
-            R"(100 = UserId AND JSON_VALUE(Text, '$.score' RETURNING Int64) = 20 AND "acme"u = Tenant)",
-            "json_idx", "TestTable");
-        ValidateAutoSelectWithDecl(db,
-            "DECLARE $tenant AS Utf8;\nDECLARE $uid AS Uint64;",
-            R"(UserId = $uid AND JSON_EXISTS(Text, '$.kind') AND Tenant = $tenant)",
-            "json_idx", "TestTable");
-
-        ValidateNoAutoSelect(db,
-            R"(UserId = 100 AND JSON_EXISTS(Text, '$.kind'))",
-            "json_idx", "TestTable");
-        ValidateNoAutoSelect(db,
-            R"(Tenant = "acme"u AND JSON_EXISTS(Text, '$.kind'))",
-            "json_idx", "TestTable");
-        ValidateNoAutoSelect(db,
-            R"((Tenant = "acme"u OR Tenant = "globex"u) AND UserId = 100 AND JSON_EXISTS(Text, '$.kind'))",
-            "json_idx", "TestTable");
-        ValidateNoAutoSelect(db,
-            R"(Tenant = "acme"u AND UserId > 0 AND JSON_EXISTS(Text, '$.kind'))",
-            "json_idx", "TestTable");
-    }
 
     Y_UNIT_TEST(CompactJsonMultiShardBuildAndDml) {
         auto kikimr = KikimrCompactJsonAutoSelect();
@@ -1577,7 +1501,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             R"(JSON_VALUE(Text, '$.enabled' RETURNING Bool))",
             R"([["alpha"];["gamma"]])");
     }
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 }
 
 }  // namespace NKikimr::NKqp

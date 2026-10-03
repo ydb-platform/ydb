@@ -96,20 +96,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     void DoCheckPlainIndexTable(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-<<<<<<< HEAD
-        UNIT_ASSERT_VALUES_EQUAL("[[[["
-            R"(["and";["two"];["2"]];)"
-            R"(["apple";["one"];["1"]];)"
-            R"(["apple";["two"];["2"]];)"
-            R"(["apple";["three"];["3"]];)"
-            R"(["blue";["two"];["2"]];)"
-            R"(["car";["four"];["4"]];)"
-            R"(["green";["one"];["1"]];)"
-            R"(["red";["two"];["2"]];)"
-            R"(["red";["four"];["4"]];)"
-            R"(["yellow";["three"];["3"]]];)"
-        "%false]]]", rows);
-=======
         if (IsCompactFulltextIndex(runtime, index)) {
             UNIT_ASSERT_VALUES_EQUAL("[[[["
                 R"([%true;"18446744073709551615";"2";"\2";"and"];)"
@@ -134,26 +120,11 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
                 R"(["yellow";["three"];["3"]]];)"
             "%false]]]", rows);
         }
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
     }
 
     void DoCheckRelevanceIndexTables(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-<<<<<<< HEAD
-        UNIT_ASSERT_VALUES_EQUAL("[[[["
-            R"(["1";"and";["2"]];)"
-            R"(["1";"apple";["1"]];)"
-            R"(["2";"apple";["2"]];)"
-            R"(["1";"apple";["3"]];)"
-            R"(["1";"blue";["2"]];)"
-            R"(["1";"car";["4"]];)"
-            R"(["1";"green";["1"]];)"
-            R"(["1";"red";["2"]];)"
-            R"(["1";"red";["4"]];)"
-            R"(["1";"yellow";["3"]]];)"
-        "%false]]]", rows);
-=======
         if (IsCompactFulltextIndex(runtime, index)) {
             UNIT_ASSERT_VALUES_EQUAL("[[[["
                 R"([%true;"18446744073709551615";"2";"\2";"and"];)"
@@ -178,7 +149,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
                 R"(["1";"yellow";["3"]]];)"
             "%false]]]", rows);
         }
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 
         rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplDocsTable").at(0);
         Cerr << index << "/indexImplDocsTable rows: " << rows << "\n";
@@ -917,8 +887,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         appData.FeatureFlags.SetEnableFulltextIndex(true);
         appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
         appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-<<<<<<< HEAD
-=======
         appData.FeatureFlags.SetEnableUniqConstraint(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     }
@@ -935,7 +903,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
                   NTableIndex::NFulltext::GenColumn },
                 /*strictCount=*/ true),
         });
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
     }
 
     Y_UNIT_TEST(AutoProvision_FirstFulltextBuildAddsRowIdAndUniqueIndex) {
@@ -969,15 +936,19 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
 
-        // The fulltext posting impl-table is keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+        if (IsCompactFulltextIndex(runtime, "/MyRoot/texts/fulltext_idx")) {
+            CheckCompactFulltextImplTable(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable");
+        } else {
+            // The legacy fulltext posting impl-table is keyed by [__ydb_token, __ydb_row_id].
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*ensureNoOther=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(RejectDropRowIdUniqueIndexUsedByFulltext) {
@@ -1142,15 +1113,19 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::PathExist,
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                // Relevance posting table also carries the __ydb_freq value column.
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::FreqColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+        if (IsCompactFulltextIndex(runtime, "/MyRoot/texts/fulltext_two")) {
+            CheckCompactFulltextImplTable(runtime, "/MyRoot/texts/fulltext_two/indexImplTable");
+        } else {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                    // Relevance posting table also carries the __ydb_freq value column.
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::FreqColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*ensureNoOther=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(AutoProvision_DropAllFulltextIndexesAndRecreateReusesInfra) {
@@ -1458,11 +1433,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         appData.FeatureFlags.SetEnableFulltextIndex(true);
         appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
         appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-<<<<<<< HEAD
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-    }
-
-=======
         appData.FeatureFlags.SetEnableUniqConstraint(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     }
@@ -1720,7 +1690,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_C(physicalRows.Contains("kiwi"), physicalRows);
     }
 
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;

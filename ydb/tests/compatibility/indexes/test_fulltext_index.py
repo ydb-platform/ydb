@@ -282,12 +282,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
             table_name_prefixed = f"table_{text_type}_prefixed"
             self.create_table(table_name_prefixed, with_prefix=True)
             self._write_data(table_name_prefixed, with_prefix=True)
-<<<<<<< HEAD
             for index_type in ['fulltext_plain', 'fulltext_relevance']:
-=======
-
-            for index_type in self._index_types(with_prefix=True):
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
                 for tokenizer in ['standard', 'whitespace']:
                     index_name = f"idx_{index_type}_{tokenizer}_prefixed"
                     self._create_index(

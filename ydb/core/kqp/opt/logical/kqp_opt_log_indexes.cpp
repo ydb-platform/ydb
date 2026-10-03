@@ -2658,7 +2658,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return false;
     };
 
-<<<<<<< HEAD
     using TPrefixColumns = TVector<std::pair<TString, TExprNode::TPtr>>;
     auto extractEqualityColumns = [&](const THashSet<TString>& columns) {
         TPrefixColumns extracted;
@@ -2728,8 +2727,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return ordered;
     };
 
-=======
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
     auto isFulltextRelevanceIndex = [](const TIndexDescription& index) {
         return index.Type == TIndexDescription::EType::GlobalFulltextRelevance
             || index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance;
@@ -2862,16 +2859,12 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
                         && isFulltextRelevanceIndex(idx)
-<<<<<<< HEAD
                         && !idx.KeyColumns.empty() && idx.KeyColumns.back() == b.ScoredColumn)
                     {
                         auto prefixColumns = extractPrefixColumns(idx, false);
                         if (!prefixColumns) {
                             continue;
                         }
-=======
-                        && columnInList(idx.KeyColumns, b.ScoredColumn)) {
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
                         b.IndexName = idx.Name;
                         b.PrefixColumns = std::move(*prefixColumns);
                         ++matches;

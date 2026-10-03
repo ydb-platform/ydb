@@ -15,13 +15,10 @@ class TestYdbWorkload(StressFixture):
             "enable_table_datetime64": True,
             "enable_vector_index": True,
             "enable_fulltext_index": True,
-<<<<<<< HEAD
-=======
             "enable_fulltext_index_prefix": True,
             "enable_fulltext_index_row_id": True,
             "enable_compact_fulltext_index": True,
             "enable_add_unique_index": True,
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
             "enable_json_index": True,
             "enable_json_index_auto_select": True,
         }

@@ -123,8 +123,6 @@ void EnableJsonCompactRowIdFlags(TTestActorRuntime& runtime) {
     RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 }
 
-<<<<<<< HEAD
-=======
 void RebootJsonTableShardsAndAssertPartitions(TTestBasicRuntime& runtime, const TString& path,
     ui32 expectedPartitions)
 {
@@ -137,7 +135,6 @@ void RebootJsonTableShardsAndAssertPartitions(TTestBasicRuntime& runtime, const 
     }
 }
 
->>>>>>> b6b877b3056 (Added more tests for different indexes (#50622))
 TString RowIdSrcTablePath(const TString& indexPath) {
     return TStringBuilder() << indexPath << "/"
         << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;

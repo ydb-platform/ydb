@@ -1027,7 +1027,9 @@ namespace NKikimr::NBsController {
                     Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot.GetShortVDiskId());
                 }
             });
+            size_t numGroups = 0;
             Groups.ForEach([&](const auto& groupId, const auto& group) {
+                ++numGroups;
                 Y_ABORT_UNLESS(groupId == group.ID);
                 for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                     Y_ABORT_UNLESS(VSlots.Find(vslot->VSlotId) == vslot);
@@ -1035,7 +1037,25 @@ namespace NKikimr::NBsController {
                     Y_ABORT_UNLESS(vslot->GroupId == groupId);
                     Y_ABORT_UNLESS(vslot->GroupGeneration == group.Generation);
                 }
+                Y_ABORT_UNLESS(StoragePoolGroups.Get().contains({group.StoragePoolId, groupId}));
             });
+            for (const auto& [storagePoolId, groupId] : StoragePoolGroups.Get()) {
+                Y_ABORT_UNLESS(StoragePools.Get().contains(storagePoolId));
+                const TGroupInfo *group = Groups.Find(groupId);
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->StoragePoolId == storagePoolId);
+            }
+            // species index lists every existing group exactly once, under the group's species
+            std::unordered_set<TGroupId> indexedGroups;
+            for (const auto& [species, groupIds] : IndexGroupSpeciesToGroup.Get()) {
+                for (const TGroupId groupId : groupIds) {
+                    Y_ABORT_UNLESS(indexedGroups.insert(groupId).second);
+                    const TGroupInfo *group = Groups.Find(groupId);
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->GetGroupSpecies() == species);
+                }
+            }
+            Y_ABORT_UNLESS(indexedGroups.size() == numGroups);
 #endif
         }
 

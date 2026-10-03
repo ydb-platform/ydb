@@ -29,6 +29,37 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
 
     Y_UNIT_TEST_SUITE(Coordinator) {
 
+        Y_UNIT_TEST(UnusedChannelsDelegateGCToExecutor) {
+            TTestBasicRuntime runtime;
+            TAppPrepare app;
+            app.FeatureFlags.SetEnableCutHistory(true);
+            SetupTabletServices(runtime, &app, true);
+
+            const ui64 tabletId = MakeTabletID(false, 1);
+            TIntrusivePtr<TTabletStorageInfo> info = CreateTestTabletInfo(tabletId, TTabletTypes::Coordinator);
+            // Repeated assignment to the same group still leaves an obsolete
+            // history entry. These data channels have never contained blobs.
+            for (ui32 channel : {2, 3, 4}) {
+                info->Channels[channel].History.emplace_back(1, 0);
+            }
+            THashSet<ui32> collectedChannels;
+            auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                    const auto* gc = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                    if (gc->TabletId == tabletId && gc->Channel >= 2 && !gc->Hard) {
+                        collectedChannels.insert(gc->Channel);
+                    }
+                }
+            });
+            CreateTestBootstrapper(runtime, info.Get(), CreateFlatTxCoordinator);
+            runtime.WaitFor("executor GC of unused Coordinator channels", [&] {
+                return collectedChannels.size() == 3;
+            });
+            UNIT_ASSERT(collectedChannels.contains(2));
+            UNIT_ASSERT(collectedChannels.contains(3));
+            UNIT_ASSERT(collectedChannels.contains(4));
+        }
+
         Y_UNIT_TEST(ReadStepSubscribe) {
             TPortManager pm;
             TServerSettings serverSettings(pm.GetPort(2134));

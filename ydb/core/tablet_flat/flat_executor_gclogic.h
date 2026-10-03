@@ -41,12 +41,13 @@ struct TGCLogEntry {
 class TExecutorGCLogic {
 public:
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>, const TFeatureFlags& flags);
+    void InitializeChannel(ui32 channelId);
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
     TDuration OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev,
-                                     const TActorContext &ctx, TActorId launcher);               // notification on any garbage collection results
+                                     const TActorContext &ctx);                                 // notification on any garbage collection results
     void OnConfirmSnapshot(ui32 step, const TActorContext &ctx);                                 // notification about snapshot confirmation - will GC blobs in storage
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
@@ -57,7 +58,7 @@ public:
     void SendCollectGarbage(const TActorContext& executor);
     bool HasGarbageBefore(TGCTime snapshotTime);
     void RetryGcRequests(ui32 channel, const TActorContext& ctx);
-    void Confirm(const TActorContext &ctx);
+    void Confirm(const TActorContext &ctx, TActorId launcher);
 
     THistoryCutter HistoryCutter;
     // Needed so we do not cut history if the feature flag was
@@ -104,6 +105,7 @@ protected:
     struct TChannelInfo {
         enum class ECutHistoryStatus {
             None,
+            PendingBarrier, // snapshot confirmed; waiting for GC to become idle
             SentBarrier,
             Cut,
         };
@@ -144,7 +146,10 @@ protected:
     bool AllowGarbageCollection;
 
     THashSet<ui32> ChannelsToCutHistory;
+    TActorId CutHistoryRecipient;
 
+    void TrySendHistoryBarriers(ui32 channelId, const TActorContext& ctx);
+    void SendCutTabletHistory(ui32 channelId, const TActorContext& ctx);
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);

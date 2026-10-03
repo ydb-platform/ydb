@@ -144,6 +144,11 @@ namespace NYdb::NConsoleClient {
         TCommandTopicConsumerOffset();
     };
 
+    class TCommandTopicConsumerOffsets: public TClientCommandTree {
+    public:
+        TCommandTopicConsumerOffsets();
+    };
+
     class TCommandTopicConsumerAdd: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
     public:
         TCommandTopicConsumerAdd();

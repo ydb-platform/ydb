@@ -67,6 +67,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
+        if (exportInfo.EnableTableBackupAsSql) {
+            desc.SetCaptureBackupSchemeSnapshot(true);
+        }
     }
 
     return propose;
@@ -86,28 +89,67 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
     return record.GetPathDescription();
 }
 
-static TString ComputeIndexItemSuffix(
-    TSchemeShard* ss,
-    const TExportInfo& exportInfo,
-    const TExportInfo::TItem& item,
-    bool encrypted)
-{
-    if (!encrypted) {
-        return item.SourcePathName;
+static const NKikimrSchemeOp::TBackupTask* FindBackupSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
+    if (!path.IsResolved()) {
+        return nullptr;
     }
+
+    const TPathId pathId = path.Base()->PathId;
+    if (path->IsColumnTable() && ss->ColumnTables.contains(pathId)) {
+        return &ss->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+    }
+    if (path->IsTable() && ss->Tables.contains(pathId)) {
+        return &ss->Tables.at(pathId)->BackupSettings;
+    }
+    return nullptr;
+}
+
+bool FillExportTableSchemePaths(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    TExportTableSchemeContext& context,
+    TString& error)
+{
+    error.clear();
+    context.TablePath.clear();
+
+    if (!sourcePathName) {
+        error = "Source table path is empty";
+        return false;
+    }
+
+    const TString sourcePath = CanonizePath(sourcePathName);
+    std::pair<TString, TString> paths;
+    const TString database = CanonizePath(ss->RootPathElements);
+    if (!TrySplitPathByDb(sourcePath, database, paths, error)) {
+        return false;
+    }
+
+    context.TablePath = paths.second;
+    return true;
+}
+
+TString ComputeIndexItemSuffix(
+    const NKikimrSchemeOp::TBackupTask* schemeSnapshot,
+    const NKikimrSchemeOp::TPathDescription& sourceDescription,
+    const TString& indexImplTablePath,
+    bool encrypted
+) {
+    if (!encrypted) {
+        return indexImplTablePath;
+    }
+
+    const auto& parentDescription = schemeSnapshot && schemeSnapshot->HasTable()
+        ? schemeSnapshot->GetTable()
+        : sourceDescription;
 
     static constexpr int INVALID_IDX = 999;
     int idx = INVALID_IDX;
     bool found = false;
 
-    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
-    const auto& parentItem = exportInfo.Items[item.ParentIdx];
-
-    auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
     TStringBuf indexName;
     TStringBuf implTableName;
-    if (parentPath.IsResolved() && TStringBuf(item.SourcePathName).TrySplit('/', indexName, implTableName)) {
-        const auto parentDescription = GetDescription(ss, parentPath.Base()->PathId);
+    if (parentDescription.HasTable() && TStringBuf(indexImplTablePath).TrySplit('/', indexName, implTableName)) {
         idx = parentDescription.GetTable().CdcStreamsSize() + 1;
 
         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
@@ -138,6 +180,29 @@ static TString ComputeIndexItemSuffix(
     std::stringstream ss2;
     ss2 << std::setfill('0') << std::setw(3) << std::right << (found ? idx : INVALID_IDX);
     return ss2.str();
+}
+
+static TString ComputeIndexItemSuffix(
+    TSchemeShard* ss,
+    const TExportInfo& exportInfo,
+    const TExportInfo::TItem& item,
+    bool encrypted)
+{
+    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
+    const auto& parentItem = exportInfo.Items[item.ParentIdx];
+
+    const TPath copiedParentPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, item.ParentIdx), ss);
+    const auto* schemeSnapshot = FindBackupSchemeSnapshot(ss, copiedParentPath);
+
+    NKikimrSchemeOp::TPathDescription sourceDescription;
+    if (!schemeSnapshot || !schemeSnapshot->HasTable()) {
+        const TPath sourceParentPath = TPath::Init(parentItem.SourcePathId, ss);
+        if (sourceParentPath.IsResolved()) {
+            sourceDescription = GetDescription(ss, sourceParentPath.Base()->PathId);
+        }
+    }
+
+    return ComputeIndexItemSuffix(schemeSnapshot, sourceDescription, item.SourcePathName, encrypted);
 }
 
 template <typename TSettings>
@@ -187,36 +252,173 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
-void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
-    auto copiedPath = GetDescription(ss, exportItemPathId);
-    const auto& copiedTable = copiedPath.GetTable();
-
+void FillPartitioning(
+    NKikimrSchemeOp::TTableDescription& desc,
+    const NKikimrSchemeOp::TTableDescription& copiedTable
+) {
     *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
-void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return;
+bool FillPartitioning(
+    TSchemeShard* ss,
+    NKikimrSchemeOp::TTableDescription& desc,
+    const TPathId& exportItemPathId,
+    TString& error
+) {
+    const auto copiedPath = GetDescription(ss, exportItemPathId);
+    const auto& copiedTable = copiedPath.GetTable();
+
+    FillPartitioning(desc, copiedTable);
+
+    for (auto& index : *desc.MutableTableIndexes()) {
+        const NKikimrSchemeOp::TIndexDescription* copiedIndex = nullptr;
+        for (const auto& candidate : copiedTable.GetTableIndexes()) {
+            if (candidate.GetName() == index.GetName()) {
+                copiedIndex = &candidate;
+                break;
+            }
+        }
+
+        if (!copiedIndex) {
+            continue;
+        }
+        if (copiedIndex->IndexImplTableDescriptionsSize() != index.IndexImplTableDescriptionsSize()) {
+            error = TStringBuilder()
+                << "Index implementation table count does not match the consistent copy"
+                << ": index# " << index.GetName()
+                << ", snapshot# " << index.IndexImplTableDescriptionsSize()
+                << ", copy# " << copiedIndex->IndexImplTableDescriptionsSize();
+            return false;
+        }
+
+        const int implTableCount = static_cast<int>(index.IndexImplTableDescriptionsSize());
+        for (int i = 0; i < implTableCount; ++i) {
+            FillPartitioning(
+                *index.MutableIndexImplTableDescriptions(i),
+                copiedIndex->GetIndexImplTableDescriptions(i));
+        }
+    }
+    return true;
+}
+
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TPath& sourcePath,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+) {
+    error.clear();
+    context.TablePath.clear();
+    context.PathDescription.Clear();
+    context.ChangefeedUnderlyingTopics.Clear();
+
+    if (!sourcePath.IsResolved()) {
+        error = "Source table path is not resolved";
+        return false;
+    }
+    if (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved()) {
+        error = "Export table path is not resolved";
+        return false;
     }
 
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
+
     if (sourceDescription.HasTable()) {
-        FillSetValForSequences(
-            ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        FillSetValForSequences(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        if (!FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId, error)) {
+            return false;
+        }
+
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+            auto cdcPathDesc = GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+
             for (const auto& child : cdcPathDesc.GetChildren()) {
                 if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    *task.AddChangefeedUnderlyingTopics() =
+                    *context.ChangefeedUnderlyingTopics.AddChangefeedUnderlyingTopics() =
                         GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
                 }
             }
         }
     }
 
-    task.MutableTable()->CopyFrom(sourceDescription);
+    context.PathDescription.Swap(&sourceDescription);
+    return true;
+}
+
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    const NKikimrSchemeOp::TBackupTask& task,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+) {
+    error.clear();
+    context.TablePath.clear();
+    context.PathDescription.Clear();
+    context.ChangefeedUnderlyingTopics.Clear();
+
+    if (!sourcePathName) {
+        error = "Source table path is empty";
+        return false;
+    }
+    if (!task.HasTable()) {
+        error = "Backup task does not contain a table description";
+        return false;
+    }
+
+    context.PathDescription.CopyFrom(task.GetTable());
+
+    if (context.PathDescription.HasTable()) {
+        if (!exportItemPath.IsResolved()) {
+            error = "Export table path is not resolved";
+            return false;
+        }
+
+        FillSetValForSequences(ss, *context.PathDescription.MutableTable(), exportItemPath.Base()->PathId);
+        if (!FillPartitioning(ss, *context.PathDescription.MutableTable(), exportItemPath.Base()->PathId, error)) {
+            return false;
+        }
+    }
+
+    for (const auto& topic : task.GetChangefeedUnderlyingTopics()) {
+        *context.ChangefeedUnderlyingTopics.AddChangefeedUnderlyingTopics() = topic;
+    }
+    return true;
+}
+
+bool FillBackupTaskTableDescription(
+    TSchemeShard* ss,
+    NKikimrSchemeOp::TBackupTask& task,
+    const TString& sourcePathName,
+    const TPath& sourcePath,
+    const TPath& exportItemPath,
+    bool allowEmptyTableDescription,
+    TString& error
+) {
+    TExportTableSchemeContext context;
+    const auto* schemeSnapshot = FindBackupSchemeSnapshot(ss, exportItemPath);
+
+    if ((!schemeSnapshot || !schemeSnapshot->HasTable()) && !sourcePath.IsResolved() && allowEmptyTableDescription) {
+        error.clear();
+        return true;
+    }
+
+    const bool prepared = schemeSnapshot && schemeSnapshot->HasTable()
+        ? PrepareExportTableSchemeContext(ss, sourcePathName, *schemeSnapshot, exportItemPath, context, error)
+        : PrepareExportTableSchemeContext(ss, sourcePath, exportItemPath, context, error);
+    if (!prepared) {
+        return false;
+    }
+
+    task.MutableTable()->CopyFrom(context.PathDescription);
+    task.ClearChangefeedUnderlyingTopics();
+    for (const auto& topic : context.ChangefeedUnderlyingTopics.GetChangefeedUnderlyingTopics()) {
+        *task.AddChangefeedUnderlyingTopics() = topic;
+    }
+    return true;
 }
 
 template <typename TSettings>
@@ -239,7 +441,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
     const auto& item = exportInfo.Items[itemIdx];
@@ -258,7 +461,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        if (!FillBackupTaskTableDescription(ss, task, item.SourcePathName,
+                TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)),
+                !exportInfo.EnableTableBackupAsSql, error)) {
+            return nullptr;
+        }
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -275,7 +482,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(parentPath.PathString());
         task.SetTableName(childName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
+        if (!FillBackupTaskTableDescription(ss, task, item.SourcePathName,
+                TPath::Init(item.SourcePathId, ss), parentPath.Child(childName),
+                !exportInfo.EnableTableBackupAsSql, error)) {
+            return nullptr;
+        }
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
@@ -366,7 +577,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
-            
+
             // TODO: Parquet format support for FS will be added after public API approval
 
             if (const auto compression = exportSettings.compression()) {

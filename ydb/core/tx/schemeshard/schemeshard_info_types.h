@@ -3586,6 +3586,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         CopyTables = 3,
         Transferring = 4,
         UploadExportMetadata = 5,
+        UploadingCreateTable = 6,
         Done = 240,
         Dropping = 241,
         Dropped = 242,
@@ -3669,6 +3670,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
+    bool EnableTableBackupAsSql = false;
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;

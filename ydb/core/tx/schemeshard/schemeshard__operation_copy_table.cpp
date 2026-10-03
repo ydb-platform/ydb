@@ -2,6 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
+#include "schemeshard_backup_scheme_snapshot.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
@@ -576,6 +577,7 @@ public:
 
         auto schema = Transaction.GetCreateTable();
         const bool isBackup = schema.GetIsBackup();
+        const bool captureBackupSchemeSnapshot = isBackup && schema.GetCaptureBackupSchemeSnapshot();
         const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
         TPath dstPath = parent.Child(name);
@@ -659,6 +661,13 @@ public:
             }
         }
 
+        NKikimrSchemeOp::TBackupTask backupSchemeSnapshot;
+        if (captureBackupSchemeSnapshot && !MakeBackupTableSchemeSnapshot(
+                context.SS, context.Ctx, srcPath.Base()->PathId, backupSchemeSnapshot, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
+        }
+
         const bool omitFollowers = schema.GetOmitFollowers();
 
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
@@ -737,6 +746,10 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        if (captureBackupSchemeSnapshot) {
+            tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
+        }
 
         // Preserve table partitions storage format from source table.
         tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
@@ -840,6 +853,9 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables.Set(newTable->PathId, tableInfo);
+        if (captureBackupSchemeSnapshot) {
+            context.DbChanges.PersistBackupSchemeSnapshot(newTable->PathId);
+        }
 
         if (parent.Base()->HasActiveChanges()) {
             TTxId parentTxId = parent.Base()->PlannedToCreate() ? parent.Base()->CreateTxId : parent.Base()->LastTxId;
@@ -974,6 +990,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetCopyFromTable(copying.GetCopyFromTable());
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
+        if (copying.GetCaptureBackupSchemeSnapshot()) {
+            operation->SetCaptureBackupSchemeSnapshot(true);
+        }
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
         if (cdcPeerOp) {
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);

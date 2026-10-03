@@ -20,6 +20,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/regex/pcre
         library/cpp/svnversion
         ydb/core/testlib/default
+        ydb/core/sys_view/show_create/formatters
         ydb/library/testlib/parquet_helpers
         ydb/core/tx
         ydb/core/tx/columnshard

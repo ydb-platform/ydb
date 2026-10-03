@@ -4495,6 +4495,24 @@ NKikimrSchemeOp::TChangefeedUnderlyingTopics ConvertChangefeedUnderlyingTopics(
     return result;
 }
 
+void TSchemeShard::PersistBackupSchemeSnapshot(
+        NIceDb::TNiceDb& db,
+        TPathId pathId,
+        const NKikimrSchemeOp::TBackupTask& settings)
+{
+    Y_ABORT_UNLESS(settings.HasTable());
+
+    db.Table<Schema::BackupSchemeSnapshots>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::BackupSchemeSnapshots::TableName>(settings.GetTableName()),
+        NIceDb::TUpdate<Schema::BackupSchemeSnapshots::TableDescription>(settings.GetTable().SerializeAsString()),
+        NIceDb::TUpdate<Schema::BackupSchemeSnapshots::ChangefeedUnderlyingTopics>(
+            ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()));
+}
+
+void TSchemeShard::PersistRemoveBackupSchemeSnapshot(NIceDb::TNiceDb& db, TPathId pathId) {
+    db.Table<Schema::BackupSchemeSnapshots>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistBackupSettings(
         NIceDb::TNiceDb& db,
         TPathId pathId,
@@ -4532,6 +4550,7 @@ void TSchemeShard::PersistBackupSettings(
     PERSIST_BACKUP_SETTINGS(FSSettings)
 
 #undef PERSIST_BACKUP_SETTINGS
+
 }
 
 void TSchemeShard::PersistCompletedBackupRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& info, TTableInfo::TBackupRestoreResult::EKind kind) {
@@ -4873,6 +4892,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    PersistRemoveBackupSchemeSnapshot(db, pathId);
 
     db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 
@@ -5148,6 +5168,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    PersistRemoveBackupSchemeSnapshot(db, pathId);
 
     db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 

@@ -36,6 +36,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
         operation->SetIsBackup(descr.GetIsBackup());
         operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
         operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
+        operation->SetCaptureBackupSchemeSnapshot(descr.GetCaptureBackupSchemeSnapshot());
         if (descr.HasCreateSrcCdcStream()) {
             auto* coOp = scheme.MutableCreateCdcStream();
             coOp->CopyFrom(descr.GetCreateSrcCdcStream());
@@ -51,6 +52,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
         operation->SetName(dst.LeafName());
         operation->SetCopyFromTable(src.PathString());
         operation->SetIsBackup(descr.GetIsBackup());
+        operation->SetCaptureBackupSchemeSnapshot(descr.GetCaptureBackupSchemeSnapshot());
     }
 
     return scheme;

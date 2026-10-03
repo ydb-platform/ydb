@@ -1432,7 +1432,7 @@ protected:
                 }
                 return true;
             }
-            catch (TMemoryLimitExceededException) {
+            catch (const TMemoryLimitExceededException&) {
             }
             return false;
         };

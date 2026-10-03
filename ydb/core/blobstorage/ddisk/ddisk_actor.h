@@ -17,6 +17,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/subsystems/metric_system.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -509,6 +510,7 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupCollectMemoryMetrics = 6,
         };
 
         struct TPbOpSnapshot {
@@ -524,6 +526,10 @@ namespace NKikimr::NDDisk {
         static constexpr TDuration PbStatsSnapshotPeriod = TDuration::Seconds(1);
 
         void CollectPbStatsSnapshot();
+
+        TLine<TRawLineFrontend<ui64>> MemoryMetric;
+        void InitMemoryMetrics();
+        void CollectMemoryMetrics();
 
         const bool IsPersistentBufferActor = false;
 

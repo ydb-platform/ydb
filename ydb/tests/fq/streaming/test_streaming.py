@@ -9,7 +9,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -2596,7 +2596,7 @@ FROM `{table_name}`"""
         def total_pq_read_actor_count() -> int:
             return sum(
                 self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-                for node_id in kikimr.cluster.nodes
+                for node_id in counter_nodes(kikimr.cluster)
             )
 
         name = f"test_restart_after_part_inc_{local_topics!s:.1}"

@@ -2181,8 +2181,9 @@ void PatchQueryPhysicalGraphForRescaling(
 
     YDB_LOG_INFO("Computing PQ source task counts for rescaling");
 
-    // Compute new task count per PQ source stage:
-    // same formula as CountReadTasksFromSource with scheduledTaskCount == 0.
+    // Use the default PQ partition grouping and cap parallelism by the number
+    // of usable threads across nodes, as for PQ sources without task count hints.
+    const ui64 tasksByThreads = static_cast<ui64>(TStagePredictor::GetUsableThreads()) * resourceSnapshot.size();
     THashMap<TStageKey, ui32> newTaskCounts;
     for (const auto& sk : pqSourceStages) {
 
@@ -2195,7 +2196,9 @@ void PatchQueryPhysicalGraphForRescaling(
             continue; // No partitions → skip
         }
 
-        ui32 newCount = std::min(partitions, (ui32)resourceSnapshot.size() * 2);
+        const ui64 tasksByPartitions = NYql::NDq::GetExpectedTopicReadTasks(
+            partitions, /* maxPartitions */ 0, /* groupPartitions */ true);
+        const ui32 newCount = std::min(tasksByPartitions, tasksByThreads);
 
         // Only scale up: preserve existing tasks and their checkpoint identities.
         auto it2 = stageToTaskIndices.find(sk);

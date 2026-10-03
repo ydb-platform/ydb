@@ -223,6 +223,19 @@ namespace NKikimr::NBlobDepot {
         return agent;
     }
 
+    TBlobDepot::TAgent *TBlobDepot::FindAgent(const TActorId& pipeServerId) {
+        const auto it = PipeServers.find(pipeServerId);
+        if (it == PipeServers.end() || !it->second.NodeId) {
+            return nullptr;
+        }
+        const auto agentIt = Agents.find(*it->second.NodeId);
+        if (agentIt == Agents.end()) {
+            return nullptr;
+        }
+        TAgent& agent = agentIt->second;
+        return agent.Connection && agent.Connection->PipeServerId == pipeServerId ? &agent : nullptr;
+    }
+
     void TBlobDepot::ResetAgent(TAgent& agent) {
         for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
             if (agentGivenIdRange.IsEmpty()) {

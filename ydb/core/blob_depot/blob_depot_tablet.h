@@ -155,6 +155,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
+        TAgent *FindAgent(const TActorId& pipeServerId);
         void ResetAgent(TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);

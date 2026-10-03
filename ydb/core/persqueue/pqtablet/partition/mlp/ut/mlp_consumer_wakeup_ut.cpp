@@ -1,4 +1,5 @@
 #include "mlp.h"
+#include "mlp_message_enricher.h"
 #include "mlp_storage.h"
 
 #include <ydb/core/base/appdata.h>
@@ -90,19 +91,66 @@ THolder<TEvPersQueue::TEvResponse> MakeFetchResponse(ui64 firstOffset, ui64 coun
     return response;
 }
 
-class TIgnorePipeCacheActor : public TActorBootstrapped<TIgnorePipeCacheActor> {
+struct TPipeCacheState {
+    bool HoldForwards = false;
+    TActorId Actor;
+};
+
+// Answers enricher reads so the consumer can wait for TEvMLPEnricherFinished.
+// HoldForwards keeps the read until TEvWakeup, which is how the queue-gate test
+// observes that processing does not continue while the enricher is in flight.
+class TPipeCacheStub : public TActorBootstrapped<TPipeCacheStub> {
 public:
+    explicit TPipeCacheStub(TPipeCacheState* state)
+        : State(state)
+    {
+    }
+
     void Bootstrap() {
+        State->Actor = SelfId();
         Become(&TThis::StateWork);
     }
 
+    void ReplyForward(TEvPipeCache::TEvForward::TPtr& ev) {
+        ui64 offset = 0;
+        if (ev->Get()->Ev && ev->Get()->Ev->Type() == TEvPersQueue::TEvRequest::EventType) {
+            const auto* request = static_cast<const TEvPersQueue::TEvRequest*>(ev->Get()->Ev.Get());
+            if (request->Record.GetPartitionRequest().HasCmdRead()) {
+                offset = request->Record.GetPartitionRequest().GetCmdRead().GetOffset();
+            }
+        }
+        Send(ev->Sender, MakeFetchResponse(offset, 1, TInstant::MilliSeconds(1)).Release());
+    }
+
+    void HandleForward(TEvPipeCache::TEvForward::TPtr& ev) {
+        if (State->HoldForwards) {
+            Held.push_back(std::move(ev));
+            return;
+        }
+        ReplyForward(ev);
+    }
+
+    void ReleaseHeld() {
+        State->HoldForwards = false;
+        auto held = std::exchange(Held, {});
+        for (auto& ev : held) {
+            ReplyForward(ev);
+        }
+    }
+
     STRICT_STFUNC(StateWork,
-        IgnoreFunc(TEvPipeCache::TEvForward);
+        hFunc(TEvPipeCache::TEvForward, HandleForward);
         IgnoreFunc(TEvPipeCache::TEvUnlink);
+        sFunc(TEvents::TEvWakeup, ReleaseHeld);
     )
+
+private:
+    TPipeCacheState* State;
+    std::deque<TEvPipeCache::TEvForward::TPtr> Held;
 };
 
 struct TConsumerEnv {
+    TPipeCacheState PipeState;
     TTestBasicRuntime Runtime;
     TActorId Tablet;
     TActorId Partition;
@@ -111,6 +159,8 @@ struct TConsumerEnv {
     NMonitoring::TDynamicCounterPtr Counters;
     ui32 RegularWakeupsAllowed = 0;
     bool DropProcessingWakeups = false;
+    bool CountKvRequests = false;
+    ui32 KvRequestsSeen = 0;
 
     TConsumerEnv()
         : Runtime(1, false)
@@ -120,7 +170,7 @@ struct TConsumerEnv {
         Runtime.SetScheduledLimit(10000);
         Runtime.SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
 
-        auto pipeCache = Runtime.Register(new TIgnorePipeCacheActor());
+        auto pipeCache = Runtime.Register(new TPipeCacheStub(&PipeState));
         Runtime.EnableScheduleForActor(pipeCache);
         Runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCache);
 
@@ -129,10 +179,18 @@ struct TConsumerEnv {
         Reader = Runtime.AllocateEdgeActor();
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (CountKvRequests && ev->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType) {
+                ++KvRequestsSeen;
+            }
             if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
                 const auto* wakeup = ev->Get<TEvents::TEvWakeup>();
                 if (!wakeup) {
                     return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                // Collapsed test time would fire the enricher deadline as soon as the
+                // queue is idle. These tests hold that read on purpose.
+                if (wakeup->Tag == MessageEnricherDeadlineWakeupTag) {
+                    return TTestActorRuntime::EEventAction::DROP;
                 }
                 if (wakeup->Tag == kWakeupRegular) {
                     if (RegularWakeupsAllowed == 0) {
@@ -234,6 +292,22 @@ struct TConsumerEnv {
             new TEvPQ::TEvMLPUnlockRequest(kTopic, kConsumer, 0, {offset})));
     }
 
+    void ReleaseEnricher() {
+        PipeState.HoldForwards = false;
+        Runtime.Send(new IEventHandle(PipeState.Actor, Consumer, new TEvents::TEvWakeup()));
+        Pump();
+    }
+
+    void AssertNoPersistWhileEnricherHeld(const char* message) {
+        KvRequestsSeen = 0;
+        CountKvRequests = true;
+        Pump();
+        Runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        Pump();
+        UNIT_ASSERT_VALUES_EQUAL_C(KvRequestsSeen, 0u, message);
+        CountKvRequests = false;
+    }
+
     void SendWakeup(ui64 tag) {
         Runtime.Send(new IEventHandle(Consumer, Consumer, new TEvents::TEvWakeup(tag)), 0, true);
     }
@@ -258,7 +332,7 @@ struct TConsumerEnv {
                 return;
             }
         }
-        // Persist() compact drops a committed prefix, so a successful commit may
+        // Compact drops a committed prefix, so a successful commit may
         // disappear from the in-memory iterator.
         if (status == TStorage::EMessageStatus::Committed) {
             return;
@@ -459,6 +533,96 @@ Y_UNIT_TEST(RegularDuringWriteDoesNotDropQueuedCommit) {
     env.ReplyKv(*lockKv);
 
     env.AssertQueueStillProcessesAfterCommit(0, 1);
+}
+
+Y_UNIT_TEST(QueueWaitsUntilEnricherFinishes) {
+    TConsumerEnv env;
+    env.FetchMessages(2);
+    env.PipeState.HoldForwards = true;
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.ReplyKvWrite();
+
+    env.SendCommit(0);
+    env.AssertNoPersistWhileEnricherHeld("commit must wait until the enricher finishes");
+    env.AssertStatus(0, TStorage::EMessageStatus::Locked);
+
+    env.ReleaseEnricher();
+    env.AssertPersisted(0, TStorage::EMessageStatus::Committed,
+        "commit is applied after the enricher finishes");
+}
+
+Y_UNIT_TEST(UnlockWaitsUntilEnricherFinishes) {
+    TConsumerEnv env;
+    env.FetchOneMessage();
+    env.PipeState.HoldForwards = true;
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.ReplyKvWrite();
+
+    env.SendUnlock(0);
+    env.AssertNoPersistWhileEnricherHeld("unlock must wait until the enricher finishes");
+    env.AssertStatus(0, TStorage::EMessageStatus::Locked);
+
+    env.ReleaseEnricher();
+    env.AssertPersisted(0, TStorage::EMessageStatus::Unprocessed,
+        "unlock is applied after the enricher finishes");
+}
+
+Y_UNIT_TEST(NextReadWaitsUntilEnricherFinishes) {
+    TConsumerEnv env;
+    env.FetchMessages(2);
+    env.PipeState.HoldForwards = true;
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.ReplyKvWrite();
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.AssertNoPersistWhileEnricherHeld("the next read must wait until the enricher finishes");
+    env.AssertStatus(0, TStorage::EMessageStatus::Locked);
+    env.AssertStatus(1, TStorage::EMessageStatus::Unprocessed);
+
+    env.ReleaseEnricher();
+    env.AssertPersisted(1, TStorage::EMessageStatus::Locked,
+        "the next read locks a message after the enricher finishes");
+}
+
+Y_UNIT_TEST(VisibilityTimeoutWaitsForEnricher) {
+    TConsumerEnv env;
+    env.FetchOneMessage();
+    env.PipeState.HoldForwards = true;
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(1));
+    env.ReplyKvWrite();
+
+    env.Runtime.SimulateSleep(TDuration::Seconds(3));
+    env.RegularWakeupsAllowed = 1;
+    env.KvRequestsSeen = 0;
+    env.CountKvRequests = true;
+    env.SendWakeup(kWakeupRegular);
+    env.Pump();
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(200));
+    env.Pump();
+    UNIT_ASSERT_VALUES_EQUAL_C(env.KvRequestsSeen, 0u, "expired visibility must wait until the enricher finishes");
+    env.CountKvRequests = false;
+    env.AssertStatus(0, TStorage::EMessageStatus::Locked);
+
+    env.ReleaseEnricher();
+    env.AssertPersisted(0, TStorage::EMessageStatus::Unprocessed,
+        "expired visibility is applied after the enricher finishes");
+}
+
+Y_UNIT_TEST(EmptyReadDoesNotBlockQueue) {
+    TConsumerEnv env;
+    env.PipeState.HoldForwards = true;
+
+    env.SendRead(TDuration::Zero(), TDuration::Seconds(30));
+    env.Pump();
+
+    env.FetchOneMessage();
+    env.SendCommit(0);
+    env.AssertPersisted(0, TStorage::EMessageStatus::Committed,
+        "an empty read must not wait for an enricher");
 }
 
 Y_UNIT_TEST(StaleProcessingInWriteThenKvPersistsCommit) {

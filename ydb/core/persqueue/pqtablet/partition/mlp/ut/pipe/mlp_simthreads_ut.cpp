@@ -41,13 +41,14 @@ Y_UNIT_TEST(PipeBreakOnFetchReturnsShutdown) {
     auto& runtime = setup->GetRuntime();
     const ui64 tabletId = GetTabletId(setup, TString(kDatabase), TString(kTopic), 0);
     const auto edge = runtime.AllocateEdgeActor();
+    const auto parent = runtime.AllocateEdgeActor();
 
     TPipeBreakGuard pipeBreak(runtime, { TEvPersQueue::TEvRequest::EventType });
 
     std::deque<TReadResult> replies;
     replies.push_back(TReadResult(edge, 42, MakeReadMessages({0})));
     const auto enricherId = runtime.Register(
-        CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies)));
+        CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies), parent));
     runtime.EnableScheduleForActor(enricherId);
 
     auto error = runtime.GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(edge, TDuration::Seconds(30));
@@ -56,6 +57,9 @@ Y_UNIT_TEST(PipeBreakOnFetchReturnsShutdown) {
     UNIT_ASSERT_VALUES_EQUAL(error->Get()->Record.GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT(error->Get()->Record.GetErrorMessage().Contains("Shutdown"));
     UNIT_ASSERT_GE(pipeBreak.BrokenCount(), 1u);
+
+    auto finished = runtime.GrabEdgeEvent<TEvPQ::TEvMLPEnricherFinished>(parent, TDuration::Seconds(5));
+    UNIT_ASSERT(finished);
 }
 
 Y_UNIT_TEST(PipeBreakThenSecondEnricherSucceeds) {
@@ -71,29 +75,35 @@ Y_UNIT_TEST(PipeBreakThenSecondEnricherSucceeds) {
 
     {
         const auto edge = runtime.AllocateEdgeActor();
+        const auto parent = runtime.AllocateEdgeActor();
         TPipeBreakGuard pipeBreak(runtime, { TEvPersQueue::TEvRequest::EventType });
         std::deque<TReadResult> replies;
         replies.push_back(TReadResult(edge, 1, MakeReadMessages({0})));
         const auto enricherId = runtime.Register(
-            CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies)));
+            CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies), parent));
         runtime.EnableScheduleForActor(enricherId);
         auto error = runtime.GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(error);
         UNIT_ASSERT_GE(pipeBreak.BrokenCount(), 1u);
+        auto finished = runtime.GrabEdgeEvent<TEvPQ::TEvMLPEnricherFinished>(parent, TDuration::Seconds(5));
+        UNIT_ASSERT(finished);
     }
 
     {
         const auto edge = runtime.AllocateEdgeActor();
+        const auto parent = runtime.AllocateEdgeActor();
         std::deque<TReadResult> replies;
         replies.push_back(TReadResult(edge, 2, MakeReadMessages({0})));
         const auto enricherId = runtime.Register(
-            CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies)));
+            CreateMessageEnricher(tabletId, 0, TString(kConsumer), std::move(replies), parent));
         runtime.EnableScheduleForActor(enricherId);
         auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 2);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.MessageSize(), 1);
         UNIT_ASSERT(response->Get()->Record.GetMessage(0).GetData().Contains("after-break"));
+        auto finished = runtime.GrabEdgeEvent<TEvPQ::TEvMLPEnricherFinished>(parent, TDuration::Seconds(5));
+        UNIT_ASSERT(finished);
     }
 }
 

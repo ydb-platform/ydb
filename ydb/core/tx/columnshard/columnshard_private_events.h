@@ -95,10 +95,23 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
+        EvContinueUnusedHistory,
+        EvUnusedHistoryPortionsReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvContinueUnusedHistory: NActors::TEventLocal<TEvContinueUnusedHistory, EvContinueUnusedHistory> {};
+
+    struct TEvUnusedHistoryPortionsReady: NActors::TEventLocal<TEvUnusedHistoryPortionsReady, EvUnusedHistoryPortionsReady> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+
+        explicit TEvUnusedHistoryPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+            : Portions(std::move(portions))
+        {
+        }
+    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

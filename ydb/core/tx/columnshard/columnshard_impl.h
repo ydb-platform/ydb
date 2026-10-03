@@ -1,6 +1,7 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
+#include "columnshard_cut_history.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -10,6 +11,7 @@
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
+#include "common/blob.h"
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
@@ -214,6 +216,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
+    friend class TTxSaveCutHistoryRequests;
+    friend class TUnusedHistoryResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -600,6 +604,15 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    std::optional<TUnusedHistoryScan> UnusedHistoryScan;
+    void InitUnusedHistoryScan();
+    void StartUnusedHistoryScan(const TActorContext& ctx);
+    void AbortUnusedHistoryScan();
+    void FinishUnusedHistoryBatch(const NOlap::TDataAccessorsResult& result);
+    void TryCutHistory(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinueUnusedHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvUnusedHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
@@ -625,6 +638,7 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
+    void ResumePostponedCutHistory(const TActorContext& ctx);
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

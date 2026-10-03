@@ -84,6 +84,7 @@ class TestTpch1000(TpchSuiteBase):
         'lineitem': 5999989709,
     }
     scale: int = 1000
+    iterations: int = 5
     timeout = max(TpchSuiteBase.timeout, 3600.)
 
 

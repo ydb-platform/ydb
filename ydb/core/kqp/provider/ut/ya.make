@@ -15,7 +15,8 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/resource_pools
     yql/essentials/ast
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
     yql/essentials/sql/v1/translation
 )
 

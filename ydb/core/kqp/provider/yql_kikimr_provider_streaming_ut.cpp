@@ -47,11 +47,11 @@ struct TStreamingAggregationTypeAnnTest {
 
     TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)",
         TStringBuf itemType = "(StructType '('key (DataType 'String)))",
-        TStringBuf save = "state", TStringBuf load = "state")
+        TStringBuf save = "state", TStringBuf load = "state", TStringBuf init = "(Int64 '0)")
     {
         const TString program = TStringBuilder() << R"((
             (return (AggregationTraits )" << itemType << R"(
-                (lambda '(item) (Int64 '0))
+                (lambda '(item) )" << init << R"()
                 (lambda '(item state) state)
                 (lambda '(state) )" << save << R"()
                 (lambda '(state) )" << load << R"()
@@ -600,6 +600,180 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             if (variant != 0) {
                 UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), expectedErrors[variant]);
             }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationOutputStateKeyTypes) {
+        struct TCase {
+            TString Type;
+            bool Supported;
+        };
+        TVector<TCase> cases;
+        for (const TStringBuf name : {"Bool", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Int64", "Uint64",
+                "Float", "Double", "String", "Utf8", "Yson", "Json", "JsonDocument", "Uuid", "DyNumber",
+                "Date", "Datetime", "Timestamp", "Interval", "Date32", "Datetime64", "Timestamp64", "Interval64",
+                "TzDate", "TzDatetime", "TzTimestamp"}) {
+            cases.push_back({TStringBuilder() << "(DataType '" << name << ")", true});
+        }
+        for (const TStringBuf type : {
+                "(DataType 'Decimal '22 '9)",
+                "(OptionalType (DataType 'Int64))",
+                "(ListType (DataType 'Utf8))",
+                "(TupleType)",
+                "(TupleType (DataType 'String) (DataType 'Uint64))",
+                "(DictType (DataType 'String) (DataType 'Uint64))",
+                "(OptionalType (ListType (TupleType (DataType 'String) (DictType (DataType 'Int64) (OptionalType (DataType 'Decimal '22 '9))))))",
+                "(VoidType)", "(NullType)", "(EmptyListType)", "(EmptyDictType)"}) {
+            cases.push_back({TString(type), true});
+        }
+        for (const TStringBuf type : {
+                "(PgType 'int4)",
+                "(StructType '('member (DataType 'String)))",
+                "(TaggedType (DataType 'String) 'tag)",
+                "(VariantType (TupleType (DataType 'String) (DataType 'Int64)))",
+                "(VariantType (StructType '('member (DataType 'String))))",
+                "(DataType 'TzDate32)", "(DataType 'TzDatetime64)", "(DataType 'TzTimestamp64)"}) {
+            // Every container must validate its contents, including both sides of a dict.
+            for (const TStringBuf wrapper : {"", "OptionalType", "ListType", "TupleType",
+                    "DictType (DataType 'String)", "DictType"}) {
+                const TString wrapped = wrapper.empty() ? TString(type) : TStringBuilder()
+                    << '(' << wrapper << ' ' << type << (wrapper == "DictType" ? " (DataType 'String)" : "") << ')';
+                cases.push_back({wrapped, false});
+            }
+        }
+        cases.push_back({"(OptionalType (ListType (TupleType (DataType 'String) (DictType (DataType 'Int64) (OptionalType (PgType 'int4))))))", false});
+
+        for (const auto& testCase : cases) {
+            for (const TStringBuf stateSetting : {"", "state_table_path", "output_state_table"}) {
+                TStreamingAggregationTypeAnnTest test;
+                test.Config->FeatureFlags.SetEnableStreamingAggregationAdvanced(true);
+                const auto typeNode = ParseAndAnnotate(TStringBuilder() << "((return " << testCase.Type << "))",
+                    test.Ctx, false, false, test.Types);
+                UNIT_ASSERT_C(typeNode, testCase.Type << ": " << test.Ctx.IssueManager.GetIssues().ToString());
+                const auto* const keyType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                TExprNodeList settings;
+                if (stateSetting == "output_state_table") {
+                    settings.push_back(test.List({test.Atom(stateSetting), test.List({test.Atom("/Root/result"), test.List({
+                        test.List({test.Atom("key"), test.Atom("key")}),
+                        test.List({test.Atom("typed_key"), test.Atom("typed_key")})})})}));
+                } else if (!stateSetting.empty()) {
+                    settings.push_back(test.List({test.Atom(stateSetting), test.Atom("/Root/state")}));
+                }
+                auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key"), test.Atom("typed_key")}, {}, std::move(settings));
+                const auto* const rowType = test.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+                    test.Ctx.MakeType<TItemExprType>("key", test.Ctx.MakeType<TDataExprType>(EDataSlot::String)),
+                    test.Ctx.MakeType<TItemExprType>("typed_key", keyType)});
+                node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(rowType));
+
+                TStringBuf expectedError;
+                if (!keyType->IsHashable() || !keyType->IsEquatable()) {
+                    // The allowlist does not relax existing grouping key requirements (e.g. Json/Yson).
+                    expectedError = "Expected hashable and equatable type for key column: typed_key";
+                } else if (!testCase.Supported && stateSetting == "output_state_table") {
+                    expectedError = "Unsupported key type for streaming aggregation output state table, column: typed_key";
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), expectedError.empty()
+                    ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
+                    testCase.Type << ", setting: " << stateSetting << ": " << test.Ctx.IssueManager.GetIssues().ToString());
+                if (!expectedError.empty()) {
+                    UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), expectedError);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateValueTypes, DisableCheckpoints, TiedTable) {
+        struct TCase {
+            TString Type;
+            bool Supported;
+        };
+        TVector<TCase> cases;
+        for (const TStringBuf name : {"Bool", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Int64", "Uint64",
+                "Float", "Double", "String", "Utf8", "Yson", "Json", "JsonDocument", "Uuid", "DyNumber",
+                "Date", "Datetime", "Timestamp", "Interval", "Date32", "Datetime64", "Timestamp64", "Interval64",
+                "TzDate", "TzDatetime", "TzTimestamp", "TzDate32", "TzDatetime64", "TzTimestamp64"}) {
+            cases.push_back({TStringBuilder() << "(DataType '" << name << ")", true});
+        }
+        for (const TStringBuf type : {
+                "(DataType 'Decimal '22 '9)", "(PgType 'int4)", "(PgType '_int4)",
+                "(OptionalType (DataType 'Json))", "(ListType (DataType 'JsonDocument))",
+                "(TupleType)", "(TupleType (DataType 'String) (DataType 'Uint64))",
+                "(StructType)", "(StructType '('member (DataType 'String)))",
+                "(DictType (DataType 'String) (DataType 'Uint64))",
+                "(TaggedType (DataType 'String) 'tag)",
+                "(VariantType (TupleType (DataType 'String) (DataType 'Int64)))",
+                "(VariantType (StructType '('member (DataType 'String))))",
+                "(OptionalType (ListType (StructType '('member (TaggedType (DictType (DataType 'String) (PgType 'int4)) 'tag)))))",
+                "(VoidType)", "(NullType)", "(EmptyListType)", "(EmptyDictType)"}) {
+            cases.push_back({TString(type), true});
+        }
+        for (const TStringBuf type : {
+                "(ResourceType 'TestState)", "(StreamType (DataType 'Int64))", "(FlowType (DataType 'Int64))",
+                "(CallableType '() '((DataType 'Int64)))", "(BlockType (DataType 'Int64))", "(ScalarType (DataType 'Int64))",
+                "(MultiType (DataType 'Int64))", "(LinearType (DataType 'Int64))", "(DynamicLinearType (DataType 'Int64))",
+                "(OptionalType (ResourceType 'TestState))", "(ListType (ResourceType 'TestState))",
+                "(TupleType (DataType 'String) (ResourceType 'TestState))",
+                "(StructType '('first (DataType 'String)) '('last (ResourceType 'TestState)))",
+                "(DictType (DataType 'String) (ResourceType 'TestState))",
+                "(DictType (MultiType (DataType 'Int64)) (DataType 'String))",
+                "(TaggedType (ResourceType 'TestState) 'tag)",
+                "(VariantType (TupleType (DataType 'String) (ResourceType 'TestState)))",
+                "(VariantType (StructType '('first (DataType 'String)) '('last (ResourceType 'TestState))))",
+                "(OptionalType (ListType (StructType '('member (TaggedType (DictType (DataType 'String) (MultiType (DataType 'Int64))) 'tag)))))"}) {
+            cases.push_back({TString(type), false});
+        }
+
+        for (const auto& testCase : cases) {
+            TStreamingAggregationTypeAnnTest test;
+            test.Config->DisableCheckpoints = DisableCheckpoints;
+            test.Types.LangVer = MakeLangVersion(2025, 4);
+            const auto traits = test.Traits("state", "(Null)", "(StructType '('key (DataType 'String)))",
+                "state", "state", TStringBuilder() << "(InstanceOf " << testCase.Type << ')');
+            // Projection must not hide a saved field that the runtime exports.
+            TExprNodeList settings = {test.List({test.Atom("output_columns"), test.List({test.Atom("key")})})};
+            if constexpr (TiedTable) {
+                settings.push_back(test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})}));
+            }
+            auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+                {test.List({test.Atom("value"), traits})}, std::move(settings));
+            TStringBuf expectedError;
+            if (TiedTable && !testCase.Supported) {
+                expectedError = "Unsupported saved state type for streaming aggregation output state table, column: value";
+            } else if (!DisableCheckpoints && !traits->Child(NNodes::TCoAggregationTraits::idx_SaveHandler)->GetTypeAnn()->IsPersistable()) {
+                expectedError = "Expected persistable data, but got:";
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), expectedError.empty()
+                ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
+                testCase.Type << ": " << test.Ctx.IssueManager.GetIssues().ToString());
+            if (!expectedError.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), expectedError);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateSavedTypeNormalization, ResourceState, IdentityFinish) {
+        TStreamingAggregationTypeAnnTest test;
+        test.Config->DisableCheckpoints = true;
+        const TStringBuf resource = "(InstanceOf (ResourceType 'TestState))";
+        const TStringBuf integer = "(Int64 '0)";
+        const TStringBuf init = ResourceState ? resource : integer;
+        const TStringBuf save = ResourceState ? integer : resource;
+        const auto traits = test.Traits(IdentityFinish ? "state" : save, "(Null)",
+            "(StructType '('key (DataType 'String)))", save, init, init);
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+            {test.List({test.Atom("value"), traits})}, {
+                test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})})});
+        const bool supported = IdentityFinish ? !ResourceState : ResourceState;
+        UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), supported
+            ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        if (!supported) {
+            UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
+                "Unsupported saved state type for streaming aggregation output state table, column: value");
         }
     }
 

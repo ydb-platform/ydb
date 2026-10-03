@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/kqp/common/events/query.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -29,9 +30,11 @@ class TStateTableQueryProxy final : public TActorBootstrapped<TStateTableQueryPr
 public:
     using THandler = std::function<bool(const TEvKqp::TEvQueryRequest&, TEvKqp::TEvQueryResponse&)>;
 
-    TStateTableQueryProxy(const TActorId& proxy, THandler handler)
+    TStateTableQueryProxy(const TActorId& proxy, THandler handler, TString tablePath, bool holdRequests)
         : Proxy(proxy)
         , Handler(std::move(handler))
+        , TablePath(std::move(tablePath))
+        , HoldRequests(holdRequests)
     {}
 
     void Bootstrap() {
@@ -43,13 +46,25 @@ public:
             PassAway();
             return;
         }
+        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+            HoldRequests = false;
+            for (auto& pending : Pending) {
+                Send(pending->Forward(Proxy));
+            }
+            Pending.clear();
+            return;
+        }
         if (ev->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType) {
             const auto& request = *ev->Get<TEvKqp::TEvQueryRequest>();
-            if (request.GetQuery().Contains("DECLARE $key AS String;")
-                && request.GetQuery().Contains("`/Root/aggregationState`")) {
+            if (request.GetQuery().Contains("DECLARE $key")
+                && request.GetQuery().Contains(TStringBuilder() << '`' << TablePath << '`')) {
                 auto response = MakeHolder<TEvKqp::TEvQueryResponse>(MakeIntrusive<NActors::TProtoArenaHolder>());
                 if (Handler(request, *response)) {
                     Send(ev->Sender, response.Release(), 0, ev->Cookie);
+                    return;
+                }
+                if (HoldRequests) {
+                    Pending.emplace_back(ev.Release());
                     return;
                 }
             }
@@ -60,16 +75,20 @@ public:
 private:
     const TActorId Proxy;
     const THandler Handler;
+    const TString TablePath;
+    bool HoldRequests;
+    TVector<TAutoPtr<IEventHandle>> Pending;
 };
 
 // The fixture uses real actor threads, so intercept requests through the local service.
 class TScopedStateTableQueryProxy {
 public:
-    TScopedStateTableQueryProxy(TTestActorRuntime& runtime, TStateTableQueryProxy::THandler handler)
+    TScopedStateTableQueryProxy(TTestActorRuntime& runtime, TStateTableQueryProxy::THandler handler,
+                               TString tablePath = "/Root/aggregationState", bool holdRequests = false)
         : ActorSystem(*runtime.GetActorSystem(0))
         , ServiceId(MakeKqpProxyID(runtime.GetNodeId()))
         , OriginalProxy(ActorSystem.LookupLocalService(ServiceId))
-        , Proxy(ActorSystem.Register(new TStateTableQueryProxy(OriginalProxy, std::move(handler))))
+        , Proxy(ActorSystem.Register(new TStateTableQueryProxy(OriginalProxy, std::move(handler), std::move(tablePath), holdRequests)))
     {
         ActorSystem.RegisterLocalService(ServiceId, Proxy);
     }
@@ -77,6 +96,10 @@ public:
     ~TScopedStateTableQueryProxy() {
         ActorSystem.RegisterLocalService(ServiceId, OriginalProxy);
         ActorSystem.Send(Proxy, new TEvents::TEvPoison());
+    }
+
+    void Resume() {
+        ActorSystem.Send(Proxy, new TEvents::TEvWakeup());
     }
 
 private:
@@ -669,7 +692,7 @@ public:
         readSession->AddDataReceivedEvent(1, R"({"key":"b","value":"y"})");
         NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "oversized aggregation state error", [&](TString& error) {
             error = GetStreamingQueryIssues("aggregation");
-            return error.Contains("Streaming aggregation UPSERT failed for table /Root/aggregationState")
+            return error.Contains("Streaming aggregation UPSERT failed for table `/Root/aggregationState`")
                 && error.Contains(largeKey ? "Row key size of" : "Row cell size of")
                 && error.Contains(ToString(limit));
         });
@@ -1035,7 +1058,7 @@ public:
         const TString operation = writeFailure ? "UPSERT" : "SELECT";
         NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "state table failure", [&](TString& error) {
             error = GetStreamingQueryIssues("aggregation");
-            return error.Contains(TStringBuilder() << "Streaming aggregation " << operation << " failed for table /Root/aggregationState");
+            return error.Contains(TStringBuilder() << "Streaming aggregation " << operation << " failed for table `/Root/aggregationState`");
         });
         ExecQuery("DROP STREAMING QUERY aggregation;");
     }
@@ -2113,7 +2136,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         UNIT_ASSERT_C(!result.IsSuccess(), "State table access must use the query user's permissions");
         const TString operation = WriteFailure ? "UPSERT" : "SELECT";
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            TStringBuilder() << "Streaming aggregation " << operation << " failed for table /Root/aggregationState");
+            TStringBuilder() << "Streaming aggregation " << operation << " failed for table `/Root/aggregationState`");
     }
 
     Y_UNIT_TEST_TWIN_F(StateTableDoesNotRetryUnauthorized, WriteFailure, TStreamingAggregationTestFixture) {
@@ -2172,5 +2195,226 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         CheckStateTableFailure(WriteFailure);
     }
 } // Y_UNIT_TEST_SUITE(KqpStreamingAggregation)
+
+namespace {
+
+class TOutputTableAggregationTestFixture : public TStreamingAggregationTestFixture {
+public:
+    TOutputTableAggregationTestFixture()
+        : TStreamingAggregationTestFixture(true, false)
+        , OriginalWriteSettings(GetWriteActorSettings())
+    {
+        // Flush each output batch without requiring a checkpoint to flush the table sink.
+        auto& config = *AggregationAppConfig.MutableTableServiceConfig();
+        config.SetEnableStreamWrite(true);
+        config.MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(1);
+    }
+
+    ~TOutputTableAggregationTestFixture() override {
+        SetWriteActorSettings(MakeIntrusive<TWriteActorSettings>(OriginalWriteSettings));
+    }
+
+    void FinishOutputAggregation() {
+        // Metadata cleanup uses non-streaming writes and needs the normal buffer limit.
+        SetWriteActorSettings(MakeIntrusive<TWriteActorSettings>(OriginalWriteSettings));
+        FinishAggregation();
+    }
+
+    void PrepareOutputTable(const TString& ddl) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        InputTopic = TStringBuilder() << "outputStateInput_" << CreateGuidAsString();
+        CreateTopic(InputTopic);
+        CreatePqSource("source");
+        ExecQuery(ddl);
+    }
+
+    void StartOutputAggregation(const TString& body) {
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY aggregation AS DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                {}
+            END DO;
+        )", body));
+        WaitStreamingQueryStatus("aggregation");
+        ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
+            UNIT_ASSERT_STRING_CONTAINS(ast, "output_state_table");
+            UNIT_ASSERT_STRING_CONTAINS(ast, "/Root/aggregateResult");
+        });
+    }
+
+    void WaitOutputRows(const TString& query, const std::vector<std::string>& expected) {
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "output table aggregation results", [&](TString& error) {
+            const auto results = ExecQuery(query);
+            TResultSetParser rows(results.at(0));
+            std::vector<std::string> actual;
+            error = "Unexpected output table contents:";
+            while (rows.TryNextRow()) {
+                actual.push_back(rows.ColumnParser("Data").GetString());
+                error += TStringBuilder() << ' ' << actual.back();
+            }
+            return actual == expected;
+        });
+    }
+
+private:
+    const TWriteActorSettings OriginalWriteSettings;
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
+    Y_UNIT_TEST_F(RestoresRowsAndCachesInterleavedKeys, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (
+                renamed_key String, subkey Uint64 NOT NULL, count Uint64, total Int64,
+                PRIMARY KEY (subkey, renamed_key)
+            );
+        )");
+        ExecQuery(R"(
+            UPSERT INTO aggregateResult (renamed_key, subkey, count, total) VALUES
+                ("a", 1u, 10u, 100l), (NULL, 2u, 20u, NULL);
+        )");
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads](const auto&, auto&) {
+            ++*reads;
+            return false;
+        }, "/Root/aggregateResult", /* holdRequests */ true);
+        StartOutputAggregation(fmt::format(R"(
+            $agg = SELECT key, part, COUNT(*) AS n, SUM(value) AS s
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String, part Uint64 NOT NULL, value Int64))
+            GROUP BY key, part;
+            UPSERT INTO aggregateResult
+            SELECT key AS renamed_key, part AS subkey, Just(n) AS count, s AS total FROM $agg;
+        )", "input"_a = InputTopic));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","part":1,"value":5})", {}},
+            {1, R"({"key":"b","part":1,"value":7})", {}},
+            {2, R"({"key":null,"part":2,"value":3})", {}},
+            {3, R"({"key":"a","part":1,"value":2})", {}},
+            {4, R"({"key":"b","part":1,"value":4})", {}},
+            {5, R"({"key":null,"part":2,"value":6})", {}},
+        });
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "first output state lookup", [&](TString&) {
+            return reads->load() > 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 1);
+        WaitOutputRows(R"(
+            SELECT Unwrap(Coalesce(renamed_key, "null") || ":" || CAST(count AS String)) AS Data
+            FROM aggregateResult ORDER BY subkey, renamed_key;
+        )", {"a:10", "null:20"});
+        // The pending lookup must block consumption and output until its response wakes the computation.
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 1);
+        proxy.Resume();
+        const TString resultQuery = R"(
+            SELECT Unwrap(Coalesce(renamed_key, "null") || ":" || CAST(count AS String)
+                || ":" || Coalesce(CAST(total AS String), "null")) AS Data
+            FROM aggregateResult ORDER BY subkey, renamed_key;
+        )";
+        WaitOutputRows(resultQuery, {"a:12:107", "b:2:11", "null:22:9"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 3);
+        readSession->AddDataReceivedEvent(6, R"({"key":"a","part":1,"value":1})");
+        WaitOutputRows(resultQuery, {"a:13:108", "b:2:11", "null:22:9"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 3);
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_F(RestoresSerializedUdafState, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (
+                key String NOT NULL, raw_count Int64, serialized_value String, PRIMARY KEY (key)
+            );
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key, raw_count, serialized_value) VALUES ("a", 10l, "100");)");
+        StartOutputAggregation(fmt::format(R"(
+            $save = ($state) -> (CAST($state AS String));
+            $load = ($saved) -> (Unwrap(CAST($saved AS Int64)));
+            $raw = AggregationFactory("UDAF", ($item) -> (1l), ($state, $item) -> ($state + 1l),
+                NULL, ($state) -> ($state), $save, $load);
+            $serialized = AggregationFactory("UDAF", ($item) -> ($item), ($state, $item) -> ($state + $item),
+                NULL, $save, $save, $load);
+            UPSERT INTO aggregateResult
+            SELECT key, AGGREGATE_BY(value, $raw) AS raw_count,
+                AGGREGATE_BY(value, $serialized) AS serialized_value
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL))
+            GROUP BY key;
+        )", "input"_a = InputTopic));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":7})", {}},
+            {1, R"({"key":"b","value":5})", {}},
+            {2, R"({"key":"a","value":3})", {}},
+        });
+        WaitOutputRows(R"(
+            SELECT Unwrap(key || ":" || CAST(raw_count AS String) || ":" || serialized_value) AS Data
+            FROM aggregateResult ORDER BY key;
+        )", {"a:12:110", "b:1:5"});
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_TWIN_F(ReadErrors, Transient, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, total Int64, PRIMARY KEY (key));
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key, total) VALUES ("a", 100l);)");
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads](const auto&, auto& response) {
+            const auto attempt = reads->fetch_add(1);
+            if (Transient && attempt >= 2) {
+                return false;
+            }
+            response.Record.SetYdbStatus(Transient ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNAUTHORIZED);
+            response.Record.MutableResponse()->AddQueryIssues()->set_message("Injected output state read failure");
+            return true;
+        }, "/Root/aggregateResult");
+        StartOutputAggregation(fmt::format(R"(
+            UPSERT INTO aggregateResult SELECT key, SUM(value) AS total
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent(0, R"({"key":"a","value":5})");
+        if constexpr (Transient) {
+            WaitOutputRows(R"(SELECT Unwrap(CAST(total AS String)) AS Data FROM aggregateResult;)", {"105"});
+            UNIT_ASSERT_VALUES_EQUAL(reads->load(), 3);
+        } else {
+            NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "output state read failure", [&](TString& error) {
+                error = GetStreamingQueryIssues("aggregation");
+                return error.Contains("Streaming aggregation SELECT failed for table `/Root/aggregateResult`")
+                    && error.Contains("Injected output state read failure");
+            });
+            WaitOutputRows(R"(SELECT Unwrap(CAST(total AS String)) AS Data FROM aggregateResult;)", {"100"});
+        }
+        FinishOutputAggregation();
+    }
+
+    Y_UNIT_TEST_F(NullRequiredStateIsRejected, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, count Uint64, PRIMARY KEY (key));
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key) VALUES ("a");)");
+        StartOutputAggregation(fmt::format(R"(
+            UPSERT INTO aggregateResult SELECT key, COUNT(*) AS count
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent(0, R"({"key":"a"})");
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "invalid output state", [&](TString& error) {
+            error = GetStreamingQueryIssues("aggregation");
+            return error.Contains("Output state table contains NULL for required aggregation state");
+        });
+        FinishOutputAggregation();
+    }
+}
 
 } // namespace NKikimr::NKqp

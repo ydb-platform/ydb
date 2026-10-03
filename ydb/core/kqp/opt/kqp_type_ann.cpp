@@ -12,6 +12,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -3451,6 +3452,92 @@ TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
+    // Keys must support both ExportTypeToProto and SDK FormatType for DECLARE.
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Data: {
+            const auto slot = type.Cast<TDataExprType>()->GetSlot();
+            return IsDataTypeNumeric(slot) || IsDataTypeDate(slot) || IsDataTypeInterval(slot)
+                || (IsDataTypeTzDate(slot) && !IsDataTypeBigDate(slot))
+                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
+        }
+        case ETypeAnnotationKind::Optional:
+            return IsStreamingAggregationOutputTableKeyType(*type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::List:
+            return IsStreamingAggregationOutputTableKeyType(*type.Cast<TListExprType>()->GetItemType());
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* item : type.Cast<TTupleExprType>()->GetItems()) {
+                if (!IsStreamingAggregationOutputTableKeyType(*item)) {
+                    return false;
+                }
+            }
+            return true;
+        case ETypeAnnotationKind::Dict: {
+            const auto* const dict = type.Cast<TDictExprType>();
+            return IsStreamingAggregationOutputTableKeyType(*dict->GetKeyType())
+                && IsStreamingAggregationOutputTableKeyType(*dict->GetPayloadType());
+        }
+        case ETypeAnnotationKind::Void:
+        case ETypeAnnotationKind::Null:
+        case ETypeAnnotationKind::EmptyList:
+        case ETypeAnnotationKind::EmptyDict:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type) {
+    // Saved values only need ExportTypeToProto; their types are not formatted as SQL.
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Data: {
+            const auto slot = type.Cast<TDataExprType>()->GetSlot();
+            return IsDataTypeNumeric(slot) || IsDataTypeDateOrTzDateOrInterval(slot)
+                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Yson, EDataSlot::Json,
+                    EDataSlot::JsonDocument, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
+        }
+        case ETypeAnnotationKind::Pg:
+            return NKikimr::NPg::TypeDescFromPgTypeId(type.Cast<TPgExprType>()->GetId()) != nullptr;
+        case ETypeAnnotationKind::Optional:
+            return IsStreamingAggregationOutputTableStateType(*type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::List:
+            return IsStreamingAggregationOutputTableStateType(*type.Cast<TListExprType>()->GetItemType());
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* item : type.Cast<TTupleExprType>()->GetItems()) {
+                if (!IsStreamingAggregationOutputTableStateType(*item)) {
+                    return false;
+                }
+            }
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type.Cast<TStructExprType>()->GetItems()) {
+                if (!IsStreamingAggregationOutputTableStateType(*item->GetItemType())) {
+                    return false;
+                }
+            }
+            return true;
+        case ETypeAnnotationKind::Dict: {
+            const auto* const dict = type.Cast<TDictExprType>();
+            return IsStreamingAggregationOutputTableStateType(*dict->GetKeyType())
+                && IsStreamingAggregationOutputTableStateType(*dict->GetPayloadType());
+        }
+        case ETypeAnnotationKind::Tagged:
+            return IsStreamingAggregationOutputTableStateType(*type.Cast<TTaggedExprType>()->GetBaseType());
+        case ETypeAnnotationKind::Variant: {
+            const auto* const underlying = type.Cast<TVariantExprType>()->GetUnderlyingType();
+            return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::Struct}, underlying->GetKind())
+                && IsStreamingAggregationOutputTableStateType(*underlying);
+        }
+        case ETypeAnnotationKind::Void:
+        case ETypeAnnotationKind::Null:
+        case ETypeAnnotationKind::EmptyList:
+        case ETypeAnnotationKind::EmptyDict:
+            return true;
+        default:
+            return false;
+    }
+}
+
 TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TKikimrConfiguration& config) {
     if (!EnsureMinArgsCount(*input, 3, ctx) || !EnsureMaxArgsCount(*input, 4, ctx)) {
         return TStatus::Error;
@@ -3737,6 +3824,16 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
                 return TStatus::Error;
             }
 
+            for (const auto& key : inputKeys.Children()) {
+                const auto* const keyType = rowType->FindItemType(key->Content());
+                if (!IsStreamingAggregationOutputTableKeyType(*keyType)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder()
+                        << "Unsupported key type for streaming aggregation output state table, column: "
+                        << key->Content() << ", type: " << *keyType));
+                    return TStatus::Error;
+                }
+            }
+
             THashSet<TStringBuf> mappedColumns;
             THashSet<TStringBuf> tableColumns;
             for (const auto& mapping : setting->Tail().Child(1)->Children()) {
@@ -3795,6 +3892,16 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!normalizedHandlers.empty()) {
                 output = ctx.ChangeChild(*input, TKqpStreamingAggregation::idx_Handlers, ctx.NewList(handlers->Pos(), std::move(normalizedHandlers)));
                 return TStatus::Repeat;
+            }
+
+            for (const auto& handler : handlers->Children()) {
+                const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
+                if (!IsStreamingAggregationOutputTableStateType(*save.GetTypeAnn())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(save.Pos()), TStringBuilder()
+                        << "Unsupported saved state type for streaming aggregation output state table, column: "
+                        << handler->Head().Content() << ", type: " << *save.GetTypeAnn()));
+                    return TStatus::Error;
+                }
             }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {

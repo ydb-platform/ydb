@@ -210,6 +210,7 @@ public:
         TString Status;
         TInstant StatusChangeTimestamp;
         ui64 EnforcedDynamicSlotSize = 0;
+        ui64 EnforcedDynamicUnitSize = 0;
         ui32 SlotCount = 0;
         ui32 SlotSizeInUnits = 0;
         ui64 ExpectedSlotSize = 0;
@@ -239,7 +240,9 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (EnforcedDynamicSlotSize) {
+            if (ExpectedSlotSize && EnforcedDynamicUnitSize) {
+                return EnforcedDynamicUnitSize;
+            } else if (EnforcedDynamicSlotSize) {
                 return EnforcedDynamicSlotSize;
             } else if (ExpectedSlotSize) {
                 return ExpectedSlotSize;
@@ -251,7 +254,7 @@ public:
         }
 
         ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits) const {
-            return TPDiskConfig::GetOwnerQuotaMultiplier(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+            return TPDiskConfig::GetOwnerQuotaMultiplier(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize, EnforcedDynamicUnitSize);
         }
 
         float GetDiskSpaceUsage() const {
@@ -1748,6 +1751,7 @@ public:
                     pDisk.Status = info.GetStatusV2();
                     pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
                     pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
+                    pDisk.EnforcedDynamicUnitSize = info.GetEnforcedDynamicUnitSize();
                     pDisk.SlotCount = info.GetExpectedSlotCount();
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
@@ -2133,6 +2137,9 @@ public:
                     if (pDisk.EnforcedDynamicSlotSize < info.GetEnforcedDynamicSlotSize()) {
                         pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
                     }
+                    if (info.HasEnforcedDynamicUnitSize()) {
+                        pDisk.EnforcedDynamicUnitSize = info.GetEnforcedDynamicUnitSize();
+                    }
                     if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
                         pDisk.SlotCount = info.GetExpectedSlotCount();
                     }
@@ -2235,6 +2242,7 @@ public:
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kEnforcedDynamicUnitSizeFieldNumber);
             PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, pdiskRequest));
             ++PDiskStateRequestsInFlight;
         }

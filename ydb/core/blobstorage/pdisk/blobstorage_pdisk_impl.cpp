@@ -1944,24 +1944,28 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetPDiskId(PCtx->PDiskId);
         pDiskMetrics.SetTotalSize(Format.DiskSize);
         pDiskMetrics.SetAvailableSize(availableSize);
-        pDiskMetrics.SetUserChunkPoolSize(ui64(Keeper.GetUserChunkPoolSize()) * Format.ChunkSize);
-        pdiskState.SetUserChunkPoolSize(pDiskMetrics.GetUserChunkPoolSize());
+        // Until replay initializes the keeper, its zero pool means unknown capacity.
+        if (InitPhase == EInitPhase::Initialized) {
+            pDiskMetrics.SetUserChunkPoolSize(ui64(Keeper.GetUserChunkPoolSize()) * Format.ChunkSize);
+            pdiskState.SetUserChunkPoolSize(pDiskMetrics.GetUserChunkPoolSize());
+            const ui64 unitSize = ExpectedSlotSize ? ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize : 0;
+            pDiskMetrics.SetEnforcedDynamicUnitSize(unitSize);
+            // Whiteboard merges fields: explicitly clear the unit model when it is disabled.
+            pdiskState.SetEnforcedDynamicUnitSize(unitSize);
+        }
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
         //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         //pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
-        ui64 minSlotSize = ExpectedSlotSize
-            ? ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize
-            : Max<ui64>();
-        if (!ExpectedSlotSize) {
-            for (const auto& [_, owner] : VDiskOwners) {
-                minSlotSize = Min(minSlotSize,
-                    ui64(Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner)) * Format.ChunkSize);
-            }
+        ui64 minSlotSize = Max<ui64>();
+        for (const auto& [_, owner] : VDiskOwners) {
+            // Preserve the guarantee understood by older consumers of this wire field.
+            const ui32 weight = ExpectedSlotSize ? 1 : Keeper.GetOwnerWeight(owner);
+            minSlotSize = Min(minSlotSize, ui64(Keeper.GetOwnerHardLimit(owner) / weight) * Format.ChunkSize);
         }
-        if (ExpectedSlotSize || minSlotSize != Max<ui64>()) {
+        if (minSlotSize != Max<ui64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }

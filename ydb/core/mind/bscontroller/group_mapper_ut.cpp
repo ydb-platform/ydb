@@ -839,6 +839,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             .SpaceAvailable = 1000,
             .Operational = true,
             .Decommitted = false,
+            .EnforcedDynamicUnitSize = 100,
         }));
 
         TGroupMapper::TGroupDefinition group;
@@ -854,11 +855,14 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(ExpectedSlotSizeEnforcedSpaceScalesByGroupSize) {
         auto canAllocate = [](bool enforced, ui64 freeBytes, ui32 groupSize, i64 requiredBytes,
-                std::optional<ui64> userChunkPoolSize = std::nullopt, ui32 marginPromille = 0) {
+                std::optional<ui64> userChunkPoolSize = std::nullopt, ui32 marginPromille = 0, bool unitQuota = true) {
             NKikimrBlobStorage::TPDiskMetrics metrics;
             metrics.SetTotalSize(1000);
             metrics.SetAvailableSize(freeBytes);
             metrics.SetEnforcedDynamicSlotSize(100);
+            if (unitQuota) {
+                metrics.SetEnforcedDynamicUnitSize(100);
+            }
             if (userChunkPoolSize) {
                 metrics.SetUserChunkPoolSize(*userChunkPoolSize);
             }
@@ -885,6 +889,8 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 std::move(state), std::move(request)).Success;
         };
         UNIT_ASSERT(canAllocate(true, 1000, 2, 150));
+        UNIT_ASSERT(canAllocate(true, 1000, 2, 100, {}, 0, false));
+        UNIT_ASSERT(!canAllocate(true, 1000, 2, 101, {}, 0, false));
         UNIT_ASSERT(!canAllocate(true, 1000, 1, 150));
         UNIT_ASSERT(!canAllocate(true, 1000, 2, 201));
         UNIT_ASSERT(canAllocate(false, 150, 2, 150));
@@ -907,7 +913,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         NKikimrBlobStorage::TPDiskMetrics metrics;
         metrics.SetTotalSize(3000000000000000000ull);
         metrics.SetUserChunkPoolSize(3000000000000000000ull);
-        metrics.SetEnforcedDynamicSlotSize(1000000000000000000ull);
+        metrics.SetEnforcedDynamicUnitSize(1000000000000000000ull);
         TGroupMapper::TPlacementSnapshot state;
         state.PDisks.push_back({
             .PDiskId = TPDiskId(1, 1),
@@ -928,20 +934,20 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT(!mapper.AllocateGroup(1, group, {}, {}, 3, 2550000000000000001ll, false, {}, error));
         UNIT_ASSERT_C(mapper.AllocateGroup(1, group, {}, {}, 3, 2550000000000000000ll, false, {}, error), error.ErrorMessage);
 
-        metrics.SetEnforcedDynamicSlotSize(Max<ui64>());
+        metrics.SetEnforcedDynamicUnitSize(Max<ui64>());
         UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateSpaceAvailable(TGroupMapper::CapturePDiskSpace(metrics),
             NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, 150), Max<i64>());
     }
 
     Y_UNIT_TEST(ExpectedSlotSizeCapacityUsesRoundedUnit) {
         for (const auto& [enforcedUnitSize, expectedUnits] :
-                std::vector<std::pair<std::optional<ui64>, ui32>>{{96, 3}, {std::nullopt, 2}, {0, 0}}) {
+                std::vector<std::pair<std::optional<ui64>, ui32>>{{96, 3}, {std::nullopt, 8}, {0, 8}}) {
             NKikimrBlobStorage::TPDiskMetrics metrics;
             metrics.SetTotalSize(400);
             metrics.SetAvailableSize(400);
             metrics.SetUserChunkPoolSize(288);
             if (enforcedUnitSize) {
-                metrics.SetEnforcedDynamicSlotSize(*enforcedUnitSize);
+                metrics.SetEnforcedDynamicUnitSize(*enforcedUnitSize);
             }
             TGroupMapper::TPlacementSnapshot state;
             state.PDisks.push_back({
@@ -955,7 +961,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
             mapper.Populate(std::move(state));
             TGroupMapperError error;
-            // Three rounded quotas fit; older metrics fall back to two configured units.
+            // Three rounded quotas fit; old PDisks retain their placement slot budget.
             for (ui32 groupId = 1; groupId <= expectedUnits; ++groupId) {
                 TGroupMapper::TGroupDefinition group;
                 UNIT_ASSERT_C(mapper.AllocateGroup(groupId, group, {}, {}, 1, 0, false, {}, error), error.ErrorMessage);
@@ -973,7 +979,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 metrics.SetTotalSize(500);
                 metrics.SetAvailableSize(500);
                 metrics.SetUserChunkPoolSize(400);
-                metrics.SetEnforcedDynamicSlotSize(100);
+                metrics.SetEnforcedDynamicUnitSize(100);
                 TGroupMapper::TPlacementSnapshot state;
                 state.PDisks.push_back({
                     .PDiskId = TPDiskId(1, 1),
@@ -1017,7 +1023,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             metrics.SetTotalSize(400);
             metrics.SetAvailableSize(400);
             metrics.SetUserChunkPoolSize(nodeId == 3 ? 200 : 300);
-            metrics.SetEnforcedDynamicSlotSize(100);
+            metrics.SetEnforcedDynamicUnitSize(100);
             state.PDisks.push_back({
                 .PDiskId = TPDiskId(nodeId, 1),
                 .Location = MakeTestLocation(nodeId),

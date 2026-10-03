@@ -56,7 +56,8 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfigFixedSize.GetOwnerWeight(10), 4);
 
 
-        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 100), 4);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 100), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 100, 96), 4);
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 0), 2);
         UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(0, 2, 100), 1);
 

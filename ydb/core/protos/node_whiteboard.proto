@@ -160,6 +160,7 @@ message TPDiskStateInfo {
     optional string MaintenanceStatus = 31;
     optional bool HasWhiteboardData = 32; // filled by viewer
     optional uint64 UserChunkPoolSize = 33; // physical upper bound for one owner's quota, in bytes
+    optional uint64 EnforcedDynamicUnitSize = 34; // rounded unit quota; zero selects legacy slot semantics
 }
 
 // One DDisk slot and its PB share a PDisk owner. Reported by the PB every 5s.

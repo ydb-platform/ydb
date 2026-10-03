@@ -196,7 +196,7 @@ namespace NKikimr::NBsController {
                     return false;
                 }
                 const i64 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(GroupSizeInUnits,
-                    pdisk.SlotSizeInUnits, pdisk.SlotSizeInBytes);
+                    pdisk.SlotSizeInUnits, pdisk.SlotSizeInBytes, pdisk.EnforcedDynamicUnitSize);
                 const i64 requiredPerUnit = RequiredSpace > 0
                     ? RequiredSpace / quotaMultiplier + (RequiredSpace % quotaMultiplier != 0)
                     : RequiredSpace;
@@ -1611,10 +1611,11 @@ namespace NKikimr::NBsController {
                 }
                 if (maxSlotSizeInBytes) {
                     // Reserve the full quota even for an empty or replicating VDisk.
-                    const ui64 unitSize = disk.Space->EnforcedDynamicSlotSize.value_or(disk.SlotSizeInBytes);
-                    const ui64 totalUnits = unitSize ? *maxSlotSizeInBytes / unitSize : 0;
-                    availableCapacityInUnits = i64(Min(totalUnits, ui64(Max<i64>())))
-                        - i64(Min(disk.NumActiveUnits, ui64(Max<i64>())));
+                    if (const ui64 unitSize = disk.Space->EnforcedDynamicUnitSize) {
+                        const ui64 totalUnits = *maxSlotSizeInBytes / unitSize;
+                        availableCapacityInUnits = i64(Min(totalUnits, ui64(Max<i64>())))
+                            - i64(Min(disk.NumActiveUnits, ui64(Max<i64>())));
+                    }
                     const ui64 usablePromille = 1000 - State->Mapper.Options.SpaceMarginPromille;
                     *maxSlotSizeInBytes = *maxSlotSizeInBytes / 1000 * usablePromille
                         + *maxSlotSizeInBytes % 1000 * usablePromille / 1000;
@@ -1639,6 +1640,7 @@ namespace NKikimr::NBsController {
                 .DiskScope = std::move(disk.DiskScope),
                 .SpaceAvailablePerUnit = disk.SlotSizeInBytes && disk.Space
                     && SlotSpaceEnforced(*disk.Space, State->Mapper.Options.SpaceColorBorder),
+                .EnforcedDynamicUnitSize = disk.Space ? disk.Space->EnforcedDynamicUnitSize : 0,
                 .MaxSlotSizeInBytes = maxSlotSizeInBytes,
                 .AvailableCapacityInUnits = availableCapacityInUnits,
             });
@@ -1653,6 +1655,7 @@ namespace NKikimr::NBsController {
 
     TGroupMapper::TPDiskSpaceState TGroupMapper::CapturePDiskSpace(const NKikimrBlobStorage::TPDiskMetrics& metrics) {
         TPDiskSpaceState state{
+            .EnforcedDynamicUnitSize = metrics.GetEnforcedDynamicUnitSize(),
             .AvailableSize = metrics.GetAvailableSize(),
             .TotalSize = metrics.GetTotalSize(),
         };
@@ -1667,14 +1670,15 @@ namespace NKikimr::NBsController {
 
     bool TGroupMapper::SlotSpaceEnforced(const TPDiskSpaceState& space,
                                          NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
-        return space.EnforcedDynamicSlotSize.has_value()
+        return (space.EnforcedDynamicUnitSize || space.EnforcedDynamicSlotSize.has_value())
                && colorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
     }
 
     i64 TGroupMapper::CalculateSpaceAvailable(const TPDiskSpaceState& space,
                                               NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder, ui32 marginPromille) {
         if (SlotSpaceEnforced(space, colorBorder)) {
-            const ui64 slotSize = *space.EnforcedDynamicSlotSize;
+            const ui64 slotSize = space.EnforcedDynamicUnitSize
+                ? space.EnforcedDynamicUnitSize : *space.EnforcedDynamicSlotSize;
             const ui64 usablePromille = 1000 - marginPromille;
             const ui64 available = slotSize / 1000 * usablePromille + slotSize % 1000 * usablePromille / 1000;
             return Min(available, ui64(Max<i64>()));

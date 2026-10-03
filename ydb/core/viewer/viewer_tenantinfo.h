@@ -692,7 +692,8 @@ public:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
-        ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        ui64 slotSize = pdiskInfo.GetExpectedSlotSize() && pdiskInfo.GetEnforcedDynamicUnitSize()
+            ? pdiskInfo.GetEnforcedDynamicUnitSize() : pdiskInfo.GetEnforcedDynamicSlotSize();
         if (!slotSize) {
             slotSize = pdiskInfo.GetExpectedSlotSize();
         }
@@ -701,7 +702,8 @@ public:
             slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
         const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
-            groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize());
+            groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.GetEnforcedDynamicUnitSize());
         slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
         if (pdiskInfo.GetExpectedSlotSize()) {
             if (pdiskInfo.HasUserChunkPoolSize()) {

@@ -66,7 +66,9 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
+        if (disk.ExpectedSlotSize && pdiskMetrics.GetEnforcedDynamicUnitSize()) {
+            slotSize = pdiskMetrics.GetEnforcedDynamicUnitSize();
+        } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
             slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
         } else if (disk.ExpectedSlotSize) {
             slotSize = disk.ExpectedSlotSize;
@@ -75,7 +77,8 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
         }
 
         const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
-            groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize);
+            groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize,
+            pdiskMetrics.GetEnforcedDynamicUnitSize());
         slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
         if (disk.ExpectedSlotSize) {
             if (pdiskMetrics.HasUserChunkPoolSize()) {
@@ -355,6 +358,9 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
+    if (pDiskInfo->Metrics.HasEnforcedDynamicUnitSize()) {
+        info->SetEnforcedDynamicUnitSize(pDiskInfo->Metrics.GetEnforcedDynamicUnitSize());
+    }
     if (pDiskInfo->Metrics.HasUserChunkPoolSize()) {
         info->SetUserChunkPoolSize(pDiskInfo->Metrics.GetUserChunkPoolSize());
     }
@@ -614,6 +620,9 @@ void TBlobStorageController::UpdateSystemViews() {
                     pb->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pdisk.PDiskMetrics->GetState()));
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
+                    }
+                    if (pdisk.PDiskMetrics->HasEnforcedDynamicUnitSize()) {
+                        pb->SetEnforcedDynamicUnitSize(pdisk.PDiskMetrics->GetEnforcedDynamicUnitSize());
                     }
                     if (pdisk.PDiskMetrics->HasUserChunkPoolSize()) {
                         pb->SetUserChunkPoolSize(pdisk.PDiskMetrics->GetUserChunkPoolSize());

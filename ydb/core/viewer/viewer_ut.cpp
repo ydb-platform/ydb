@@ -815,7 +815,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false,
-            std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false)
+            std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false, bool unitQuota = true)
     {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -894,8 +894,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         }
                         if (id == 2) {
                             info->SetExpectedSlotSize(150);
+                            if (unitQuota) {
+                                info->SetEnforcedDynamicUnitSize(enforcedSlotSize ? 80 : 150);
+                            }
                             if (overflowingQuota) {
                                 info->SetExpectedSlotSize(ui64{1} << 40);
+                                info->SetEnforcedDynamicUnitSize(ui64{1} << 40);
                                 if (enforcedSlotSize) {
                                     info->SetEnforcedDynamicSlotSize(ui64{1} << 40);
                                 }
@@ -949,7 +953,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::TJsonValue json;
         NJson::ReadJsonTree(result->Response->Body, &json, true);
         const ui64 fixedQuota = overflowingQuota ? userChunkPoolSize.value_or(1600)
-            : Min<ui64>(enforcedSlotSize ? 720 : 1350, userChunkPoolSize.value_or(1600));
+            : Min<ui64>((enforcedSlotSize ? 80 : 150) * (unitQuota ? 9 : 1), userChunkPoolSize.value_or(1600));
         if (cluster) {
             const auto& stats = json["StorageStats"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(stats.size(), 2);
@@ -1019,6 +1023,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    Y_UNIT_TEST(StorageLimitWithLegacyFixedQuota)
+    {
+        for (bool cluster : {false, true}) {
+            for (bool enforced : {false, true}) {
+                CheckStorageLimitWithGroupSizeInUnits(enforced, cluster, {}, false, false);
+            }
+        }
+    }
+
     Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotSize)
     {
         NKikimrWhiteboard::TVDiskStateInfo vdisk;
@@ -1034,14 +1047,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(stats.Total, expectedTotal);
             UNIT_ASSERT(!stats.UnknownSlotSize);
         };
+        check(96);
+        pdisk.SetEnforcedDynamicUnitSize(96);
         check(384);
+        pdisk.ClearEnforcedDynamicUnitSize();
+        check(96);
         pdisk.ClearEnforcedDynamicSlotSize();
+        check(100);
+        pdisk.SetEnforcedDynamicUnitSize(100);
         check(400);
         pdisk.SetTotalSize(350);
         check(350);
         pdisk.SetUserChunkPoolSize(300);
         check(300);
-        pdisk.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        pdisk.SetEnforcedDynamicUnitSize(ui64{1} << 40);
         check(300, ui32{1} << 24);
         pdisk.ClearUserChunkPoolSize();
         check(350, Max<ui32>());
@@ -1154,11 +1173,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
         pdisk.SlotCount = 10;
 
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 96);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 71);
+        vdisk.AvailableSize = 900;
+        pdisk.EnforcedDynamicUnitSize = 96;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
         UNIT_ASSERT_VALUES_EQUAL(group.Limit, 192);
         UNIT_ASSERT_VALUES_EQUAL(group.Available, 167);
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 25 / 192, 1e-6);
 
         pdisk.EnforcedDynamicSlotSize = 0;
+        pdisk.EnforcedDynamicUnitSize = 100;
         vdisk.AvailableSize = 900;
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
         UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
@@ -1174,7 +1199,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(group.Limit, 150);
         UNIT_ASSERT_VALUES_EQUAL(group.Available, 125);
         group.GroupSizeInUnits = ui32{1} << 24;
-        pdisk.EnforcedDynamicSlotSize = ui64{1} << 40;
+        pdisk.EnforcedDynamicUnitSize = ui64{1} << 40;
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
         UNIT_ASSERT_VALUES_EQUAL(group.Limit, 150);
         UNIT_ASSERT_VALUES_EQUAL(group.Available, 125);

@@ -6,6 +6,7 @@
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/sys_view.h>
+#include <ydb/core/mind/bscontroller/storage_stats_calculator.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -2212,6 +2213,74 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
     }
 
+    Y_UNIT_TEST(StorageStatsReserveFixedQuotaCapacity) {
+        for (bool unitQuota : {false, true}) {
+            TEnvironmentSetup env(1, 1);
+            env.SetupRuntime(1, 1);
+            auto& runtime = *env.Runtime;
+            const ui32 nodeId = runtime.GetNodeId(0);
+            const TPDiskId pdiskId(nodeId, 1);
+            const auto groupId = TGroupId::FromValue(0x80000001);
+            TControllerSystemViewsState state;
+            auto& disk = state.PDisks[pdiskId];
+            disk.SetBoxId(1);
+            disk.SetCategory(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+            disk.SetExpectedSlotCount(8);
+            disk.SetSlotSizeInUnits(2);
+            disk.SetExpectedSlotSize(100);
+            disk.SetEnforcedDynamicSlotSize(200);
+            if (unitQuota) {
+                disk.SetEnforcedDynamicUnitSize(100);
+            }
+            disk.SetTotalSize(1000);
+            disk.SetUserChunkPoolSize(600);
+            disk.SetNumActiveSlots(3); // One static reservation, one active slot, one donor.
+            auto& group = state.Groups[groupId];
+            group.SetGroupSizeInUnits(2);
+            group.SetBoxId(1);
+            group.SetStoragePoolId(1);
+            for (ui32 slotId : {1, 2, 3}) {
+                auto& slot = state.VSlots[TVSlotId(pdiskId, slotId)];
+                slot.SetGroupId(groupId.GetRawId());
+                slot.SetGroupGeneration(slotId == 1 ? 2 : 1);
+                slot.SetIsBeingDeleted(slotId == 3);
+            }
+            TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters{
+                {.Type = NKikimrBlobStorage::ROT}};
+            TStringStream filterData;
+            Save(&filterData, filters);
+            auto& pool = state.StoragePools[{1, 1}];
+            pool.SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters));
+            pool.SetPDiskFilterData(filterData.Str());
+            pool.SetErasureSpeciesV2("none");
+
+            NKikimrBlobStorage::TStorageConfig config;
+            auto* node = config.AddAllNodes();
+            node->SetNodeId(nodeId);
+            node->SetHost("host");
+            node->SetPort(19001);
+            node->MutableLocation()->SetDataCenter("dc");
+            node->MutableLocation()->SetRack("rack");
+            const THostRecordMap hosts = std::make_shared<THostRecordMapImpl>(config);
+            const auto edge = runtime.AllocateEdgeActor();
+            runtime.Register(CreateStorageStatsCoroCalculator(state, hosts, 0, 0).release(),
+                0, 0, TMailboxType::Simple, 0, edge);
+            auto response = runtime.GrabEdgeEventRethrow<TEvCalculateStorageStatsResponse>(edge);
+            bool found = false;
+            for (const auto& entry : response->Get()->StorageStats) {
+                if (entry.GetErasureSpecies() == "none") {
+                    found = true;
+                    // Five units are reserved; only one more fits in the pool.
+                    // Old PDisks continue to expose the five remaining placement slots.
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableGroupsToCreate(), unitQuota ? 1 : 5);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetImmediateGroupsToCreate(), unitQuota ? 1 : 5);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableSizeToCreate(), unitQuota ? 100 : 1000);
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeResourcesCappedPerGroup) {
         using TPDiskInfo = TBlobStorageController::TPDiskInfo;
         TPDiskInfo pdisk(
@@ -2244,14 +2313,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT_VALUES_EQUAL(resources.GetSpace(), expectedSize);
             }
         };
+        checkResources(3, 100); // Old PDisks enforce one fixed quota per owner.
+        pdisk.Metrics.SetEnforcedDynamicUnitSize(100);
         checkResources(1, 100);
         checkResources(100, 1000);
         checkResources(2, 200);
-        pdisk.Metrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        pdisk.Metrics.SetEnforcedDynamicUnitSize(ui64{1} << 40);
         checkResources(ui32{1} << 24, 1000); // The uncapped quota is 2^64 bytes.
         pdisk.Metrics.ClearUserChunkPoolSize();
         checkResources(Max<ui32>(), 1200);
-        pdisk.Metrics.SetEnforcedDynamicSlotSize(100);
+        pdisk.Metrics.SetEnforcedDynamicUnitSize(100);
         pdisk.Metrics.SetUserChunkPoolSize(0);
         checkResources(100, 0);
         pdisk.Metrics.ClearUserChunkPoolSize();
@@ -2285,19 +2356,25 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
             UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailable);
         };
-        check(155); // Old PDisks lack the user chunk pool metric; cap by TotalSize.
+        check(71); // The legacy field is a per-slot guarantee, even for multi-unit groups.
+        pdiskMetrics.SetEnforcedDynamicUnitSize(96);
+        check(155); // Without a pool metric, cap by TotalSize.
         pdiskMetrics.SetTotalSize(1000);
         check(167);
+        pdiskMetrics.ClearEnforcedDynamicUnitSize();
+        check(71);
         pdiskMetrics.ClearEnforcedDynamicSlotSize();
+        check(75);
+        pdiskMetrics.SetEnforcedDynamicUnitSize(100);
         check(175);
-        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetEnforcedDynamicUnitSize(96);
         pdiskMetrics.SetUserChunkPoolSize(150);
         check(125);
-        pdiskMetrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        pdiskMetrics.SetEnforcedDynamicUnitSize(ui64{1} << 40);
         check(125, ui32{1} << 24);
         pdiskMetrics.ClearUserChunkPoolSize();
         check(975, Max<ui32>());
-        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetEnforcedDynamicUnitSize(96);
         pdiskMetrics.SetUserChunkPoolSize(0);
         check(0);
 

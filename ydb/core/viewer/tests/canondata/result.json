@@ -866,6 +866,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "EnforcedDynamicUnitSize": "0",
                                 "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
@@ -881,7 +882,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -979,6 +981,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "EnforcedDynamicUnitSize": "0",
                                 "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
@@ -994,7 +997,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1092,6 +1096,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "EnforcedDynamicUnitSize": "0",
                                 "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
@@ -1107,7 +1112,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1206,6 +1212,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "EnforcedDynamicUnitSize": "0",
                                 "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
@@ -1221,7 +1228,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1320,6 +1328,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "EnforcedDynamicUnitSize": "0",
                                 "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
@@ -1335,7 +1344,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",

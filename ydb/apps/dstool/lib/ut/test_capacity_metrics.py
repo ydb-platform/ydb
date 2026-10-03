@@ -14,15 +14,18 @@ from ydb.apps.dstool.lib import dstool_cmd_vdisk_list as vdisk_list
     ids=['vdisk', 'group', 'pool', 'group-grpc'])
 @pytest.mark.parametrize('group_size_in_units', [0, 1, 3, 20])
 @pytest.mark.parametrize('expected_slot_size', [0, 101])
+@pytest.mark.parametrize('unit_quota', [False, True])
 @pytest.mark.parametrize('slot_size_in_units', [0, 2, 5])
 @pytest.mark.parametrize('enforced_slot_size', [0, 96])
 @pytest.mark.parametrize('user_chunk_pool_size', [None, 0, 200])
 def test_rounded_slot_size_in_list(command, use_grpc, group_size_in_units, expected_slot_size,
-                                   slot_size_in_units, enforced_slot_size, user_chunk_pool_size, monkeypatch):
+                                   slot_size_in_units, enforced_slot_size, user_chunk_pool_size, unit_quota, monkeypatch):
     base_config = common.kikimr_bsconfig.TBaseConfig()
     base_config.Node.add(NodeId=1).HostKey.Fqdn = 'node-1'
     pdisk = base_config.PDisk.add(NodeId=1, PDiskId=1, ExpectedSlotSize=expected_slot_size)
     pdisk.PDiskMetrics.EnforcedDynamicSlotSize = enforced_slot_size
+    if expected_slot_size and unit_quota:
+        pdisk.PDiskMetrics.EnforcedDynamicUnitSize = enforced_slot_size or expected_slot_size
     pdisk.PDiskMetrics.TotalSize = 1800
     if user_chunk_pool_size is not None:
         pdisk.PDiskMetrics.UserChunkPoolSize = user_chunk_pool_size
@@ -37,7 +40,7 @@ def test_rounded_slot_size_in_list(command, use_grpc, group_size_in_units, expec
     group.VSlotId.add().CopyFrom(vslot.VSlotId)
     units = max(1, group_size_in_units)
     if expected_slot_size:
-        rounded_quota = min((enforced_slot_size or expected_slot_size) * units,
+        rounded_quota = min((enforced_slot_size or expected_slot_size) * (units if unit_quota else 1),
                             1800 if user_chunk_pool_size is None else user_chunk_pool_size)
     else:
         slot_units = max(1, slot_size_in_units)

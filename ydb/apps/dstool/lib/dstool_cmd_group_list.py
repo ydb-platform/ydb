@@ -111,6 +111,7 @@ def _convert_legacy_storage_state(data):
         pdisk.id.pdisk_id = source.PDiskId
         _, pdisk.slot_size_in_units = common.get_pdisk_inferred_settings(source)
         pdisk.enforced_dynamic_slot_size = source.PDiskMetrics.EnforcedDynamicSlotSize
+        pdisk.enforced_dynamic_unit_size = source.PDiskMetrics.EnforcedDynamicUnitSize
         pdisk.expected_slot_size = source.ExpectedSlotSize
         if source.PDiskMetrics.HasField('UserChunkPoolSize'):
             pdisk.user_chunk_pool_size = source.PDiskMetrics.UserChunkPoolSize
@@ -277,7 +278,7 @@ def do(args):
                 group.size_in_units, pdisk.slot_size_in_units, pdisk.enforced_dynamic_slot_size,
                 pdisk.expected_slot_size,
                 pdisk.user_chunk_pool_size if pdisk.HasField('user_chunk_pool_size') else None,
-                pdisk.total_size or None)
+                pdisk.total_size or None, pdisk.enforced_dynamic_unit_size)
             group_stat['Limit'] += vdisk_slot_size
 
         # Aggregate capacity metrics - use max values

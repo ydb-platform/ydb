@@ -3510,6 +3510,29 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeMetricsBeforeInitialization) {
+        TTestActorRuntime runtime;
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+        const auto recipient = runtime.AllocateEdgeActor();
+        auto context = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto config = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        config->ExpectedSlotSize = 100_MB;
+        auto disk = MakeHolder<NPDisk::TPDisk>(context, config, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto* report = new NPDisk::TEvWhiteboardReportResult;
+        report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+        auto request = std::unique_ptr<NPDisk::TWhiteboardReport>(
+            disk->ReqCreator.CreateFromArgs<NPDisk::TWhiteboardReport>(recipient, report));
+        disk->WhiteboardReport(*request);
+        const auto result = runtime.GrabEdgeEvent<NPDisk::TEvWhiteboardReportResult>(recipient);
+        const auto& metrics = result->Get()->DiskMetrics->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT(!metrics.HasUserChunkPoolSize());
+        UNIT_ASSERT(!metrics.HasEnforcedDynamicUnitSize());
+        UNIT_ASSERT(!result->Get()->PDiskState->Record.HasUserChunkPoolSize());
+        UNIT_ASSERT(!result->Get()->PDiskState->Record.HasEnforcedDynamicUnitSize());
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeRestoresOwnerQuotasWhenDisabled) {
         TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
         const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
@@ -3535,7 +3558,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
                 new NPDisk::TEvChangeExpectedSlotCount(slotCount, slotSizeInUnits, expectedSlotSize), NKikimrProto::OK);
         };
-        auto checkReportedSlotSize = [&](ui64 expectedSlotSize) {
+        auto checkReportedSlotSize = [&](ui64 expectedUnitSize, ui64 expectedSlotSize) {
             testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
                 auto* report = new NPDisk::TEvWhiteboardReportResult;
                 report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
@@ -3544,6 +3567,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             const auto report = testCtx.Recv<NPDisk::TEvWhiteboardReportResult>();
             const auto& metrics = report->DiskMetrics->Record.GetPDisksMetrics(0);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetUserChunkPoolSize(), ui64(poolSize) * chunkSize);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetEnforcedDynamicUnitSize(), expectedUnitSize);
+            UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicUnitSize(), expectedUnitSize);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetEnforcedDynamicSlotSize(), expectedSlotSize);
             UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicSlotSize(), expectedSlotSize);
         };
@@ -3554,14 +3579,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         changeSettings(8, 2, 100ull * chunkSize);
         checkOwner(disk, 2, 300);
         checkOwner(otherDisk, 1, 200);
-        checkReportedSlotSize(100ull * chunkSize);
+        checkReportedSlotSize(100ull * chunkSize, 200ull * chunkSize);
         // Resizing beyond the physical pool caps the owner's quota without affecting its neighbour.
         UNIT_ASSERT(poolSize < 900);
         testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
             new NPDisk::TEvYardResize(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound, 9), NKikimrProto::OK);
         checkOwner(disk, 5, poolSize);
         checkOwner(otherDisk, 1, 200);
-        checkReportedSlotSize(100ull * chunkSize);
+        checkReportedSlotSize(100ull * chunkSize, 200ull * chunkSize);
 
         // Use the resized group and the new slot settings. Active weights now exceed the expected count.
         changeSettings(2, 4, 0);
@@ -3570,15 +3595,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         changeSettings(2, 4, 100ull * chunkSize);
         checkOwner(disk, 3, poolSize);
         checkOwner(otherDisk, 1, 200);
-        checkReportedSlotSize(100ull * chunkSize);
+        checkReportedSlotSize(100ull * chunkSize, 200ull * chunkSize);
         changeSettings(2, 4, Max<ui64>());
         checkOwner(disk, 3, poolSize);
         checkOwner(otherDisk, 1, poolSize);
-        checkReportedSlotSize(Max<ui64>() / chunkSize * chunkSize);
+        checkReportedSlotSize(Max<ui64>() / chunkSize * chunkSize, ui64(poolSize) * chunkSize);
         changeSettings(8, 2, 0);
         checkOwner(disk, 5, poolSize / 8 * 5);
         checkOwner(otherDisk, 1, poolSize / 8);
-        checkReportedSlotSize(ui64(poolSize / 8) * chunkSize);
+        checkReportedSlotSize(0, ui64(poolSize / 8) * chunkSize);
     }
 
     Y_UNIT_TEST(ExpectedSlotSizeBelowChunkRejectedOnStartup) {
@@ -3706,8 +3731,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             });
             const auto report = testCtx.Recv<NPDisk::TEvWhiteboardReportResult>();
             const ui64 roundedSlotSize = ui64(quota / groupSizeInUnits) * chunkSize;
-            UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicSlotSize(), roundedSlotSize);
-            UNIT_ASSERT_VALUES_EQUAL(report->DiskMetrics->Record.GetPDisksMetrics(0).GetEnforcedDynamicSlotSize(),
+            UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicUnitSize(), roundedSlotSize);
+            UNIT_ASSERT_VALUES_EQUAL(report->DiskMetrics->Record.GetPDisksMetrics(0).GetEnforcedDynamicUnitSize(),
                 roundedSlotSize);
             bool found = false;
             for (size_t i = 0; i < report->VDiskStateVect.size(); ++i) {

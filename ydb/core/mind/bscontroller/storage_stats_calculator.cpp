@@ -121,6 +121,23 @@ public:
             }
         }
 
+        // NumActiveSlots includes static reservations and weighted dynamic slots. Convert the
+        // latter to capacity units, including donors but excluding slots being deleted.
+        THashMap<TPDiskId, ui64> activeUnits;
+        for (const auto& [id, disk] : SystemViewsState.PDisks) {
+            activeUnits[id] = disk.GetNumActiveSlots();
+        }
+        for (const auto& [id, slot] : SystemViewsState.VSlots) {
+            const auto disk = SystemViewsState.PDisks.find(id.ComprisingPDiskId());
+            const auto group = SystemViewsState.Groups.find(TGroupId::FromValue(slot.GetGroupId()));
+            if (!slot.GetIsBeingDeleted() && disk != SystemViewsState.PDisks.end()
+                    && group != SystemViewsState.Groups.end()) {
+                const ui32 units = Max(1u, group->second.GetGroupSizeInUnits());
+                activeUnits[id.ComprisingPDiskId()] += units - TPDiskConfig::GetOwnerWeight(units,
+                    disk->second.GetSlotSizeInUnits());
+            }
+        }
+
         for (auto& entry : storageStats) {
             TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters;
             TStringInput s(entry.GetPDiskFilterData());
@@ -130,11 +147,11 @@ public:
             const ui32 currentGroupsCreated = entry.GetCurrentGroupsCreated();
 
             for (const auto& [boxId, pdisks] : boxes) {
-                TStats stats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks,
+                TStats stats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks, activeUnits,
                         /*considerDriveStatus=*/false,
                         /*considerDecommitStatus=*/true,
                         /*considerMaintenanceStatus=*/false);
-                TStats immediateStats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks,
+                TStats immediateStats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks, activeUnits,
                         /*considerDriveStatus=*/true,
                         /*considerDecommitStatus=*/true,
                         /*considerMaintenanceStatus=*/true);
@@ -167,10 +184,13 @@ private:
             ui32 currentGroupsCreated,
             const TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter>& filters,
             const std::vector<const TPDiskEntry*>& pdisks,
+            const THashMap<TPDiskId, ui64>& activeUnits,
             bool considerDriveStatus,
             bool considerDecommitStatus,
             bool considerMaintenanceStatus) {
-        TGroupMapper mapper(TGroupGeometryInfo(erasureType, NKikimrBlobStorage::TGroupGeometry())); // default geometry
+        TGroupMapper mapper(TGroupGeometryInfo(erasureType, NKikimrBlobStorage::TGroupGeometry()),
+            {.IgnoreVSlotQuotaCheck = true}); // Estimate empty groups while reserving their full capacity.
+        TGroupMapper::TPlacementBuilder builder(mapper);
 
         for (const auto& kv : pdisks) {
             const auto& [pdiskId, pdisk] = *kv;
@@ -182,7 +202,14 @@ private:
                     const bool usable = (!considerDriveStatus || !pdisk.HasStatusV2() || pdisk.GetStatusV2() == "ACTIVE") &&
                             (!considerDecommitStatus || !pdisk.HasDecommitStatus() || pdisk.GetDecommitStatus() == "DECOMMIT_NONE") &&
                             (!considerMaintenanceStatus || !pdisk.HasMaintenanceStatus() || pdisk.GetMaintenanceStatus() == "NO_REQUEST");
-                    const bool ok = mapper.RegisterPDisk({
+                    TGroupMapper::TPDiskSpaceState space{
+                        .EnforcedDynamicUnitSize = pdisk.GetEnforcedDynamicUnitSize(),
+                        .TotalSize = pdisk.GetTotalSize(),
+                    };
+                    if (pdisk.HasUserChunkPoolSize()) {
+                        space.UserChunkPoolSize = pdisk.GetUserChunkPoolSize();
+                    }
+                    builder.AddPDisk({
                         .PDiskId = pdiskId,
                         .Location = location,
                         .Usable = usable,
@@ -190,16 +217,16 @@ private:
                         .ExpectedSlotCount = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                         .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
                         .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
-                        .Groups = {},
-                        .SpaceAvailable = 0,
+                        .Space = space,
                         .Operational = true,
-                        .Decommitted = false, // this flag applies only to group reconfiguration
+                        .NumActiveUnits = activeUnits.at(pdiskId),
                     });
-                    Y_ABORT_UNLESS(ok);
                     break;
                 }
             }
         }
+
+        builder.Finish();
 
         // calculate number of groups we can create without accounting reserve
         TGroupMapper::TGroupDefinition group;
@@ -222,6 +249,9 @@ private:
                             }
                             if (pdisk.HasEnforcedDynamicSlotSize()) {
                                 pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
+                            }
+                            if (pdisk.HasEnforcedDynamicUnitSize()) {
+                                pm.SetEnforcedDynamicUnitSize(pdisk.GetEnforcedDynamicUnitSize());
                             }
                             if (pdisk.HasUserChunkPoolSize()) {
                                 pm.SetUserChunkPoolSize(pdisk.GetUserChunkPoolSize());

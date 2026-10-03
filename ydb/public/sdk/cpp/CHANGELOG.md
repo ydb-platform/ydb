@@ -1,3 +1,5 @@
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
 ## v3.24.0
 
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.

@@ -852,7 +852,9 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                 std::move(writeContext)
         );
 
-        readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
+        ContinuationTokenIssued = false;
+        OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize));
+        readyToAccept = TryIssueContinuationTokenImpl();
         FlushWriteIfRequiredImpl();
     }
     if (readyToAccept) {
@@ -1097,7 +1099,8 @@ void TWriteSessionImpl::InitImpl() {
 }
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
-void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req) {
+void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req,
+                                             size_t requestMemoryUsage) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
@@ -1105,12 +1108,31 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
         return;
     }
     auto callback = [cbContext = SelfContext,
-                     connectionGeneration = ConnectionGeneration](NYdbGrpc::TGrpcStatus&& grpcStatus) {
-        if (auto self = cbContext->LockShared()) {
-            self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+                     connectionGeneration = ConnectionGeneration,
+                     requestMemoryUsage](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+        const bool success = grpcStatus.Ok();
+        auto complete = [cbContext, connectionGeneration, requestMemoryUsage, status = std::move(grpcStatus)](bool ok) mutable {
+            // Scheduling can fail inline during driver shutdown.
+            if (!ok) {
+                return;
+            }
+            if (auto self = cbContext->LockShared()) {
+                if (requestMemoryUsage) {
+                    self->OnWriteRequestDone(requestMemoryUsage);
+                } else {
+                    self->OnWriteDone(std::move(status), connectionGeneration);
+                }
+            }
+        };
+        if (success) {
+            complete(true);
+        } else if (auto self = cbContext->LockShared()) {
+            // A rejected Write calls back inline while the session lock is held.
+            self->Connections->ScheduleCallback(TDuration::Zero(), std::move(complete));
         }
     };
 
+    OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
     Processor->Write(std::move(req), callback);
 }
 
@@ -1155,6 +1177,27 @@ void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t conne
         }
     }
     ProcessHandleResult(handleResult);
+}
+
+void TWriteSessionImpl::OnWriteRequestDone(size_t requestMemoryUsage) {
+    bool readyToAccept = false;
+    {
+        std::lock_guard guard(Lock);
+        OnMemoryUsageChangedImpl(-static_cast<i64>(requestMemoryUsage));
+        readyToAccept = TryIssueContinuationTokenImpl();
+    }
+    if (readyToAccept) {
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+    }
+}
+
+bool TWriteSessionImpl::TryIssueContinuationTokenImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    if (Aborting || ContinuationTokenIssued || MemoryUsage > Settings.MaxMemoryUsage_) {
+        return false;
+    }
+    ContinuationTokenIssued = true;
+    return true;
 }
 
 void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
@@ -1344,6 +1387,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             if (!FirstTokenSent) {
                 result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 FirstTokenSent = true;
+                ContinuationTokenIssued = true;
             }
             // Kickstart send after session reestablishment
             SendImpl();
@@ -1439,8 +1483,8 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
         const auto& front = SentPackedMessage.front();
         const ui64 memoryToRelease = front.Compressed ? front.Data.size() : front.OriginalMemoryUsage;
-        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(memoryToRelease));
-        result = memoryUsage.NowOk && !memoryUsage.WasOk;
+        OnMemoryUsageChangedImpl(-static_cast<i64>(memoryToRelease));
+        result = TryIssueContinuationTokenImpl();
         packedMessageCount = front.MessageCount;
         if (front.Compressed) {
             compressedSize = front.Data.size();
@@ -1592,14 +1636,16 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 }
 
 void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
-    TMemoryUsageChange memoryUsage;
+    bool readyToAccept = false;
     if (!isSyncCompression) {
         std::lock_guard guard(Lock);
-        memoryUsage = OnCompressedImpl(std::move(block));
+        OnCompressedImpl(std::move(block));
+        readyToAccept = TryIssueContinuationTokenImpl();
     } else {
-        memoryUsage = OnCompressedImpl(std::move(block));
+        OnCompressedImpl(std::move(block));
+        readyToAccept = TryIssueContinuationTokenImpl();
     }
-    if (memoryUsage.NowOk && !memoryUsage.WasOk) {
+    if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
@@ -2042,7 +2088,8 @@ void TWriteSessionImpl::SendImpl() {
                 << OriginalMessagesToSend.size() << " left), first sequence number is "
                 << writeRequest->messages(0).seq_no()
         );
-        Processor->Write(std::move(clientMessage));
+        const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
+        WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
     }
 }
 

@@ -442,7 +442,8 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         engine.FetchDataAccessors(i.GetRequest());
     }
 
-    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges =
+        engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024, NActualizer::EActualizationScope::ExceptMoveData);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().GetSize(), expectedToDrop);

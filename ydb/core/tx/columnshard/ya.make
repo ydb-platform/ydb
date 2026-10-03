@@ -5,6 +5,7 @@ SRCS(
     blob.cpp
     blob_cache.cpp
     columnshard.cpp
+    columnshard_move_data.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp
@@ -108,6 +109,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut_rw
     ut_schema
+    ut_movedata
     backup
     data_accessor
     export

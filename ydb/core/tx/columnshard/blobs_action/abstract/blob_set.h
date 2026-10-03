@@ -83,6 +83,14 @@ public:
         return TGenStep(*Blobs.begin());
     }
 
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator>::const_iterator begin() const {
+        return Blobs.begin();
+    }
+
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator>::const_iterator end() const {
+        return Blobs.end();
+    }
+
     template <class TActor>
         requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
     bool ExtractTo(const TGenStep& lessOrEqualThan, const ui32 countLimit, const TActor& actor) {

@@ -139,6 +139,7 @@ namespace NKikimr {
                 }
                 auto& table = Tables[path];
                 if (table.Type == TTabletTypes::TypeInvalid) {
+                    ReportDescriptorErrors(*descriptor);
                     table.Type = type;
                     table.Desc = descriptor;
                     table.PublicGroup = TargetCounterGroup->GetSubgroup(TABLE_LABEL, path);
@@ -163,6 +164,23 @@ namespace NKikimr {
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), group, isFollowerSource, nameScope);
                 }
                 return bucket.Get();
+            }
+
+            /**
+             * Report the errors of the descriptor of a tablet type (see TDetailedMetricsDescriptor::Errors),
+             * each of which leaves a public metric publishing zero, once per tablet type: on the first
+             * table of the type.
+             */
+            void ReportDescriptorErrors(const TDetailedMetricsDescriptor& descriptor) {
+                if (descriptor.Errors.empty() || !TypesReportedDescriptorErrors.insert(descriptor.Type).second) {
+                    return;
+                }
+                for (const auto& error : descriptor.Errors) {
+                    YDB_LOG_CRIT("Invalid public detailed metric of the tablet type, it publishes zero",
+                        {"database", DatabasePrefix},
+                        {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)},
+                        {"error", error});
+                }
             }
 
             void LogWarnings(ui32 nodeId, const TString& path, const TVector<TString>& warnings) const {
@@ -237,6 +255,7 @@ namespace NKikimr {
             THashMap<TString, TTableEntry> Tables;
             THashMap<TNodeRoleKey, TContributions> ContributionsByNodeRole;
             THashSet<ui32> NodesWarnedMissingTabletType;
+            THashSet<TTabletTypes::EType> TypesReportedDescriptorErrors;
         };
 
     } // namespace

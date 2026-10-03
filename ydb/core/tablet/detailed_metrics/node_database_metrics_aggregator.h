@@ -19,6 +19,8 @@
 
 namespace NKikimr {
 
+struct TDetailedMetricsDescriptor;
+
 /**
  * Serializes the calls into the TNodeDatabaseMetricsAggregator instances of the node,
  * which come from two sides:
@@ -152,6 +154,29 @@ TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(
     NMonitoring::TDynamicCounterPtr targetCounterGroup,
     const TString& databasePath,
     bool isFollowerRole
+);
+
+/**
+ * Get the descriptor of the public detailed metrics of a tablet type, nullptr if the type has none,
+ * see GetDetailedMetricsDescriptor().
+ *
+ * @note The descriptor must outlive every aggregator, which gets it.
+ */
+using TDetailedMetricsDescriptorGetter = const TDetailedMetricsDescriptor* (*)(TTabletTypes::EType tabletType);
+
+/**
+ * The same as above, but the public metrics of the tablet types are described by the given
+ * function rather than by GetDetailedMetricsDescriptor().
+ *
+ * @note For the tests: a synthetic descriptor reaches the cases, which the descriptors
+ *       of the production tablet types do not (e.g. an empty allow-list of a category
+ *       of the low level counters, or a descriptor with errors).
+ */
+TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(
+    NMonitoring::TDynamicCounterPtr targetCounterGroup,
+    const TString& databasePath,
+    bool isFollowerRole,
+    TDetailedMetricsDescriptorGetter getDescriptor
 );
 
 /**

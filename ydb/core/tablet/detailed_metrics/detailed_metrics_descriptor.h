@@ -203,12 +203,22 @@ struct TDetailedMetricsDescriptor {
     /**
      * The allow-list of the low level counters for the TABLE raw tree:
      * every source name as written, plus x for SUM(x), MAX(x) and HIST(x).
+     *
+     * @note An empty set of a category means no counter of that category in the TABLE raw
+     *       tree (see TNodeDatabaseMetricsAggregator), unlike the empty name filter
+     *       of NPrivate::TAggregatedTabletCounters, which publishes every counter.
      */
     TDetailedMetricsCounterNames RawNames;
 
     /**
-     * The errors found when the descriptor was built. The descriptor is static
-     * (built without an actor context), so the users log these errors themselves.
+     * The errors found when the descriptor was built: each of them leaves a metric
+     * publishing zero (see FinalizeDescriptor()).
+     *
+     * The descriptor is static (built without an actor context), so it only aborts
+     * on them in a debug build, and the unit tests keep the descriptors of the production
+     * tablet types free of them. The users log them at CRIT, once per aggregator and tablet
+     * type: TNodeDatabaseMetricsAggregator on the first binding of the type,
+     * TProcessorDatabaseMetricsAggregator on the first table of the type.
      */
     TVector<TString> Errors;
 

@@ -214,6 +214,9 @@ void CollectRawNames(const TVector<TMetricSpec>& specs, TDetailedMetricsCounterN
 
 /**
  * Build and finalize the descriptor for the given tablet type.
+ *
+ * @note A release build keeps a descriptor with errors as it is, and the aggregators,
+ *       which use it, log the errors (see TDetailedMetricsDescriptor::Errors).
  */
 template <const NProtoBuf::EnumDescriptor* SimpleDesc(),
           const NProtoBuf::EnumDescriptor* CumulativeDesc(),

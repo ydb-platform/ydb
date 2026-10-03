@@ -697,6 +697,53 @@ private:
     std::thread Thread;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+// Synthetic descriptors of the public metrics of DataShard, for an aggregator created
+// with CreateNodeDatabaseMetricsAggregator(..., getDescriptor)
+
+/**
+ * @return The descriptor of the public metrics of DataShard, changed by the given function
+ *         (nullptr for another tablet type)
+ *
+ * @tparam Change The function, which changes a copy of the production descriptor once:
+ *         the result is static, as every descriptor is
+ */
+template <void (*Change)(TDetailedMetricsDescriptor&)>
+const TDetailedMetricsDescriptor* GetChangedDescriptor(TTabletTypes::EType tabletType) {
+    static const TDetailedMetricsDescriptor descriptor = []() {
+        TDetailedMetricsDescriptor changed = *GetDetailedMetricsDescriptor(TABLET_TYPE);
+        Change(changed);
+        return changed;
+    }();
+
+    return tabletType == TABLET_TYPE ? &descriptor : nullptr;
+}
+
+/**
+ * The TABLE raw tree allow-lists no application counter, while the public metrics still read them.
+ */
+void ClearAppRawNames(TDetailedMetricsDescriptor& descriptor) {
+    descriptor.RawNames.AppNames.clear();
+}
+
+/**
+ * The TABLE raw tree allow-lists no executor counter, while the public metrics still read them.
+ */
+void ClearExecutorRawNames(TDetailedMetricsDescriptor& descriptor) {
+    descriptor.RawNames.ExecutorNames.clear();
+}
+
+/**
+ * The descriptor has an error: the WRITE_ROWS rate has a SUM(x) source, which a rate does not
+ * accept, so FinalizeDescriptor() drops the sources of that metric (and of no other one).
+ */
+void BreakWriteRows(TDetailedMetricsDescriptor& descriptor) {
+    auto& sources = descriptor.Rates[WRITE_ROWS].Sources;
+    Y_ABORT_UNLESS(!sources.empty());
+    sources.front().Wrapper = ESourceWrapper::Sum;
+    Y_ABORT_UNLESS(!FinalizeDescriptor(descriptor, nullptr));
+}
+
 } // namespace <anonymous>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3723,5 +3770,200 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, *appCountersTemplate, &appNames));
         UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, fullAppCounters));
         UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(fullAppCounters, *appCountersTemplate, &appNames));
+    }
+
+    /**
+     * Verify that the TABLE bucket of a tablet type, whose allow-list of the TABLE raw tree has
+     * no application counter, publishes no application counter at all, rather than every one
+     * of the reported layout (as the empty name filter of NPrivate::TAggregatedTabletCounters
+     * would): no category=app group and no aggregate for it, while the executor counters
+     * and the public metric values, the ones of the application counters included,
+     * are unaffected throughout the life of the bucket.
+     */
+    Y_UNIT_TEST(TableBucketSkipsAnEmptyAppCategory) {
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            root, DATABASE_PATH, false /* isFollowerRole */, &GetChangedDescriptor<ClearAppRawNames>);
+
+        auto report = [&](TDataShardTablet& tablet, EDetailedMetricsLevel level, TInstant now) {
+            tablet.Report([&](const TTabletCountersBase& executorCounters, const TTabletCountersBase& appCounters) {
+                aggregator->AddCounters(TABLE_PATH, level, tablet.TabletId, 0, TABLET_TYPE, executorCounters, appCounters, now);
+            });
+        };
+
+        // The published executor counters and the application counters of every kind
+        auto fill = [](TDataShardTablet& tablet, ui64 value) {
+            auto& executor = tablet.ExecutorCounters;
+            executor.Simple()[NTabletFlatExecutor::TExecutorCounters::DB_UNIQUE_ROWS_TOTAL].Set(value);
+            executor.Cumulative()[NTabletFlatExecutor::TExecutorCounters::CONSUMED_CPU] += 100 * value;
+
+            auto& app = tablet.AppCounters;
+            app.Simple()[NDataShard::COUNTER_TX_IN_FLY].Set(value);
+            app.Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW] += value;
+            app.TxCumulative(NDataShard::TXTYPE_PROPOSE_DATA, NKikimr::COUNTER_TT_RW_COMPLETED) += value;
+        };
+
+        TDataShardTablet tablet1(1000);
+        TDataShardTablet tablet2(2000);
+
+        TInstant now = TInstant::Seconds(100);
+        fill(tablet1, 1);
+        fill(tablet2, 2);
+        report(tablet1, TDetailedMetricsSettings::MetricsLevelTable, now);
+        report(tablet2, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("The TABLE bucket without the application counters", root);
+
+        auto executorCounters = FindTableBucketCounters(root);
+        UNIT_ASSERT(executorCounters);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(executorCounters, "SUM(DbUniqueRowsTotal)"), 1 + 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(executorCounters, "ConsumedCPU"), 100 + 200);
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(executorCounters, "HIST(ConsumedCPU)"), 2);
+
+        // Not a single application counter, though the reported layout has hundreds of them
+        UNIT_ASSERT_GT(tablet1.AppCounters.Cumulative().Size(), 100u);
+        UNIT_ASSERT(!FindAppTableBucketCounters(root));
+        UNIT_ASSERT(!NMonitoring::ToJson(*root).Contains("DataShard/"));
+
+        // No aggregate of them (the layout sizes of a bucket without one are all zero)
+        const auto appLayoutSizes = GetTableBucketAppLayoutSizes(*aggregator, TABLE_PATH);
+        UNIT_ASSERT(appLayoutSizes);
+        UNIT_ASSERT_VALUES_EQUAL(FormatLayoutSizes(*appLayoutSizes), "0/0/0");
+
+        // The public metric values read the application counters all the same
+        {
+            const auto packed = PackOnce(aggregator);
+            const auto& values = GetSinglePackedCounters(packed, TDetailedMetricsSettings::MetricsLevelTable);
+            UNIT_ASSERT_VALUES_EQUAL(values.GetSimple(ROW_COUNT), 1 + 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(values, WRITE_ROWS), 1 + 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(values, CONSUMED_CPU_MICROSECONDS), 100 + 200);
+        }
+
+        // A forgotten tablet, the next report and a recalculation
+        aggregator->ForgetTablet(tablet1.TabletId, 0);
+        now += TDuration::Seconds(15);
+        fill(tablet2, 3);
+        report(tablet2, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(executorCounters, "SUM(DbUniqueRowsTotal)"), 3);
+        UNIT_ASSERT(!FindAppTableBucketCounters(root));
+        {
+            const auto packed = PackOnce(aggregator);
+            const auto& values = GetSinglePackedCounters(packed, TDetailedMetricsSettings::MetricsLevelTable);
+            UNIT_ASSERT_VALUES_EQUAL(values.GetSimple(ROW_COUNT), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(values, WRITE_ROWS), 3);
+        }
+
+        // A level change drops the bucket together with its groups
+        now += TDuration::Seconds(15);
+        report(tablet2, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        UNIT_ASSERT(!GetTableBucketAppLayoutSizes(*aggregator, TABLE_PATH));
+        UNIT_ASSERT(IsEmptyTree(root));
+
+        // So does the last tablet of a bucket created anew
+        report(tablet1, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+        UNIT_ASSERT(FindTableBucketCounters(root));
+        UNIT_ASSERT(!FindAppTableBucketCounters(root));
+
+        aggregator->ForgetTablet(tablet1.TabletId, 0);
+        aggregator->ForgetTablet(tablet2.TabletId, 0);
+        UNIT_ASSERT(IsEmptyTree(root));
+    }
+
+    /**
+     * Verify the same for a tablet type, whose allow-list of the TABLE raw tree has
+     * no executor counter.
+     */
+    Y_UNIT_TEST(TableBucketSkipsAnEmptyExecutorCategory) {
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            root, DATABASE_PATH, false /* isFollowerRole */, &GetChangedDescriptor<ClearExecutorRawNames>);
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1).AddCumulative(CONSUMED_CPU, 100).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 10);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2).AddCumulative(CONSUMED_CPU, 200).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 20);
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("The TABLE bucket without the executor counters", root);
+
+        auto appCounters = FindAppTableBucketCounters(root);
+        UNIT_ASSERT(appCounters);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdates"), 10 + 20);
+
+        // Not a single executor counter
+        UNIT_ASSERT(!FindTableBucketCounters(root));
+        UNIT_ASSERT(!NMonitoring::ToJson(*root).Contains("ConsumedCPU"));
+
+        // The public metric values read the executor counters all the same
+        {
+            const auto packed = PackOnce(aggregator);
+            const auto& values = GetSinglePackedCounters(packed, TDetailedMetricsSettings::MetricsLevelTable);
+            UNIT_ASSERT_VALUES_EQUAL(values.GetSimple(ROW_COUNT), 1 + 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(values, CONSUMED_CPU_MICROSECONDS), 100 + 200);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(values, USED_CORE_PERCENTS), 2);
+        }
+
+        // A forgotten tablet, the next report and a recalculation: the accumulated value
+        // of a cumulative counter keeps the contribution of the forgotten tablet
+        aggregator->ForgetTablet(leader1.TabletId, 0);
+        leader2.AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 5);
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now + TDuration::Seconds(15));
+        aggregator->RecalculateAllCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdates"), 10 + 20 + 5);
+        UNIT_ASSERT(!FindTableBucketCounters(root));
+
+        aggregator->ForgetTablet(leader2.TabletId, 0);
+        UNIT_ASSERT(IsEmptyTree(root));
+    }
+
+    /**
+     * Verify that a descriptor with errors, which the aggregator reports on the first binding
+     * of its tablet type, is used all the same: a metric, which failed the validation, has
+     * no sources and publishes zero (see FinalizeDescriptor()), every other one is computed,
+     * both in a PARTITION leaf and in a TABLE bucket.
+     *
+     * @note The report is a CRIT log record, which is not observable here (no actor system):
+     *       the test covers the path alone.
+     */
+    Y_UNIT_TEST(DescriptorErrorsDoNotStopTheMetrics) {
+        // WRITE_ROWS alone has lost its sources, though the tablets below still report its counter
+        const auto* descriptor = GetChangedDescriptor<BreakWriteRows>(TABLET_TYPE);
+        UNIT_ASSERT_VALUES_EQUAL(descriptor->Errors.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(descriptor->Errors.front(), "is not a plain name");
+        UNIT_ASSERT(descriptor->Rates[WRITE_ROWS].Sources.empty());
+        UNIT_ASSERT(!descriptor->Rates[CONSUMED_CPU_MICROSECONDS].Sources.empty());
+        UNIT_ASSERT(!descriptor->Gauges[ROW_COUNT].Sources.empty());
+        UNIT_ASSERT(!GetDetailedMetricsDescriptor(TABLET_TYPE)->Rates[WRITE_ROWS].Sources.empty());
+
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            root, DATABASE_PATH, false /* isFollowerRole */, &GetChangedDescriptor<BreakWriteRows>);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1).AddCumulative(CONSUMED_CPU, 100).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 10);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2).AddCumulative(CONSUMED_CPU, 200).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 20);
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, TInstant::Seconds(100));
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, TInstant::Seconds(100), OTHER_TABLE_PATH);
+
+        const auto packed = PackOnce(aggregator);
+        const auto& leafValues = GetSinglePackedCounters(packed, TDetailedMetricsSettings::MetricsLevelPartition);
+        UNIT_ASSERT_VALUES_EQUAL(leafValues.GetSimple(ROW_COUNT), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leafValues, CONSUMED_CPU_MICROSECONDS), 100);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leafValues, WRITE_ROWS), 0);
+
+        const auto* table = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable, OTHER_TABLE_PATH);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().GetSimple(ROW_COUNT), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableMetrics(), CONSUMED_CPU_MICROSECONDS), 200);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableMetrics(), WRITE_ROWS), 0);
     }
 }

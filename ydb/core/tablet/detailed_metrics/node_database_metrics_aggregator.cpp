@@ -66,7 +66,9 @@ namespace NKikimr {
          * The bucket keeps two views of the same tablets:
          * - the public metric values (see TDetailedValuesAccumulator), which Pack() reports
          *   to the SysView Processor;
-         * - the low level counters in the counter tree, a debug view refreshed only
+         * - the low level counters in the counter tree, a debug view: cumulative counters
+         *   and plain percentile histograms are updated on every report, while simple
+         *   counters, their SUM/MAX and the MAX/HIST(x) aggregates are refreshed only
          *   by RecalcAll().
          *
          * @note A PARTITION leaf has no such bucket: it is kept as its public metric values
@@ -84,6 +86,10 @@ namespace NKikimr {
              *
              * @note Only the leaders reach a TABLE bucket (see AddCounters()), so every public
              *       metric is computed, the LeaderOnly ones included.
+             *
+             * @note A category, whose allow-list is empty, has no aggregate and no category= group
+             *       at all: the empty name filter of NPrivate::TAggregatedTabletCounters publishes
+             *       every counter of the reported layout instead of none.
              */
             TCountersBucket(
                 NMonitoring::TDynamicCounterPtr bucketGroup,
@@ -94,8 +100,8 @@ namespace NKikimr {
                 const TDetailedMetricsBinding& binding)
                 : TabletType(tabletType)
                 , TypeGroup(GetOrCreateTypeGroup(bucketGroup, tabletType))
-                , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
-                , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
+                , ExecutorCounters(MakeCategoryCounters(TypeGroup, EXECUTOR_CATEGORY, counterNames.ExecutorNames, visibility))
+                , AppCounters(MakeCategoryCounters(TypeGroup, APP_CATEGORY, counterNames.AppNames, visibility))
                 , CounterNames(&counterNames)
                 , AppCountersLayout(appCountersLayout)
                 , Binding(&binding)
@@ -115,17 +121,20 @@ namespace NKikimr {
                     ++NextSourceId;
                 }
 
-                if (!ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
+                if (ExecutorCounters) {
+                    if (!ExecutorCounters->IsInitialized) {
+                        ExecutorCounters->Initialize(&executorCounters, &CounterNames->ExecutorNames);
+                    }
+                    ExecutorCounters->Apply(it->second, &executorCounters, TabletType, now);
                 }
-                if (!AppCounters.IsInitialized) {
-                    // Every report is read up to the slots of the layout the aggregate is built on,
-                    // which are a prefix of the slots of the reported layout
-                    AppCounters.Initialize(AppCountersLayout ? AppCountersLayout : &appCounters, &CounterNames->AppNames);
+                if (AppCounters) {
+                    if (!AppCounters->IsInitialized) {
+                        // Every report is read up to the slots of the layout the aggregate is built on,
+                        // which are a prefix of the slots of the reported layout
+                        AppCounters->Initialize(AppCountersLayout ? AppCountersLayout : &appCounters, &CounterNames->AppNames);
+                    }
+                    AppCounters->Apply(it->second, &appCounters, TabletType, now);
                 }
-
-                ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
-                AppCounters.Apply(it->second, &appCounters, TabletType, now);
 
                 Values.Apply(tablet, executorCounters, appCounters, now);
             }
@@ -136,11 +145,11 @@ namespace NKikimr {
                     return;
                 }
 
-                if (ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.Forget(it->second);
+                if (ExecutorCounters && ExecutorCounters->IsInitialized) {
+                    ExecutorCounters->Forget(it->second);
                 }
-                if (AppCounters.IsInitialized) {
-                    AppCounters.Forget(it->second);
+                if (AppCounters && AppCounters->IsInitialized) {
+                    AppCounters->Forget(it->second);
                 }
 
                 SourceIds.erase(it);
@@ -154,11 +163,11 @@ namespace NKikimr {
             }
 
             void RecalcAll() {
-                if (ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.RecalcAll();
+                if (ExecutorCounters && ExecutorCounters->IsInitialized) {
+                    ExecutorCounters->RecalcAll();
                 }
-                if (AppCounters.IsInitialized) {
-                    AppCounters.RecalcAll();
+                if (AppCounters && AppCounters->IsInitialized) {
+                    AppCounters->RecalcAll();
                 }
             }
 
@@ -186,10 +195,28 @@ namespace NKikimr {
 
             /**
              * @return The sizes of the layout the aggregate of the application counters is built on,
-             *         see NPrivate::TAggregatedTabletCounters::GetLayoutSizes()
+             *         see NPrivate::TAggregatedTabletCounters::GetLayoutSizes() (all zero if there is
+             *         no such aggregate)
              */
             std::array<ui32, 3> GetAppLayoutSizes() const {
-                return AppCounters.GetLayoutSizes();
+                return AppCounters ? AppCounters->GetLayoutSizes() : std::array<ui32, 3>{};
+            }
+
+        private:
+            /**
+             * @return The aggregate of the counters of one category in its category= group,
+             *         or nullptr if the category publishes no counter (see the constructor)
+             */
+            static THolder<NPrivate::TAggregatedTabletCounters> MakeCategoryCounters(
+                const NMonitoring::TDynamicCounterPtr& typeGroup,
+                const TString& category,
+                const THashSet<TString>& counterNames,
+                NMonitoring::TCountableBase::EVisibility visibility)
+            {
+                if (counterNames.empty()) {
+                    return nullptr;
+                }
+                return MakeHolder<NPrivate::TAggregatedTabletCounters>(typeGroup->GetSubgroup(CATEGORY_LABEL, category), visibility);
             }
 
         private:
@@ -197,8 +224,9 @@ namespace NKikimr {
 
             NMonitoring::TDynamicCounterPtr TypeGroup;
 
-            NPrivate::TAggregatedTabletCounters ExecutorCounters;
-            NPrivate::TAggregatedTabletCounters AppCounters;
+            // nullptr for a category, which publishes no counter
+            THolder<NPrivate::TAggregatedTabletCounters> ExecutorCounters;
+            THolder<NPrivate::TAggregatedTabletCounters> AppCounters;
 
             const TDetailedMetricsCounterNames* CounterNames;
 
@@ -261,12 +289,14 @@ namespace NKikimr {
             TNodeDatabaseMetricsAggregatorImpl(
                 NMonitoring::TDynamicCounterPtr targetCounterGroup,
                 const TString& databasePath,
-                bool isFollowerRole)
+                bool isFollowerRole,
+                TDetailedMetricsDescriptorGetter getDescriptor)
                 : TargetCounterGroup(targetCounterGroup)
                 , CounterVisibility(targetCounterGroup->Visibility())
                 , DatabasePath(databasePath)
                 , DatabasePrefix(ChopTrailingSlash(databasePath))
                 , IsFollowerRole(isFollowerRole)
+                , GetDescriptor(getDescriptor)
             {
             }
 
@@ -285,7 +315,7 @@ namespace NKikimr {
                 CheckSingleRole(followerId);
 
                 // The public metrics are a property of the tablet type: a type without them publishes nothing
-                const TDetailedMetricsDescriptor* descriptor = GetDetailedMetricsDescriptor(tabletType);
+                const TDetailedMetricsDescriptor* descriptor = GetDescriptor(tabletType);
                 if (!descriptor) {
                     return;
                 }
@@ -602,6 +632,8 @@ namespace NKikimr {
             {
                 auto& binding = Bindings[descriptor.Type];
                 if (!binding) {
+                    // The first binding of the type is the first use of its descriptor
+                    ReportDescriptorErrors(descriptor);
                     binding = Bind(descriptor, executorCounters, appCounters);
                     return *binding;
                 }
@@ -622,6 +654,21 @@ namespace NKikimr {
                     {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)});
                 extras.push_back(Bind(descriptor, executorCounters, appCounters));
                 return *extras.back();
+            }
+
+            /**
+             * Report the errors of the descriptor of a tablet type (see TDetailedMetricsDescriptor::Errors),
+             * each of which leaves a public metric publishing zero.
+             *
+             * @note Called on the first binding of the type, so once per instance and tablet type.
+             */
+            void ReportDescriptorErrors(const TDetailedMetricsDescriptor& descriptor) const {
+                for (const auto& error : descriptor.Errors) {
+                    YDB_LOG_CRIT("Invalid public detailed metric of the tablet type, it publishes zero",
+                        {"database", DatabasePath},
+                        {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)},
+                        {"error", error});
+                }
             }
 
             /**
@@ -726,13 +773,20 @@ namespace NKikimr {
              * @param[in] appCounters The application counters of a report of that layout
              * @param[in] appNames The application counters, which the bucket publishes
              *
-             * @return The layout to build the aggregate on, nullptr for the reported one
+             * @return The layout to build the aggregate on, nullptr for the reported one or if
+             *         the bucket publishes no application counter (and has no such aggregate)
              */
             const TTabletCountersBase* GetRawAppCountersLayout(
                 const TDetailedMetricsBinding& binding,
                 const TTabletCountersBase& appCounters,
                 const THashSet<TString>& appNames)
             {
+                // The bucket has no aggregate of the application counters (see TCountersBucket),
+                // so there is no layout to pick, nor a template to create
+                if (appNames.empty()) {
+                    return nullptr;
+                }
+
                 auto [it, inserted] = RawAppCountersLayouts.try_emplace(&binding, nullptr);
                 if (!inserted) {
                     return it->second;
@@ -878,6 +932,12 @@ namespace NKikimr {
             const bool IsFollowerRole;
 
             /**
+             * The source of the descriptors of the public metrics by tablet type,
+             * GetDetailedMetricsDescriptor() but in the tests.
+             */
+            const TDetailedMetricsDescriptorGetter GetDescriptor;
+
+            /**
              * Reverse map from (tabletId, followerId) to the table's relative path, used to
              * satisfy ForgetTablet when the forget event carries no table identity.
              */
@@ -941,11 +1001,25 @@ namespace NKikimr {
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
         bool isFollowerRole) {
+        return CreateNodeDatabaseMetricsAggregator(
+            targetCounterGroup,
+            databasePath,
+            isFollowerRole,
+            &GetDetailedMetricsDescriptor);
+    }
+
+    TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(
+        NMonitoring::TDynamicCounterPtr targetCounterGroup,
+        const TString& databasePath,
+        bool isFollowerRole,
+        TDetailedMetricsDescriptorGetter getDescriptor) {
+        Y_ABORT_UNLESS(getDescriptor);
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         return MakeIntrusive<TNodeDatabaseMetricsAggregatorImpl>(
             targetCounterGroup,
             databasePath,
-            isFollowerRole);
+            isFollowerRole,
+            getDescriptor);
     }
 
     TMaybe<std::array<ui32, 3>> GetTableBucketAppLayoutSizes(

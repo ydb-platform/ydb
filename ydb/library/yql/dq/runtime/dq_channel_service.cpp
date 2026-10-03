@@ -2286,7 +2286,12 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = SendFlags(DqIcChannelControl);
+    // it may subscribe only under SubscribeMutex: a consumer runs it off the session thread and Mutex, see HandlePoison
+    std::unique_lock subscribeLock(SubscribeMutex, std::defer_lock);
+    if (!Subscribed.load()) {
+        subscribeLock.lock();
+    }
+    ui32 flags = subscribeLock.owns_lock() ? SendFlags(DqIcChannelControl) : TrackFlags(DqIcChannelControl);
 
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -2829,7 +2834,8 @@ void TNodeState::HandlePoison() {
     std::lock_guard lock(Mutex);
     FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
     // a dead subscriber lingers until the hourly liveness check. Subscribed stays set so that later sends do not
-    // resubscribe; one which has already taken the flag still can
+    // resubscribe; an update which has taken the flag holds SubscribeMutex until it is sent
+    std::lock_guard subscribeLock(SubscribeMutex);
     if (Subscribed.exchange(true)) {
         ActorSystem->Send(new NActors::IEventHandle(ActorSystem->InterconnectProxy(NodeId), NodeActorId,
             new NActors::TEvents::TEvUnsubscribe()));

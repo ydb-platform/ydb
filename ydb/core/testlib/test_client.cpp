@@ -473,6 +473,11 @@ namespace Tests {
                                                     Settings->UseRealThreads);
         }
 
+        // read only while the runtime is initialized, so it has to be set here even for init = false
+        if (Settings->UseRealInterconnect) {
+            Runtime->SetUseRealInterconnect();
+        }
+
         if (init) {
             Initialize();
         }

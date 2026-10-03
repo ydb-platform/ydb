@@ -353,4 +353,7 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    optional bool EnableRelativePaths = 354 [default = false];
 }

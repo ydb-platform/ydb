@@ -440,6 +440,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
+    if constexpr (!UseMigrationProtocol) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
+
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "iface.h"
+#include "request_paths.h"
 
 #include <grpcpp/support/byte_buffer.h>
 #include <grpcpp/support/slice.h>
@@ -12,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -327,6 +329,7 @@ public:
 
 class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
+    virtual void CountResourcePath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
 };
@@ -497,6 +500,9 @@ public:
     virtual bool Validate(TString& error) = 0;
 
     // counters
+    void CountRequestPaths() const;
+    void CountDatabasePath(TStringBuf path) const;
+    void CountResourcePath(TStringBuf path) const override;
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
@@ -531,6 +537,14 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+protected:
+    virtual void CountRequestBodyPaths() const {}
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
+
+private:
+    mutable bool RelativeDatabaseCounted_ = false;
+    mutable bool RelativeResourceCounted_ = false;
 };
 
 // Request context
@@ -1000,6 +1014,10 @@ public:
         Ctx_->UseDatabase(database);
     }
 
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
+    }
+
     TVector<TStringBuf> FindClientCertPropertyValues() const override {
         return {};
     }
@@ -1359,12 +1377,36 @@ public:
         Counters = counters;
     }
 
+    void CountRequestBodyPaths() const override {
+        if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+            if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
+                this->CountDatabasePath(request->database());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::AlterDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetDatabaseStatusRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetScaleRecommendationRequest>
+                || std::is_same_v<TReq, Ydb::Cms::RemoveDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Discovery::NodeRegistrationRequest>) {
+                this->CountDatabasePath(request->path());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>) {
+                this->CountDatabasePath(request->serverless_resources().shared_database_path());
+            }
+            CountSchemaRequestPaths(*this, *request);
+        }
+    }
+
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
     }
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {

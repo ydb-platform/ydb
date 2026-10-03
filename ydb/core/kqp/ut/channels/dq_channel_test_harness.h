@@ -1234,9 +1234,8 @@ struct TSessionTest : public TLoadTest {
         return state->GetReconciliationLog();
     }
 
-    // the subscriptions to its interconnect sessions which the node holds for actors of an activity whose name has
-    // the given part: the activity of the actor which made the subscribing send, over the real interconnect only
-    // (the mock keeps none)
+    // the node's interconnect subscriptions made by actors whose activity name contains the given part; the mock
+    // has no such sensor
     i64 GetInterconnectSubscribers(ui32 nodeIndex, TStringBuf activity) {
         std::function<i64(const NMonitoring::TDynamicCounters&, bool)> sum = [&](const NMonitoring::TDynamicCounters& group, bool bySubscriber) {
             i64 result = 0;

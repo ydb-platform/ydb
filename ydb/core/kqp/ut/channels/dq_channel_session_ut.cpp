@@ -254,9 +254,8 @@ struct TSameChannelIdTest : public TSessionTest {
     }
 };
 
-// A node session subscribes to the interconnect session with its 1st send, and unsubscribes when it dies:
-// otherwise its dead id stays a subscriber of the interconnect session until its hourly liveness check. The
-// debug sessions make the discovery their 1st send, so the subscription is under their own activity.
+// A freed node session unsubscribes from the interconnect session (#54894). A debug session subscribes with its
+// own discovery, so the sensor counts it under the session actor's activity
 struct TUnsubscribeTest : public TSessionTest {
 
     void Prepare() override {
@@ -284,12 +283,6 @@ Y_UNIT_TEST_SUITE(Channels20Session) {
 
     Y_UNIT_TEST(IdleSessionDestroyed2n) {
         TIdleDestroyTest test;
-        test.Local = false;
-        test.Run();
-    }
-
-    Y_UNIT_TEST(FreedSessionUnsubscribes2n) {
-        TUnsubscribeTest test;
         test.Local = false;
         test.Run();
     }
@@ -340,6 +333,12 @@ Y_UNIT_TEST_SUITE(Channels20Session) {
     Y_UNIT_TEST(SameChannelIdNewActors1n) {
         TSameChannelIdTest test;
         test.Local = true;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreedSessionUnsubscribes2n) {
+        TUnsubscribeTest test;
+        test.Local = false;
         test.Run();
     }
 

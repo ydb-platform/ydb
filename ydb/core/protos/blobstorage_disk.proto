@@ -25,6 +25,7 @@ message TPDiskState {
         Reserved15 = 15;
         Reserved16 = 16;
         Reserved17 = 17;
+        Slow = 18;
 
         Missing = 252;
         Timeout = 253;

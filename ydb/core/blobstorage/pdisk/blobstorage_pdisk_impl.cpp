@@ -1837,7 +1837,46 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
 // Report to Whiteboard
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+bool TPDisk::SetSlowDiskState(bool slow) {
+    const auto currentState = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
+    const auto expectedState = slow
+        ? NKikimrBlobStorage::TPDiskState::Normal
+        : NKikimrBlobStorage::TPDiskState::Slow;
+    if (currentState != expectedState || SysLogDiskState.IsSlow() == slow || Cfg->ReadOnly || !SysLogger ||
+            InitPhase.load() != EInitPhase::Initialized) {
+        return false;
+    }
+
+    SysLogDiskState.SetSlow(slow);
+    DeviceSlowdownDetector.Reset();
+    *Mon.SlowPDisk = slow;
+    *Mon.PDiskState = slow
+        ? NKikimrBlobStorage::TPDiskState::Slow
+        : NKikimrBlobStorage::TPDiskState::Normal;
+    WriteSysLogRestorePoint(nullptr, TReqId(TReqId::SlowDiskState, 0), {});
+
+    YDB_LOG_P_LOG(PRI_NOTICE, TString(slow ? "Slow PDisk latch set" : "Slow PDisk latch reset"),
+        {"marker", "BPD01"},
+        {"deviceOverestimationRatio", Mon.DeviceOverestimationRatio->Val()});
+    return true;
+}
+
+bool TPDisk::UpdateSlowDiskState(ui64 nowMs) {
+    if (SysLogDiskState.IsSlow() || Cfg->ReadOnly || !SysLogger ||
+            InitPhase.load() != EInitPhase::Initialized) {
+        return false;
+    }
+
+    if (DeviceSlowdownDetector.Update(Mon.DeviceOverestimationRatio->Val(), nowMs,
+            Cfg->OverestimationSlowLimit, Cfg->OverestimationSlowDurationMs)) {
+        return SetSlowDiskState(true);
+    }
+    return false;
+}
+
 void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
+    UpdateSlowDiskState(TMonotonic::Now().MilliSeconds());
+
     TEvWhiteboardReportResult *reportResult = whiteboardReport.Response.Release();
     {
         TGuard<TMutex> guard(StateMutex);
@@ -1949,7 +1988,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }
-        pDiskMetrics.SetState(state);
+        // Slow is a whiteboard/CMS signal. PDisk remains fully operational and
+        // BSController must continue seeing it as Normal.
+        pDiskMetrics.SetState(state == NKikimrBlobStorage::TPDiskState::Slow
+            ? NKikimrBlobStorage::TPDiskState::Normal
+            : state);
         pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
             pDiskMetrics.SetExpectedSlotCount(ExpectedSlotCount);

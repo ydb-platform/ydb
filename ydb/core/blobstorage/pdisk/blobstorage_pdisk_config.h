@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "blobstorage_pdisk_device_overestimation.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
@@ -123,6 +124,11 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 SectorSize = 4 << 10;
 
     ui64 StatisticsUpdateIntervalMs = 1000;
+
+    // Chronic device slowdown detection. Production uses the RFC defaults;
+    // keeping the values on the in-memory config also permits fast tests.
+    ui64 OverestimationSlowLimit = NPDisk::OverestimationSlowLimit;
+    ui64 OverestimationSlowDurationMs = NPDisk::OverestimationSlowDurationMs;
 
     TPDiskSchedulerConfig SchedulerCfg;
 
@@ -330,6 +336,8 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SectorSize# " << SectorSize << x;
 
         str << " StatisticsUpdateIntervalMs# " << StatisticsUpdateIntervalMs << x;
+        str << " OverestimationSlowLimit# " << OverestimationSlowLimit << x;
+        str << " OverestimationSlowDurationMs# " << OverestimationSlowDurationMs << x;
 
         str << " SchedulerCfg# " << SchedulerCfg.ToString(isMultiline) << x;
 

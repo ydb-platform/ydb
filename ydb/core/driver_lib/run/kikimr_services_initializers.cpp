@@ -637,7 +637,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (auto* mon = appData->Mon) {
         NInMemoryMetricsMonitoring::TConfig metricsViewer;
-        metricsViewer.ExecutorPool = systemPoolId;
+        metricsViewer.ExecutorPool = appData->BatchPoolId;
         metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
             auto* actors = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actors, "metrics", "In-memory metric viewer", false, &system, actor, /*useAuth=*/true);

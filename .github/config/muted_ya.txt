@@ -44,7 +44,6 @@ ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionD
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
 ydb/core/persqueue/ut TPQTest.TestPQPartialRead
-ydb/core/persqueue/ut TPQTest.TestPQRead
 ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
 ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset
@@ -67,7 +66,6 @@ ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_old_proxy_handles_limit_response_from_current_tablet[mixed_current_and_intermediate]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
-ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[default-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]

@@ -24,33 +24,41 @@ TRestoreRequestExecutor::TRestoreRequestExecutor(
 
 TRestoreRequestExecutor::~TRestoreRequestExecutor()
 {
-    if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TRestoreRequestExecutor. Reply not sent");
-
-        Y_ABORT_UNLESS(false);
+    if (Promise.IsReady()) {
+        return;
     }
+
+    // Shutdown drops the executor while a list is still in flight. Reply so
+    // subscribers release this object instead of aborting the process.
+    LOG_ERROR(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TRestoreRequestExecutor destroyed before reply");
+
+    Reply(MakeError(E_REJECTED, "TRestoreRequestExecutor destroyed"));
 }
 
 void TRestoreRequestExecutor::Run()
 {
+    const auto directBlockGroup = DirectBlockGroup.lock();
+    if (!directBlockGroup) {
+        Reply(MakeError(E_REJECTED, "DirectBlockGroup destroyed"));
+        return;
+    }
+
     for (THostIndex i = 0; i < DirectBlockGroupHostCount; ++i) {
-        DoRun(i);
+        DoRun(*directBlockGroup, i);
     }
 }
 
-void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
+void TRestoreRequestExecutor::DoRun(
+    IDirectBlockGroup& directBlockGroup,
+    THostIndex hostIndex)
 {
-    auto future = DirectBlockGroup->ListPBuffers(hostIndex);
-    future.Subscribe(
-        [self = shared_from_this(), hostIndex]   //
-        (const NThreading::TFuture<TListPBufferResponse>& f)
-        {
-            //
-            self->OnResponse(hostIndex, UnsafeExtractValue(f));
-        });
+    auto future = directBlockGroup.ListPBuffers(hostIndex);
+    future.Subscribe([self = shared_from_this(), hostIndex]   //
+                     (const NThreading::TFuture<TListPBufferResponse>& f)
+                     { self->OnResponse(hostIndex, UnsafeExtractValue(f)); });
 }
 
 NThreading::TFuture<TAggregatedListPBufferResponse>

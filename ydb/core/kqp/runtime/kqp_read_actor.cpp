@@ -1350,7 +1350,7 @@ public:
         TVector<NScheme::TTypeInfo> types;
         for (auto& column : Settings->GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
-                types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+                types.push_back(MakeTypeInfo(column));
             }
         }
 

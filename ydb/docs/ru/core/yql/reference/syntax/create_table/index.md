@@ -12,28 +12,36 @@
 
 {% endif %}
 
+Обозначения в блоке синтаксиса описаны в [{#T}](../syntax-conventions.md).
+
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
-  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
-  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
-  [ENCODING([OFF|DICT])]
-  [, ...],
-    INDEX <index_name>
-      [GLOBAL|LOCAL]
-      [UNIQUE]
-      [SYNC|ASYNC]
-      [USING <index_type>]
-      ON ( <index_columns> )
-      [COVER ( <cover_columns> )]
-      [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...]
-  PRIMARY KEY ( <column>[, ...]),
-  [FAMILY <column_family> ( family_options[, ...])]
+    <column_name> <column_data_type> [<column_option> ...] [, ...]
+    [, INDEX <index_name>
+          [GLOBAL | LOCAL]
+          [UNIQUE]
+          [SYNC | ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value> [, ...] )]
+       [, ...]]
+    PRIMARY KEY ( <column_name> [, ...] )
+    [, FAMILY <family_name> ( <family_options> [, ...] )]
 )
-[PARTITION BY HASH ( <column>[, ...])]
-[WITH (<setting_name> = <setting_value>[, ...])]
+[PARTITION BY HASH ( <column_name> [, ...] )]
+[WITH ( <setting_name> = <setting_value> [, ...] )]
+[AS <select>]
+```
 
-[AS SELECT ...]
+где `<column_option>` — это:
+
+```yql
+FAMILY <family_name>
+[NULL | NOT NULL]
+DEFAULT <default_value>
+COMPRESSION ( [ algorithm = <algorithm_name> [, level = <value>] ] )
+ENCODING ( [ { OFF | DICT } ] )
 ```
 
 {% if oss == true and backend_name == "YDB" %}

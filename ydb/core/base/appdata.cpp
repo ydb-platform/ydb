@@ -92,6 +92,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig LongTxServiceConfig;
     NKikimrConfig::TUdfStoreConfig UdfStoreConfig;
+    NKikimrConfig::TIamConfig IamConfig;
 };
 
 TAppData::TAppData(
@@ -165,6 +166,7 @@ TAppData::TAppData(
     , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
     , UdfStoreConfig(Impl->UdfStoreConfig)
+    , IamConfig(Impl->IamConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

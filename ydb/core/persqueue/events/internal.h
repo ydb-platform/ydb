@@ -1997,6 +1997,7 @@ struct TEvWriteSessionsQuoter {
         EvQuotaAcquired,
         EvRemove,
         EvQuotaDeclined,
+        EvReleaseQuota,
         EvEnd,
     };
 
@@ -2023,6 +2024,19 @@ struct TEvWriteSessionsQuoter {
         {
         }
 
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvReleaseQuota : TEventLocal<TEvReleaseQuota, EvReleaseQuota> {
+        TEvReleaseQuota(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+    
         const TString Topic;
         const ui32 Partition;
         const ui32 Generation;

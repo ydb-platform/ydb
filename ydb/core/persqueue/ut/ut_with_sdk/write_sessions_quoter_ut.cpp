@@ -3,17 +3,15 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/time_provider/monotonic.h>
 
-#include <util/generic/algorithm.h>
-
 namespace NKikimr::NPQ {
 namespace {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 
-void CheckConcurrentWriteSessions(ui32 rps, bool directWrite, size_t sessionCount, bool restartTablet = false) {
+void CheckConcurrentWriteSessions(ui32 maxConcurrentInitializations, bool directWrite, size_t sessionCount, bool restartTablet = false) {
     auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
-    serverSettings.PQConfig.SetWriteSessionsInitRps(rps);
+    serverSettings.PQConfig.SetMaxConcurrentWriteSessionInitializations(maxConcurrentInitializations);
     TTopicSdkTestSetup setup("WriteSessionsQuoter", serverSettings, false);
 
     setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
@@ -25,9 +23,8 @@ void CheckConcurrentWriteSessions(ui32 rps, bool directWrite, size_t sessionCoun
     auto driver = setup.MakeDriver();
     TTopicClient client(driver);
     TVector<std::shared_ptr<IWriteSession>> sessions;
-    TVector<NThreading::TFuture<TMonotonic>> initialized;
-    const auto started = TMonotonic::Now();
-    const auto deadline = started + TDuration::Seconds(30);
+    TVector<NThreading::TFuture<void>> initialized;
+    const auto deadline = TMonotonic::Now() + TDuration::Seconds(30);
     for (size_t i = 0; i < sessionCount; ++i) {
         const auto producer = "producer-" + std::to_string(i);
         TWriteSessionSettings settings;
@@ -42,25 +39,17 @@ void CheckConcurrentWriteSessions(ui32 rps, bool directWrite, size_t sessionCoun
         // ReadyToAccept only describes the SDK buffer, not server initialization.
         initialized.push_back(session->GetInitSeqNo().Apply([](const auto& future) {
             UNIT_ASSERT_VALUES_EQUAL(future.GetValue(), 0);
-            return TMonotonic::Now();
         }));
         sessions.push_back(std::move(session));
     }
 
-    TVector<TMonotonic> completionTimes;
+    // More sessions than slots must finish while earlier sessions stay open:
+    // quota covers initialization, not the lifetime of a write session.
     for (auto& future : initialized) {
-        UNIT_ASSERT_C(future.Wait(deadline - TMonotonic::Now()), "Write session initialization timed out");
-        completionTimes.push_back(future.GetValue());
-    }
-    Sort(completionTimes);
-    if (directWrite) {
-        // The initial burst is rps; later sessions must wait for replenishment.
-        for (size_t i = rps; i < completionTimes.size(); ++i) {
-            const auto minimum = TDuration::MilliSeconds((i + 1 - rps) * 1000 / rps);
-            UNIT_ASSERT_C(completionTimes[i] - started + TDuration::MilliSeconds(10) >= minimum,
-                TStringBuilder() << "Session " << i + 1 << " initialized too early at "
-                    << completionTimes[i] - started << ", limit: " << rps << " RPS");
-        }
+        const auto now = TMonotonic::Now();
+        const auto remaining = now < deadline ? deadline - now : TDuration::Zero();
+        UNIT_ASSERT_C(future.Wait(remaining), "Write session initialization timed out");
+        future.GetValue();
     }
 
     for (auto& session : sessions) {
@@ -75,11 +64,11 @@ void CheckConcurrentWriteSessions(ui32 rps, bool directWrite, size_t sessionCoun
 }
 
 Y_UNIT_TEST_SUITE(WriteSessionsQuoterWithSDK) {
-    Y_UNIT_TEST(ConcurrentDirectSessionsAtOneRps) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsWithOneInitializationSlot) {
         CheckConcurrentWriteSessions(1, true, 8);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsAtThreeRps) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsWithThreeInitializationSlots) {
         CheckConcurrentWriteSessions(3, true, 12);
     }
 
@@ -87,11 +76,11 @@ Y_UNIT_TEST_SUITE(WriteSessionsQuoterWithSDK) {
         CheckConcurrentWriteSessions(0, false, 12);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartAtOneRps) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithOneInitializationSlot) {
         CheckConcurrentWriteSessions(1, true, 8, true);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartAtThreeRps) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithThreeInitializationSlots) {
         CheckConcurrentWriteSessions(3, true, 12, true);
     }
 }

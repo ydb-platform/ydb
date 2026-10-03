@@ -343,6 +343,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/ut unittest.sole chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/benchmark g_benchmark.sole chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume_ut unittest.sole chunk
 ydb/core/persqueue/pqrb/ut Balancing.Balancing_ManyTopics_PQv1
 ydb/core/persqueue/pqrb/ut Balancing.Balancing_ManyTopics_TopicApi
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters

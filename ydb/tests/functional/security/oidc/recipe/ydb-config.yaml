@@ -1,0 +1,18 @@
+auth_config:
+  external_idp_authentication_domain: sso
+  external_idp_config:
+    issuer: ${OIDC_ISSUER}
+    audience: ydb
+    subject_claim_name: preferred_username
+
+domains_config:
+  security_config:
+    enforce_user_token_requirement: true
+    database_allowed_sids:
+      - ${YDB_CLUSTER_ADMIN}
+      - ${OIDC_CLIENT_SID}
+      - ${OIDC_DEVICE_SID}
+    default_access:
+      - +F:${YDB_CLUSTER_ADMIN}
+      - +F:${OIDC_CLIENT_SID}
+      - +F:${OIDC_DEVICE_SID}

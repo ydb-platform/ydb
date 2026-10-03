@@ -1,14 +1,23 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/client_provider.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/device_provider.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider_base.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/overloaded.h>
+#include <util/system/guard.h>
 #include <util/system/mutex.h>
 
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <utility>
+#include <variant>
 
 namespace NYdb::inline Dev::NOidc {
 
@@ -35,17 +44,33 @@ public:
     std::string GetClientIdentity() const override;
 
 private:
-    TCredentialsProviderPtr CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const;
-
     TOidcConfig Config;
     std::string Identity;
     mutable TMutex Mutex;
     mutable TCredentialsProviderPtr Provider;
+    const std::shared_ptr<TProviderBase> State;
 };
+
+std::shared_ptr<TProviderBase> CreateState(const TOidcConfig& config);
+
+std::shared_ptr<TProviderBase> CreateState(const TOidcConfig& config) {
+    return std::visit(TOverloaded{
+        [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TStaticProvider>(config);
+        },
+        [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TClientProvider>(config);
+        },
+        [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TDeviceProvider>(config);
+        },
+    }, config.FlowConfig);
+}
 
 TFactory::TFactory(TOidcConfig config)
     : Config(std::move(config))
     , Identity(GetOidcClientIdentity(Config))
+    , State(CreateState(Config))
 {
     // The factory is identified before authorization, so a token's sub claim
     // is not available for client/device grants. Keep the credential fingerprint
@@ -62,32 +87,18 @@ TCredentialsProviderPtr TFactory::CreateProvider() const {
         if (Provider == nullptr) {
             auto facility = CreateSimpleCoreFacility();
             Provider = std::make_shared<NCredentials::NDetail::TOwningFacilityCredentialsProvider>(
-                facility, CreateProviderImpl(facility));
+                facility, State->CreateProvider(facility));
         }
         return Provider;
     }
 }
 
 TCredentialsProviderPtr TFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
-    return CreateProviderImpl(std::move(facility));
+    return State->CreateProvider(std::move(facility));
 }
 
 std::string TFactory::GetClientIdentity() const {
     return Identity;
-}
-
-TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const {
-    return std::visit(TOverloaded{
-        [&](const TStaticOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TStaticProvider>(Config, std::move(facility));
-        },
-        [&](const TClientOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TClientProvider>(Config, std::move(facility));
-        },
-        [&](const TDeviceOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TDeviceProvider>(Config, std::move(facility));
-        },
-    }, Config.FlowConfig);
 }
 
 } // namespace

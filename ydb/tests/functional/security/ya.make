@@ -3,4 +3,5 @@ RECURSE(
     acl
     mon
     node_registration
+    sdk
 )

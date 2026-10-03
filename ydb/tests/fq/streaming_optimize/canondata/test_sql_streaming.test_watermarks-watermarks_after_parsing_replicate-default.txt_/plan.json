@@ -47,7 +47,7 @@
                         "Plans" : [
                             {
                                 "PlanNodeId" : 1,
-                                "HashFunc" : "HashV1",
+                                "HashFunc" : "HashV2",
                                 "Node Type" : "HashShuffle",
                                 "KeyColumns" : [
                                     "k"

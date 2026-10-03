@@ -275,6 +275,7 @@ ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseTablesMetricsLevel-EnableDataShard
 ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseTablesMetricsLevelKeepsSchemeLimits
 ydb/core/kqp/ut/scheme KqpScheme.AlterSequence
 ydb/core/kqp/ut/scheme KqpScheme.AlterSequenceRestartWith
+ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactAccessDenied+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateAndAlterTopicYqlSettings+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery

@@ -654,6 +654,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughUnionAllRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughJoinRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughReplicateRule>());
+    decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughSortRule>());
+    decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughLimitRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TDependentJoinNotSupportedRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Decorrelation", std::move(decorrelationStageRules)));
 

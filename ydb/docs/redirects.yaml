@@ -544,6 +544,8 @@ common:
     to: /reference/ydb-cli/scan-query.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
+  - from: /devops/deployment-options/ansible/initial-deployment.md
+    to: /devops/deployment-options/ansible/initial-deployment/index.md
 
 ru:
   - from: /db/terraform.md

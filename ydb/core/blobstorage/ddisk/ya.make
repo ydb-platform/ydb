@@ -14,6 +14,10 @@ LIBRARY()
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
+        ddisk_actor_tablet_stats.cpp
+        tablet_stats.h
+        tablet_stats_actor.h
+        tablet_stats_actor.cpp
         direct_io_op.cpp
         integrity_manager.cpp
         integrity_manager.h

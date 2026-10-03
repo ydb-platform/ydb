@@ -1,31 +1,17 @@
 #pragma once
 
-#include <library/cpp/yt/cpu_clock/clock.h>
+// TODO(babenko): Drop this shim; include library/cpp/yt/system/spin_wait_hook.h instead.
 
-#include <library/cpp/yt/misc/enum.h>
-
-#include <util/system/src_location.h>
+#include <library/cpp/yt/system/spin_wait_hook.h>
 
 namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ESpinLockActivityKind,
-    (Read)
-    (Write)
-    (ReadWrite)
-);
-
-using TSpinWaitSlowPathHook = void(*)(
-    TCpuDuration cpuDelay,
-    const ::TSourceLocation& location,
-    ESpinLockActivityKind activityKind);
-
-void RegisterSpinWaitSlowPathHook(TSpinWaitSlowPathHook hook);
-void InvokeSpinWaitSlowPathHooks(
-    TCpuDuration cpuDelay,
-    const ::TSourceLocation& location,
-    ESpinLockActivityKind activityKind);
+using ::NYT::ESpinLockActivityKind;
+using ::NYT::InvokeSpinWaitSlowPathHooks;
+using ::NYT::RegisterSpinWaitSlowPathHook;
+using ::NYT::TSpinWaitSlowPathHook;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -627,12 +627,15 @@ public:
             return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
         }
 
+        ui32 GetSlotSizeInUnitsForWeight() const {
+            // Preserve config-based accounting until fixed quotas are enabled.
+            // With fixed quotas, use the same inferred slot weights as PDisk and the mapper.
+            return Max(1u, GetEffectiveExpectedSlotSize() && Metrics.HasExpectedSlotCount()
+                ? Metrics.GetSlotSizeInUnits() : SlotSizeInUnits);
+        }
+
         ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
-            // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
-            // (conservative). Switching to the effective value would change legacy accounting
-            // and requires extending the NumActiveDynamicSlots recompute triggers to units changes
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, GetSlotSizeInUnitsForWeight());
         }
 
         // sum of owner weights over the live vslots with the current weight inputs; must be
@@ -1862,7 +1865,6 @@ private:
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 
-    void RecomputePDiskNumActiveDynamicSlots(TPDiskInfo *pdisk);
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);

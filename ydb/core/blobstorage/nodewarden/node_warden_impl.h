@@ -183,6 +183,8 @@ namespace NKikimr::NStorage {
         bool EnableProxyMock = false;
         NKikimrBlobStorage::TMockDevicesConfig MockDevicesConfig;
         NKikimrBlobStorage::TInferPDiskSlotCountSettings InferPDiskSlotCountSettings;
+        TControlWrapper UseFixedVDiskSlotSize{0, 0, 1};
+        bool UseFixedVDiskSlotSizeCached = false;
 
         struct TEvPrivate {
             enum EEv {
@@ -362,7 +364,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
             TString *configWarning = nullptr);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
-            ui64 unitSizeInBytes, ui32 maxSlots);
+            ui64 unitSizeInBytes, ui32 maxSlots, bool useFixedVDiskSlotSize = false);
         void UpdateBlobStorageExecutorPoolMapping();
         // Engaged when the PDisk placement feature is enabled; disengaged means "no
         // assignment" and callers register actors on the System pool without pinning.
@@ -789,6 +791,7 @@ namespace NKikimr::NStorage {
 
         void SendDiskMetrics(bool reportMetrics);
         static void SetCurrentVDiskId(const TVDiskRecord& vdisk, NKikimrBlobStorage::TVDiskMetrics *metrics);
+        void UpdatePDiskSettings();
         void Handle(TEvStatusUpdate::TPtr ev);
 
         void Handle(TEvBlobStorage::TEvDropDonor::TPtr ev);

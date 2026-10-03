@@ -57,7 +57,7 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
         return;
     }
     ui64 allocatedSize = 0;
-    ui64 totalSize = 0;
+    std::optional<ui64> totalSize;
     for (const TGroupDiskInfo& disk : disks) {
         const auto& metrics = *disk.VDiskMetrics;
         if (metrics.HasAllocatedSize()) {
@@ -66,22 +66,32 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (disk.ExpectedSlotSize) {
-            slotSize = disk.ExpectedSlotSize;
+        if (disk.ExpectedSlotSize && pdiskMetrics.GetEnforcedDynamicUnitSize()) {
+            slotSize = pdiskMetrics.GetEnforcedDynamicUnitSize();
         } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
             slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
+        } else if (disk.ExpectedSlotSize) {
+            slotSize = disk.ExpectedSlotSize;
         } else if (pdiskMetrics.GetTotalSize() && disk.ExpectedSlotCount) {
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
-        slotSize *= disk.ExpectedSlotSize
-            ? 1
-            : TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits());
-        if (slotSize) {
-            totalSize = Min(totalSize ? totalSize : Max<ui64>(), slotSize);
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
+            groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize,
+            pdiskMetrics.GetEnforcedDynamicUnitSize());
+        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
+        if (disk.ExpectedSlotSize) {
+            if (pdiskMetrics.HasUserChunkPoolSize()) {
+                slotSize = Min(slotSize, pdiskMetrics.GetUserChunkPoolSize());
+            } else if (pdiskMetrics.HasTotalSize()) {
+                slotSize = Min(slotSize, pdiskMetrics.GetTotalSize());
+            }
+        }
+        if (slotSize || (disk.ExpectedSlotSize && pdiskMetrics.HasUserChunkPoolSize())) {
+            totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize * disks.size() * type.DataParts() / type.TotalPartCount();
+    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
     const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
     info->SetAllocatedSize(b);
     info->SetAvailableSize(b < a ? a - b : 0);
@@ -348,6 +358,12 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
+    if (pDiskInfo->Metrics.HasEnforcedDynamicUnitSize()) {
+        info->SetEnforcedDynamicUnitSize(pDiskInfo->Metrics.GetEnforcedDynamicUnitSize());
+    }
+    if (pDiskInfo->Metrics.HasUserChunkPoolSize()) {
+        info->SetUserChunkPoolSize(pDiskInfo->Metrics.GetUserChunkPoolSize());
+    }
     ui32 expectedSlotCount = 0;
     ui32 slotSizeInUnits = 0;
     pDiskInfo->ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
@@ -604,6 +620,12 @@ void TBlobStorageController::UpdateSystemViews() {
                     pb->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pdisk.PDiskMetrics->GetState()));
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
+                    }
+                    if (pdisk.PDiskMetrics->HasEnforcedDynamicUnitSize()) {
+                        pb->SetEnforcedDynamicUnitSize(pdisk.PDiskMetrics->GetEnforcedDynamicUnitSize());
+                    }
+                    if (pdisk.PDiskMetrics->HasUserChunkPoolSize()) {
+                        pb->SetUserChunkPoolSize(pdisk.PDiskMetrics->GetUserChunkPoolSize());
                     }
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));

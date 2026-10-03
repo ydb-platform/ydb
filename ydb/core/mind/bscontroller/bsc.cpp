@@ -177,18 +177,31 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         const auto& metrics = pdisk->Metrics;
 
         const ui32 expectedSlotCount = pdisk->GetEffectiveExpectedSlotCount();
+        const ui64 expectedSlotSize = pdisk->GetEffectiveExpectedSlotSize();
 
         ui64 vdiskSlotSize = 0;
-        const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
-        if (metrics.HasEnforcedDynamicSlotSize()) {
-            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
+            GroupSizeInUnits, pdisk->SlotSizeInUnits, expectedSlotSize, metrics.GetEnforcedDynamicUnitSize());
+        if (expectedSlotSize && metrics.GetEnforcedDynamicUnitSize()) {
+            vdiskSlotSize = metrics.GetEnforcedDynamicUnitSize();
+        } else if (metrics.HasEnforcedDynamicSlotSize()) {
+            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
         } else if (metrics.GetTotalSize()) {
             const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
                 ? expectedSlotCount
                 : pdisk->NumActiveDynamicSlots + pdisk->StaticSlotUsage;
-            vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
+            vdiskSlotSize = metrics.GetTotalSize() / shareFactor;
         }
-        if (vdiskSlotSize) {
+        vdiskSlotSize = vdiskSlotSize > Max<ui64>() / quotaMultiplier
+            ? Max<ui64>() : vdiskSlotSize * quotaMultiplier;
+        if (expectedSlotSize) {
+            if (metrics.HasUserChunkPoolSize()) {
+                vdiskSlotSize = Min(vdiskSlotSize, metrics.GetUserChunkPoolSize());
+            } else if (metrics.HasTotalSize()) {
+                vdiskSlotSize = Min(vdiskSlotSize, metrics.GetTotalSize());
+            }
+        }
+        if (vdiskSlotSize || (expectedSlotSize && metrics.HasUserChunkPoolSize())) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 

@@ -295,6 +295,25 @@ def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
     return int(vu / pu) + (1 if (vu % pu) else 0)
 
 
+def get_vslot_quota(group_size_in_units, pdisk_slot_size_in_units, slot_size,
+                    expected_slot_size=0, user_chunk_pool_size=None, total_size=None, enforced_unit_size=0):
+    if expected_slot_size:
+        quota = enforced_unit_size * max(1, group_size_in_units) if enforced_unit_size else slot_size or expected_slot_size
+        limit = user_chunk_pool_size if user_chunk_pool_size is not None else total_size
+        return min(quota, limit) if limit is not None else quota
+    return slot_size * get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units)
+
+
+def get_vslot_quota_from_pdisk(group_size_in_units, pdisk):
+    metrics = pdisk.PDiskMetrics
+    _, slot_size_in_units = get_pdisk_inferred_settings(pdisk)
+    return get_vslot_quota(
+        group_size_in_units, slot_size_in_units, metrics.EnforcedDynamicSlotSize,
+        pdisk.ExpectedSlotSize,
+        metrics.UserChunkPoolSize if metrics.HasField('UserChunkPoolSize') else None,
+        metrics.TotalSize if metrics.HasField('TotalSize') else None, metrics.EnforcedDynamicUnitSize)
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int

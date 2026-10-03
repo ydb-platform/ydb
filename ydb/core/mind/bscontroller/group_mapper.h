@@ -157,12 +157,19 @@ namespace NKikimr {
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
                 std::optional<TString> DiskScope;
+                // SpaceAvailable is a per-slot-size limit rather than free PDisk bytes.
+                bool SpaceAvailablePerUnit = false;
+                ui64 EnforcedDynamicUnitSize = 0;
+                std::optional<ui64> MaxSlotSizeInBytes; // physical capacity limit, including the space margin
+                std::optional<i64> AvailableCapacityInUnits; // may be negative after a group resize
             };
 
             struct TPDiskSpaceState {
                 std::optional<ui64> EnforcedDynamicSlotSize;
+                ui64 EnforcedDynamicUnitSize = 0;
                 ui64 AvailableSize = 0;
                 ui64 TotalSize = 0;
+                std::optional<ui64> UserChunkPoolSize;
             };
 
             struct TPDiskState {
@@ -181,6 +188,7 @@ namespace NKikimr {
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
                 std::optional<TString> DiskScope;
+                ui64 NumActiveUnits = 0; // assigned capacity, independent of occupied slot weights
             };
 
             struct TVSlotState {
@@ -290,7 +298,7 @@ namespace NKikimr {
                                           NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder);
             static bool SlotSpaceEnforced(const NKikimrBlobStorage::TPDiskMetrics& metrics,
                                           NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
-                return metrics.HasEnforcedDynamicSlotSize()
+                return (metrics.GetEnforcedDynamicUnitSize() || metrics.HasEnforcedDynamicSlotSize())
                        && colorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
             }
 

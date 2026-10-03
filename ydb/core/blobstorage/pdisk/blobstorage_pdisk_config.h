@@ -502,11 +502,14 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
     }
 
-    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
-        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+    // Old PDisks enforce one ExpectedSlotSize per owner. Only the new metric opts into unit quotas.
+    static ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize,
+            ui64 enforcedDynamicUnitSize = 0) {
+        return expectedSlotSize ? (enforcedDynamicUnitSize ? Max(1u, groupSizeInUnits) : 1u)
+            : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {

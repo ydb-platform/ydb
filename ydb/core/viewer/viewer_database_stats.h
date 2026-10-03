@@ -20,9 +20,10 @@ struct TDatabaseStorageStats {
             const NKikimrWhiteboard::TVDiskStateInfo& vdisk,
             const NKikimrWhiteboard::TPDiskStateInfo& pdisk,
             ui32 groupSizeInUnits) {
-        ui64 slotSize = pdisk.GetExpectedSlotSize();
+        ui64 slotSize = pdisk.GetExpectedSlotSize() && pdisk.GetEnforcedDynamicUnitSize()
+            ? pdisk.GetEnforcedDynamicUnitSize() : pdisk.GetEnforcedDynamicSlotSize();
         if (!slotSize) {
-            slotSize = pdisk.GetEnforcedDynamicSlotSize();
+            slotSize = pdisk.GetExpectedSlotSize();
         }
         if (!slotSize) {
             const ui32 slotCount = pdisk.GetExpectedSlotCount();
@@ -34,11 +35,20 @@ struct TDatabaseStorageStats {
             slotSize = pdisk.GetTotalSize() / slotCount;
         }
 
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
             groupSizeInUnits,
             pdisk.GetSlotSizeInUnits(),
-            pdisk.GetExpectedSlotSize());
-        Total += slotSize * ownerWeight;
+            pdisk.GetExpectedSlotSize(),
+            pdisk.GetEnforcedDynamicUnitSize());
+        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
+        if (pdisk.GetExpectedSlotSize()) {
+            if (pdisk.HasUserChunkPoolSize()) {
+                slotSize = Min(slotSize, pdisk.GetUserChunkPoolSize());
+            } else if (pdisk.HasTotalSize()) {
+                slotSize = Min(slotSize, pdisk.GetTotalSize());
+            }
+        }
+        Total += slotSize;
     }
 };
 
@@ -221,6 +231,9 @@ public:
             }
             if (PDiskStateResponse.count(nodeId) == 0) {
                 auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
+                request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kEnforcedDynamicUnitSizeFieldNumber);
                 PDiskStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
             if (VDiskStateResponse.count(nodeId) == 0) {

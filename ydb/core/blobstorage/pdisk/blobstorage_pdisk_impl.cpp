@@ -184,6 +184,15 @@ void TPDisk::NormalizeExpectedSlotSettings() {
     Cfg->ExpectedSlotSize = ExpectedSlotSize;
 }
 
+bool TPDisk::ValidateExpectedSlotSize(ui64 expectedSlotSize, TString& errorReason) const {
+    if (expectedSlotSize && expectedSlotSize < Format.ChunkSize) {
+        errorReason = TStringBuilder() << "ExpectedSlotSize must be at least one physical chunk"
+            << " ExpectedSlotSize# " << expectedSlotSize << " ChunkSize# " << Format.ChunkSize;
+        return false;
+    }
+    return true;
+}
+
 i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
     if (!ExpectedSlotSize || !Format.ChunkSize) {
         return 0;
@@ -195,7 +204,7 @@ i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
 }
 
 ui32 TPDisk::GetOwnerWeight(ui32 groupSizeInUnits) const {
-    return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, Cfg->SlotSizeInUnits, ExpectedSlotSize);
+    return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, Cfg->SlotSizeInUnits);
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -1881,7 +1890,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (ExpectedSlotSize) {
-            *Mon.SlotSizeBytes = ExpectedSlotSize;
+            *Mon.SlotSizeBytes = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
         } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
@@ -1935,23 +1944,35 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetPDiskId(PCtx->PDiskId);
         pDiskMetrics.SetTotalSize(Format.DiskSize);
         pDiskMetrics.SetAvailableSize(availableSize);
+        // Until replay initializes the keeper, its zero pool means unknown capacity.
+        if (InitPhase == EInitPhase::Initialized) {
+            pDiskMetrics.SetUserChunkPoolSize(ui64(Keeper.GetUserChunkPoolSize()) * Format.ChunkSize);
+            pdiskState.SetUserChunkPoolSize(pDiskMetrics.GetUserChunkPoolSize());
+            const ui64 unitSize = ExpectedSlotSize ? ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize : 0;
+            pDiskMetrics.SetEnforcedDynamicUnitSize(unitSize);
+            // Whiteboard merges fields: explicitly clear the unit model when it is disabled.
+            pdiskState.SetEnforcedDynamicUnitSize(unitSize);
+        }
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
         //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         //pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
-        i64 minSlotSize = Max<i64>();
+        ui64 minSlotSize = Max<ui64>();
         for (const auto& [_, owner] : VDiskOwners) {
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+            // Preserve the guarantee understood by older consumers of this wire field.
+            const ui32 weight = ExpectedSlotSize ? 1 : Keeper.GetOwnerWeight(owner);
+            minSlotSize = Min(minSlotSize, ui64(Keeper.GetOwnerHardLimit(owner) / weight) * Format.ChunkSize);
         }
-        if (minSlotSize != Max<i64>()) {
+        if (minSlotSize != Max<ui64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }
         pDiskMetrics.SetState(state);
         pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
-        if (ExpectedSlotCount) {
+        // A disk smaller than ExpectedSlotSize has an explicit zero-slot budget.
+        if (ExpectedSlotCount || ExpectedSlotSize) {
             pDiskMetrics.SetExpectedSlotCount(ExpectedSlotCount);
         }
         if (ExpectedSlotSize) {
@@ -2560,7 +2581,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
     ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
 
-    Keeper.SetOwnerWeight(owner, ownerWeight);
+    Keeper.SetOwnerSettings(owner, ownerWeight, evYardInit.GroupSizeInUnits);
     AddCbsSet(owner);
 
     YDB_LOG_P_LOG(PRI_NOTICE, "Registered known VDisk",
@@ -2699,7 +2720,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         // A new owner on a read-only PDisk was already rejected by YardInitStart.
 
         // Allocate quota for the owner
-        Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits));
+        Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits), evYardInit.GroupSizeInUnits);
 
         TOwnerData& ownerData = OwnerData[owner];
         ownerData.Reset(false);
@@ -2773,7 +2794,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     {
         TGuard<TMutex> guard(StateMutex);
         OwnerData[ev.Owner].GroupSizeInUnits = ev.GroupSizeInUnits;
-        Keeper.SetOwnerWeight(ev.Owner, GetOwnerWeight(ev.GroupSizeInUnits));
+        Keeper.SetOwnerSettings(ev.Owner, GetOwnerWeight(ev.GroupSizeInUnits), ev.GroupSizeInUnits);
     }
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
@@ -2788,10 +2809,17 @@ void TPDisk::YardResize(TYardResize &ev) {
 
 void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
     TGuard<TMutex> guard(StateMutex);
+    TString errorReason;
+    if (!ValidateExpectedSlotSize(request.ExpectedSlotSize, errorReason)) {
+        Mon.ChangeExpectedSlotCount.CountResponse();
+        PCtx->ActorSystem->Send(request.Sender,
+            new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::ERROR, errorReason));
+        return;
+    }
     ExpectedSlotCount = request.ExpectedSlotCount;
     ExpectedSlotSize = request.ExpectedSlotSize;
-    NormalizeExpectedSlotSettings();
     Cfg->SlotSizeInUnits = request.SlotSizeInUnits;
+    NormalizeExpectedSlotSettings();
     Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks());
     for (TOwner owner = OwnerBeginUser; owner < OwnerEndUser; ++owner) {
         if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {

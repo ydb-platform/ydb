@@ -1831,21 +1831,8 @@ namespace NKikimr::NDDisk {
         PersistentBufferDiskOperationInflight.erase(inflightIt);
     }
 
-    ui64 TDDiskActor::CalcPersistentBufferInMemoryCacheSize() {
-        ui64 res = 0;
-        for (auto& [_, v] : PersistentBuffers) {
-            for (auto& [__, r] : v.Records) {
-                if (r.Size == r.Data.size()) {
-                    res += r.Size;
-                }
-            }
-        }
-        return res;
-    }
-
     void TDDiskActor::SanitizePersistentBufferInMemoryCache() {
         while (PersistentBufferInMemoryCacheSize > PersistentBufferFormat.MaxInMemoryCache) {
-            Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             auto recordIt = PersistentBuffersInMemoryCacheUptime.begin();
             Y_ABORT_UNLESS(recordIt != PersistentBuffersInMemoryCacheUptime.end());
             auto lsnIt = recordIt->second.begin();
@@ -1853,6 +1840,7 @@ namespace NKikimr::NDDisk {
             auto& pb = PersistentBuffers.at({lsnIt->TabletId, lsnIt->Generation, lsnIt->DirectBlockGroupIndex});
             auto& pr = pb.Records.at(lsnIt->Lsn);
             Y_ABORT_UNLESS(pr.Data.size() == pr.Size);
+            Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= pr.Size);
             PersistentBufferInMemoryCacheSize -= pr.Size;
             *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
             recordIt->second.erase(lsnIt);
@@ -1866,7 +1854,6 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::SanitizePersistentBufferInMemoryCache(ui64 tabletId, ui32 generation, ui64 lsn, TPersistentBuffer::TRecord& record, ui8 directBlockGroupIndex) {
         if (!record.Data.empty()) {
             Y_ABORT_UNLESS(record.Data.size() == record.Size);
-            Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
             PersistentBufferInMemoryCacheSize -= record.Size;
             *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;

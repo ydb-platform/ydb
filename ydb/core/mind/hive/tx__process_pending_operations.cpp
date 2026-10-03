@@ -7,8 +7,6 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxProcessPendingOperations : public TTransactionBase<THive> {
-    TVector<THolder<ITransaction>> PendingBatches;
-
 public:
     TTxProcessPendingOperations(THive *hive)
         : TBase(hive)
@@ -26,11 +24,6 @@ public:
                 {"logPrefix", GetLogPrefix()});
             TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
-        for (auto& [key, batch] : Self->PendingCreateTabletBatches) {
-            if (auto* tx = Self->SchedulePendingCreateTabletBatch(batch)) {
-                PendingBatches.emplace_back(tx);
-            }
-        }
         for (auto& handle : Self->PendingOperations) {
             TlsActivationContext->Send(handle.Release());
         }
@@ -41,9 +34,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxProcessPendingOperations::Complete",
             {"logPrefix", GetLogPrefix()});
-        for (auto& batch : PendingBatches) {
-            Self->Execute(batch.Release());
-        }
+        Self->ProcessPendingCreateTabletBatches();
     }
 };
 

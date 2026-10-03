@@ -863,6 +863,9 @@ public:
         SideEffects.Complete(ctx, Self->Requests);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
+        if (PendingBatchGeneration) {
+            Self->CompletePendingCreateTabletBatchRetry(PendingBatchGeneration);
+        }
     }
 };
 

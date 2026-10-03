@@ -1289,30 +1289,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     class TPendingBatchTestHive : public NHive::TTestHive {
-        THolder<NTabletFlatExecutor::ITransaction> HeldBatch;
-
-        STATEFN(StateWithHeldBatch) {
-            if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
-                UNIT_ASSERT(HeldBatch);
-                Execute(HeldBatch.Release());
-            } else {
-                THive::StateWork(ev);
-            }
-        }
-
     public:
         using TTestHive::TTestHive;
         using THive::PendingCreateTabletBatches;
         using THive::TPendingCreateTabletBatch;
         using THive::Sequencer;
+        using THive::PendingCreateTabletBatchRetries;
+        using THive::ActivePendingCreateTabletBatchRetries;
+        using THive::MaxPendingCreateTabletBatchRetriesInFlight;
 
-        void HoldScheduledBatch(ui64 owner, ui64 firstIdx) {
-            UNIT_ASSERT(!HeldBatch);
-            // Use the production scheduling path, but hold its transaction until
-            // the test delivers a wakeup. All deletion handlers remain real.
-            HeldBatch.Reset(SchedulePendingCreateTabletBatch(PendingCreateTabletBatches.at(std::make_pair(owner, firstIdx))));
-            UNIT_ASSERT(HeldBatch);
-            Become(&TPendingBatchTestHive::StateWithHeldBatch);
+        size_t RunningPendingCreateTabletBatchRetries() const {
+            return CountIf(ActivePendingCreateTabletBatchRetries, [](const auto& entry) {
+                return entry.second.Running;
+            });
         }
     };
 
@@ -1332,6 +1321,211 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         MakeSureTabletIsUp(runtime, tenantHive, 0);
         return tenantHive;
+    }
+
+    Y_UNIT_TEST(TestBulkCreateResumePreservesHiveInfoPriority) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinRequestSequenceSize(1024);
+            app.HiveConfig.SetRequestSequenceSize(1024);
+            app.HiveConfig.SetMaxRequestSequenceSize(1024);
+        });
+        TPendingBatchTestHive* tenantHive = nullptr;
+        const ui64 hive = StartBulkCreateTestHives(runtime, &tenantHive);
+        const auto sender = runtime.AllocateEdgeActor();
+        constexpr size_t BatchCount = 256;
+        constexpr size_t Window = TPendingBatchTestHive::MaxPendingCreateTabletBatchRetriesInFlight;
+        constexpr ui32 TabletsPerBatch = 2;
+        TBlockEvents<TEvHive::TEvResponseTabletIdSequence> refills(runtime, [=](const auto& ev) {
+            return ev->Get()->Record.GetOwner().GetOwner() == hive;
+        });
+        for (size_t i = 0; i < BatchCount; ++i) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+            request->Record = MakeBulkCreate(1000 + i * TabletsPerBatch, TabletsPerBatch);
+            runtime.SendToPipe(hive, sender, request.Release(), 0, GetPipeConfigWithRetries(), TActorId(), i + 1);
+        }
+        runtime.WaitFor("all batches are waiting for IDs", [&] {
+            return tenantHive->PendingCreateTabletBatches.size() == BatchCount && !refills.empty();
+        });
+
+        using TResume = NHive::TEvPrivate::TEvResumePendingCreateTabletBatch;
+        TBlockEvents<TResume> resumes(runtime);
+        refills.Stop().Unblock();
+        runtime.WaitFor("retry window is scheduled", [&] { return resumes.size() == Window; });
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatchRetries.size(), BatchCount - Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->ActivePendingCreateTabletBatchRetries.size(), Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), 0);
+        const ui64 firstGeneration = resumes.front()->Get()->Generation;
+        const auto firstKey = tenantHive->ActivePendingCreateTabletBatchRetries.at(firstGeneration).Key;
+
+        // Put both events into Hive's priority queue before allowing it to dispatch.
+        // This checks ordering, not machine-dependent response latency.
+        TBlockEvents<NHive::TEvPrivate::TEvProcessIncomingEvent> dispatch(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == tenantHive->SelfId();
+        });
+        bool retryArrived = false;
+        auto retryObserver = runtime.AddObserver<TResume>([&](auto&) { retryArrived = true; });
+        bool infoArrived = false;
+        const auto infoSender = runtime.AllocateEdgeActor();
+        auto infoObserver = runtime.AddObserver<TEvHive::TEvRequestHiveInfo>([&](auto& ev) {
+            if (ev->Sender == infoSender) {
+                infoArrived = true;
+            }
+        });
+        resumes.Unblock(1);
+        auto infoRequest = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+        infoRequest->Record.SetTabletType(TTabletTypes::Dummy);
+        runtime.Send(new IEventHandle(tenantHive->SelfId(), infoSender, infoRequest.Release()));
+        runtime.WaitFor("retry and HiveInfo are in the priority queue", [&] {
+            return retryArrived && infoArrived && !dispatch.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatches.size(), BatchCount);
+        dispatch.Stop().Unblock();
+        const auto info = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(infoSender);
+        // HiveInfo was handled before even the first resumed batch created tablets.
+        UNIT_ASSERT_VALUES_EQUAL(info->Get()->Record.TabletsSize(), 0);
+
+        runtime.WaitFor("first batch completed and its slot is refilled", [&] { return resumes.size() == Window; });
+        UNIT_ASSERT(!tenantHive->ActivePendingCreateTabletBatchRetries.contains(firstGeneration));
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatches.size(), BatchCount - 1);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatchRetries.size(), BatchCount - 1 - Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), 0);
+        resumes.Stop();
+        // A delayed duplicate of a completed retry must not release another slot.
+        runtime.Send(new IEventHandle(tenantHive->SelfId(), sender,
+            new TResume(firstKey.first, firstKey.second, firstGeneration)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->ActivePendingCreateTabletBatchRetries.size(), Window);
+        for (const auto& retry : resumes) {
+            UNIT_ASSERT(tenantHive->ActivePendingCreateTabletBatchRetries.contains(retry->Get()->Generation));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatches.size(), BatchCount - 1);
+        resumes.Unblock();
+
+        THashSet<ui64> cookies;
+        THashSet<ui64> tabletIds;
+        for (size_t i = 0; i < BatchCount; ++i) {
+            const auto ev = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender);
+            UNIT_ASSERT(ev->Cookie >= 1 && ev->Cookie <= BatchCount);
+            UNIT_ASSERT(cookies.insert(ev->Cookie).second);
+            const auto& reply = ev->Get()->Record;
+            UNIT_ASSERT(reply.GetIsBatch());
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), TabletsPerBatch);
+            for (size_t j = 0; j < reply.ResultsSize(); ++j) {
+                const auto& result = reply.GetResults(j);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetOwnerIdx(), 1000 + (ev->Cookie - 1) * TabletsPerBatch + j);
+                UNIT_ASSERT(result.GetTabletID());
+                UNIT_ASSERT(tabletIds.insert(result.GetTabletID()).second);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), BatchCount * TabletsPerBatch);
+        UNIT_ASSERT(tenantHive->PendingCreateTabletBatches.empty());
+        UNIT_ASSERT(tenantHive->PendingCreateTabletBatchRetries.empty());
+        UNIT_ASSERT(tenantHive->ActivePendingCreateTabletBatchRetries.empty());
+    }
+
+    Y_UNIT_TEST(TestBulkCreateResumeWindowWithDelayedCommits) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinRequestSequenceSize(1024);
+            app.HiveConfig.SetRequestSequenceSize(1024);
+            app.HiveConfig.SetMaxRequestSequenceSize(1024);
+        });
+        TPendingBatchTestHive* tenantHive = nullptr;
+        const ui64 hive = StartBulkCreateTestHives(runtime, &tenantHive);
+        const auto sender = runtime.AllocateEdgeActor();
+        constexpr size_t Window = TPendingBatchTestHive::MaxPendingCreateTabletBatchRetriesInFlight;
+        constexpr size_t BatchCount = 4 * Window;
+        static_assert(Window > 1);
+        TBlockEvents<TEvHive::TEvResponseTabletIdSequence> refills(runtime, [=](const auto& ev) {
+            return ev->Get()->Record.GetOwner().GetOwner() == hive;
+        });
+        for (size_t i = 0; i < BatchCount; ++i) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+            // One tablet per batch models many small tables, with no batching
+            // across table requests at the caller.
+            request->Record = MakeBulkCreate(1000 + i, 1);
+            runtime.SendToPipe(hive, sender, request.Release(), 0, GetPipeConfigWithRetries(), TActorId(), i + 1);
+        }
+        runtime.WaitFor("single-tablet batches are waiting for IDs", [&] {
+            return tenantHive->PendingCreateTabletBatches.size() == BatchCount && !refills.empty();
+        });
+        using TResume = NHive::TEvPrivate::TEvResumePendingCreateTabletBatch;
+        TBlockEvents<TResume> resumes(runtime);
+        refills.Stop().Unblock();
+        runtime.WaitFor("retry window is scheduled", [&] { return resumes.size() == Window; });
+
+        // Install the blocker after the ID range is committed, but before any
+        // retry runs. Complete cannot release its slot without these ACKs.
+        TBlockEvents<TEvTablet::TEvCommitResult> commits(runtime, [=](const auto& ev) {
+            return ev->Get()->TabletID == hive;
+        });
+        THashSet<ui64> repliedCookies;
+        auto replyObserver = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == sender) {
+                repliedCookies.insert(ev->Cookie);
+            }
+        });
+        const ui64 firstGeneration = resumes.front()->Get()->Generation;
+        const auto firstKey = tenantHive->ActivePendingCreateTabletBatchRetries.at(firstGeneration).Key;
+        resumes.Stop().Unblock();
+        runtime.WaitFor("whole retry window executed without a log confirmation", [&] {
+            return tenantHive->RunningPendingCreateTabletBatchRetries() == Window
+                && tenantHive->PendingCreateTabletBatches.size() == BatchCount - Window && !commits.empty();
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->ActivePendingCreateTabletBatchRetries.size(), Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatchRetries.size(), BatchCount - Window);
+        UNIT_ASSERT(repliedCookies.empty());
+
+        // A duplicate while its transaction is awaiting commit must not consume
+        // a second slot or complete the first one prematurely.
+        runtime.Send(new IEventHandle(tenantHive->SelfId(), sender,
+            new TResume(firstKey.first, firstKey.second, firstGeneration)));
+        const auto infoSender = runtime.AllocateEdgeActor();
+        auto infoRequest = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+        infoRequest->Record.SetTabletType(TTabletTypes::Dummy);
+        runtime.Send(new IEventHandle(tenantHive->SelfId(), infoSender, infoRequest.Release()));
+        const auto info = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(infoSender);
+        UNIT_ASSERT_VALUES_EQUAL(info->Get()->Record.TabletsSize(), Window);
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->ActivePendingCreateTabletBatchRetries.size(), Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), Window);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->PendingCreateTabletBatches.size(), BatchCount - Window);
+        UNIT_ASSERT(repliedCookies.empty());
+
+        // One log confirmation may complete several grouped transactions; refill
+        // exactly the freed slots while all subsequent confirmations stay held.
+        commits.Unblock(1);
+        runtime.WaitFor("confirmed slots are filled with more waiting batches", [&] {
+            return !repliedCookies.empty() && tenantHive->RunningPendingCreateTabletBatchRetries() == Window
+                && tenantHive->PendingCreateTabletBatches.size() < BatchCount - Window;
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->ActivePendingCreateTabletBatchRetries.size(), Window);
+        commits.Stop().Unblock();
+
+        THashSet<ui64> cookies;
+        THashSet<ui64> tabletIds;
+        for (size_t i = 0; i < BatchCount; ++i) {
+            const auto ev = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender);
+            UNIT_ASSERT(ev->Cookie >= 1 && ev->Cookie <= BatchCount);
+            UNIT_ASSERT(cookies.insert(ev->Cookie).second);
+            const auto& reply = ev->Get()->Record;
+            UNIT_ASSERT(reply.GetIsBatch());
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), 1);
+            const auto& result = reply.GetResults(0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetOwnerIdx(), 1000 + ev->Cookie - 1);
+            UNIT_ASSERT(result.GetTabletID());
+            UNIT_ASSERT(tabletIds.insert(result.GetTabletID()).second);
+        }
+        UNIT_ASSERT(tenantHive->PendingCreateTabletBatches.empty());
+        UNIT_ASSERT(tenantHive->PendingCreateTabletBatchRetries.empty());
+        UNIT_ASSERT(tenantHive->ActivePendingCreateTabletBatchRetries.empty());
     }
 
     Y_UNIT_TEST(TestBulkCreateWaitsForTabletIds) {
@@ -1574,8 +1768,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         request->Record = record;
         runtime.SendToPipe(hive, sender, request.Release(), 0, GetPipeConfigWithRetries());
         runtime.WaitFor("batch waits for IDs", [&] { return !refills.empty(); });
-        tenantHive->HoldScheduledBatch(record.GetOwner(), 1000);
+        TBlockEvents<NHive::TEvPrivate::TEvResumePendingCreateTabletBatch> retries(runtime);
+        refills.Stop().Unblock();
+        runtime.WaitFor("batch retry is queued after ID replenishment", [&] { return !retries.empty(); });
         UNIT_ASSERT(tenantHive->PendingCreateTabletBatches.at(key).Scheduled);
+        UNIT_ASSERT_VALUES_EQUAL(tenantHive->RunningPendingCreateTabletBatchRetries(), 0);
 
         const auto newSender = runtime.AllocateEdgeActor();
         auto retry = MakeHolder<TEvHive::TEvCreateTablet>();
@@ -1593,11 +1790,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(tenantHive->PendingCreateTabletBatches.at(key).Scheduled);
         UNIT_ASSERT(tenantHive->PendingCreateTabletBatches.at(key).CancelledOwnerIdxs.contains(1001));
 
-        refills.Stop().Unblock();
-        runtime.WaitFor("ID range received without executing the held batch", [&] {
-            return tenantHive->Sequencer.FreeSize() >= 2;
-        });
-        runtime.Send(new IEventHandle(tenantHive->SelfId(), sender, new TEvents::TEvWakeup()));
+        UNIT_ASSERT(tenantHive->Sequencer.FreeSize() >= 2);
+        retries.Stop().Unblock();
         const auto reply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender)->Get()->Record;
         const auto joinedReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(newSender)->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(joinedReply.SerializeAsString(), reply.SerializeAsString());

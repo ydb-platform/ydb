@@ -3779,6 +3779,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvPostponeProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvProcessPendingOperations, Handle);
+        hFunc(TEvPrivate::TEvResumePendingCreateTabletBatch, Handle);
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
         hFunc(TEvLocal::TEvSyncTablets, Handle);
         hFunc(TEvPrivate::TEvKickTablet, Handle);
@@ -3900,6 +3901,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvResumePendingCreateTabletBatch::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvLocal::TEvSyncTablets::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvKickTablet::EventType, EnqueueIncomingEvent);
@@ -4101,12 +4103,47 @@ THive::TPendingCreateTabletBatchKeys THive::CancelPendingCreateTabletBatches(ui6
     return affected;
 }
 
-ITransaction* THive::SchedulePendingCreateTabletBatch(TPendingCreateTabletBatch& batch) {
+void THive::EnqueuePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, TPendingCreateTabletBatch& batch) {
     if (batch.Scheduled) {
-        return nullptr;
+        return;
     }
     batch.Scheduled = true;
-    return CreateCreateTablet(batch.CreateTablet, batch.Sender, batch.Cookie, batch.Generation);
+    PendingCreateTabletBatchRetries.push({key, batch.Generation});
+}
+
+void THive::ResumePendingCreateTabletBatches() {
+    while (ActivePendingCreateTabletBatchRetries.size() < MaxPendingCreateTabletBatchRetriesInFlight
+            && !PendingCreateTabletBatchRetries.empty()) {
+        const auto retry = PendingCreateTabletBatchRetries.front();
+        PendingCreateTabletBatchRetries.pop();
+        const bool inserted = ActivePendingCreateTabletBatchRetries.emplace(
+            retry.Generation, TActivePendingCreateTabletBatchRetry{retry.Key}).second;
+        Y_ABORT_UNLESS(inserted);
+        // Go through EventQueue, where viewer/healthcheck requests have higher priority.
+        Send(SelfId(), new TEvPrivate::TEvResumePendingCreateTabletBatch(retry.Key.first, retry.Key.second, retry.Generation));
+    }
+}
+
+void THive::Handle(TEvPrivate::TEvResumePendingCreateTabletBatch::TPtr& ev) {
+    const auto& msg = *ev->Get();
+    const auto key = std::make_pair(msg.Owner, msg.FirstOwnerIdx);
+    const auto active = ActivePendingCreateTabletBatchRetries.find(msg.Generation);
+    if (active == ActivePendingCreateTabletBatchRetries.end() || active->second.Key != key || active->second.Running) {
+        return; // A stale or duplicate event cannot consume another retry's slot.
+    }
+    const auto pending = PendingCreateTabletBatches.find(key);
+    if (pending == PendingCreateTabletBatches.end() || pending->second.Generation != msg.Generation) {
+        CompletePendingCreateTabletBatchRetry(msg.Generation);
+        return;
+    }
+    const auto& batch = pending->second;
+    active->second.Running = true;
+    Execute(CreateCreateTablet(batch.CreateTablet, batch.Sender, batch.Cookie, batch.Generation));
+}
+
+void THive::CompletePendingCreateTabletBatchRetry(ui64 generation) {
+    Y_ABORT_UNLESS(ActivePendingCreateTabletBatchRetries.erase(generation));
+    ResumePendingCreateTabletBatches();
 }
 
 void THive::ProcessPendingCreateTabletBatches(const TPendingCreateTabletBatchKeys& keys) {
@@ -4114,11 +4151,17 @@ void THive::ProcessPendingCreateTabletBatches(const TPendingCreateTabletBatchKey
     for (const auto& key : keys) {
         auto pending = PendingCreateTabletBatches.find(key);
         if (pending != PendingCreateTabletBatches.end()) {
-            if (auto* tx = SchedulePendingCreateTabletBatch(pending->second)) {
-                Execute(tx);
-            }
+            EnqueuePendingCreateTabletBatch(key, pending->second);
         }
     }
+    ResumePendingCreateTabletBatches();
+}
+
+void THive::ProcessPendingCreateTabletBatches() {
+    for (auto& [key, batch] : PendingCreateTabletBatches) {
+        EnqueuePendingCreateTabletBatch(key, batch);
+    }
+    ResumePendingCreateTabletBatches();
 }
 
 void THive::ProcessPendingOperations() {

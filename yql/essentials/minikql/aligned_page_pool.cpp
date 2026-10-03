@@ -11,7 +11,7 @@
 #include <util/system/error.h>
 #include <util/system/info.h>
 
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/utils/exception_utils.h>
 
 #if defined(_win_)
@@ -533,11 +533,12 @@ void* GetAlignedPage() {
 
     void* page = AlignUp(unalignedPtr, size);
 
-    // Unmap unaligned prefix before offset and tail after aligned page
     const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
     if (Y_UNLIKELY(offset)) {
         globalPool.DoMunmap(unalignedPtr, offset);
         globalPool.DoMunmap((ui8*)page + size, size - offset);
+    } else {
+        globalPool.PushPage(0, static_cast<ui8*>(page) + size);
     }
 
     return page;

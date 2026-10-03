@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     file_tree_builder.cpp
@@ -11,8 +11,6 @@ PEERDIR(
     yql/essentials/utils
     library/cpp/protobuf/util
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

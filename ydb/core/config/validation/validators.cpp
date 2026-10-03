@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/config/protos/marker.pb.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
@@ -15,6 +16,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 #include <map>
@@ -265,6 +267,13 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    try {
+        NPathAliasing::TPathNormalizer{config.GetResourcePathPrefixMapping()};
+    } catch (const yexception& e) {
+        msg = {e.what()};
+        return EValidationResult::Error;
+    }
+
     if (config.GetFeatureFlags().GetSwitchToConfigV2() && config.HasGRpcConfig()
         && config.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = config.GetGRpcConfig();

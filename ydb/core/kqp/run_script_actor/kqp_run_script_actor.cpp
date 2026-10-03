@@ -75,6 +75,7 @@ public:
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
         , QueryServiceConfig(std::move(queryServiceConfig))
+        , TraceId(std::move(settings.TraceId))
     {}
 
     void Bootstrap() {
@@ -262,7 +263,7 @@ private:
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
         QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
-        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
+        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
@@ -477,6 +478,7 @@ private:
     const TScriptExecutionContext::TPtr Ctx;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NWilson::TTraceId TraceId;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;

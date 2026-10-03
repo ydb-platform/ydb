@@ -187,7 +187,7 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
 class TFileTransformProvider : public TSimpleFileTransformProvider {
 public:
     TFileTransformProvider(const TYtFileServices::TPtr& services, const TUserDataTable& userDataBlocks)
-        : TSimpleFileTransformProvider(services->GetFunctionRegistry(), userDataBlocks)
+        : TSimpleFileTransformProvider(services->GetFunctionRegistry(), userDataBlocks, services->GetFileStorage())
         , ExtraArgs(std::make_shared<THashMap<TString, TRuntimeNode>>())
     {
     }

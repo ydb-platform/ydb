@@ -48,7 +48,7 @@ void TObjectPool<T, TTraits>::TDeleter::operator()(T* obj) const
 template <class T, class TTraits>
 auto TObjectPool<T, TTraits>::AllocateUnique() -> TObjectUniquePtr
 {
-    return TObjectUniquePtr(DoAllocate(), TDeleter(true));
+    return TObjectUniquePtr(DoAllocate(), TDeleter(/*pooled*/ true));
 }
 
 template <class T, class TTraits>

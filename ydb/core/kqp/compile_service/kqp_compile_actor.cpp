@@ -1,4 +1,5 @@
 #include "kqp_compile_service.h"
+#include "kqp_warmup_compile_actor.h"
 
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -372,7 +373,7 @@ private:
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
                 CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId());
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
@@ -684,9 +685,20 @@ private:
         }
         meta["parameters"] = parameters;
         if (UserToken && !UserToken->GetUserSID().empty()) {
-            NJson::TJsonValue groups(NJson::JSON_ARRAY);
-            for (const auto& sid : UserToken->GetGroupSIDs()) {
-                groups.AppendValue(sid);
+            const auto groupSids = UserToken->GetGroupSIDs();
+            // Null marks an oversized group set; a missing field means legacy metadata.
+            NJson::TJsonValue groups(NJson::JSON_NULL);
+            if (groupSids.size() <= MaxWarmupGroupSids) {
+                groups.SetType(NJson::JSON_ARRAY);
+                size_t bytes = 0;
+                for (const auto& sid : groupSids) {
+                    if (sid.size() > MaxWarmupGroupSidsBytes - bytes) {
+                        groups = NJson::TJsonValue(NJson::JSON_NULL);
+                        break;
+                    }
+                    bytes += sid.size();
+                    groups.AppendValue(sid);
+                }
             }
             meta["user_group_sids"] = std::move(groups);
         }

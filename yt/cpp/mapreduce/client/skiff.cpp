@@ -216,7 +216,7 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node)
             case EWireType::RepeatedVariant16:
                 return CreateRepeatedVariant16Schema(std::move(children));
             default:
-                if (IsSimpleType(wireType)) {
+                if (GetSchemaKind(wireType) == ESchemaKind::Simple) {
                     return CreateSimpleTypeSchema(wireType);
                 }
                 ythrow yexception() << "Wire type '" << wireType << "' is not yet supported in Skiff schema";
@@ -229,15 +229,18 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node)
     auto wireType = FromString<NSkiff::EWireType>(wireTypePtr->AsString());
 
     const auto* childrenPtr = map.FindPtr("children");
-    Y_ENSURE(NSkiff::IsSimpleType(wireType) || childrenPtr,
-        "'children' key is required for complex node '" << wireType << "'");
     TVector<TSkiffSchemaPtr> children;
     if (childrenPtr) {
+        Y_ENSURE(NSkiff::GetSchemaKind(wireType) == NSkiff::ESchemaKind::Complex,
+            "Non-complex wire type '" << wireType << "' must not have a 'children' key");
         for (const auto& childNode : childrenPtr->AsList()) {
             TSkiffSchemaPtr childSchema;
             Deserialize(childSchema, childNode);
             children.push_back(std::move(childSchema));
         }
+    } else {
+        Y_ENSURE(NSkiff::GetSchemaKind(wireType) != NSkiff::ESchemaKind::Complex,
+            "Complex wire type '" << wireType << "' must have a 'children' key");
     }
 
     schema = createSchema(wireType, std::move(children));

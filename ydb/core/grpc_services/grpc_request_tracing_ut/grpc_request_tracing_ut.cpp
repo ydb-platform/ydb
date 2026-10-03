@@ -562,7 +562,7 @@ void AssertGrpcRequestProxySpanSentAfter(TTestActorRuntime& runtime, const NWils
 class TAuthAndCheckReplyActor : public TActorBootstrapped<TAuthAndCheckReplyActor> {
 public:
     TAuthAndCheckReplyActor(
-        std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> request,
+        std::unique_ptr<NGRpcService::TEvHttpRequestAuthAndCheck> request,
         Ydb::StatusIds::StatusCode status)
         : Request_(std::move(request))
         , Status_(status)
@@ -574,7 +574,7 @@ public:
     }
 
 private:
-    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> Request_;
+    std::unique_ptr<NGRpcService::TEvHttpRequestAuthAndCheck> Request_;
     Ydb::StatusIds::StatusCode Status_;
 };
 
@@ -603,7 +603,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckRequest) {
     TTestSetup setup("user1", "/Root/db");
     auto* uploader = SetupFakeWilsonUploader(*setup.GetRuntime());
 
-    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+    std::unique_ptr<NGRpcService::TEvHttpRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
         setup.DbPath,
         Nothing(),
         setup.FakeMonActor,
@@ -628,7 +628,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
     TTestSetup setup("user1", "/Root/db");
     auto* uploader = SetupFakeWilsonUploader(*setup.GetRuntime());
 
-    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+    std::unique_ptr<NGRpcService::TEvHttpRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
         setup.DbPath,
         Nothing(),
         setup.FakeMonActor,

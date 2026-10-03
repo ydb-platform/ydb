@@ -3769,6 +3769,10 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
+    // Снимок _txinfo уже в запросе. Сбрасываем флаг здесь, а не в EndWriteTxs: пока запрос
+    // в полёте, PlanStep/ExecStep могут измениться и снова поднять флаг, и следующий цикл
+    // запишет их. Сброс в EndWriteTxs затёр бы это изменение вместе со старым снимком.
+    PlanStepChanged = false;
 
     MovePendingDeferredReadSetAcks();
 
@@ -3810,7 +3814,6 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     }
 
     TxWritesChanged = false;
-    PlanStepChanged = false;
     CompletedWriteTxsCycle = WriteTxsCycle;
 
     SendReplies(ctx);
@@ -3908,7 +3911,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const ui64 step = event.GetStep();
     // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
     // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
-    // поднял бы этот пол
+    // поднял бы эту нижнюю границу
     TMaybe<ui64> lastKnownTxId;
 
     TVector<ui64> txIds;

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_result_set_builders.cpp
@@ -14,7 +14,5 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -40,6 +40,8 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
 
                 CheckpointInterval = TDuration::MicroSeconds(signedDuration);
             }
+        } else if (name == TStreamingQueryMeta::TProperties::InflightOperation) {
+            InflightOperation = value;
         } else if (name == TStreamingQueryMeta::TProperties::StatsCollectionMode) {
             if (StatsCollectionModeString = value) {
                 Ydb::Table::QueryStatsCollection::Mode mode;

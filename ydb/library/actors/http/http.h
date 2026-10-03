@@ -31,7 +31,7 @@ void CrackAddress(const TString& address, TString& hostname, TIpPort& port);
 [[nodiscard]] TStringBuf TrimEnd(TStringBuf target, char delim);
 [[nodiscard]] TStringBuf Trim(TStringBuf target, char delim);
 void TrimEnd(TString& target, char delim);
-TString GetObfuscatedData(TString data, const THeaders& headers);
+TString GetObfuscatedData(TStringBuf data);
 TString ToHex(size_t value);
 bool IsReadableContent(TStringBuf contentType);
 bool IsValidMethod(TStringBuf s);
@@ -696,7 +696,7 @@ public:
     }
 
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString());
     }
 };
 
@@ -936,7 +936,7 @@ public:
     }
 
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString());
     }
 
     void Assign(TStringBuf data) {

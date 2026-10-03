@@ -169,7 +169,6 @@ void TNonblockingBatcher<T, TBatchLimiter>::SetBatchDuration(TGuard<NThreading::
     }
 }
 
-
 template <class T, CBatchLimiter<T> TBatchLimiter>
 void TNonblockingBatcher<T, TBatchLimiter>::ResetTimer(TGuard<NThreading::TSpinLock>& /*guard*/)
 {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_sausage_misc.h"
 #include "flat_sausage_layout.h"
 #include "flat_util_binary.h"
 #include "util_basics.h"
@@ -33,13 +34,37 @@ namespace NPageCollection {
             return Blobs.emplace_back(one), *this;
         }
 
-        ui32 Push(ui32 type, TArrayRef<const char> body)
+        ui32 Push(ui32 type, TArrayRef<const char> body, ui32* crc32 = nullptr)
         {
             Index.push_back({ Offset += body.size(), Inbound.size() });
-            Extra.push_back({ type, Checksum(body) });
+            const auto c = Checksum(body);
+            Extra.push_back({ type, c });
+
+            if (crc32) {
+                *crc32 = c;
+            }
 
             return Index.size() - 1;
         }
+
+        ui32 PushSkip(ui64 totalOffset, ui32 type, ui32 pages)
+        {
+            Y_ENSURE(totalOffset >= Offset,
+                "PushSkip: totalOffset " << totalOffset << " less than current Offset " << Offset);
+
+            Index.push_back({ totalOffset, Inbound.size() });
+            /* Crc32 stores the net page contribution beyond the skip entry
+               itself: (pages - 1) when pages > 0, or 0 for old-format entries.
+               Skip entries have no data to checksum, so the field is repurposed.
+               The total with skipped pages is MetaPages + sum(Crc32). */
+            Extra.push_back({ type, pages ? pages - 1 : 0 });
+
+            Offset = totalOffset;
+
+            return Index.size() - 1;
+        }
+
+        ui64 GetOffset() const noexcept { return Offset; }
 
         void PushInplace(ui32 page, TArrayRef<const char> body)
         {

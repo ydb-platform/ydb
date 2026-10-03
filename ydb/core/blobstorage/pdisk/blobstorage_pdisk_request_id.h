@@ -102,6 +102,7 @@ struct TReqId {
         ChunkReadRaw = 83,
         ChunkWriteRaw = 84,
         CompactionBidder = 85,
+        IdleDeviceProbe = 86,
     };
 
     // 56 bit idx, 8 bit source

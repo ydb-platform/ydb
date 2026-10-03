@@ -8,6 +8,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     SRCS(
         out_of_space.cpp
         fresh_space_projection.cpp
+        huge_space_admission.cpp
     )
 
     PEERDIR(

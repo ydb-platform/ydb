@@ -14,7 +14,8 @@ Troubleshooting performance issues in {{ ydb-short-name }} involves the followin
 - [Tracing](../../reference/observability/tracing/setup.md)
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md)
 - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md)
-- [Query plans](../../dev/query-execution-optimization/query-plans-optimization.md)
+- [Query execution optimization](../../dev/optimization/index.md);
+- [Parameterized queries and recompilation](../../dev/optimization/parameterized-queries.md);
 - Third-party observability tools
 
 ## Classification of {{ ydb-short-name }} performance issues

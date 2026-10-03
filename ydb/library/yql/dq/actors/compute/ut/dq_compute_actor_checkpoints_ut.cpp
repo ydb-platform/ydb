@@ -26,6 +26,7 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
     TActorId CheckpointsId;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     TMaybe<TComputeActorState> LoadedState;
+    TMaybe<TString> LoadError;
     bool Stopped = false;
 
     TRestoreFixture() {
@@ -56,7 +57,7 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
         UNIT_ASSERT_VALUES_EQUAL(checkpoint.GetId(), 7);
         UNIT_ASSERT_VALUES_EQUAL(checkpoint.GetGeneration(), 1);
         LoadedState = std::move(state);
-        Checkpoints->AfterStateLoading({});
+        Checkpoints->AfterStateLoading(LoadError);
     }
 
     void Restore(const TTaskPlan& plan, ui64 cookie = 0) {
@@ -66,18 +67,38 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
             new TEvDqCompute::TEvRestoreFromCheckpoint(7, 1, 2, transportedPlan), 0, cookie));
     }
 
-    void CheckRestored(ui64 cookie = 0) {
+    void CheckRestoreResult(ui64 cookie = 0) {
         const auto result = Runtime.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(
             Coordinator, TDuration::Seconds(5));
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Cookie, cookie);
-        UNIT_ASSERT(result->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK);
+        const auto expectedStatus = LoadError.Defined()
+            ? NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR
+            : NDqProto::TEvRestoreFromCheckpointResult::OK;
+        UNIT_ASSERT(result->Get()->Record.GetStatus() == expectedStatus);
+        if (LoadError) {
+            UNIT_ASSERT_STRING_CONTAINS(IssuesFromMessageAsString(result->Get()->Record.GetIssues()), *LoadError);
+        }
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetTaskId(), 42);
         UNIT_ASSERT(LoadedState);
         UNIT_ASSERT(LoadedState->MiniKqlProgram);
         UNIT_ASSERT_VALUES_EQUAL(LoadedState->MiniKqlProgram->Data.Version,
             static_cast<ui64>(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion));
         UNIT_ASSERT(LoadedState->Sinks.empty());
+
+        // The transported plan has its own buffers. After loading, the actor must
+        // not keep references to them alongside the state handed to the runner.
+        const auto checkReleased = [](const TString& blob) {
+            if (blob) {
+                UNIT_ASSERT_C(blob.IsDetached(), "The restore plan still retains a state blob");
+            }
+        };
+        checkReleased(LoadedState->MiniKqlProgram->Data.Blob);
+        for (const auto& source : LoadedState->Sources) {
+            for (const auto& data : source.Data) {
+                checkReleased(data.Blob);
+            }
+        }
     }
 };
 
@@ -95,8 +116,11 @@ void AddForeignSource(TSourcePlan& source, ui64 taskId, ui64 inputIndex) {
     foreign.SetInputIndex(inputIndex);
 }
 
-void CheckCheckpointSources(bool explicitState) {
+void CheckCheckpointSources(bool explicitState, bool failLoad = false) {
     TRestoreFixture fixture;
+    if (failLoad) {
+        fixture.LoadError = "Cannot load mixed checkpoint state";
+    }
     auto plan = MakeForeignPlan();
     auto& first = *plan.AddSources();
     first.SetInputIndex(4);
@@ -131,7 +155,7 @@ void CheckCheckpointSources(bool explicitState) {
         source.Data.emplace_back("another partition", 2);
     }
     fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Storage, response.release()));
-    fixture.CheckRestored();
+    fixture.CheckRestoreResult();
 
     const auto& restored = *fixture.LoadedState;
     UNIT_ASSERT_VALUES_EQUAL(restored.MiniKqlProgram->Data.Blob, explicitState ? "program" : "");
@@ -157,35 +181,46 @@ void CheckCheckpointSources(bool explicitState) {
     }
 }
 
+void CheckExplicitState(bool failLoad = false) {
+    for (const TString& blob : {TString("state"), TString()}) {
+        TRestoreFixture fixture;
+        if (failLoad) {
+            fixture.LoadError = "Cannot load explicit checkpoint state";
+        }
+        auto noReads = fixture.Runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([](auto&) {
+            UNIT_FAIL("Explicit state must not read checkpoints");
+        });
+        auto plan = MakeForeignPlan();
+        plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
+        plan.MutableProgram()->SetState(blob);
+        auto& source = *plan.AddSources();
+        source.SetStateType(STATE_TYPE_FOREIGN);
+        source.SetInputIndex(5);
+        source.SetState(blob);
+        source.SetStateVersion(3);
+        AddForeignSource(source, 99, 0);
+        fixture.Restore(plan, 123);
+        fixture.CheckRestoreResult(123);
+        const auto& state = *fixture.LoadedState;
+        UNIT_ASSERT_VALUES_EQUAL(state.MiniKqlProgram->Data.Blob, blob);
+        UNIT_ASSERT_VALUES_EQUAL(state.MiniKqlProgram->RuntimeVersion, static_cast<ui64>(NDqProto::RUNTIME_VERSION_YQL_1_0));
+        UNIT_ASSERT_VALUES_EQUAL(state.Sources.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().InputIndex, 5);
+        UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().DataSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().Data.front().Blob, blob);
+        UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().Data.front().Version, 3);
+    }
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TComputeActorStateRestore) {
     Y_UNIT_TEST(ExplicitStateDoesNotReadCheckpoints) {
-        for (const TString& blob : {TString("state"), TString()}) {
-            TRestoreFixture fixture;
-            auto noReads = fixture.Runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([](auto&) {
-                UNIT_FAIL("Explicit state must not read checkpoints");
-            });
-            auto plan = MakeForeignPlan();
-            plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
-            plan.MutableProgram()->SetState(blob);
-            auto& source = *plan.AddSources();
-            source.SetStateType(STATE_TYPE_FOREIGN);
-            source.SetInputIndex(5);
-            source.SetState(blob);
-            source.SetStateVersion(3);
-            AddForeignSource(source, 99, 0);
-            fixture.Restore(plan, 123);
-            fixture.CheckRestored(123);
-            const auto& state = *fixture.LoadedState;
-            UNIT_ASSERT_VALUES_EQUAL(state.MiniKqlProgram->Data.Blob, blob);
-            UNIT_ASSERT_VALUES_EQUAL(state.MiniKqlProgram->RuntimeVersion, static_cast<ui64>(NDqProto::RUNTIME_VERSION_YQL_1_0));
-            UNIT_ASSERT_VALUES_EQUAL(state.Sources.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().InputIndex, 5);
-            UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().DataSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().Data.front().Blob, blob);
-            UNIT_ASSERT_VALUES_EQUAL(state.Sources.front().Data.front().Version, 3);
-        }
+        CheckExplicitState();
+    }
+
+    Y_UNIT_TEST(ExplicitStateReleasedAfterLoadError) {
+        CheckExplicitState(true);
     }
 
     Y_UNIT_TEST(ExplicitProgramWithoutSourcesDoesNotReadCheckpoints) {
@@ -197,13 +232,17 @@ Y_UNIT_TEST_SUITE(TComputeActorStateRestore) {
         plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
         plan.MutableProgram()->SetState("program");
         fixture.Restore(plan);
-        fixture.CheckRestored();
+        fixture.CheckRestoreResult();
         UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->MiniKqlProgram->Data.Blob, "program");
         UNIT_ASSERT(fixture.LoadedState->Sources.empty());
     }
 
     Y_UNIT_TEST(MixedExplicitAndCheckpointState) {
         CheckCheckpointSources(true);
+    }
+
+    Y_UNIT_TEST(MixedStateReleasedAfterLoadError) {
+        CheckCheckpointSources(true, true);
     }
 
     Y_UNIT_TEST(CheckpointStateWithoutExplicitOverrides) {

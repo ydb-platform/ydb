@@ -201,9 +201,8 @@ bool TTabletInfo::CanBeAlive() const {
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
-bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
-    return IsReadyToWork()
-            && Node != nullptr
+bool TTabletInfo::IsPresentOnLocal(const TActorId& local) const {
+    return Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
                 || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING

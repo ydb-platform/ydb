@@ -30,9 +30,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             const std::string sourceName      = std::string("restartAfterPartIncSource")      + suffix;
             const std::string queryName       = std::string("restartAfterPartIncQuery")       + suffix;
 
-            CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+            CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
                 .PartitioningSettings(/* minActivePartitions */ 1, /* maxActivePartitions */ 1), local);
-            CreateTopic(outputTopicName, std::nullopt, local);
+            CreateScopedTopicExt(outputTopicName, std::nullopt, local);
 
             std::string inputRef, outputRef;
             if (local) {
@@ -125,9 +125,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
         config.MutableFeatureFlags()->SetEnableUpdatingPartitionsOnStreamingQueryRestart(true);
 
         const ui32 initialPartitionCount = 4;
-        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(initialPartitionCount, initialPartitionCount));
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(sourceName);
 
         ExecQuery(fmt::format(R"(

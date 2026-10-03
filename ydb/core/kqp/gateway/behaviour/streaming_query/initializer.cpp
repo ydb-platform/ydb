@@ -12,6 +12,9 @@ using namespace NMetadata::NInitializer;
 class TStreamingQueriesTablesCreator final : public NTableCreator::TMultiTableCreator {
     using TBase = NTableCreator::TMultiTableCreator;
 
+    static constexpr TDuration TTL_DEADLINE_OFFSET = TDuration::Minutes(20);
+    static constexpr TDuration TTL_BRO_RUN_INTERVAL = TDuration::Minutes(60);
+
 public:
     TStreamingQueriesTablesCreator(const TString& modificationId, IModifierExternalController::TPtr externalController)
         : TBase({GetStreamingQueriesCreator()})
@@ -31,10 +34,11 @@ protected:
                 Col(TStreamingQueryConfig::TColumns::DatabaseId, NScheme::NTypeIds::Utf8),
                 Col(TStreamingQueryConfig::TColumns::QueryPath, NScheme::NTypeIds::Utf8),
                 Col(TStreamingQueryConfig::TColumns::State, NScheme::NTypeIds::Json),
+                Col(TStreamingQueryConfig::TColumns::ExpireAt, NScheme::NTypeIds::Timestamp),
             },
             { TStreamingQueryConfig::TColumns::DatabaseId, TStreamingQueryConfig::TColumns::QueryPath },
             NKikimrServices::KQP_PROXY,
-            {},
+            TtlCol(TStreamingQueryConfig::TColumns::ExpireAt, TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
             {},
             /* isSystemUser */ true,
             Nothing(),

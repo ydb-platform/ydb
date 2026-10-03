@@ -14,4 +14,8 @@ TString AssembleGeneratedQuery(const TString& exprBody);
 TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver);
 
+// Validates a type-annotated generated-column lambda. Every callable in the
+// expression must be explicitly known to be deterministic and non-throwing
+bool ValidateGeneratedExpr(const TExprNode& lambda, const TString& columnName, TExprContext& ctx);
+
 }   // namespace NYql

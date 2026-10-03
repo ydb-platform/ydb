@@ -9,6 +9,8 @@
 
 #include <yql/essentials/types/binary_json/read.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 namespace {
@@ -129,6 +131,31 @@ void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::
             AFL_VERIFY(NArrow::Append<arrow::BooleanType>(builder, ExtractBoolScalar(blob)));
             return;
     }
+}
+
+void AppendValueFromView(arrow::ArrayBuilder& builder, const TJsonValueView& value, const EValueType valueType) {
+    value.Visit(TOverloaded{
+        [&builder, valueType](const TStringBuf& value) {
+            switch (valueType) {
+                case EValueType::BinaryJson:
+                    AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(value.data(), value.size())));
+                    return;
+                case EValueType::String:
+                    AFL_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(value.data(), value.size())));
+                    return;
+                case EValueType::Double:
+                case EValueType::Bool:
+                    AFL_VERIFY(false);
+            }
+        },
+        [&builder, valueType](const double value) {
+            AFL_VERIFY(valueType == EValueType::Double);
+            AFL_VERIFY(NArrow::Append<arrow::DoubleType>(builder, value));
+        },
+        [&builder, valueType](const bool value) {
+            AFL_VERIFY(valueType == EValueType::Bool);
+            AFL_VERIFY(NArrow::Append<arrow::BooleanType>(builder, value));
+        }});
 }
 
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next) {

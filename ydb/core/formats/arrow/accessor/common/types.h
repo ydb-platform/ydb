@@ -8,8 +8,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 
-#include <library/cpp/json/writer/json_value.h>
-
 #include <yql/essentials/types/binary_json/format.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -29,6 +27,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilderForValueType(const EValueType va
 
 // Decode a BinaryJson value and append it to a builder of the value type's arrow storage.
 void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob, const EValueType valueType);
+void AppendValueFromView(arrow::ArrayBuilder& builder, const TJsonValueView& value, const EValueType valueType);
 
 // Element type to represent result of merging arrays with arg types
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next);

@@ -470,6 +470,7 @@ public:
 
 private:
     void FillStages();
+    void AllocateSamplingShardBudget();
 
     // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
     // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).

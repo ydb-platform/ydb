@@ -808,6 +808,74 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_VALUES_EQUAL(schemaErrors, 1u);
     }
 
+    Y_UNIT_TEST_TWIN(SamplingSelectedUnitSurvivesOverloadedRetry, inclusiveCursor) {
+        auto server = MakeSamplingServer();
+        TTestSetup setup(ETestActorType::SorceRead, "/Root/Sampling", server.Get());
+        CreateSamplingTable(setup);
+        SetSamplingQuota(2);
+        TBlockEvents<TEvDataShard::TEvReadAck> blockedAcks(*setup.Runtime);
+        NKikimrTxDataShard::TReadContinuationToken token;
+        TActorId reader;
+        TActorId shard;
+        ui64 initialReadId = 0;
+        ui64 lastSeqNo = 0;
+        ui32 reads = 0;
+        auto requests = setup.Runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& read = *ev->Get();
+            if (reads++ == 0) {
+                reader = ev->Sender;
+                shard = ev->GetRecipientRewrite();
+                initialReadId = read.Record.GetReadId();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), shard);
+                UNIT_ASSERT_VALUES_EQUAL(read.Ranges.size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(read.Ranges.front().From.GetBuffer(), token.GetLastProcessedKey());
+                UNIT_ASSERT_VALUES_EQUAL(read.Ranges.front().FromInclusive, inclusiveCursor);
+                UNIT_ASSERT_VALUES_EQUAL(read.Record.GetSampling().GetContinuation().SerializeAsString(),
+                    token.GetSampling().SerializeAsString());
+            }
+        });
+        ui32 partialRows = 0;
+        ui32 resumedRows = 0;
+        auto results = setup.Runtime->AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+                return;
+            }
+            if (record.GetReadId() == initialReadId) {
+                UNIT_ASSERT(token.ParseFromString(record.GetContinuationToken()));
+                UNIT_ASSERT(token.GetSampling().HasPendingSelectedUnit());
+                lastSeqNo = record.GetSeqNo();
+                partialRows += ev->Get()->GetRowsCount();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetSamplingStats().GetUnitsTotal(), 0u);
+                resumedRows += ev->Get()->GetRowsCount();
+            }
+        });
+        setup.SendScanQuery(SamplingQuery());
+        setup.Runtime->WaitFor("sampling reader exhausted its quota", [&] { return !blockedAcks.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(partialRows, 2u);
+        if (inclusiveCursor) {
+            // Before(2) resumes the same unread rows as the original After(1).
+            token.SetLastProcessedKey(TSerializedCellVec::Serialize({TCell::Make(ui64(2))}));
+            token.MutableSampling()->SetLastProcessedKeyInclusive(true);
+        }
+        auto stopped = MakeHolder<TEvDataShard::TEvReadResult>();
+        stopped->Record.SetReadId(initialReadId);
+        stopped->Record.SetSeqNo(lastSeqNo + 1);
+        stopped->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+        stopped->Record.SetThrottleDelayMs(0);
+        stopped->Record.SetContinuationToken(token.SerializeAsString());
+        // The exhausted reader cannot advance while its ACK is held. The retry
+        // cancels it; discard that ACK and allow ACKs for the replacement reader.
+        setup.Runtime->Send(new IEventHandle(reader, shard, stopped.Release()));
+        blockedAcks.Stop();
+        setup.AssertSuccess();
+        AssertSamplingKeys(setup, 10);
+        UNIT_ASSERT_VALUES_EQUAL(reads, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(resumedRows, 8u);
+    }
+
     Y_UNIT_TEST_TWIN(SamplingLostReaderFailsWithoutRetry, beforeFirstResult) {
         auto server = MakeSamplingServer();
         TTestSetup setup(ETestActorType::SorceRead, "/Root/Sampling", server.Get());

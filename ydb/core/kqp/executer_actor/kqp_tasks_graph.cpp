@@ -3280,31 +3280,40 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
     using TShardRangesVector = TVector<TShardRangesWithShardId>;
 
     THashMap<ui64, TShardRangesVector> nodeIdToShardKeyRanges;
-    TShardRangesVector remoteShardRanges;
-    for (const auto& [shardId, shardInfo] : partitions) {
-        YQL_ENSURE(!shardInfo.KeyWriteRanges);
+    if (source.HasSampling()) {
+        TShardRangesVector samplingRemoteShardRanges;
+        for (const auto& [shardId, shardInfo] : partitions) {
+            YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-        const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
-        auto& ranges = source.HasSampling() && !tasksByNode.contains(nodeId)
-            ? remoteShardRanges : nodeIdToShardKeyRanges[nodeId];
-        ranges.push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
-    }
-
-    if (!remoteShardRanges.empty()) {
-        // There may be more shard-owning nodes than sampling slots. Keep local reads
-        // local where possible, and let the selected actors also read those other nodes.
-        TVector<ui64> nodes;
-        for (const auto& [nodeId, _] : tasksByNode) {
-            nodes.push_back(nodeId);
-            nodeIdToShardKeyRanges[nodeId];
+            const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
+            auto& ranges = !tasksByNode.contains(nodeId)
+                ? samplingRemoteShardRanges : nodeIdToShardKeyRanges[nodeId];
+            ranges.push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
         }
-        std::sort(nodes.begin(), nodes.end());
-        for (const auto& ranges : remoteShardRanges) {
-            const auto node = std::min_element(nodes.begin(), nodes.end(), [&](ui64 lhs, ui64 rhs) {
-                return nodeIdToShardKeyRanges.at(lhs).size() * tasksByNode.at(rhs).size()
-                    < nodeIdToShardKeyRanges.at(rhs).size() * tasksByNode.at(lhs).size();
-            });
-            nodeIdToShardKeyRanges.at(*node).push_back(ranges);
+
+        if (!samplingRemoteShardRanges.empty()) {
+            // There may be more shard-owning nodes than sampling slots. Keep local reads
+            // local where possible, and let the selected actors also read those other nodes.
+            TVector<ui64> nodes;
+            for (const auto& [nodeId, _] : tasksByNode) {
+                nodes.push_back(nodeId);
+                nodeIdToShardKeyRanges[nodeId];
+            }
+            std::sort(nodes.begin(), nodes.end());
+            for (const auto& ranges : samplingRemoteShardRanges) {
+                const auto node = std::min_element(nodes.begin(), nodes.end(), [&](ui64 lhs, ui64 rhs) {
+                    return nodeIdToShardKeyRanges.at(lhs).size() * tasksByNode.at(rhs).size()
+                        < nodeIdToShardKeyRanges.at(rhs).size() * tasksByNode.at(lhs).size();
+                });
+                nodeIdToShardKeyRanges.at(*node).push_back(ranges);
+            }
+        }
+    } else {
+        for (const auto& [shardId, shardInfo] : partitions) {
+            YQL_ENSURE(!shardInfo.KeyWriteRanges);
+
+            const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
+            nodeIdToShardKeyRanges[nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
         }
     }
 
@@ -3584,10 +3593,7 @@ void TKqpTasksGraph::ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes) 
     }
 }
 
-size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats,
-    const TPlacementParams& placementParams)
-{
+void TKqpTasksGraph::AllocateSamplingShardBudget() {
     constexpr ui32 SampledShardsPerScan = 12;
     TVector<TStageInfo*> samplingStages;
     for (auto& [_, stageInfo] : GetStagesInfo()) {
@@ -3610,6 +3616,13 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         budget = samplingSlotsLeft / (samplingStages.size() - i);
         samplingSlotsLeft -= budget;
     }
+}
+
+size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats,
+    const TPlacementParams& placementParams)
+{
+    AllocateSamplingShardBudget();
 
     // Counting tasks via MaxTasksGraph
 

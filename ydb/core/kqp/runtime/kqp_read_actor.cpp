@@ -99,15 +99,6 @@ public:
             return SamplingContinuation && SamplingContinuation->GetLastProcessedKeyInclusive();
         }
 
-        void RestoreContinuation(const NKikimrTxDataShard::TReadContinuationToken& token) {
-            FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
-            LastKey = TOwnedCellVec(TSerializedCellVec(token.GetLastProcessedKey()).GetCells());
-            SamplingContinuation.Clear();
-            if (token.HasSampling()) {
-                SamplingContinuation = token.GetSampling();
-            }
-        }
-
         void InheritSamplingContinuation(const TShardState& parent, const TTableRange& remaining,
             TConstArrayRef<NScheme::TTypeInfo> keyTypes)
         {
@@ -900,7 +891,6 @@ public:
 
             if (CheckShardRetriesExceeded(id)) {
                 ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
-                RestoreReadContinuation(id);
                 ResetRead(id);
                 return ResolveShard(state);
             }
@@ -935,19 +925,21 @@ public:
             {"readId", id});
 
         ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
-        RestoreReadContinuation(id);
         ResetRead(id);
+
+        if (Reads[id].SerializedContinuationToken) {
+            NKikimrTxDataShard::TReadContinuationToken token;
+            Y_ABORT_UNLESS(token.ParseFromString(*(Reads[id].SerializedContinuationToken)), "Failed to parse continuation token");
+            state->FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
+
+            if (token.GetLastProcessedKey()) {
+                TSerializedCellVec vec(token.GetLastProcessedKey());
+                state->LastKey = TOwnedCellVec(vec.GetCells());
+            }
+        }
 
         Counters->ReadActorRetries->Inc();
         StartRead(state);
-    }
-
-    void RestoreReadContinuation(ui64 id) {
-        if (Reads[id].SerializedContinuationToken) {
-            NKikimrTxDataShard::TReadContinuationToken token;
-            YQL_ENSURE(token.ParseFromString(*Reads[id].SerializedContinuationToken), "Failed to parse continuation token");
-            Reads[id].Shard->RestoreContinuation(token);
-        }
     }
 
     void StartRead(TShardState* state) {
@@ -1211,6 +1203,10 @@ public:
                 }
                 Reads[id].SamplingCheckpoint = true;
                 Reads[id].SerializedContinuationToken = record.GetContinuationToken();
+                auto* shard = Reads[id].Shard;
+                shard->FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
+                shard->LastKey = TOwnedCellVec(TSerializedCellVec(token.GetLastProcessedKey()).GetCells());
+                shard->SamplingContinuation = token.GetSampling();
             }
         }
 
@@ -1252,7 +1248,6 @@ public:
                 }
                 auto shard = Reads[id].Shard;
                 ShardReadTrace.Retry(ReadActorSpan, shard->TabletId, id);
-                RestoreReadContinuation(id);
                 ResetRead(id);
                 return ResolveShard(shard);
             }

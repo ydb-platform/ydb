@@ -1,21 +1,27 @@
 #include "node_database_metrics_aggregator.h"
 #include "detailed_metrics_binding.h"
 #include "detailed_metrics_counter_set.h"
+#include "detailed_values_accumulator.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_size.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
+#include <util/system/align.h>
 #include <util/system/mutex.h>
 
 #include <atomic>
@@ -207,7 +213,7 @@ NMonitoring::TDynamicCounterPtr FindTableGroup(
 }
 
 /**
- * @param[in] bucketGroup The counter group of a table bucket or of a leaf
+ * @param[in] bucketGroup The counter group of a table bucket
  * @param[in] category "executor" or "app"
  *
  * @return The counter group of the given category (or nullptr if there is none)
@@ -229,7 +235,7 @@ NMonitoring::TDynamicCounterPtr FindCategoryCountersGroup(
 }
 
 /**
- * @param[in] bucketGroup The counter group of a table bucket or of a leaf
+ * @param[in] bucketGroup The counter group of a table bucket
  *
  * @return The counter group of the executor counters (or nullptr if there is none)
  *
@@ -240,7 +246,7 @@ NMonitoring::TDynamicCounterPtr FindExecutorCountersGroup(NMonitoring::TDynamicC
 }
 
 /**
- * @param[in] bucketGroup The counter group of a table bucket or of a leaf
+ * @param[in] bucketGroup The counter group of a table bucket
  *
  * @return The counter group of the application counters (or nullptr if there is none)
  */
@@ -277,33 +283,11 @@ NMonitoring::TDynamicCounterPtr FindAppTableBucketCounters(
 
 /**
  * @param[in] rootGroup The counter group where the whole tree is created
- * @param[in] tabletId The ID of the tablet
- * @param[in] followerId The follower ID of the tablet (0 for the leader)
  *
- * @return The counter group of the leaf itself (or nullptr if there is none)
+ * @return Whether the tree has no group and no counter
  */
-NMonitoring::TDynamicCounterPtr FindLeafGroup(
-    NMonitoring::TDynamicCounterPtr rootGroup,
-    ui64 tabletId,
-    ui32 followerId,
-    const TString& relativeTablePath = RELATIVE_TABLE_PATH
-) {
-    auto tableGroup = FindTableGroup(rootGroup, relativeTablePath);
-    if (!tableGroup) {
-        return nullptr;
-    }
-
-    auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-    if (!perPartitionGroup) {
-        return nullptr;
-    }
-
-    auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
-    if (!tabletGroup) {
-        return nullptr;
-    }
-
-    return tabletGroup->FindSubgroup("follower_id", ToString(followerId));
+bool IsEmptyTree(NMonitoring::TDynamicCounterPtr rootGroup) {
+    return rootGroup->ReadSnapshot().empty();
 }
 
 /**
@@ -509,7 +493,7 @@ void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGrou
 /**
  * The private "ydb_detailed_raw" group with the two aggregators of a node built off it,
  * the way the two Tablet Counters Aggregator actors do: ONE shared root, no role label,
- * one aggregator per role writing into the very same tree.
+ * one aggregator per role.
  */
 struct TRoleTrees {
     NMonitoring::TDynamicCounterPtr Root = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -551,6 +535,8 @@ struct TRoleTrees {
  *
  * @param[in] check Returns the description of the very first violation it finds, or an
  *                   empty string when the tree looks whole
+ * @param[in] lockTree Whether the reader takes the shared tree lock around the check. Off for a check,
+ *                     which takes the lock on its own (e.g. Pack()), so as not to cover up a missing lock
  *
  * @note The check does NOT assert on its own. UNIT_ASSERT off the unittest thread does
  *       not throw: it panics ("assertion failed in non-unittest thread"), which aborts
@@ -560,12 +546,16 @@ struct TRoleTrees {
 class TLockedReaderThread {
 public:
     template <typename TCheck>
-    explicit TLockedReaderThread(TCheck check)
-        : Thread([this, check]() {
+    explicit TLockedReaderThread(TCheck check, bool lockTree = true)
+        : Thread([this, check, lockTree]() {
               while (!Stopped.load(std::memory_order_acquire)) {
                   try {
-                      TGuard<TMutex> guard(DetailedMetricsLock());
-                      Failure = check();
+                      if (lockTree) {
+                          TGuard<TMutex> guard(DetailedMetricsLock());
+                          Failure = check();
+                      } else {
+                          Failure = check();
+                      }
                   } catch (...) {
                       // Nothing here is expected to throw, but a panic on this thread
                       // would be even less readable than a reported failure
@@ -727,7 +717,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // 2 partitions of the same table, a leader and 2 followers each. The leader goes
         // to the aggregator of the leaders and both followers to the other one, exactly
         // the way the two Tablet Counters Aggregator actors of a node are fed. All of
-        // them land in ONE shared tree, told apart by follower_id alone.
+        // them are told apart by follower_id alone.
         const TVector<ui64> tabletIds = {1000, 2000};
         const TVector<ui32> followerIds = {0, 1, 2};
 
@@ -770,36 +760,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(leaf, USED_CORE_PERCENTS), 1);
         }
 
-        // The leader and the followers of one partition share a single tablet_id= node,
-        // written by the two different aggregators
-        auto tableGroup = FindTableGroup(trees.Root);
-        UNIT_ASSERT(tableGroup);
-
-        auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-        UNIT_ASSERT(perPartitionGroup);
-
-        auto sharedTabletGroup = perPartitionGroup->FindSubgroup("tablet_id", "1000");
-        UNIT_ASSERT(sharedTabletGroup);
-        for (ui32 followerId : followerIds) {
-            UNIT_ASSERT_C(
-                sharedTabletGroup->FindSubgroup("follower_id", ToString(followerId)),
-                "no follower_id=" << followerId << " under the shared tablet_id=1000"
-            );
-        }
-
-        // No table bucket and no on-node rollup at the partition level
-        UNIT_ASSERT(!FindExecutorCountersGroup(tableGroup));
-        UNIT_ASSERT(!FindExecutorCountersGroup(perPartitionGroup));
-
-        for (ui64 tabletId : tabletIds) {
-            auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
-            UNIT_ASSERT(tabletGroup);
-            UNIT_ASSERT(!FindExecutorCountersGroup(tabletGroup));
-
-            // No replicas_only aggregate is synthesized on the node
-            UNIT_ASSERT(!tabletGroup->FindSubgroup("follower_id", "replicas_only"));
-        }
-
+        UNIT_ASSERT(!packed.Exists(TPackedBucketId::Table(TABLE_PATH)));
+        UNIT_ASSERT(IsEmptyTree(trees.Root));
     }
 
     /**
@@ -1061,11 +1023,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * Verify that forgetting a tablet of a partition level table removes its own leaf
      * and ONLY its own leaf.
      *
-     * @note The tablet_id= node above the leaf is shared: the leader of a partition and
-     *       its followers may run on one node and are reported by the two different
-     *       aggregators. It survives for exactly as long as either of them is still there,
-     *       and is reclaimed together with detailed_metrics=, table= and database= once
-     *       the last leaf below it goes.
+     * @note The followers of a partition share one tablet ID and one aggregator, its leader only the tablet ID.
      */
     Y_UNIT_TEST(ForgetTabletAtPartitionLevel) {
         TRoleTrees trees;
@@ -1078,7 +1036,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         TFakeTablet follower3(2000, 1);
 
         // ... and the leader of the first partition, on this very node, reported by the
-        // OTHER aggregator into the very same tablet_id= node
+        // OTHER aggregator
         TFakeTablet leader1(1000, 0);
 
         for (auto* tablet : {&follower1, &follower2, &follower3}) {
@@ -1091,12 +1049,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         trees.RecalculateAllCounters();
 
-        auto tableGroup = FindTableGroup(trees.Root);
-        UNIT_ASSERT(tableGroup);
-
-        auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-        UNIT_ASSERT(perPartitionGroup);
-
         // TEST 1: Only the leaf of the forgotten tablet is removed, its siblings survive
         trees.Followers->ForgetTablet(follower1.TabletId, follower1.FollowerId);
 
@@ -1106,48 +1058,27 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(trees.Packed.Exists(Leaf(follower2.TabletId, follower2.FollowerId)));
         UNIT_ASSERT(trees.Packed.Exists(Leaf(leader1.TabletId, leader1.FollowerId)));
 
-        // TEST 2: Emptying the followers of a partition must NOT take the shared
-        //         tablet_id= node with it — the leader of that partition is still live
-        //         there, reported by the other aggregator
+        // TEST 2: Emptying the followers of a partition must NOT take the leaf of its leader with it
         trees.Followers->ForgetTablet(follower2.TabletId, follower2.FollowerId);
         trees.Followers->ForgetTablet(follower3.TabletId, follower3.FollowerId);
 
         DumpCounters("Counters after forgetting every follower", trees.Root);
-
-        auto sharedTabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(leader1.TabletId));
-        UNIT_ASSERT(sharedTabletGroup);
 
         const auto& packed = trees.Settle();
         UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 1);
         UNIT_ASSERT(packed.Exists(Leaf(leader1.TabletId, leader1.FollowerId)));
         UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(leader1.TabletId, leader1.FollowerId), ROW_COUNT), 7);
 
-        // ... and it is still reachable from the SHARED root, not merely alive by
-        // reference count
-        UNIT_ASSERT(
-            trees.Root
-                ->FindSubgroup("database", DATABASE_PATH)
-                ->FindSubgroup("table", RELATIVE_TABLE_PATH)
-                ->FindSubgroup("detailed_metrics", "per_partition")
-                ->FindSubgroup("tablet_id", ToString(leader1.TabletId))
-                ->FindSubgroup("follower_id", "0")
-        );
-
-        // TEST 3: The last leaf goes too, and everything it emptied goes with it, all the
-        //         way up to the database= node. Nothing of this database is left on the
-        //         node, so nothing of it is left in the tree either
+        // TEST 3: The last leaf goes too
         trees.Leaders->ForgetTablet(leader1.TabletId, leader1.FollowerId);
 
         DumpCounters("Counters after forgetting the last tablet of the database", trees.Root);
 
         UNIT_ASSERT(!trees.Settle().Exists(Leaf(leader1.TabletId, leader1.FollowerId)));
         UNIT_ASSERT_VALUES_EQUAL(trees.Packed.LiveCount(), 0);
-        UNIT_ASSERT(!FindTableGroup(trees.Root));
-        UNIT_ASSERT(!trees.Root->FindSubgroup("database", DATABASE_PATH));
+        UNIT_ASSERT(IsEmptyTree(trees.Root));
 
-        // TEST 4: The two instances rebuild the tree from scratch afterwards, neither of
-        //         them filling a node it used to hold a pointer to. The follower leaf carries
-        //         no LeaderOnly metric, so the work of the follower is what it reports
+        // TEST 4: The two instances create the leaves from scratch afterwards
         leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
         leader1.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
 
@@ -1170,47 +1101,55 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * teardown walks upwards only for as long as the nodes it empties come out empty.
      */
     Y_UNIT_TEST(ForgetTabletKeepsTheOtherTablesOfTheDatabase) {
-        TRoleTrees trees;
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool isTableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            auto bucketOf = [isTableLevel](const TFakeTablet& tablet, const TString& tablePath) {
+                return isTableLevel
+                    ? TPackedBucketId::Table(tablePath)
+                    : Leaf(tablet.TabletId, tablet.FollowerId, tablePath);
+            };
 
-        const TInstant now = TInstant::Seconds(100);
+            TRoleTrees trees;
 
-        TFakeTablet leader(1000, 0);
-        TFakeTablet otherLeader(2000, 0);
+            const TInstant now = TInstant::Seconds(100);
 
-        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
-        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+            TFakeTablet leader(1000, 0);
+            TFakeTablet otherLeader(2000, 0);
 
-        otherLeader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
-        otherLeader.Report(
-            trees.Leaders,
-            TDetailedMetricsSettings::MetricsLevelPartition,
-            now,
-            OTHER_TABLE_PATH
-        );
+            leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+            leader.Report(trees.Leaders, level, now);
 
-        trees.RecalculateAllCounters();
+            otherLeader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+            otherLeader.Report(trees.Leaders, level, now, OTHER_TABLE_PATH);
 
-        // The only tablet of the first table is gone: that table= node goes with it, and
-        // the walk stops at database=, which the second table still occupies
-        trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
+            trees.RecalculateAllCounters();
 
-        DumpCounters("Counters after emptying one table of the database", trees.Root);
+            // The only tablet of the first table is gone: that table= node goes with it, and
+            // the walk stops at database=, which the second table still occupies
+            trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
 
-        UNIT_ASSERT(!FindTableGroup(trees.Root));
-        UNIT_ASSERT(trees.Root->FindSubgroup("database", DATABASE_PATH));
+            DumpCounters("Counters after emptying one table of the database", trees.Root);
 
-        const auto& packed = trees.Settle();
-        UNIT_ASSERT(!packed.Exists(Leaf(leader.TabletId, leader.FollowerId)));
+            UNIT_ASSERT(!FindTableGroup(trees.Root));
+            if (isTableLevel) {
+                UNIT_ASSERT(FindTableGroup(trees.Root, OTHER_RELATIVE_TABLE_PATH));
+            } else {
+                UNIT_ASSERT(IsEmptyTree(trees.Root));
+            }
 
-        const auto survivingLeaf = Leaf(otherLeader.TabletId, otherLeader.FollowerId, OTHER_TABLE_PATH);
-        UNIT_ASSERT(packed.Exists(survivingLeaf));
-        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(survivingLeaf, ROW_COUNT), 2);
+            const auto& packed = trees.Settle();
+            UNIT_ASSERT(!packed.Exists(bucketOf(leader, TABLE_PATH)));
 
-        // The second table goes too, and now the database= node has nothing left to hold
-        trees.Leaders->ForgetTablet(otherLeader.TabletId, otherLeader.FollowerId);
+            const auto survivingBucket = bucketOf(otherLeader, OTHER_TABLE_PATH);
+            UNIT_ASSERT(packed.Exists(survivingBucket));
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(survivingBucket, ROW_COUNT), 2);
 
-        UNIT_ASSERT(!trees.Root->FindSubgroup("database", DATABASE_PATH));
-        UNIT_ASSERT_VALUES_EQUAL(trees.Settle().LiveCount(), 0);
+            // The second table goes too, and now the database= node has nothing left to hold
+            trees.Leaders->ForgetTablet(otherLeader.TabletId, otherLeader.FollowerId);
+
+            UNIT_ASSERT(IsEmptyTree(trees.Root));
+            UNIT_ASSERT_VALUES_EQUAL(trees.Settle().LiveCount(), 0);
+        }
     }
 
     /**
@@ -1305,17 +1244,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that at the partition level, leaves of both roles are kept in their
-     * respective trees and never merged, even on the same node.
+     * Verify that the leaves of both roles of a tablet are never merged, even on the same node.
      *
      * This is deliberate on the node: a leaf is single-owner and passes through
-     * verbatim, and there is no on-node rollup at partition granularity. The node keeps
-     * both roles' raw leaves verbatim. The leader-only filter for leaf series is applied
-     * at publication: the SysView Processor publishes follower leaves without the
-     * LeaderOnly metrics, and the rollup takes those metrics from leaders only.
+     * verbatim.
      *
-     * This test documents the boundary: the two roles land on the shared tablet_id=
-     * node as separate follower_id= leaves, never merged.
+     * A follower leaf carries no LeaderOnly metric, and the rollup takes those from leaders only.
      */
     Y_UNIT_TEST(PartitionLeavesCarryBothRolesByDesign) {
         TRoleTrees trees;
@@ -1323,7 +1257,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const TInstant now = TInstant::Seconds(100);
 
         // The leader holds one value, the follower another, so we can verify each lands
-        // in its own follower_id= leaf of the ONE shared tree
+        // in its own leaf
         TFakeTablet leader(1000, 0);
         leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 42).AddCumulative(CONSUMED_CPU, 42);
 
@@ -1348,14 +1282,85 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(1000, 1), ROW_COUNT), 0);
         UNIT_ASSERT_VALUES_EQUAL(packed.Rate(Leaf(1000, 1), CONSUMED_CPU_MICROSECONDS), 99);
 
-        // The two are separate leaves of ONE tablet_id= node: the label carries the role,
-        // so nothing above the leaf has to
-        auto tabletGroup = FindTableGroup(trees.Root)
-            ->FindSubgroup("detailed_metrics", "per_partition")
-            ->FindSubgroup("tablet_id", "1000");
-        UNIT_ASSERT(tabletGroup);
-        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "0"));
-        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "1"));
+        UNIT_ASSERT(IsEmptyTree(trees.Root));
+    }
+
+    Y_UNIT_TEST(TableGroupLivesWithTheTableBucket) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        TFakeTablet otherLeader(3000, 0);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+        otherLeader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 4);
+
+        // TEST 1: A partition level table alone creates nothing
+        otherLeader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now, OTHER_TABLE_PATH);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(IsEmptyTree(rootGroup));
+
+        // TEST 2: The first table level report creates the groups, the second fills the same bucket
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(FindTableGroup(rootGroup));
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"), 1);
+
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"), 1 + 2);
+        UNIT_ASSERT(!FindTableGroup(rootGroup, OTHER_RELATIVE_TABLE_PATH));
+
+        DumpCounters("Counters of a table level table next to a partition level one", rootGroup);
+
+        // TEST 3: The table moves to the partition level, and the groups go with the last tablet of the bucket
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"), 2);
+
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(IsEmptyTree(rootGroup));
+
+        TPackedReceiver packed;
+        packed.Settle(*aggregator);
+        UNIT_ASSERT(!packed.Exists(TPackedBucketId::Table(TABLE_PATH)));
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(leader1.TabletId, leader1.FollowerId), ROW_COUNT), 1);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(leader2.TabletId, leader2.FollowerId), ROW_COUNT), 2);
+
+        // TEST 4: Back at the table level, the groups are created afresh for the new bucket alone
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after the table came back to the table level", rootGroup);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"), 5);
+        UNIT_ASSERT(!FindTableGroup(rootGroup, OTHER_RELATIVE_TABLE_PATH));
+
+        // TEST 5: The last tablet of the bucket is forgotten: the groups go, the leaves stay
+        aggregator->ForgetTablet(leader1.TabletId, leader1.FollowerId);
+
+        UNIT_ASSERT(IsEmptyTree(rootGroup));
+
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 2);
+        UNIT_ASSERT(packed.Exists(Leaf(leader2.TabletId, leader2.FollowerId)));
+        UNIT_ASSERT(packed.Exists(Leaf(otherLeader.TabletId, otherLeader.FollowerId, OTHER_TABLE_PATH)));
     }
 
     /**
@@ -1514,11 +1519,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             DumpCounters("Leaves after the tablet moved to another table", rootGroup);
 
-            // The old leaf is gone together with the table= node it emptied, and the new
-            // leaf holds the counters
             packed.Settle(*aggregator);
             UNIT_ASSERT(!packed.Exists(Leaf(leader.TabletId, leader.FollowerId)));
-            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
 
             const auto movedLeaf = Leaf(leader.TabletId, leader.FollowerId, OTHER_TABLE_PATH);
             UNIT_ASSERT(packed.Exists(movedLeaf));
@@ -1613,9 +1616,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             DumpCounters("Partition level leaves of two tablets at one path", rootGroup);
 
-            // Both leaves live under the very same table= group, and both are reported
-            // for the very same table
-            UNIT_ASSERT(FindTableGroup(rootGroup));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
 
             TPackedReceiver packed;
             packed.Settle(*aggregator);
@@ -1686,9 +1687,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         DumpCounters("Counters after ALTER DATABASE dropped the level to the table one", trees.Root);
 
         // Not a single leaf is left, of either role
-        auto tableGroup = FindTableGroup(trees.Root);
-        UNIT_ASSERT(tableGroup);
-        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
         UNIT_ASSERT_VALUES_EQUAL(trees.Settle().LiveCount(TABLE_PATH, TDetailedMetricsSettings::MetricsLevelPartition), 0);
 
         // ... and the collapse bucket holds the leaders alone
@@ -1821,14 +1819,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             DumpCounters("Counters while only one partition has stopped collecting", rootGroup);
 
-            // leader1's leaf is gone, but leader2 has not noticed yet, so its own leaf —
-            // and the table= and database= groups it still fills — survive untouched
             packed.Settle(*aggregator);
             UNIT_ASSERT(!packed.Exists(Leaf(leader1.TabletId, leader1.FollowerId)));
             UNIT_ASSERT(packed.Exists(Leaf(leader2.TabletId, leader2.FollowerId)));
             UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(leader2.TabletId, leader2.FollowerId), ROW_COUNT), 5);
-            UNIT_ASSERT(FindTableGroup(rootGroup));
-            UNIT_ASSERT(rootGroup->FindSubgroup("database", DATABASE_PATH));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
 
             // The last partition converges too: NOW the table goes whole
             leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
@@ -1839,8 +1834,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT(!packed.Exists(Leaf(leader1.TabletId, leader1.FollowerId)));
             UNIT_ASSERT(!packed.Exists(Leaf(leader2.TabletId, leader2.FollowerId)));
             UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
-            UNIT_ASSERT(!FindTableGroup(rootGroup));
-            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
 
             // The reports of a disabled table keep creating nothing at all
             leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
@@ -1956,22 +1950,17 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
     /**
      * Verify that the two instances of a node converge on a new level INDEPENDENTLY,
-     * one report each, and that neither of them detaches a shared node the other still
-     * writes under while they disagree.
+     * one report each, and that neither of them drops a leaf of the other while they disagree.
      *
      * @note A level change reaches the instances through their own tablets' reports, so
      *       there is always a window where the leader instance has already switched and
-     *       the follower one has not. The removals are routed through
-     *       RemoveSubgroupChain, which tests every node it empties within that node's
-     *       own lock, so the walk stops at the shared tablet_id= node for as long as
-     *       either instance still has a leaf there.
+     *       the follower one has not.
      */
     Y_UNIT_TEST(LevelChangeConvergesBothInstances) {
         TRoleTrees trees;
 
         const TInstant now = TInstant::Seconds(100);
 
-        // The leader of a partition and its follower, on one node, under ONE tablet_id=
         TFakeTablet leader(1000, 0);
         TFakeTablet follower(1000, 1);
 
@@ -1994,20 +1983,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         UNIT_ASSERT(!trees.Settle().Exists(Leaf(leader.TabletId, leader.FollowerId)));
 
-        // The follower's leaf is untouched and still reachable from the SHARED root:
-        // the leader instance removed its own leaf, and the walk stopped at the
-        // tablet_id= node, which the follower instance still occupies
         UNIT_ASSERT(trees.Packed.Exists(Leaf(follower.TabletId, follower.FollowerId)));
         UNIT_ASSERT_VALUES_EQUAL(
             trees.Packed.Rate(Leaf(follower.TabletId, follower.FollowerId), CONSUMED_CPU_MICROSECONDS), 99);
-        UNIT_ASSERT(
-            trees.Root
-                ->FindSubgroup("database", DATABASE_PATH)
-                ->FindSubgroup("table", RELATIVE_TABLE_PATH)
-                ->FindSubgroup("detailed_metrics", "per_partition")
-                ->FindSubgroup("tablet_id", ToString(leader.TabletId))
-                ->FindSubgroup("follower_id", ToString(follower.FollowerId))
-        );
 
         UNIT_ASSERT_VALUES_EQUAL(
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
@@ -2015,16 +1993,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         );
 
         // TEST 2: The follower instance converges one report later, and the last leaf
-        //         takes the whole per-partition subtree with it — but not the table=
-        //         node, which the collapse bucket of the other instance still holds
+        //         goes, while the collapse bucket of the other instance stays
         follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
         trees.RecalculateAllCounters();
 
         DumpCounters("Counters after both instances converged on the table level", trees.Root);
 
-        auto tableGroup = FindTableGroup(trees.Root);
-        UNIT_ASSERT(tableGroup);
-        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
         UNIT_ASSERT_VALUES_EQUAL(trees.Settle().LiveCount(TABLE_PATH, TDetailedMetricsSettings::MetricsLevelPartition), 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2090,9 +2064,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         DumpCounters("Counters after both partitions converged on the table level", rootGroup);
 
-        auto tableGroup = FindTableGroup(rootGroup);
-        UNIT_ASSERT(tableGroup);
-        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
         packed.Settle(*aggregator);
         UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(TABLE_PATH, TDetailedMetricsSettings::MetricsLevelPartition), 0);
 
@@ -2276,7 +2247,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             DumpCounters("Leaves after the rename", rootGroup);
 
-            UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
 
             packed.Settle(*aggregator);
             UNIT_ASSERT(!packed.Exists(Leaf(leader.TabletId, leader.FollowerId)));
@@ -2287,7 +2258,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
 
-            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            UNIT_ASSERT(IsEmptyTree(rootGroup));
             packed.Settle(*aggregator);
             UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
         }
@@ -2495,14 +2466,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
     }
 
     /**
-     * Verify that a reader, which holds the shared tree lock, never observes a half built
-     * leaf while the writer creates and drops the leaves of a partition level table.
+     * Verify that a concurrent Pack() never observes a half built or half dropped bucket while the writer
+     * creates and drops the leaves and TABLE buckets, and that no rate delta is lost or reported twice.
      *
-     * @note A leaf group and the low level counters underneath it are created in two
-     *       steps, and this is what asserts that both steps are inside one critical
-     *       section: a leaf, which the reader can see, always carries its counters.
+     * @note The guard under test is DetailedMetricsLock() in Pack(), AddCounters() and ForgetTablet().
      */
-    Y_UNIT_TEST(ConcurrentStructuralChurnKeepsTheTreeConsistent) {
+    Y_UNIT_TEST(ConcurrentPackSeesWholeBuckets) {
         constexpr ui32 PARTITION_COUNT = 16;
         constexpr ui32 WRITER_ITERATIONS = 200;
 
@@ -2514,6 +2483,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             false /* isFollowerRole */
         );
 
+        const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
+        UNIT_ASSERT(descriptor);
+
         TInstant now = TInstant::Seconds(100);
 
         TVector<THolder<TFakeTablet>> partitions;
@@ -2522,67 +2494,133 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             partition->SetSimple(DB_UNIQUE_ROWS_TOTAL, i + 1);
         }
 
-        TLockedReaderThread reader([&]() -> TString {
-            for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
-                const ui64 tabletId = 1000 + i;
+        ui64 packedCpu = 0;
 
-                auto leafGroup = FindLeafGroup(rootGroup, tabletId, 0);
-                if (!leafGroup) {
-                    // The writer has not created this leaf yet, or has already dropped it
-                    continue;
-                }
+        auto checkBucket = [descriptor](const NKikimrSysView::TDbCounters& values, ui64 expectedRows) -> TString {
+            if (static_cast<size_t>(values.SimpleSize()) != descriptor->Gauges.size()
+                || static_cast<size_t>(values.GetCumulativeCount()) != descriptor->Rates.size()
+                || static_cast<size_t>(values.HistogramSize()) != descriptor->Histograms.size())
+            {
+                return TStringBuilder() << "a bucket of " << values.SimpleSize() << " gauges, "
+                    << values.GetCumulativeCount() << " rates and " << values.HistogramSize() << " histograms";
+            }
 
-                // A leaf, which exists at all, is fully built: its type=/category=
-                // subtree is there and the low level counters are already published.
-                // Their VALUES are not checked, because a freshly created leaf carries
-                // its aggregates only from the next recalculation on
-                auto leafCounters = FindExecutorCountersGroup(leafGroup);
-                if (!leafCounters || !leafCounters->FindNamedCounter("sensor", "SUM(DbUniqueRowsTotal)")) {
-                    return TStringBuilder() << "a half built leaf: the tablet " << tabletId
-                        << " has no executor counters";
-                }
-
-                auto leafAppCounters = FindAppCountersGroup(leafGroup);
-                if (!leafAppCounters
-                    || !leafAppCounters->FindNamedCounter("sensor", "DataShard/EngineHostRowUpdates"))
+            ui64 observations = 0;
+            for (ui32 metric = 0; metric < descriptor->Histograms.size(); ++metric) {
+                const auto& histogram = values.GetHistogram(metric);
+                if (!histogram.GetNonDerivative()
+                    || static_cast<size_t>(histogram.GetBucketsCount()) != descriptor->Histograms[metric].BucketCount()
+                    || histogram.BucketsSize() % 2 != 0)
                 {
-                    return TStringBuilder() << "a half built leaf: the tablet " << tabletId
-                        << " has no application counters";
+                    return TStringBuilder() << "a torn histogram " << metric;
+                }
+                for (size_t i = 1; i < static_cast<size_t>(histogram.BucketsSize()); i += 2) {
+                    observations += histogram.GetBuckets(i);
                 }
             }
 
-            return {};
-        });
+            // A live bucket has gauges and observations, a retired one neither
+            const ui64 rows = values.GetSimple(ROW_COUNT);
+            if ((rows == 0) != (observations == 0)) {
+                return TStringBuilder() << "a bucket of " << rows << " rows and " << observations << " observations";
+            }
+            if (expectedRows && rows && rows != expectedRows) {
+                return TStringBuilder() << "a leaf of " << rows << " rows instead of " << expectedRows;
+            }
+            if (expectedRows && observations > 1) {
+                return TStringBuilder() << "a leaf of " << observations << " observations";
+            }
 
+            return {};
+        };
+
+        auto checkReport = [&](const TPackedTables& tables) -> TString {
+            THashSet<TPackedBucketId, TPackedBucketId::THash> buckets;
+            for (const auto& table : tables) {
+                if (table.GetTabletType() != TABLET_TYPE) {
+                    return TStringBuilder() << "a table entry of the tablet type " << table.GetTabletType();
+                }
+
+                const bool isTableLevel = table.GetLevel() == TDetailedMetricsSettings::MetricsLevelTable;
+                if (isTableLevel != table.HasTableMetrics() || isTableLevel == (table.LeavesSize() != 0)) {
+                    return TStringBuilder() << "a table entry of the level " << static_cast<int>(table.GetLevel())
+                        << " with the buckets of the other one";
+                }
+
+                auto addBucket = [&](const TPackedBucketId& id, const NKikimrSysView::TDbCounters& values, ui64 expectedRows) -> TString {
+                    if (!buckets.insert(id).second) {
+                        return TStringBuilder() << "the bucket " << id.ToString() << " is reported twice";
+                    }
+                    packedCpu += GetPackedCumulativeDelta(values, CONSUMED_CPU_MICROSECONDS);
+                    if (auto failure = checkBucket(values, expectedRows)) {
+                        return TStringBuilder() << id.ToString() << ": " << failure;
+                    }
+                    return {};
+                };
+
+                if (isTableLevel) {
+                    if (auto failure = addBucket(TPackedBucketId::Table(table.GetTablePath()), table.GetTableMetrics(), 0)) {
+                        return failure;
+                    }
+                }
+                for (const auto& leaf : table.GetLeaves()) {
+                    const auto id = TPackedBucketId::Leaf(table.GetTablePath(), leaf.GetTabletId(), leaf.GetFollowerId());
+                    if (auto failure = addBucket(id, leaf.GetMetrics(), leaf.GetTabletId() - 1000 + 1)) {
+                        return failure;
+                    }
+                }
+            }
+            return {};
+        };
+
+        TLockedReaderThread reader(
+            [&]() -> TString {
+                return checkReport(PackOnce(aggregator));
+            },
+            false /* lockTree */
+        );
+
+        ui64 reportedCpu = 0;
         for (ui32 iteration = 0; iteration < WRITER_ITERATIONS; ++iteration) {
             now += TDuration::Seconds(1);
 
             for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
+                // Now and then a partition moves to the table level and back, so the TABLE bucket comes and goes too
+                const auto level = (iteration + i) % 5 == 0
+                    ? TDetailedMetricsSettings::MetricsLevelTable
+                    : TDetailedMetricsSettings::MetricsLevelPartition;
+
                 auto& partition = partitions[i];
                 partition->AddCumulative(CONSUMED_CPU, 1 + i);
-                partition->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+                reportedCpu += 1 + i;
+                partition->Report(aggregator, level, now);
 
-                // Drop the previous leaf right after creating this one, so that the whole
-                // per_partition subtree — and, on the wrap around, the table= and
-                // database= nodes above it — is torn down and rebuilt under the reader
+                // Drop the previous partition, so its bucket is retired and created again under the reader
                 const ui32 previous = (i + PARTITION_COUNT - 1) % PARTITION_COUNT;
                 aggregator->ForgetTablet(partitions[previous]->TabletId, 0);
             }
 
             aggregator->RecalculateAllCounters();
 
-            // Now and then drop the very last leaf too, so that the emptied table= and
-            // database= nodes above it are reclaimed and rebuilt under the reader
+            // Now and then retire every bucket at once
             if (iteration % 8 == 0) {
                 for (auto& partition : partitions) {
                     aggregator->ForgetTablet(partition->TabletId, 0);
                 }
 
-                UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+                UNIT_ASSERT(IsEmptyTree(rootGroup));
             }
         }
 
         UNIT_ASSERT(reader.Join() > 0);
+
+        // Pack twice, as TPackedReceiver::Settle() does
+        for (int report = 0; report < 2; ++report) {
+            const auto failure = checkReport(PackOnce(aggregator));
+            UNIT_ASSERT_C(failure.empty(), failure);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(packedCpu, reportedCpu);
     }
 
     Y_UNIT_TEST(PackTableLevelUsesThePreviousSnapshotForCumulativeDeltas) {
@@ -2996,6 +3034,72 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         trees.Leaders->ForgetTablet(1000, 0);
         UNIT_ASSERT(!FindTableGroup(trees.Root));
         UNIT_ASSERT(!FindTableGroup(trees.Root, OTHER_RELATIVE_TABLE_PATH));
+    }
+
+    /**
+     * Verify that a PARTITION leaf takes a few hundred bytes on the node (about 154 KB with a counter
+     * tree of its own), and that the steady state reports and Pack() allocate nothing.
+     *
+     * @note The leaves are built the way TTableEntry::Leaves of the aggregator is. Every allocation
+     *       is rounded up to 16 bytes, an estimate of the size classes of the allocator.
+     */
+    Y_UNIT_TEST(LeafFootprintIsSmall) {
+        constexpr ui64 LEAF_COUNT = 1000;
+        constexpr size_t ALLOCATION_ALIGNMENT = 16;
+
+        const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
+        UNIT_ASSERT(descriptor);
+
+        NTabletFlatExecutor::TExecutorCounters executorCounters;
+        const auto appCounters = CreateAppCountersByTabletType(TABLET_TYPE);
+        const auto binding = BindDetailedMetrics(*descriptor, executorCounters, *appCounters);
+        UNIT_ASSERT_C(binding->Problems.empty(), JoinSeq("\n", binding->Problems));
+
+        using TLeaves = THashMap<NDetailedMetrics::TTabletKey, TDetailedValuesAccumulator>;
+        TLeaves leaves;
+
+        TInstant now = TInstant::Seconds(100);
+        auto reportAll = [&]() {
+            for (ui64 i = 0; i < LEAF_COUNT; ++i) {
+                const NDetailedMetrics::TTabletKey tablet(1000 + i, 0);
+                auto [leaf, inserted] = leaves.try_emplace(tablet, binding.Get(), false /* skipLeaderOnly */);
+                leaf->second.Apply(tablet, executorCounters, *appCounters, now);
+            }
+            now += TDuration::Seconds(15);
+        };
+
+        auto measure = [&]() {
+            auto roundUp = [](size_t bytes) {
+                return AlignUp(bytes, ALLOCATION_ALIGNMENT);
+            };
+
+            size_t bytes = roundUp(leaves.bucket_count() * sizeof(void*));
+            for (const auto& [_, leaf] : leaves) {
+                // The hash map node: the next pointer and the value
+                bytes += roundUp(sizeof(void*) + sizeof(TLeaves::value_type));
+
+                // The heap of the accumulator: its source and its state, the second rounded up on its own
+                bytes += roundUp(leaf.GetAllocatedBytes() - sizeof(TDetailedValuesAccumulator)) + ALLOCATION_ALIGNMENT;
+            }
+            return bytes;
+        };
+
+        reportAll();
+        const size_t bytes = measure();
+        const size_t bytesPerLeaf = bytes / LEAF_COUNT;
+
+        Cerr << "TEST A PARTITION leaf takes " << bytesPerLeaf << " bytes on the node" << Endl;
+
+        UNIT_ASSERT_LE(bytesPerLeaf, 512u);
+
+        NKikimrSysView::TDbCounters packed;
+        for (int round = 0; round < 3; ++round) {
+            reportAll();
+            for (auto& [_, leaf] : leaves) {
+                leaf.Pack(packed);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(measure(), bytes);
+        }
     }
 
     Y_UNIT_TEST(NonDerivativeHistogramsOfDataShardAreConsumedCpuOnly) {

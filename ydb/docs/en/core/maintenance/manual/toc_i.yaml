@@ -1,6 +1,8 @@
 items:
 - name: Adding storage groups
   href: adding_storage_groups.md
+- name: Removing storage groups from a database
+  href: removing_storage_groups.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
 - name: Enabling/disabling Scrubbing

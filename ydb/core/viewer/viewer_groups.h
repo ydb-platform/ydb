@@ -509,7 +509,9 @@ public:
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
-                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerQuotaMultiplier(GroupSizeInUnits);
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize();
+                    const ui32 quotaMultiplier = itPDisk->second.GetOwnerQuotaMultiplier(GroupSizeInUnits);
+                    slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
                     if (itPDisk->second.ExpectedSlotSize) {
                         slotSize = Min(slotSize, itPDisk->second.UserChunkPoolSize.value_or(itPDisk->second.TotalSize));
                     }

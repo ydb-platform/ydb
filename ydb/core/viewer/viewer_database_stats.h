@@ -38,7 +38,7 @@ struct TDatabaseStorageStats {
             groupSizeInUnits,
             pdisk.GetSlotSizeInUnits(),
             pdisk.GetExpectedSlotSize());
-        slotSize *= quotaMultiplier;
+        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
         if (pdisk.GetExpectedSlotSize()) {
             if (pdisk.HasUserChunkPoolSize()) {
                 slotSize = Min(slotSize, pdisk.GetUserChunkPoolSize());

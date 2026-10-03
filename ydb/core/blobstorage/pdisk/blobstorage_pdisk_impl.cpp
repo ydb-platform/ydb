@@ -1890,7 +1890,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (ExpectedSlotSize) {
-            *Mon.SlotSizeBytes = GetExpectedOwnerSizeInChunks() * Format.ChunkSize;
+            *Mon.SlotSizeBytes = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
         } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
@@ -1952,16 +1952,16 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         //pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
-        i64 minSlotSize = ExpectedSlotSize
-            ? GetExpectedOwnerSizeInChunks() * Format.ChunkSize
-            : Max<i64>();
+        ui64 minSlotSize = ExpectedSlotSize
+            ? ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize
+            : Max<ui64>();
         if (!ExpectedSlotSize) {
             for (const auto& [_, owner] : VDiskOwners) {
                 minSlotSize = Min(minSlotSize,
-                    Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+                    ui64(Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner)) * Format.ChunkSize);
             }
         }
-        if (minSlotSize != Max<i64>()) {
+        if (ExpectedSlotSize || minSlotSize != Max<ui64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }

@@ -2247,6 +2247,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         checkResources(1, 100);
         checkResources(100, 1000);
         checkResources(2, 200);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        checkResources(ui32{1} << 24, 1000); // The uncapped quota is 2^64 bytes.
+        pdisk.Metrics.ClearUserChunkPoolSize();
+        checkResources(Max<ui32>(), 1200);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(100);
         pdisk.Metrics.SetUserChunkPoolSize(0);
         checkResources(100, 0);
         pdisk.Metrics.ClearUserChunkPoolSize();
@@ -2274,9 +2279,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
         vdiskMetrics.SetAllocatedSize(25);
         NKikimrSysView::TGroupInfo info;
-        auto check = [&](ui64 expectedAvailable) {
+        auto check = [&](ui64 expectedAvailable, ui32 groupSizeInUnits = 2) {
             CalculateGroupUsageStats(&info, {{&pdiskMetrics, &vdiskMetrics, 10, 100}},
-                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), 2);
+                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), groupSizeInUnits);
             UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
             UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailable);
         };
@@ -2288,6 +2293,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         pdiskMetrics.SetEnforcedDynamicSlotSize(96);
         pdiskMetrics.SetUserChunkPoolSize(150);
         check(125);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        check(125, ui32{1} << 24);
+        pdiskMetrics.ClearUserChunkPoolSize();
+        check(975, Max<ui32>());
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
         pdiskMetrics.SetUserChunkPoolSize(0);
         check(0);
 

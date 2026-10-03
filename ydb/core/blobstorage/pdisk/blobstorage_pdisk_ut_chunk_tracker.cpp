@@ -261,6 +261,30 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(101), 20);
     }
 
+    Y_UNIT_TEST(ExpectedOwnerSizeMultiplicationDoesNotOverflow) {
+        using namespace NPDisk;
+
+        TPerOwnerQuotaTracker tracker;
+        tracker.Reset(100, TColorLimits::MakeLogLimits());
+        tracker.SetExpectedOwnerSize(i64{1} << 32);
+        tracker.AddOwner(101, DynamicVDiskId(), 1, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.InitialAllocate(101, 20);
+
+        tracker.SetExpectedOwnerSize(Max<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetFree(101), 80);
+        tracker.SetOwnerGroupSizeInUnits(101, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.SetExpectedOwnerSize(30);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 30);
+        tracker.SetOwnerGroupSizeInUnits(101, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.SetTotal(0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(101), 20);
+    }
+
     Y_UNIT_TEST(ExpectedOwnerSizeIndependentOfCapacityAndSlotCounts) {
         using namespace NPDisk;
 

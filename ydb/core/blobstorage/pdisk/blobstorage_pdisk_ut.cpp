@@ -3571,6 +3571,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         checkOwner(disk, 3, poolSize);
         checkOwner(otherDisk, 1, 200);
         checkReportedSlotSize(100ull * chunkSize);
+        changeSettings(2, 4, Max<ui64>());
+        checkOwner(disk, 3, poolSize);
+        checkOwner(otherDisk, 1, poolSize);
+        checkReportedSlotSize(Max<ui64>() / chunkSize * chunkSize);
         changeSettings(8, 2, 0);
         checkOwner(disk, 5, poolSize / 8 * 5);
         checkOwner(otherDisk, 1, poolSize / 8);

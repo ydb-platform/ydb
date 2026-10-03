@@ -74,8 +74,9 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
-        slotSize *= TPDiskConfig::GetOwnerQuotaMultiplier(
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
             groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize);
+        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
         if (disk.ExpectedSlotSize) {
             if (pdiskMetrics.HasUserChunkPoolSize()) {
                 slotSize = Min(slotSize, pdiskMetrics.GetUserChunkPoolSize());

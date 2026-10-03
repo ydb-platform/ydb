@@ -903,6 +903,36 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT(!canAllocate(true, 1000, 10, 1001));
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeMarginDoesNotOverflow) {
+        NKikimrBlobStorage::TPDiskMetrics metrics;
+        metrics.SetTotalSize(3000000000000000000ull);
+        metrics.SetUserChunkPoolSize(3000000000000000000ull);
+        metrics.SetEnforcedDynamicSlotSize(1000000000000000000ull);
+        TGroupMapper::TPlacementSnapshot state;
+        state.PDisks.push_back({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = MakeTestLocation(1),
+            .ExpectedSlotCount = 8,
+            .SlotSizeInBytes = 1000000000000000000ull,
+            .Space = TGroupMapper::CapturePDiskSpace(metrics),
+            .Operational = true,
+        });
+        TGroupMapper::TOptions options;
+        options.SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
+        options.SpaceMarginPromille = 150;
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1), options);
+        mapper.Populate(std::move(state));
+
+        TGroupMapperError error;
+        TGroupMapper::TGroupDefinition group;
+        UNIT_ASSERT(!mapper.AllocateGroup(1, group, {}, {}, 3, 2550000000000000001ll, false, {}, error));
+        UNIT_ASSERT_C(mapper.AllocateGroup(1, group, {}, {}, 3, 2550000000000000000ll, false, {}, error), error.ErrorMessage);
+
+        metrics.SetEnforcedDynamicSlotSize(Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateSpaceAvailable(TGroupMapper::CapturePDiskSpace(metrics),
+            NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, 150), Max<i64>());
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeCapacityUsesRoundedUnit) {
         for (const auto& [enforcedUnitSize, expectedUnits] :
                 std::vector<std::pair<std::optional<ui64>, ui32>>{{96, 3}, {std::nullopt, 2}, {0, 0}}) {

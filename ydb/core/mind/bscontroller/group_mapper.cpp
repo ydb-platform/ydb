@@ -1615,7 +1615,9 @@ namespace NKikimr::NBsController {
                     const ui64 totalUnits = unitSize ? *maxSlotSizeInBytes / unitSize : 0;
                     availableCapacityInUnits = i64(Min(totalUnits, ui64(Max<i64>())))
                         - i64(Min(disk.NumActiveUnits, ui64(Max<i64>())));
-                    *maxSlotSizeInBytes = *maxSlotSizeInBytes * (1000 - State->Mapper.Options.SpaceMarginPromille) / 1000;
+                    const ui64 usablePromille = 1000 - State->Mapper.Options.SpaceMarginPromille;
+                    *maxSlotSizeInBytes = *maxSlotSizeInBytes / 1000 * usablePromille
+                        + *maxSlotSizeInBytes % 1000 * usablePromille / 1000;
                 }
             }
 
@@ -1672,7 +1674,10 @@ namespace NKikimr::NBsController {
     i64 TGroupMapper::CalculateSpaceAvailable(const TPDiskSpaceState& space,
                                               NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder, ui32 marginPromille) {
         if (SlotSpaceEnforced(space, colorBorder)) {
-            return *space.EnforcedDynamicSlotSize * (1000 - marginPromille) / 1000;
+            const ui64 slotSize = *space.EnforcedDynamicSlotSize;
+            const ui64 usablePromille = 1000 - marginPromille;
+            const ui64 available = slotSize / 1000 * usablePromille + slotSize % 1000 * usablePromille / 1000;
+            return Min(available, ui64(Max<i64>()));
         }
         return space.AvailableSize - space.TotalSize * marginPromille / 1000;
     }

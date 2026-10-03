@@ -90,7 +90,8 @@ public:
     void RedistributeQuotas() {
         if (ExpectedOwnerSize) {
             for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, Min(Total, ExpectedOwnerSize * Max(1u, QuotaForOwner[id].GetGroupSizeInUnits())));
+                const i64 units = Max(1u, QuotaForOwner[id].GetGroupSizeInUnits());
+                ForceHardLimit(id, ExpectedOwnerSize > Total / units ? Total : ExpectedOwnerSize * units);
             }
         } else {
             size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());

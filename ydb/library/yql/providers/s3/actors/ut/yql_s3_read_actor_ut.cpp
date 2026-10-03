@@ -1,0 +1,603 @@
+// ClickHouse headers go first: memlog.h (via the actor headers) defines NO_SANITIZE_THREAD differently.
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
+
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
+#include <ydb/library/yql/providers/s3/events/events.h>
+#include <ydb/library/yql/providers/s3/proto/range.pb.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/size_literals.h>
+#include <util/random/fast.h>
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
+#include <util/system/env.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
+
+#include <mutex>
+
+namespace NYql::NDq {
+
+using namespace NActors;
+using namespace NKikimr::NMiniKQL;
+
+namespace {
+
+// Fake S3: streaming (CSV/JSON/...) downloads and ranged (parquet, raw) downloads are scripted per URL.
+class TFakeS3Gateway : public IHTTPGateway {
+public:
+    using TStreamScript = std::function<void(const TString& url, int attempt, TOnDownloadStart&, TOnNewDataPart&, TOnDownloadFinish&)>;
+    using TRangeScript = std::function<TResult(const TString& url, size_t offset, size_t size)>;
+
+    TStreamScript StreamScript;
+    // Called with the callback; the script decides whether (and how) to answer. Default: serve Body.
+    std::function<void(const TString& url, size_t offset, size_t size, TOnResult& callback)> RangeScript;
+    TString Body;
+
+    std::atomic<int> StreamCalls = 0;
+    std::atomic<int> RangeCalls = 0;
+
+    int StreamCallsFor(const TString& url) {
+        std::lock_guard lock(Mutex);
+        return StreamCallsByUrl[url];
+    }
+
+    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
+        UNIT_FAIL("unexpected upload");
+    }
+
+    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
+        UNIT_FAIL("unexpected delete");
+    }
+
+    void Download(TString url, THeaders, std::size_t offset, std::size_t sizeLimit, TOnResult callback, TString, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
+        ++RangeCalls;
+        if (RangeScript) {
+            RangeScript(url, offset, sizeLimit, callback);
+            return;
+        }
+        callback(TResult(TContent(Body.substr(offset, sizeLimit), 206)));
+    }
+
+    TCancelHook Download(TString url, THeaders, std::size_t, std::size_t, TOnDownloadStart onStart, TOnNewDataPart onData, TOnDownloadFinish onFinish,
+                         const ::NMonitoring::TDynamicCounters::TCounterPtr&, IHttpRequestContext::TPtr) override {
+        ++StreamCalls;
+        int attempt;
+        {
+            std::lock_guard lock(Mutex);
+            attempt = ++StreamCallsByUrl[url];
+        }
+        StreamScript(url, attempt, onStart, onData, onFinish);
+        return [](TIssue) {};
+    }
+
+    ui64 GetBuffersSizePerStream() override {
+        return 0;
+    }
+
+    void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t>) override {}
+
+    TCountedContent Content(TString data) {
+        return TCountedContent(std::move(data), Counter, nullptr, {}, Max<size_t>());
+    }
+
+    // Answers every streaming request for any URL with the same successful body.
+    void ServeStream(const TString& data) {
+        StreamScript = [this, data](const TString&, int, TOnDownloadStart& onStart, TOnNewDataPart& onData, TOnDownloadFinish& onFinish) {
+            onStart(CURLE_OK, 206);
+            onData(Content(data));
+            onFinish(CURLE_OK, TIssues{});
+        };
+    }
+
+private:
+    std::shared_ptr<std::atomic_size_t> Counter = std::make_shared<std::atomic_size_t>(0);
+    std::mutex Mutex;
+    THashMap<TString, int> StreamCallsByUrl;
+};
+
+TString EncodeRanges(ui32 files, ui64 size) {
+    NS3::TRange range;
+    for (ui32 i = 0; i < files; ++i) {
+        auto* path = range.AddPaths();
+        path->SetName(TStringBuilder() << "file" << i);
+        path->SetSize(size);
+        path->SetRead(true);
+    }
+    TStringStream out;
+    range.Save(&out);
+    return out.Str();
+}
+
+NS3::TSource CsvSource(const TString& columnType = "String") {
+    NS3::TSource source;
+    source.SetUrl("http://fake/");
+    source.SetFormat("csv_with_names");
+    source.SetRowType(TStringBuilder() << R"(["StructType";[["a";["DataType";")" << columnType << R"("]]]])");
+    return source;
+}
+
+NS3::TSource ParquetSource() {
+    NS3::TSource source;
+    source.SetUrl("http://fake/");
+    source.SetFormat("parquet");
+    source.SetRowType(R"(["StructType";[["ts";["DataType";"Timestamp"]]]])");
+    return source;
+}
+
+// Parquet file with one Timestamp column "ts" = i seconds and one row per row group.
+TString MakeParquet(int rows) {
+    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::MICRO), arrow::default_memory_pool());
+    for (int i = 0; i < rows; ++i) {
+        UNIT_ASSERT(builder.Append(i * 1000000LL).ok());
+    }
+    std::shared_ptr<arrow::Array> array;
+    UNIT_ASSERT(builder.Finish(&array).ok());
+    auto table = arrow::Table::Make(arrow::schema({arrow::field("ts", arrow::timestamp(arrow::TimeUnit::MICRO), false)}), {array});
+    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    UNIT_ASSERT(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink, /* chunk_size */ 1).ok());
+    auto buffer = sink->Finish().ValueOrDie();
+    return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+TString Gzip(const TString& data) {
+    TString result;
+    TStringOutput out(result);
+    {
+        TZLibCompress compress(&out, ZLib::GZip);
+        compress.Write(data);
+        compress.Finish();
+    }
+    return result;
+}
+
+TString S3Error(const TString& code, const TString& message) {
+    return TStringBuilder() << "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>" << code << "</Code><Message>" << message << "</Message></Error>";
+}
+
+struct TSourceError {
+    NDqProto::StatusIds::StatusCode Code;
+    TIssues Issues;
+};
+
+// Stands for the compute actor as the recipient of source notifications: records errors with their status codes.
+class TSourceEventsCollector : public TActor<TSourceEventsCollector> {
+public:
+    TSourceEventsCollector(std::vector<TSourceError>& errors, std::mutex& mutex)
+        : TActor(&TSourceEventsCollector::StateFunc)
+        , Errors(errors)
+        , Mutex(mutex)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
+        IgnoreFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived);
+    )
+
+    void Handle(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
+        std::lock_guard lock(Mutex);
+        Errors.push_back({ev->Get()->FatalCode, ev->Get()->Issues});
+    }
+
+private:
+    std::vector<TSourceError>& Errors;
+    std::mutex& Mutex;
+};
+
+// Fake compute actor. By default the runtime runs in simulated time (no sleeps, deterministic),
+// scheduled download retries fire when Settle() advances the time.
+struct TSimulatedCA {
+    using TError = TSourceError;
+
+    const bool RealThreads;
+    TTestActorRuntimeBase Runtime;
+    const TActorId FakeActorId{0, "FakeActor"};
+    std::shared_ptr<TAsyncInputPromises> InputPromises = std::make_shared<TAsyncInputPromises>();
+    std::shared_ptr<TAsyncOutputPromises> OutputPromises = std::make_shared<TAsyncOutputPromises>();
+    std::vector<std::function<void(TAutoPtr<IEventHandle>&)>> Observers;
+    std::vector<TError> Errors; // retriable (UNSPECIFIED) and fatal errors reported by the source, guarded by ErrorsMutex
+    mutable std::mutex ErrorsMutex;
+    TActorId EventsCollectorId; // passed to the source as its compute actor
+    bool Terminated = false;
+    ui64 Rows = 0; // items returned by the source: ClickHouse blocks or arrow batches (the tests use one row per block/batch)
+    bool Finished = false;
+
+    explicit TSimulatedCA(bool realThreads = false)
+        : RealThreads(realThreads)
+        , Runtime(1, realThreads)
+    {
+        Runtime.AddLocalService(FakeActorId, TActorSetupCmd(new TFakeActor(InputPromises, OutputPromises), TMailboxType::Simple, 0));
+        Runtime.Initialize();
+        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+        if (GetEnv("S3_UT_DEBUG")) {
+            Runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
+        }
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            for (const auto& observer : Observers) {
+                observer(ev);
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        // The default filter drops every scheduled event; keep download retries so that they fire in simulated time
+        // (other scheduled events, e.g. periodic resume attempts of throttled work, stay dropped).
+        Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) {
+            return ev->GetTypeRewrite() != TEvS3Provider::TEvRetryEventFunc::EventType;
+        });
+        EventsCollectorId = Runtime.Register(new TSourceEventsCollector(Errors, ErrorsMutex));
+        if (!NDB::FormatFactory::instance().getAllFormats().contains("CSVWithNames")) {
+            NDB::registerFormats();
+        }
+    }
+
+    ~TSimulatedCA() {
+        // Pass the source away while the runtime is alive, also when an assertion failed mid-test.
+        try {
+            Terminate();
+        } catch (...) {
+        }
+    }
+
+    void Execute(TCallback callback) {
+        std::exception_ptr exception = nullptr;
+        auto promise = NThreading::NewPromise();
+        Runtime.Send(new IEventHandle(FakeActorId, Runtime.AllocateEdgeActor(), new TEvPrivate::TEvExecute(promise, callback, exception)));
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return promise.HasValue(); };
+        Runtime.DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(promise.HasValue(), "fake compute actor did not run the callback");
+        if (exception) {
+            std::rethrow_exception(exception);
+        }
+    }
+
+    // Advances simulated time and processes everything that becomes ready
+    // (with real threads: lets the actors run for up to 2 s of wall time).
+    void Settle(TDuration delta = TDuration::MilliSeconds(200)) {
+        if (RealThreads) {
+            Sleep(Min(delta, TDuration::Seconds(2)));
+            return;
+        }
+        Runtime.AdvanceCurrentTime(delta);
+        Runtime.SetDispatchTimeout(TDuration::MilliSeconds(300));
+        TDispatchOptions options;
+        options.CustomFinalCondition = [] { return false; };
+        try {
+            Runtime.DispatchEvents(options);
+        } catch (const TEmptyEventQueueException&) {
+            // the queue is drained
+        }
+    }
+
+    void CreateReader(std::shared_ptr<TFakeS3Gateway> gateway, NS3::TSource source, ui32 files, ui64 fileSize,
+                      IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy()) {
+        Execute([&](TFakeActor& actor) {
+            auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
+                std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}),
+                gateway, std::move(source), 0, TCollectStatsLevel::None, TTxId{}, THashMap<TString, TString>{}, THashMap<TString, TString>{},
+                TVector<TString>{EncodeRanges(files, fileSize)}, EventsCollectorId, CreateStructuredTokenCredentialsFactory(),
+                retryPolicy, TS3ReadActorFactoryConfig{}, nullptr, nullptr,
+                std::make_shared<TGuaranteeQuotaManager>(1_GB, 1_GB), false, nullptr);
+            actor.InitAsyncInput(input, inputActor);
+        });
+    }
+
+    void Read() {
+        Execute([&](TFakeActor& actor) {
+            TMaybe<TInstant> watermark;
+            TUnboxedValueBatch buffer;
+            bool finished = false;
+            actor.DqAsyncInput->GetAsyncInputData(buffer, watermark, finished, 1_MB);
+            Rows += buffer.RowCount();
+            Finished = finished;
+        });
+    }
+
+    void Terminate() {
+        if (!Terminated) {
+            Terminated = true;
+            Execute([](TFakeActor& actor) { actor.Terminate(); });
+        }
+    }
+
+    std::vector<TError> AllErrors() const {
+        std::lock_guard lock(ErrorsMutex);
+        return Errors;
+    }
+
+    std::vector<TError> FatalErrors() const {
+        std::lock_guard lock(ErrorsMutex);
+        std::vector<TError> result;
+        for (const auto& error : Errors) {
+            if (error.Code != NDqProto::StatusIds::UNSPECIFIED) {
+                result.push_back(error);
+            }
+        }
+        return result;
+    }
+
+    // Reads until the source reports "finished" or a fatal error, within a bounded amount of simulated time.
+    void ReadToEnd(TDuration step = TDuration::MilliSeconds(200), ui32 maxSteps = 100) {
+        for (ui32 i = 0; i < maxSteps && !Finished && FatalErrors().empty(); ++i) {
+            Settle(step);
+            Read();
+        }
+    }
+
+    TString Describe() const {
+        TStringBuilder result;
+        result << "rows=" << Rows << " finished=" << Finished << " errors=[";
+        for (const auto& error : AllErrors()) {
+            result << "{" << NDqProto::StatusIds::StatusCode_Name(error.Code) << ": " << error.Issues.ToOneLineString() << "}";
+        }
+        return result << "]";
+    }
+};
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TS3ReadCoro) {
+    Y_UNIT_TEST(CsvReadFinishes) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        const TString data = "a\nx\n";
+        gateway->ServeStream(data);
+        ca.CreateReader(gateway, CsvSource(), 3, data.size());
+        ca.ReadToEnd();
+        UNIT_ASSERT_C(ca.Finished && ca.Rows == 3 && ca.AllErrors().empty(), ca.Describe());
+        UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), 3);
+    }
+
+    Y_UNIT_TEST(ParquetReadWithoutPredicate) {
+        for (ui64 parallelRowGroups : {0, 1, 2, 5}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->Body = MakeParquet(10);
+            auto source = ParquetSource();
+            source.SetParallelRowGroupCount(parallelRowGroups);
+            ca.CreateReader(gateway, std::move(source), 1, gateway->Body.size());
+            ca.ReadToEnd();
+            UNIT_ASSERT_C(ca.Finished && ca.Rows == 10 && ca.AllErrors().empty(), "parallelRowGroups=" << parallelRowGroups << " " << ca.Describe());
+        }
+    }
+
+    // A retriable HTTP error that carries a body must not poison the next attempt.
+    Y_UNIT_TEST(RetryAfterErrorBodySucceeds) {
+        struct TCase {
+            long HttpCode;
+            TString Body;
+            int Failures;
+        };
+        const TCase cases[] = {
+            {503, S3Error("SlowDown", "Please reduce your request rate."), 1},
+            {500, S3Error("InternalError", "We encountered an internal error."), 2},
+        };
+        for (const auto& c : cases) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            const TString data = "a\nx\n";
+            gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+                if (attempt <= c.Failures) {
+                    onStart(CURLE_OK, c.HttpCode);
+                    onData(gateway->Content(c.Body));
+                } else {
+                    onStart(CURLE_OK, 206);
+                    onData(gateway->Content(data));
+                }
+                onFinish(CURLE_OK, TIssues{});
+            };
+            ca.CreateReader(gateway, CsvSource(), 1, data.size());
+            ca.ReadToEnd(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_C(ca.Finished && ca.Rows == 1 && ca.FatalErrors().empty(), "http=" << c.HttpCode << " downloads=" << gateway->StreamCalls.load() << " " << ca.Describe());
+            UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), c.Failures + 1);
+            UNIT_ASSERT_VALUES_EQUAL(ca.AllErrors().size(), size_t(c.Failures)); // transient issues only
+        }
+    }
+
+    // Issues of a retried attempt are reported as retriable when it fails; a fatal error of a later
+    // attempt (here: a parse error) must not repeat them as its cause.
+    Y_UNIT_TEST(FatalErrorAfterRetryHasNoIssuesOfEarlierAttempt) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        TStringBuilder csv;
+        csv << "a\nnot-a-number\n";
+        for (ui32 i = 0; i < 1000; ++i) {
+            csv << i << "\n";
+        }
+        const TString data = csv;
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+            if (attempt == 1) {
+                onStart(CURLE_OK, 503);
+                onData(gateway->Content(S3Error("SlowDown", "Please reduce your request rate.")));
+                onFinish(CURLE_OK, TIssues{});
+            } else {
+                onStart(CURLE_OK, 206);
+                onData(gateway->Content(data)); // the download is still in progress
+            }
+        };
+        ca.CreateReader(gateway, CsvSource("Int32"), 1, data.size());
+        ca.ReadToEnd(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), 2);
+        const auto errors = ca.AllErrors();
+        UNIT_ASSERT_VALUES_EQUAL_C(errors.size(), 2, ca.Describe());
+        UNIT_ASSERT_C(errors[0].Code == NDqProto::StatusIds::UNSPECIFIED && errors[0].Issues.ToOneLineString().Contains("SlowDown"), ca.Describe());
+        UNIT_ASSERT_C(errors[1].Code == NDqProto::StatusIds::BAD_REQUEST, ca.Describe());
+        const TString fatal = errors[1].Issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(fatal, "failed to parse data in column");
+        UNIT_ASSERT_C(!fatal.Contains("SlowDown") && !fatal.Contains("503"), fatal);
+    }
+
+    // When retries are exhausted, the fatal error carries the issues of the last attempt only.
+    Y_UNIT_TEST(RetryExhaustedReportsLastAttempt) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+            onStart(CURLE_OK, 503);
+            onData(gateway->Content(S3Error("SlowDown", TStringBuilder() << "attempt-" << attempt)));
+            onFinish(CURLE_OK, TIssues{});
+        };
+        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+            [](CURLcode, long) { return ERetryErrorClass::ShortRetry; }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(10), 2);
+        ca.CreateReader(gateway, CsvSource(), 1, 10, retryPolicy);
+        ca.ReadToEnd(TDuration::MilliSeconds(100));
+        const auto fatal = ca.FatalErrors();
+        UNIT_ASSERT_C(!fatal.empty(), ca.Describe());
+        const TString text = fatal.front().Issues.ToOneLineString();
+        const int last = gateway->StreamCalls.load();
+        UNIT_ASSERT_STRING_CONTAINS(text, TStringBuilder() << "attempt-" << last);
+        for (int i = 1; i < last; ++i) {
+            UNIT_ASSERT_C(!text.Contains(TStringBuilder() << "attempt-" << i), text);
+        }
+    }
+
+    // A retry scheduled before the coroutine was cancelled (LIMIT reached)
+    // must not start a new download.
+    Y_UNIT_TEST(RetryStopsOnCancel) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        // A limit above 1000 rows keeps parallel downloads on (a smaller one forces ParallelDownloadCount = 1).
+        constexpr ui64 rowsLimit = 1001;
+        TStringBuilder data;
+        data << "a\n";
+        for (ui64 i = 0; i < rowsLimit; ++i) {
+            data << "x\n";
+        }
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString& url, int, auto& onStart, auto& onData, auto& onFinish) {
+            if (url.EndsWith("file0")) {
+                onStart(CURLE_OK, 206);
+                onData(gateway->Content(data));
+            } else {
+                onStart(CURLE_OK, 503);
+                onData(gateway->Content(S3Error("SlowDown", "Please reduce your request rate.")));
+            }
+            onFinish(CURLE_OK, TIssues{});
+        };
+        auto source = CsvSource();
+        source.SetRowsLimitHint(rowsLimit);
+        source.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", "2"});
+        source.MutableSettings()->insert({"fileQueueBatchSizeLimit", "1000000"});
+        // A backoff long enough for file0 to reach the limit (and cancel file1) before the retry fires.
+        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+            [](CURLcode, long) { return ERetryErrorClass::LongRetry; }, TDuration::Seconds(1), TDuration::Seconds(1));
+        ca.CreateReader(gateway, std::move(source), 2, data.size(), retryPolicy);
+        ca.ReadToEnd(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_C(ca.Finished && ca.FatalErrors().empty(), ca.Describe());
+        ca.Settle(TDuration::Seconds(2)); // the backoff of the failed download has expired
+        UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCallsFor("http://fake/file0"), 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(gateway->StreamCallsFor("http://fake/file1"), 1, "retry started after the coroutine had been cancelled");
+    }
+
+    // The async decompressor actor dies with its coroutine when parsing fails.
+    Y_UNIT_TEST(DecompressorDiesOnParseError) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        TStringBuilder csv;
+        csv << "a\nnot-a-number\n";
+        TReallyFastRng32 rng(42);
+        for (ui32 i = 0; i < 100000; ++i) {
+            csv << rng() << "\n";
+        }
+        const TString compressed = Gzip(csv);
+        UNIT_ASSERT(compressed.size() > 64_KB);
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int, auto& onStart, auto& onData, auto&) {
+            onStart(CURLE_OK, 206);
+            // The first part of the object arrived, the rest of the download is still in progress.
+            onData(gateway->Content(compressed.substr(0, 64_KB)));
+        };
+        TActorId decompressor;
+        ca.Observers.push_back([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvS3Provider::TEvDecompressDataRequest::EventType) {
+                decompressor = ev->GetRecipientRewrite();
+            }
+        });
+        auto source = CsvSource("Int32");
+        source.SetAsyncDecompressing(true);
+        source.MutableSettings()->insert({"compression", "gzip"});
+        ca.CreateReader(gateway, std::move(source), 1, compressed.size());
+        ca.ReadToEnd();
+        const auto fatal = ca.FatalErrors();
+        UNIT_ASSERT_C(!fatal.empty() && fatal.front().Code == NDqProto::StatusIds::BAD_REQUEST, ca.Describe());
+        ca.Settle();
+        UNIT_ASSERT(decompressor);
+        UNIT_ASSERT_C(!ca.Runtime.FindActor(decompressor), "decompressor actor outlived its coroutine");
+        ca.Terminate();
+    }
+
+    // The async decompressor actor dies with its coroutine when the coroutine stops on the LIMIT
+    // while the download is still in progress.
+    Y_UNIT_TEST(DecompressorDiesOnLimit) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        TStringBuilder csv;
+        csv << "a\n";
+        TReallyFastRng32 rng(42);
+        for (ui32 i = 0; i < 100000; ++i) {
+            csv << (rng() % 1000000) << "\n";
+        }
+        const TString compressed = Gzip(csv);
+        UNIT_ASSERT(compressed.size() > 64_KB);
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int, auto& onStart, auto& onData, auto&) {
+            onStart(CURLE_OK, 206);
+            onData(gateway->Content(compressed.substr(0, 64_KB)));
+        };
+        TActorId decompressor;
+        ca.Observers.push_back([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvS3Provider::TEvDecompressDataRequest::EventType) {
+                decompressor = ev->GetRecipientRewrite();
+            }
+        });
+        auto source = CsvSource("Int32");
+        source.SetAsyncDecompressing(true);
+        source.SetRowsLimitHint(10);
+        source.MutableSettings()->insert({"compression", "gzip"});
+        ca.CreateReader(gateway, std::move(source), 1, compressed.size());
+        ca.ReadToEnd();
+        ca.Settle();
+        UNIT_ASSERT_C(ca.FatalErrors().empty() && ca.Rows > 0, ca.Describe());
+        UNIT_ASSERT(decompressor);
+        UNIT_ASSERT_C(!ca.Runtime.FindActor(decompressor), "decompressor actor outlived its coroutine");
+        ca.Terminate();
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3ReadActors) {
+    // The file queue registered by the reader (runtime listing off) dies with it.
+    Y_UNIT_TEST(LocalFileQueueDiesWithReader) {
+        for (bool raw : {false, true}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->StreamScript = [](const TString&, int, auto&, auto&, auto&) {}; // slow objects
+            gateway->RangeScript = [](const TString&, size_t, size_t, IHTTPGateway::TOnResult&) {};
+            TActorId queue;
+            ca.Observers.push_back([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvS3Provider::TEvGetNextBatch::EventType) {
+                    queue = ev->GetRecipientRewrite();
+                }
+            });
+            NS3::TSource source;
+            if (raw) {
+                source.SetUrl("http://fake/");
+            } else {
+                source = CsvSource();
+            }
+            ca.CreateReader(gateway, std::move(source), 10, 100);
+            ca.Settle();
+            UNIT_ASSERT(queue);
+            UNIT_ASSERT(ca.Runtime.FindActor(queue));
+            ca.Terminate(); // LIMIT, cancel or an error elsewhere: the compute actor passes the source away
+            ca.Settle(TDuration::Minutes(40));
+            UNIT_ASSERT_C(!ca.Runtime.FindActor(queue), "raw=" << raw << ": local file queue actor outlived its reader");
+        }
+    }
+
+}
+
+} // namespace NYql::NDq

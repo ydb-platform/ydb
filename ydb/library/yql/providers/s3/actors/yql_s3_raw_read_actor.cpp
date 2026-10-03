@@ -466,6 +466,10 @@ private:
 
         ClearMkqlData();
         FileQueueEvents.Unsubscribe();
+        if (!UseRuntimeListing && FileQueueActor) {
+            // The local file queue is our child: it does not die with us on its own.
+            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+        }
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 

@@ -1,3 +1,4 @@
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
@@ -633,6 +634,17 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         .MaxLines = 4096,
         .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
     }));
+
+    if (auto* mon = appData->Mon) {
+        NInMemoryMetricsMonitoring::TConfig metricsViewer;
+        metricsViewer.ExecutorPool = systemPoolId;
+        metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "metrics", "In-memory metric viewer", false, &system, actor, /*useAuth=*/true);
+            mon->RegisterActorPage(actors, "metrics-overview", "In-memory metrics overview", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NInMemoryMetricsMonitoring::MakeInMemoryMetricsMonitoring(std::move(metricsViewer)));
+    }
 
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);

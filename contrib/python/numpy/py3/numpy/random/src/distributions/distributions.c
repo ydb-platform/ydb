@@ -845,12 +845,12 @@ double random_noncentral_f(bitgen_t *bitgen_state, double dfnum, double dfden,
 
 double random_wald(bitgen_t *bitgen_state, double mean, double scale) {
   double U, X, Y;
-  double mu_2l;
+  double d;
 
-  mu_2l = mean / (2 * scale);
   Y = random_standard_normal(bitgen_state);
   Y = mean * Y * Y;
-  X = mean + mu_2l * (Y - sqrt(4 * scale * Y + Y * Y));
+  d = 1 + sqrt(1 + 4 * scale / Y);
+  X = mean * (1 - 2 / d);
   U = next_double(bitgen_state);
   if (U <= mean / (mean + X)) {
     return X;
@@ -1023,7 +1023,7 @@ RAND_INT_TYPE random_zipf(bitgen_t *bitgen_state, double a) {
    * Values below Umin would result in X being rejected because it is too
    * large, so there is no point in including them in the distribution of U.
    */
-  Umin = pow(RAND_INT_MAX, -am1);
+  Umin = pow((double) RAND_INT_MAX, -am1);
   while (1) {
     double U01, T, U, V, X;
 

@@ -60,12 +60,15 @@ try:
 except ImportError:
     _nbs_partition_modules = []
 
+import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_nbs_dbg_like as cluster_workload_nbs_dbg_like
+
 import sys
 import ydb.apps.dstool.lib.common as common
 
 MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
+    cluster_workload_nbs_dbg_like,
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
@@ -86,7 +89,7 @@ default_structure = [
     ('pool', ['list', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
-    ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
+    ('cluster', ['balance', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),
 ]
 
 # Only expose the `nbs partition ...` subcommand tree when the modules are

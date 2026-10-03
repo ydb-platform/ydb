@@ -549,8 +549,10 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-                Settings->AppConfig->GetResourcePathPrefixMapping());
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+            }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
@@ -1461,6 +1463,7 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                FederatedQuerySetupActorSystems_.push_back(actorSystemPtr);
 
                 if (FederatedQuerySetupDriver_) {
                     FederatedQuerySetupDriver_.reset();
@@ -1947,6 +1950,13 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
+
+        for (const auto& actorSystem : FederatedQuerySetupActorSystems_) {
+            if (actorSystem) {
+                actorSystem->store(nullptr, std::memory_order_release);
+            }
+        }
+        FederatedQuerySetupActorSystems_.clear();
 
         if (Runtime) {
             WaitFinalization();

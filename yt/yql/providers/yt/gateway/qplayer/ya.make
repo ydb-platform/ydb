@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_qplayer_gateway.cpp
@@ -18,7 +18,5 @@ PEERDIR(
     yt/yql/providers/yt/lib/dump_helpers
     yt/yql/providers/yt/lib/full_capture
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

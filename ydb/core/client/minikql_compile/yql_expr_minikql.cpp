@@ -1594,7 +1594,7 @@ private:
         }
         IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
         do {
-            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
+            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context, Expr->TypeContext);
         } while (status.Level == IGraphTransformer::TStatus::Repeat);
         Y_DEBUG_ABORT_UNLESS(status.Level == IGraphTransformer::TStatus::Ok ||
                      status.Level == IGraphTransformer::TStatus::Error);

@@ -240,6 +240,9 @@ namespace NKikimr::NStorage {
                     ddiskConfig.IntegrityChecksumCacheBytes =
                         Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
                 }
+                if (Cfg->DDiskConfig->HasDevNullMode()) {
+                    ddiskConfig.DevNullMode = Cfg->DDiskConfig->GetDevNullMode();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -572,7 +575,12 @@ namespace NKikimr::NStorage {
         if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
             const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
             if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-                Groups[groupId].MustSubscribe = true;
+                if (!std::exchange(Groups[groupId].MustSubscribe, true) && PipeClientId) {
+                    // A delayed placement may arrive after RegisterNode has omitted this group.
+                    // Subscribe on the current pipe as well as on subsequent reconnects.
+                    SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(
+                        LocalNodeId, &groupId, &groupId + 1));
+                }
             }
         }
 

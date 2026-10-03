@@ -61,6 +61,7 @@ std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetProperti
         {"total_memory_limit_percent_per_node", &TotalMemoryLimitPercentPerNode},
         {"database_load_cpu_threshold", &DatabaseLoadCpuThreshold},
         {"total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode},
+        {"total_cpu_guarantee_percent_per_node", &TotalCpuGuaranteePercentPerNode},
         {"query_cpu_limit_percent_per_node", &QueryCpuLimitPercentPerNode},
         {"resource_weight", &ResourceWeight}
     };
@@ -85,6 +86,9 @@ std::optional<TString> TPoolSettings::Validate() const {
     }
     if (ConcurrentQueryLimit > POOL_MAX_CONCURRENT_QUERY_LIMIT) {
         return TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
+    }
+    if (TotalCpuGuaranteePercentPerNode >= 0 && TotalCpuLimitPercentPerNode >= 0 && TotalCpuGuaranteePercentPerNode > TotalCpuLimitPercentPerNode) {
+        return TStringBuilder() << "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is " << TotalCpuGuaranteePercentPerNode << ", that exceeds total_cpu_limit_percent_per_node in " << TotalCpuLimitPercentPerNode;
     }
     if (QueueSize != -1 && ConcurrentQueryLimit == -1 && DatabaseLoadCpuThreshold < 0.0) {
         return "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold";

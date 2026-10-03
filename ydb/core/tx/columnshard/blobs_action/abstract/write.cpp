@@ -1,5 +1,8 @@
 #include "write.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS
@@ -24,6 +27,10 @@ void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TS
     SumSize += data.size();
 }
 
+void IBlobsWritingAction::UpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) {
+    DoUpdateChannelApproximateFreeSpace(blobId, approximateFreeSpaceShare);
+}
+
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
     YDB_LOG_DEBUG("",
         {"event", "WriteBlobResult"},
@@ -39,6 +46,14 @@ void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const 
     }
     WritingStart.erase(it);
     Y_ABORT_UNLESS(BlobsWaiting.erase(blobId));
+    if (status == NKikimrProto::EReplyStatus::OK && GetCacheAfterWrite()) {
+        const auto& storageId = GetStorageId();
+        if (!storageId || storageId == NBlobOperations::TGlobal::DefaultStorageId) {
+            auto dataIt = BlobsForWrite.find(blobId);
+            AFL_VERIFY(dataIt != BlobsForWrite.end())("blob_id", blobId.ToStringNew());
+            NBlobCache::AddRangeToCache(TBlobRange::FromBlobId(blobId), dataIt->second);
+        }
+    }
     return DoOnBlobWriteResult(blobId, status);
 }
 

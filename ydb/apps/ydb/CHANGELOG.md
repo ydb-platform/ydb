@@ -1,4 +1,6 @@
 
+* Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
+* Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Added the `ydb topic consumer offsets reset` command to rewind a consumer's committed offsets on all topic partitions (`earliest`, `latest`, or a timestamp).
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.

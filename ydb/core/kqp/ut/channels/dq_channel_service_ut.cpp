@@ -6,6 +6,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/dq/runtime/dq_channel_service_impl.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/threading/mux_event/mux_event.h>
@@ -183,6 +185,8 @@ struct TWorkerSettings {
     bool CheckOrder = false;
     // the producer sends the finish only once the test has sent it TEvStep
     bool FinishOnStep = false;
+    // bound to the output buffer of the producer, which increments it when it becomes finished
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 };
 
 struct TFailureSettings {
@@ -277,6 +281,9 @@ public:
         if (!Started) {
             TChannelFullInfo info(ChannelId, SelfId(), PeerId, 0, 1, TCollectStatsLevel::None);
             Buffer = Service->GetOutputBuffer(info, QuotaManager, nullptr);
+            if (Settings.FinishEpoch) {
+                Buffer->SetFinishEpoch(Settings.FinishEpoch);
+            }
             Started = true;
         }
         if (Buffer->IsFinished()) {
@@ -2097,6 +2104,97 @@ struct TConsumerPopsWhileSessionLockedTest : public TSessionTest {
     }
 };
 
+// An output buffer which counts what a channel asks of it and pushes into it, and is finished when the test says so
+struct TCountingOutputBuffer : public IChannelBuffer {
+    TCountingOutputBuffer()
+        : IChannelBuffer(TChannelFullInfo(1, {}, {}, 0, 1, TCollectStatsLevel::None))
+    {}
+
+    EDqFillLevel GetFillLevel() const override { return EDqFillLevel::NoLimit; }
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {}
+    void Push(TDataChunk&& data) override {
+        Chunks++;
+        Rows += data.Rows;
+    }
+    bool IsFinished() override {
+        FinishChecks++;
+        return Finished;
+    }
+    bool IsEarlyFinished() override { return false; }
+    bool IsEmpty() override { return true; }
+    bool Pop(TDataChunk&) override { return false; }
+    void EarlyFinish() override {}
+    void ExportPushStats(TDqAsyncStats&) override {}
+    void ExportPopStats(TDqAsyncStats&) override {}
+
+    ui64 FinishChecks = 0;
+    ui64 Chunks = 0;
+    ui64 Rows = 0;
+    bool Finished = false;
+};
+
+// A compute actor binds its output channels to the finish epoch before they are bound to their peer: the channel
+// holds a stub buffer then. The epoch has to reach the buffer which replaces the stub on Bind, or a channel which
+// finishes afterwards would never move the epoch, and the compute actor would wait for it forever.
+struct TOutputChannelFinishEpochTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+        TDqChannelSettings settings;
+        settings.RowType = NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i32>::Id, typeEnv);
+
+        auto producer = Runtime->AllocateEdgeActor(NodeIndex0);
+        auto remoteConsumer = Runtime->AllocateEdgeActor(NodeIndex1);
+        auto localConsumer = Runtime->AllocateEdgeActor(NodeIndex0);
+
+        // remote: bound on the stub, then on Bind the epoch goes to the descriptor, whose finish moves it
+        settings.ChannelId = 7;
+        auto remote = Service0->GetOutputChannel(settings);
+        auto remoteEpoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(remote->BindFinishEpoch(remoteEpoch));
+        UNIT_ASSERT_VALUES_EQUAL(remoteEpoch->load(), 1);
+        remote->Bind(producer, remoteConsumer);
+        UNIT_ASSERT_VALUES_EQUAL_C(remoteEpoch->load(), 2, "the epoch did not move on Bind");
+
+        auto remoteBuffer = std::dynamic_pointer_cast<TOutputBuffer>(dynamic_cast<TFastDqOutputChannel&>(*remote).Serializer->Buffer);
+        UNIT_ASSERT(remoteBuffer);
+        {
+            std::lock_guard lock(remoteBuffer->Descriptor->FlowControlMutex);
+            UNIT_ASSERT_C(remoteBuffer->Descriptor->FinishEpoch == remoteEpoch, "the bound buffer does not hold the epoch");
+        }
+        UNIT_ASSERT(!remote->IsFinished());
+        // the peer confirms the finish
+        remoteBuffer->Descriptor->HandleUpdate(false, 0, true, false, remoteBuffer->NodeState.get(), remoteBuffer->Descriptor);
+        UNIT_ASSERT_VALUES_EQUAL_C(remoteEpoch->load(), 3, "a finish after Bind did not move the epoch");
+        UNIT_ASSERT(remote->IsFinished());
+
+        // local: the same forwarding to the local buffer (its finish paths are covered by FinishEpoch1n)
+        settings.ChannelId = 8;
+        auto local = Service0->GetOutputChannel(settings);
+        auto localEpoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(local->BindFinishEpoch(localEpoch));
+        local->Bind(producer, localConsumer);
+        UNIT_ASSERT_VALUES_EQUAL_C(localEpoch->load(), 2, "the epoch did not move on Bind");
+        auto localBuffer = std::dynamic_pointer_cast<TLocalBuffer>(dynamic_cast<TFastDqOutputChannel&>(*local).Serializer->Buffer);
+        UNIT_ASSERT(localBuffer);
+        {
+            std::lock_guard lock(localBuffer->Mutex);
+            UNIT_ASSERT_C(localBuffer->FinishEpoch == localEpoch, "the bound buffer does not hold the epoch");
+        }
+
+        // the channels hold MiniKQL state of this allocator, and buffers of the node services
+        remoteBuffer.reset();
+        localBuffer.reset();
+        remote.Reset();
+        local.Reset();
+        Destroy();
+    }
+};
+
 // The resends of the reconciliations and the waiters interleave with the messages built off the session lock:
 // every consumer checks the order of what it gets
 struct TOrderedReconTest : public TReconTest {
@@ -2140,6 +2238,88 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(EmptyFinish2n) {
         LoadTest(100, false);
+    }
+
+    // Every output finish, the plain one and the early finish asked by the consumer, remote and local, moves the
+    // epoch a compute actor relies on to check its outputs only once one of them has finished. It is moved right
+    // after the finish is set, so it may lag the producer seeing it for a moment.
+    void FinishEpochTest(bool local, bool earlyFinish) {
+        const int count = 20;
+        auto epoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        TWorkerSettings producer{ .MessageCount = 20, .FinishEpoch = epoch };
+        TWorkerSettings consumer{ .MessageCount = earlyFinish ? 10 : 20, .EarlyFinish = earlyFinish };
+        LoadTest(count, local, producer, consumer);
+        auto deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (epoch->load() < count && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(epoch->load() >= count, "the finish epoch moved " << epoch->load() << " time(s) for " << count << " finished channels");
+    }
+
+    Y_UNIT_TEST(FinishEpoch2n) {
+        FinishEpochTest(false, false);
+    }
+
+    Y_UNIT_TEST(FinishEpoch1n) {
+        FinishEpochTest(true, false);
+    }
+
+    Y_UNIT_TEST(EarlyFinishEpoch2n) {
+        FinishEpochTest(false, true);
+    }
+
+    Y_UNIT_TEST(EarlyFinishEpoch1n) {
+        FinishEpochTest(true, true);
+    }
+
+    // A channel asked its buffer whether it had finished for every row pushed; bound to the finish epoch, it asks
+    // only once the epoch has moved, and drops the rows once the buffer has finished
+    Y_UNIT_TEST(OutputPushChecksFinishOnEpoch) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+        TDqChannelSettings settings;
+        settings.RowType = NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i32>::Id, typeEnv);
+        auto buffer = std::make_shared<TCountingOutputBuffer>();
+        TIntrusivePtr<TFastDqOutputChannel> channel = new TFastDqOutputChannel({}, settings, buffer, false);
+
+        // without the epoch: asked for every row, as before
+        for (i32 i = 0; i < 5; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 5);
+
+        // bound: asked once, as long as the epoch does not move
+        auto epoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(channel->BindFinishEpoch(epoch));
+        for (i32 i = 0; i < 100; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 6);
+        channel->Flush();
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Rows, 105);
+        const auto chunks = buffer->Chunks;
+
+        // the buffer finishes and moves the epoch: asked once more, and the rows are dropped from then on
+        buffer->Finished = true;
+        (*epoch)++;
+        for (i32 i = 0; i < 50; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 7);
+        channel->Flush();
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Rows, 105);
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Chunks, chunks);
+
+        // the serializer holds MiniKQL state of this allocator
+        channel.Reset();
+    }
+
+    Y_UNIT_TEST(OutputChannelFinishEpochBinding) {
+        TOutputChannelFinishEpochTest test;
+
+        test.Local = false;
+
+        test.Run();
     }
 
     Y_UNIT_TEST(SimpleFinish2n) {

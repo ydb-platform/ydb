@@ -12,8 +12,10 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
+    ydb/library/yql/providers/pq/task_meta
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/federated_topic
     ydb/services/scheme_secret
 )
 

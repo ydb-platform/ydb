@@ -74,8 +74,6 @@ protected:
 
     TTabletInfoOwnerCache TabletInfoOwnerCache_;
 
-    virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
-
     virtual void RegisterCell(NYTree::INodePtr cellDescriptor);
 
 private:

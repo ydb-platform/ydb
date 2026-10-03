@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/query_classifier.h>
@@ -180,7 +181,11 @@ struct TKqpSessionInfo {
     TActorId AttachedRpcId;
     TString QueryText;
     TString TraceId;
+    ui64 QueryRequestId = 0;
+    std::optional<TCurrentQueryStats::TPublishedSnapshot> CurrentQueryStats;
+    ui64 CurrentQueryStatsSequenceNo = 0;
     TString ClientApplicationName;
+    // Set when the session is created; not the identity of a later query.
     TString ClientSID;
     TString ClientHost;
     TString UserAgent;
@@ -194,6 +199,7 @@ struct TKqpSessionInfo {
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
+    TString TerminationReason;
 
     struct TFieldsMap {
         ui64 bitmap = 0;
@@ -257,7 +263,10 @@ public:
         return actors.insert(sessionInfo).second;
     }
 
-    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId) {
+    void BeginQuery(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId, ui64 requestId) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = requestId;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStatsSequenceNo = 0;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
         const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = traceId;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryCount++;
@@ -268,7 +277,9 @@ public:
         const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
-    void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
+    void EndQuery(const TKqpSessionInfo* sessionInfo) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = 0;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
@@ -338,8 +349,15 @@ public:
         info->Closing = true;
     }
 
+    void SetSessionTerminating(const TKqpSessionInfo* sessionInfo, const TString& reason) {
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        info->Closing = true;
+        info->TerminationReason = reason;
+        StopIdleCheck(sessionInfo);
+    }
+
     void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
-        if (!sessionInfo) {
+        if (!sessionInfo || !sessionInfo->TerminationReason.empty()) {
             return;
         }
 

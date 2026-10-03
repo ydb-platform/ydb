@@ -4,6 +4,8 @@
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
 #include <ydb/core/audit/audit_log_service.h>
@@ -217,7 +219,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
@@ -239,6 +241,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -625,9 +628,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
+    setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
+        .MemoryBytes = 8ull << 20,
+        .MaxLines = 4096,
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
+    }));
+
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
+    setup->RegisterSubSystem(std::make_unique<NActors::TAsyncFrameCache>(systemConfig.GetAsyncFrameCacheSizeBytes()));
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
@@ -816,6 +826,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 CHANNEL(IC_TABLETS_SMALL),
                 CHANNEL(IC_TABLETS_MEDIUM),
                 CHANNEL(IC_TABLETS_LARGE),
+                CHANNEL(IC_DQ_DATA),
+                CHANNEL(IC_DQ_CONTROL),
             };
 
             if (icConfig.GetEnforceScopeValidation()) {
@@ -1275,6 +1287,12 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
                 storageConfig.GetIntegrityChecksumCacheBytes());
         }
+        if (storageConfig.HasDevNullMode()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetDevNullMode(storageConfig.GetDevNullMode());
+        }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
         }
@@ -1470,14 +1488,9 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    std::optional<ui64> maxCacheSize;
-    if (Config.HasBlobCacheConfig()) {
-        if (Config.GetBlobCacheConfig().HasMaxSizeBytes()) {
-            maxCacheSize = Config.GetBlobCacheConfig().GetMaxSizeBytes();
-        }
-    }
+    const NBlobCache::TBlobCacheSettings settings = NBlobCache::TBlobCacheSettings::FromProto(Config.GetBlobCacheConfig());
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
-        TActorSetupCmd(NBlobCache::CreateBlobCache(maxCacheSize, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(NBlobCache::CreateBlobCache(settings, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer

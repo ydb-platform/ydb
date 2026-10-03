@@ -494,6 +494,7 @@ namespace NActors {
                     PoolName,
                     SoftProcessingDurationTs
                     ));
+            Threads[i].Thread->Prepare();
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 

@@ -3,10 +3,13 @@
 
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -126,9 +129,41 @@ private:
                 if (OverrideName) {
                     result.mutable_self()->set_name(*OverrideName);
                 }
+                const auto& requestedPath = this->GetProtoRequest()->path();
+                if (Path != requestedPath) {
+                    const auto parts = NKikimr::SplitPath(TString{requestedPath});
+                    result.mutable_self()->set_name(parts.empty() ? TString("/") : parts.back());
+                }
                 if constexpr (ListChildren) {
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
+                    }
+                    const auto header = this->Request_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
+                    const auto database = this->Request_->GetDatabaseName();
+                    if (header && database) {
+                        const TString rawDatabase = CGIUnescapeRet(*header);
+                        const TString logicalDatabase = NKikimr::CanonizePath(rawDatabase);
+                        const TString logicalName(NKikimr::ExtractBase(logicalDatabase));
+                        const TString physicalName(NKikimr::ExtractBase(*database));
+                        const TString logicalParent(NKikimr::ExtractParent(logicalDatabase));
+                        const TString physicalParent(NKikimr::ExtractParent(*database));
+                        const bool isActiveDatabaseAlias = rawDatabase.StartsWith("/") && Path.StartsWith("/")
+                            && !logicalName.empty() && !physicalName.empty() && logicalName != physicalName
+                            && this->Request_->NormalizePath(logicalDatabase) == *database;
+                        const bool listsSharedParent = logicalParent == physicalParent
+                            && NKikimr::CanonizePath(TString{requestedPath}) == logicalParent
+                            && NKikimr::CanonizePath(Path) == physicalParent;
+                        const bool hasChildNameCollision = isActiveDatabaseAlias && listsSharedParent
+                            && std::any_of(result.children().begin(), result.children().end(),
+                                [&](const auto& child) { return child.name() == logicalName; });
+                        if (isActiveDatabaseAlias && listsSharedParent && !hasChildNameCollision) {
+                            for (auto& child : *result.mutable_children()) {
+                                if (child.name() == physicalName) {
+                                    child.set_name(logicalName);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);

@@ -872,12 +872,12 @@ class KikimrConfigGenerator(object):
     def kafka_proxy_enabled(self):
         return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
-    def get_kafka_api_port(self, node_id):
+    def get_kafka_api_port(self, node_id, port_allocator=None):
         # An explicitly requested port must be honored as-is, otherwise the node would
         # still pick a dynamic port from the port manager (--kafka-port overrides the
         # config's listening_port). The fixed-port allocator already applies the
         # requested port together with its per-node offset, so keep using it there.
-        node_allocator = self.port_allocator.get_node_port_allocator(node_id)
+        node_allocator = port_allocator if port_allocator is not None else self.port_allocator.get_node_port_allocator(node_id)
         if self.__kafka_api_port not in (None, 'auto') and not isinstance(node_allocator, KikimrFixedNodePortAllocator):
             return self.__kafka_api_port
         return node_allocator.kafka_api_port

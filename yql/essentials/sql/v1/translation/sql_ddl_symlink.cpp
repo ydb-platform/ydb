@@ -1,5 +1,7 @@
 #include "sql_ddl_symlink.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 namespace NSQLTranslationV1 {
 
 bool TSymlinkTranslation::SymlinkPath(const TRule_symlink_path& node, TDeferredAtom& result) {
@@ -48,9 +50,14 @@ bool TSymlinkTranslation::SymlinkRef(const TRule_symlink_ref& node, TSymlinkRef&
 }
 
 TNodePtr TSymlinkTranslation::Build(const TRule_create_symlink_stmt& node) {
+    Token(node.GetToken1());
+    const TPosition stmtPos = Ctx_.Pos();
     Ctx_.BodyPart();
     TSymlinkRef link;
     if (!SymlinkRef(node.GetRule_symlink_ref4(), link)) {
+        return {};
+    }
+    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtSymlinks)) {
         return {};
     }
 
@@ -63,9 +70,14 @@ TNodePtr TSymlinkTranslation::Build(const TRule_create_symlink_stmt& node) {
 }
 
 TNodePtr TSymlinkTranslation::Build(const TRule_drop_symlink_stmt& node) {
+    Token(node.GetToken1());
+    const TPosition stmtPos = Ctx_.Pos();
     Ctx_.BodyPart();
     TSymlinkRef link;
     if (!SymlinkRef(node.GetRule_symlink_ref4(), link)) {
+        return {};
+    }
+    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtSymlinks)) {
         return {};
     }
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade_run.cpp
@@ -59,7 +59,5 @@ PEERDIR(
 
     contrib/libs/protobuf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

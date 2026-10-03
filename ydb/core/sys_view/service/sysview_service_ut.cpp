@@ -11,6 +11,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/cast.h>
+#include <util/string/join.h>
+
 using namespace NActors;
 
 namespace NKikimr {
@@ -26,16 +29,37 @@ namespace NKikimr {
             class TStubDetailedCounters: public IDbDetailedCounters {
             public:
                 ui64 PackCount = 0;
+                int Tables = 1;
+                int Leaves = 0;
+                // out.ClearedCount() on entry to every Pack: the Tables the service kept for reuse
+                std::vector<int> ClearedOnPack;
 
                 void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) override {
                     ++PackCount;
+                    ClearedOnPack.push_back(out.ClearedCount());
 
-                    auto* table = out.Add();
-                    table->SetTablePath(TablePath);
-                    table->SetLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
-                    auto* counters = table->MutableTableCounters()->MutableAppCounters();
-                    counters->AddSimple(0);
-                    counters->AddSimple(PackCount);
+                    for (int i = 0; i < Tables; ++i) {
+                        auto* table = out.Add();
+                        table->SetTablePath(i ? TablePath + ToString(i) : TablePath);
+                        table->SetLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+                        auto* counters = table->MutableTableCounters()->MutableAppCounters();
+                        counters->AddSimple(0);
+                        counters->AddSimple(PackCount);
+                        for (int j = 0; j < Leaves; ++j) {
+                            table->AddLeaves()->SetTabletId(j);
+                        }
+                    }
+                }
+
+                // Indexes of the packs that found no Tables kept for reuse
+                std::vector<size_t> FreshPacks() const {
+                    std::vector<size_t> fresh;
+                    for (size_t i = 0; i < ClearedOnPack.size(); ++i) {
+                        if (ClearedOnPack[i] == 0) {
+                            fresh.push_back(i);
+                        }
+                    }
+                    return fresh;
                 }
             };
 
@@ -103,6 +127,13 @@ namespace NKikimr {
                 return stub;
             }
 
+            void UnregisterRole(TTestBasicRuntime& runtime, const TActorId& serviceId,
+                                NKikimrSysView::EDbCountersService service)
+            {
+                auto ev = MakeHolder<TEvSysView::TEvUnregisterDbDetailedCounters>(Database, service);
+                runtime.Send(new IEventHandle(serviceId, runtime.AllocateEdgeActor(), ev.Release()), 0, true);
+            }
+
             NKikimrSysView::TEvSendDbCountersRequest GrabRequest(TTestBasicRuntime& runtime, const TActorId& pipeCacheEdge) {
                 auto ev = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCacheEdge, TDuration::Seconds(30));
                 UNIT_ASSERT(ev);
@@ -117,6 +148,14 @@ namespace NKikimr {
                 ack->Record.SetDatabase(Database);
                 ack->Record.SetGeneration(generation);
                 runtime.Send(new IEventHandle(serviceId, runtime.AllocateEdgeActor(), ack.Release()), 0, true);
+            }
+
+            NKikimrSysView::TEvSendDbCountersRequest GrabAndAck(TTestBasicRuntime& runtime, const TActorId& serviceId,
+                                                                const TActorId& pipeCacheEdge)
+            {
+                auto req = GrabRequest(runtime, pipeCacheEdge);
+                SendAck(runtime, serviceId, req.GetGeneration());
+                return req;
             }
 
         } // anonymous namespace
@@ -236,6 +275,150 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL((int)req.GetDetailedCounters(0).GetService(),
                                          (int)NKikimrSysView::TABLETS);
                 UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
+            }
+
+            Y_UNIT_TEST(ConfirmedSendReusesDetailedPayload) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+
+                GrabAndAck(runtime, serviceId, pipeCacheEdge);
+                auto req = GrabRequest(runtime, pipeCacheEdge);
+
+                UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", stub->ClearedOnPack), "0,1");
+                UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    req.GetDetailedCounters(0).GetTables(0).GetTableCounters().GetAppCounters().GetSimple(1), 2);
+            }
+
+            Y_UNIT_TEST(ShrunkDetailedPayloadReleasedLater) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                stub->Tables = 3;
+                GrabAndAck(runtime, serviceId, pipeCacheEdge);
+
+                // More sends than the 12 shrunk ones that free the payload
+                stub->Tables = 1;
+                for (int i = 0; i < 20; ++i) {
+                    auto req = GrabAndAck(runtime, serviceId, pipeCacheEdge);
+                    UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
+                }
+
+                const TString packs = JoinSeq(",", stub->ClearedOnPack);
+                const auto fresh = stub->FreshPacks();
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh.size(), 2, packs);
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh[0], 0, packs);
+
+                // The shrunk payload keeps the three Tables for a while, then is freed once
+                // and reused from then on
+                const size_t released = fresh[1];
+                UNIT_ASSERT_C(released >= 3, packs);
+                for (size_t i = 1; i < released; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(stub->ClearedOnPack[i], 3, packs);
+                }
+                for (size_t i = released + 1; i < stub->ClearedOnPack.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(stub->ClearedOnPack[i], 1, packs);
+                }
+            }
+
+            Y_UNIT_TEST(ShrunkLeavesReleasedLater) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                stub->Leaves = 100;
+                GrabAndAck(runtime, serviceId, pipeCacheEdge);
+
+                // The table slot stays in use, only its leaves go spare
+                stub->Leaves = 0;
+                for (int i = 0; i < 20; ++i) {
+                    auto req = GrabAndAck(runtime, serviceId, pipeCacheEdge);
+                    UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).GetTables(0).LeavesSize(), 0);
+                }
+
+                const TString packs = JoinSeq(",", stub->ClearedOnPack);
+                const auto fresh = stub->FreshPacks();
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh.size(), 2, packs);
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh[0], 0, packs);
+                UNIT_ASSERT_C(fresh[1] >= 3, packs);
+                for (size_t i = 1; i < stub->ClearedOnPack.size(); ++i) {
+                    if (i != fresh[1]) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(stub->ClearedOnPack[i], 1, packs);
+                    }
+                }
+            }
+
+            Y_UNIT_TEST(UnregisterReleasesDetailedPayload) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                auto first = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                first->Tables = 3;
+                GrabAndAck(runtime, serviceId, pipeCacheEdge);
+
+                UnregisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto idle = GrabAndAck(runtime, serviceId, pipeCacheEdge);
+                UNIT_ASSERT_VALUES_EQUAL(idle.DetailedCountersSize(), 0);
+
+                auto second = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto req = GrabRequest(runtime, pipeCacheEdge);
+                UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
+
+                // Kept elements would hand the three Tables of the first role to the second
+                UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", second->ClearedOnPack), "0");
+                UNIT_ASSERT_VALUES_EQUAL(first->PackCount, 1);
+            }
+
+            Y_UNIT_TEST(RetryNeverReleasesDetailedPayload) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                stub->Tables = 3;
+                GrabAndAck(runtime, serviceId, pipeCacheEdge);
+
+                // More retries than the 12 shrunk sends that would free the payload
+                stub->Tables = 1;
+                auto req1 = GrabRequest(runtime, pipeCacheEdge);
+                for (int i = 0; i < 19; ++i) {
+                    auto retry = GrabRequest(runtime, pipeCacheEdge);
+                    UNIT_ASSERT_VALUES_EQUAL(retry.SerializeAsString(), req1.SerializeAsString());
+                }
+                UNIT_ASSERT_VALUES_EQUAL(stub->PackCount, 2);
+
+                // The ack of a retried generation sends the next one at once. Retries do not
+                // count as shrunk sends, so the payload still keeps the three Tables
+                SendAck(runtime, serviceId, req1.GetGeneration());
+                auto req2 = GrabRequest(runtime, pipeCacheEdge);
+                UNIT_ASSERT_VALUES_EQUAL(req2.GetGeneration(), req1.GetGeneration() + 1);
+                UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", stub->ClearedOnPack), "0,3,3");
+            }
+
+            Y_UNIT_TEST(SteadyDetailedPayloadReleasedPeriodically) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+                // More sends than the 120 that free even a steady payload
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                stub->Tables = 3;
+                for (int i = 0; i < 130; ++i) {
+                    GrabAndAck(runtime, serviceId, pipeCacheEdge);
+                }
+
+                const TString packs = JoinSeq(",", stub->ClearedOnPack);
+                const auto fresh = stub->FreshPacks();
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh.size(), 2, packs);
+                UNIT_ASSERT_VALUES_EQUAL_C(fresh[0], 0, packs);
+                UNIT_ASSERT_C(fresh[1] > 100, packs);
+                for (size_t i = 1; i < stub->ClearedOnPack.size(); ++i) {
+                    if (i != fresh[1]) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(stub->ClearedOnPack[i], 3, packs);
+                    }
+                }
             }
 
         } // Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters)

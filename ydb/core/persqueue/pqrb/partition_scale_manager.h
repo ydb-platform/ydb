@@ -107,6 +107,8 @@ private:
     TRequests<TPartitionMerge> BuildMergeRequest(size_t& allowedSplitsCount);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
     std::vector<ui32> ReorderSplits() const;
+    ui32 FirstFreePartitionId() const;
+    bool PrescribedChildrenContinueSequence(const TPartitionSplit& split, ui32 nextPartitionId, ui32& nextAfter) const;
     TStructuredMessage LogPrefix() const override;
     void ClearMirrorInfo();
     void UpdateMirrorRootPartitionsSet();

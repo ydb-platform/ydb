@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     constructor.cpp
@@ -20,7 +20,5 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()

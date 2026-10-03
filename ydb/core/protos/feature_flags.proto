@@ -385,7 +385,7 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = false];
+    optional bool EnableStreamingAggregation = 328 [default = true];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
     // Judges a VDisk write by the space color the disk will be in once the Fresh

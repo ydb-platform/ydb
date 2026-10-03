@@ -1861,8 +1861,7 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx,
         return TStatus::Error;
     }
 
-    if (config.EnableStreamingAggregation.Get().GetOrElse(false)
-        && !config.StreamingAggregationStateTablePath.Get().GetOrElse("").empty()) {
+    if (!config.StreamingAggregationStateTablePath.Get().GetOrElse("").empty()) {
         ui32 stateTableAggregations = 0;
         if (const auto extraAggregation = FindNode(node, [&](const TExprNode::TPtr& expr) {
             if (const auto aggregation = TMaybeNode<TKqpStreamingAggregation>(expr)) {
@@ -3452,7 +3451,7 @@ TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool checkpointsEnabled) {
+TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TKikimrConfiguration& config) {
     if (!EnsureMinArgsCount(*input, 3, ctx) || !EnsureMaxArgsCount(*input, 4, ctx)) {
         return TStatus::Error;
     }
@@ -3712,11 +3711,90 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(setting->Tail(), ctx)) {
                 return TStatus::Error;
             }
+
             const TString tablePath(setting->Tail().Content());
+            if (!tablePath.empty() && !config.FeatureFlags.GetEnableStreamingAggregationAdvanced()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()),
+                    "Streaming aggregation with a state table requires EnableStreamingAggregationAdvanced"));
+                return TStatus::Error;
+            }
+
             if (NKikimr::PathPartBrokenAt(tablePath, "/") != tablePath.end()) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()),
                     "Invalid streaming aggregation state table path: only ASCII letters, digits, '/', '-', '_', and '.' are allowed"));
                 return TStatus::Error;
+            }
+        } else if (name == "output_state_table") {
+            // (table path, output-column mapping)
+            if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureTupleSize(setting->Tail(), 2, ctx)
+                || !EnsureAtom(setting->Tail().Head(), ctx) || !EnsureTuple(setting->Tail().Tail(), ctx)) {
+                return TStatus::Error;
+            }
+
+            const TString tablePath(setting->Tail().Head().Content());
+            if (tablePath.empty() || NKikimr::PathPartBrokenAt(tablePath, "/") != tablePath.end()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Invalid streaming aggregation output state table path"));
+                return TStatus::Error;
+            }
+
+            THashSet<TStringBuf> mappedColumns;
+            THashSet<TStringBuf> tableColumns;
+            for (const auto& mapping : setting->Tail().Child(1)->Children()) {
+                if (!EnsureTupleSize(*mapping, 2, ctx) || !EnsureAtom(mapping->Head(), ctx) || !EnsureAtom(mapping->Tail(), ctx)) {
+                    return TStatus::Error;
+                }
+                if (!resultType->FindItemType(mapping->Head().Content()) || mapping->Tail().Content().empty()
+                    || !mappedColumns.insert(mapping->Head().Content()).second || !tableColumns.insert(mapping->Tail().Content()).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(mapping->Pos()), "Invalid streaming aggregation output state column mapping"));
+                    return TStatus::Error;
+                }
+            }
+
+            for (const auto* column : resultType->GetItems()) {
+                if (!mappedColumns.contains(column->GetName())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder()
+                        << "Missing streaming aggregation output state column mapping for: " << column->GetName()));
+                    return TStatus::Error;
+                }
+            }
+
+            TExprNodeList normalizedHandlers;
+            for (ui32 handlerIndex = 0; handlerIndex < handlers->ChildrenSize(); ++handlerIndex) {
+                const auto& handler = *handlers->Child(handlerIndex);
+                if (!handler.Head().IsAtom()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(handler.Pos()),
+                        "Streaming aggregation output state tables require one column per handler; tuple splitting is not supported"));
+                    return TStatus::Error;
+                }
+
+                const auto& trait = *handler.Child(TCoAggregateTuple::idx_Trait);
+                const auto& finish = *trait.Child(TCoAggregationTraits::idx_FinishHandler);
+                const auto& save = *trait.Child(TCoAggregationTraits::idx_SaveHandler);
+                const auto& load = *trait.Child(TCoAggregationTraits::idx_LoadHandler);
+                if (IsIdentityLambda(finish)) {
+                    if (!IsIdentityLambda(save) || !IsIdentityLambda(load)) {
+                        auto children = trait.ChildrenList();
+                        children[TCoAggregationTraits::idx_SaveHandler] = ctx.DeepCopyLambda(finish);
+                        children[TCoAggregationTraits::idx_LoadHandler] = ctx.DeepCopyLambda(finish);
+                        if (normalizedHandlers.empty()) {
+                            normalizedHandlers = handlers->ChildrenList();
+                        }
+                        normalizedHandlers[handlerIndex] = ctx.ChangeChild(handler, TCoAggregateTuple::idx_Trait,
+                            ctx.ChangeChildren(trait, std::move(children)));
+                    }
+                } else {
+                    const TExprNode* lhs = &finish;
+                    const TExprNode* rhs = &save;
+                    if (!CompareExprTrees(lhs, rhs)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(finish.Pos()), "Streaming aggregation output state tables require an identity finalizer or a finalizer equal to serialization"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+
+            if (!normalizedHandlers.empty()) {
+                output = ctx.ChangeChild(*input, TKqpStreamingAggregation::idx_Handlers, ctx.NewList(handlers->Pos(), std::move(normalizedHandlers)));
+                return TStatus::Repeat;
             }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -3745,7 +3823,7 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
     }
 
     const auto stateTablePath = GetSetting(*settings, "state_table_path");
-    if ((stateTablePath && !stateTablePath->Tail().Content().empty()) || checkpointsEnabled) {
+    if ((stateTablePath && !stateTablePath->Tail().Content().empty()) || !config.DisableCheckpoints.Get().GetOrElse(false)) {
         for (const auto& handler : handlers->Children()) {
             const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
             if (!EnsurePersistableType(save.Pos(), *save.GetTypeAnn(), ctx)) {
@@ -3902,7 +3980,7 @@ public:
 
 private:
     TStatus HandleStreamingAggregation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        return AnnotateKqpStreamingAggregation(input, output, ctx, !Config->DisableCheckpoints.Get().GetOrElse(false));
+        return AnnotateKqpStreamingAggregation(input, output, ctx, *Config);
     }
 
     THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, const TString& cluster, const TKikimrTablesData&)) {

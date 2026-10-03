@@ -16,4 +16,8 @@ NYql::NNodes::TExprBase KqpRewriteWriteConstraint(const NYql::NNodes::TExprBase&
 NYql::NNodes::TExprBase KqpEliminateWideMapForLargeOlapTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 
+NYql::IGraphTransformer::TStatus KqpBuildStreamingFlow(
+    ui64 txIdx, const NYql::NNodes::TKqpPhysicalTx& tx, NYql::TExprNode::TPtr& output, THashSet<std::pair<ui64, ui64>>& streamingTxResults,
+    const NYql::TKikimrConfiguration& config, const NYql::TKikimrTablesData& tables, TStringBuf cluster, NYql::TExprContext& ctx);
+
 } // namespace NKikimr::NKqp::NOpt

@@ -2,12 +2,14 @@
 
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/kqp/common/events/query.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -86,22 +88,6 @@ private:
     const TActorId Proxy;
 };
 
-TString MakeStateTableQuery(bool tableInput = false) {
-    return fmt::format(R"sql(
-        PRAGMA ydb.EnableStreamingAggregation = "TRUE";
-        PRAGMA ydb.StreamingAggregationStateTablePath = "/Root/aggregationState";
-        PRAGMA ydb.MaxTasksPerStage = "1";
-        SELECT Unwrap(key || ":" || CAST(SUM(value) AS String)) AS Data
-        FROM {input}
-        GROUP BY key;
-    )sql", "input"_a = tableInput ? "aggregationInput" : R"(
-        AS_TABLE(AsList(
-            AsStruct("a" AS key, 1l AS value),
-            AsStruct("b" AS key, 2l AS value),
-            AsStruct("a" AS key, 1l AS value)))
-    )");
-}
-
 struct TAggregationSettings {
     ui32 Tasks = 1;
     ui32 Partitions = 1;
@@ -136,13 +122,21 @@ const TString ParentIndexUdafResult = R"($render(AGGREGATE_BY(value, $factory), 
 
 class TStreamingAggregationTestFixture : public TStreamingTestFixture {
 public:
-    TStreamingAggregationTestFixture()
+    explicit TStreamingAggregationTestFixture(bool validateConstraints = false, bool enableInMemory = true)
         : AggregationAppConfig(SetupAppConfig())
     {
         auto& featureFlags = *AggregationAppConfig.MutableFeatureFlags();
         featureFlags.SetEnableStreamingAggregation(true);
-        // Streaming aggregation currently requires constraint validation to be disabled.
-        featureFlags.SetEnableKqpConstraintsTransformer(false);
+        featureFlags.SetEnableStreamingAggregationAdvanced(true);
+        // Runtime tests intentionally exercise topic output, keyless and nested aggregations.
+        auto& validation = *AggregationAppConfig.MutableKQPConfig()->AddSettings();
+        validation.SetName("OptValidateStreamingConstraints");
+        validation.SetValue(validateConstraints ? "true" : "false");
+        if (enableInMemory) {
+            auto& inMemory = *AggregationAppConfig.MutableKQPConfig()->AddSettings();
+            inMemory.SetName("UseInMemoryStreamingAggregation");
+            inMemory.SetValue("true");
+        }
     }
 
     NKikimrConfig::TAppConfig& AggregationAppConfig;
@@ -189,7 +183,6 @@ public:
             CREATE STREAMING QUERY aggregation AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.MaxTasksPerStage = "{tasks}";
-                PRAGMA ydb.EnableStreamingAggregation = "TRUE";
                 PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
                 {planner}
                 {prelude}
@@ -270,15 +263,15 @@ public:
         }
     }
 
-    void CheckFiniteResult(const TString& query, std::vector<std::string> expected, bool expectShuffle = true) {
+    void CheckFiniteResult(const TString& query, std::vector<std::string> expected, bool expectShuffle = true, bool expectStreaming = false) {
         const auto result = GetQueryClient()->ExecuteQuery(query, NQuery::TTxControl::NoTx(),
             NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
                 .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
-        CheckFiniteResult(result, std::move(expected), expectShuffle);
+        CheckFiniteResult(result, std::move(expected), expectShuffle, expectStreaming);
     }
 
     void CheckFiniteResult(const NQuery::TExecuteQueryResult& result, std::vector<std::string> expected,
-                           bool expectShuffle = true) {
+                           bool expectShuffle = true, bool expectStreaming = false) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetStats());
         UNIT_ASSERT(result.GetStats()->GetAst());
@@ -292,17 +285,21 @@ public:
         Sort(actual);
         Sort(expected);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
-        UNIT_ASSERT_STRING_CONTAINS(ast, "KqpStreamingAggregation");
+        UNIT_ASSERT_VALUES_EQUAL_C(ast.find("KqpStreamingAggregation") != std::string::npos, expectStreaming, ast);
         if (expectShuffle) {
             UNIT_ASSERT_STRING_CONTAINS(ast, "DqCnHashShuffle");
         }
-        CheckPersistedState();
+        if (expectStreaming) {
+            CheckPersistedState();
+        } else if (HasStateTable) {
+            const auto state = ExecQuery("SELECT * FROM aggregationState;");
+            UNIT_ASSERT_VALUES_EQUAL(state.at(0).RowsCount(), 0);
+        }
     }
 
     void CheckStaticInput(bool useStateTable) {
         CreateStateTable(useStateTable);
         CheckFiniteResult(fmt::format(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             PRAGMA ydb.StreamingAggregationStateTablePath = "{}";
             $input = AsList(
                 AsStruct("a" AS key, 5l AS value),
@@ -317,7 +314,7 @@ public:
             FROM AS_TABLE($input)
             GROUP BY key;
         )", useStateTable ? "/Root/aggregationState" : ""),
-            {"a:1:5", "a:2:3", "b:1:10", "a:3:10", "b:2:0", "c:1:1", "d:1:2", "e:1:3"},
+            {"a:3:10", "b:2:0", "c:1:1", "d:1:2", "e:1:3"},
             /* expectShuffle */ false);
     }
 
@@ -337,8 +334,8 @@ public:
             WriteTopicMessages(InputTopic, messages);
         }
         const auto query = fmt::format(R"(
+            PRAGMA ydb.DisableCheckpoints = "TRUE";
             PRAGMA ydb.MaxTasksPerStage = "1";
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
             {consumer}
             $input = SELECT * FROM `source`.`{input}` WITH (
@@ -361,8 +358,10 @@ public:
                 readSession->AddDataReceivedEvent(i, TString(messages[i]));
             }
         }
-        CheckFiniteResult(result.ExtractValueSync(),
-            {"a:1:5", "b:1:10", "a:2:3", "b:2:0"});
+        CheckFiniteResult(result.ExtractValueSync(), streamingInput
+            ? std::vector<std::string>{"a:1:5", "b:1:10", "a:2:3", "b:2:0"}
+            : std::vector<std::string>{"a:2:3", "b:2:0"},
+            /* expectShuffle */ true, /* expectStreaming */ streamingInput);
         if (readSession) {
             readSession->ExpectSessionClosed();
         }
@@ -380,16 +379,14 @@ public:
             UPSERT INTO aggregationInput (id, key, value) VALUES
                 (1, "a", 5), (2, "b", 10), (3, "a", 5), (4, "b", 10), (5, "a", 5);
         )");
-        // Equal values per key make running results independent of table scan order.
         CheckFiniteResult(fmt::format(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             PRAGMA ydb.StreamingAggregationStateTablePath = "{}";
             PRAGMA ydb.MaxTasksPerStage = "1";
             SELECT Unwrap(key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String)) AS Data
             FROM aggregationInput
             GROUP BY key;
         )", useStateTable ? "/Root/aggregationState" : ""),
-            {"a:1:5", "a:2:10", "a:3:15", "b:1:10", "b:2:20"});
+            {"a:3:15", "b:2:20"});
     }
 
     void CheckGroupingSets(bool useStateTable, const TString& keys, const std::vector<ui32>& masks,
@@ -496,7 +493,6 @@ public:
     }
 
     void WaitAggregationCheckpoint() {
-        // Avoid SQL aggregation here: the feature flag rewrites metadata queries too.
         const auto latest = ExecQuery(R"(
             SELECT coordinator_generation, seq_no
             FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
@@ -594,7 +590,6 @@ public:
                 {ddl} STREAMING QUERY aggregation {settings} AS DO BEGIN
                     PRAGMA ydb.DisableCheckpoints = "TRUE";
                     PRAGMA ydb.MaxTasksPerStage = "1";
-                    PRAGMA ydb.EnableStreamingAggregation = "TRUE";
                     PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
                     INSERT INTO `source`.`{output}`
                     SELECT Unwrap({result}) AS Data
@@ -723,7 +718,6 @@ public:
             CREATE STREAMING QUERY aggregation AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";
                 PRAGMA ydb.MaxTasksPerStage = "1";
-                PRAGMA ydb.EnableStreamingAggregation = "TRUE";
                 PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
                 $input = SELECT * FROM `source`.`{input}` WITH (
                     FORMAT = "json_each_row",
@@ -993,6 +987,32 @@ public:
         FinishAggregation();
     }
 
+    NQuery::TExecuteQueryResult ExecuteStateTableQuery(NQuery::TQueryClient& client,
+        const TIntrusivePtr<NTestUtils::IMockPqGateway>& pqGateway)
+    {
+        auto result = client.ExecuteQuery(fmt::format(R"(
+            PRAGMA ydb.DisableCheckpoints = "TRUE";
+            PRAGMA ydb.StreamingAggregationStateTablePath = "/Root/aggregationState";
+            PRAGMA ydb.MaxTasksPerStage = "1";
+            $input = SELECT * FROM `source`.`{input}` WITH (
+                STREAMING = "TRUE", FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) LIMIT 3;
+            SELECT Unwrap(key || ":" || CAST(SUM(value) AS String)) AS Data FROM $input GROUP BY key;
+        )", "input"_a = InputTopic), NQuery::TTxControl::NoTx(),
+            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
+                .ClientTimeout(TEST_OPERATION_TIMEOUT)
+                .RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0)));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":1})", {}},
+            {1, R"({"key":"b","value":2})", {}},
+            {2, R"({"key":"a","value":1})", {}},
+        });
+        auto response = result.ExtractValueSync();
+        readSession->ExpectSessionClosed();
+        return response;
+    }
+
     void CheckStateTableFailure(bool writeFailure) {
         Y_DEFER {
             DropTopics();
@@ -1022,7 +1042,7 @@ public:
         ExecQuery("DROP STREAMING QUERY aggregation;");
     }
 
-private:
+protected:
     bool HasStateTable = false;
     TString InputTopic;
     TString OutputTopic;
@@ -1032,40 +1052,78 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
-    Y_UNIT_TEST_TWIN_F(FeatureFlagAndPragmaControlRewrite, Enabled, TStreamingAggregationTestFixture) {
+    Y_UNIT_TEST_QUAD_F(FiniteInputDoesNotEnableStreamingAggregation, Enabled, Keyed, TStreamingAggregationTestFixture) {
         AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregation(Enabled);
-        for (const TString& pragma : {TString(), TString("FALSE"), TString("TRUE")}) {
-            const bool streamingEnabled = Enabled && pragma == "TRUE";
-            for (const bool keyed : {false, true}) {
-                const auto query = fmt::format(R"(
-                    PRAGMA EmitAggApply;
-                    {enable_streaming_aggregation}
-                    PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
-                    $input = AsList(AsStruct("a" AS key, 2l AS value), AsStruct("a" AS key, 3l AS value));
-                    SELECT Unwrap(CAST(SUM(value) AS String)) AS Data
-                    FROM AS_TABLE($input) {group};
-                )", "enable_streaming_aggregation"_a = pragma.empty() ? ""
-                        : fmt::format(R"(PRAGMA ydb.EnableStreamingAggregation = "{}";)", pragma),
-                    "state_table"_a = streamingEnabled ? "" : "/Root/nonexistent",
-                    "group"_a = keyed ? "GROUP BY key" : "");
-                const auto result = GetQueryClient()->ExecuteQuery(query, NQuery::TTxControl::NoTx(),
-                    NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
-                        .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetStats());
-                UNIT_ASSERT(result.GetStats()->GetAst());
-                const TString ast = *result.GetStats()->GetAst();
-                UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("KqpStreamingAggregation"), streamingEnabled, ast);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-                TResultSetParser rows(result.GetResultSet(0));
-                std::vector<std::string> actual;
-                while (rows.TryNextRow()) {
-                    actual.push_back(rows.ColumnParser("Data").GetString());
-                }
-                Sort(actual);
-                UNIT_ASSERT_VALUES_EQUAL(actual, (streamingEnabled ? std::vector<std::string>{"2", "5"} : std::vector<std::string>{"5"}));
-            }
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregationAdvanced(false);
+        // Neither the feature flag nor a configured state table turns finite input into a stream.
+        CheckFiniteResult(fmt::format(R"(
+            PRAGMA EmitAggApply;
+            PRAGMA ydb.StreamingAggregationStateTablePath = "/Root/nonexistent";
+            $input = AsList(AsStruct("a" AS key, 2l AS value), AsStruct("a" AS key, 3l AS value));
+            SELECT Unwrap(CAST(SUM(value) AS String)) AS Data
+            FROM AS_TABLE($input) {};
+        )", Keyed ? "GROUP BY key" : ""), {"5"}, /* expectShuffle */ false);
+    }
+
+    Y_UNIT_TEST_QUAD_F(FeatureFlagControlsStreamingRewrite, Enabled, Keyed, TStreamingAggregationTestFixture) {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregation(Enabled);
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregationAdvanced(false);
+        StartAggregation(false, "key String NOT NULL, value Int64 NOT NULL",
+            R"(CAST(SUM(value) AS String))", Keyed ? "key" : "", "",
+            {.Prelude = Enabled ? "PRAGMA EmitAggApply;"
+                : "PRAGMA EmitAggApply; PRAGMA ydb.OptValidateStreamingConstraints = \"TRUE\";", .ExpectedError = Enabled ? ""
+                : "Aggregation of streaming input without windows is not supported"});
+        if (Enabled) {
+            WriteAndCheck({R"({"key":"a","value":2})", R"({"key":"a","value":3})"}, {"2", "5"});
+            FinishAggregation();
         }
+    }
+
+    Y_UNIT_TEST_QUAD_F(StateTableRequiresAdvancedFlag, Enabled, UseStateTable, TStreamingAggregationTestFixture) {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregationAdvanced(Enabled);
+        const bool rejected = UseStateTable && !Enabled;
+        StartAggregation(UseStateTable, "key String NOT NULL, value Int64 NOT NULL",
+            R"(key || ":" || CAST(SUM(value) AS String))", "key", "",
+            {.ExpectedError = rejected
+                ? "Streaming aggregation with a state table requires EnableStreamingAggregationAdvanced" : ""});
+        if (!rejected) {
+            WriteAndCheck({R"({"key":"a","value":1})", R"({"key":"b","value":2})",
+                R"({"key":"a","value":3})"}, {"a:1", "b:2", "a:4"});
+            FinishAggregation();
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingAggregationPreservesStreamingValidation, TStreamingAggregationTestFixture) {
+        CreateAggregationTopics();
+        ExecQuery(fmt::format(R"(
+            PRAGMA ydb.OptValidateStreamingConstraints = "TRUE";
+            SELECT key, SUM(value) AS value FROM `source`.`{input}` WITH (
+                STREAMING = "TRUE", FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL))
+            GROUP BY key ORDER BY value;
+        )", "input"_a = InputTopic), EStatus::GENERIC_ERROR, "Sorting of streaming input is not supported");
+    }
+
+    Y_UNIT_TEST_F(NestedStreamingAggregation, TStreamingAggregationTestFixture) {
+        CreateStateTable(false);
+        CreateAggregationTopics();
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY aggregation AS DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                $first = SELECT key, SUM(value) AS value FROM `source`.`{input}` WITH (
+                    FORMAT = "json_each_row", SCHEMA (key String NOT NULL, value Int64 NOT NULL))
+                    GROUP BY key;
+                INSERT INTO `source`.`{output}`
+                SELECT Unwrap(key || ":" || CAST(SUM(value) AS String)) AS Data
+                FROM $first GROUP BY key;
+            END DO;
+        )", "input"_a = InputTopic, "output"_a = OutputTopic));
+        WaitStreamingQueryStatus("aggregation");
+        WriteAndCheck({R"({"key":"a","value":1})", R"({"key":"a","value":2})",
+            R"({"key":"b","value":3})", R"({"key":"a","value":4})"},
+            {"a:1", "a:4", "b:3", "a:11"});
+        FinishAggregation();
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointRecovery, InjectFailure, TStreamingAggregationTestFixture) {
@@ -1114,17 +1172,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         });
     }
 
-    Y_UNIT_TEST_TWIN_F(CheckpointsWithStateTableValidation, ValidateCheckpoints, TStreamingAggregationTestFixture) {
+    Y_UNIT_TEST_F(CheckpointsWithStateTableValidation, TStreamingAggregationTestFixture) {
         Y_DEFER {
             DropTopics();
         };
+
         StartAggregation(true, "key String NOT NULL, value Int64 NOT NULL", R"(CAST(SUM(value) AS String))", "key", "",
             {.DisableCheckpoints = false,
-             .Prelude = ValidateCheckpoints ? "" : "PRAGMA ydb.OptValidateStreamingCheckpoints = \"FALSE\";",
-             .ExpectedError = ValidateCheckpoints ? "Checkpoints are not supported for streaming aggregation with a state table" : ""});
-        if (!ValidateCheckpoints) {
-            ExecQuery("DROP STREAMING QUERY aggregation;");
-        }
+             .ExpectedError = "Checkpoints are not supported for streaming aggregation with a state table"});
     }
 
     Y_UNIT_TEST_F(CheckpointMultiplePercentiles, TStreamingAggregationTestFixture) {
@@ -1165,7 +1220,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
 
     Y_UNIT_TEST_TWIN_F(UnusedGlobalAggregation, EmptyInput, TStreamingAggregationTestFixture) {
         const auto result = GetQueryClient()->ExecuteQuery(fmt::format(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             $input = AsList(AsStruct(1l AS value), AsStruct(2l AS value), AsStruct(3l AS value));
             SELECT "marker" AS Data FROM (
                 SELECT COUNT(*) AS count FROM AS_TABLE($input) WHERE {}
@@ -1195,7 +1249,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     Y_UNIT_TEST_TWIN_F(StaticJoinInput, UseStateTable, TStreamingAggregationTestFixture) {
         CreateStateTable(UseStateTable);
         CheckFiniteResult(fmt::format(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             PRAGMA ydb.StreamingAggregationStateTablePath = "{}";
             $left = AsList(
                 AsStruct("a" AS key, 5l AS value),
@@ -1212,7 +1265,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             FROM AS_TABLE($left) AS l JOIN AS_TABLE($right) AS r ON l.key = r.key
             GROUP BY l.key;
         )", UseStateTable ? "/Root/aggregationState" : ""),
-            {"a:1:5", "a:2:10", "b:1:10", "b:2:20", "b:3:30", "c:1:1", "d:1:2", "e:1:3"},
+            {"a:2:10", "b:3:30", "c:1:1", "d:1:2", "e:1:3"},
             /* expectShuffle */ false);
     }
 
@@ -1255,7 +1308,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     Y_UNIT_TEST_QUAD_F(MultipleFiniteAggregations, UseStateTable, Nested, TStreamingAggregationTestFixture) {
         CreateStateTable(UseStateTable);
         const TString query = fmt::format(R"sql(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             PRAGMA ydb.StreamingAggregationStateTablePath = "{}";
             $input = AsList(
                 AsStruct("a" AS key, 1l AS value),
@@ -1266,13 +1318,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         )sql", UseStateTable ? "/Root/aggregationState" : "", Nested
             ? "SELECT key, SUM(value) FROM $first GROUP BY key;"
             : "SELECT * FROM $first; SELECT key, COUNT(*) FROM AS_TABLE($input) GROUP BY key;");
-        const auto results = ExecQuery(query, UseStateTable ? EStatus::GENERIC_ERROR : EStatus::SUCCESS,
-            UseStateTable ? "At most one streaming aggregation with a state table is allowed per query" : "");
-        if constexpr (!UseStateTable) {
-            UNIT_ASSERT_VALUES_EQUAL(results.size(), Nested ? 1 : 2);
-            for (const auto& result : results) {
-                UNIT_ASSERT_VALUES_EQUAL(result.RowsCount(), 3);
-            }
+        const auto results = ExecQuery(query);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), Nested ? 1 : 2);
+        for (const auto& result : results) {
+            UNIT_ASSERT_VALUES_EQUAL(result.RowsCount(), 2);
+        }
+        if (UseStateTable) {
+            UNIT_ASSERT_VALUES_EQUAL(ExecQuery("SELECT * FROM aggregationState;").at(0).RowsCount(), 0);
         }
     }
 
@@ -1478,12 +1530,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
 
     Y_UNIT_TEST_F(ProjectedEmptyOutput, TStreamingAggregationTestFixture) {
         CheckFiniteResult(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
             $input = AsList(AsStruct("a" AS key), AsStruct("b" AS key), AsStruct("a" AS key));
             SELECT Unwrap(CAST(COUNT(*) AS String)) AS Data FROM (
                 SELECT key FROM AS_TABLE($input) GROUP BY key
             );
-        )", {"1", "2", "3"}, /* expectShuffle */ false);
+        )", {"2"}, /* expectShuffle */ false);
     }
 
     Y_UNIT_TEST_TWIN_F(CompositeKeysAndFilter, UseStateTable, TStreamingAggregationTestFixture) {
@@ -1801,29 +1852,37 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_OCTET_F(UdafResultTypes, Keyed, Optional, HasDefault, TStreamingAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        CreateStateTable(false);
+        CreateAggregationTopics();
         const auto query = fmt::format(R"(
-            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
+            PRAGMA ydb.DisableCheckpoints = "TRUE";
             $init = ($item) -> ($item);
             $update = ($state, $item) -> ($state + $item);
             $merge = ($left, $right) -> ($left + $right);
             $identity = ($state) -> ($state);
             $finish = ($state) -> ({finish});
             $factory = AggregationFactory("UDAF", $init, $update, $merge, $finish, $identity, $identity, {default});
-            $input = AsList(
-                AsStruct("a" AS key, 1l AS value),
-                AsStruct("a" AS key, 2l AS value),
-                AsStruct("b" AS key, 3l AS value),
-                AsStruct("a" AS key, 4l AS value));
+            $input = SELECT * FROM `source`.`{input}` WITH (
+                STREAMING = "TRUE", FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) LIMIT 4;
             SELECT value, Unwrap(CAST(value AS String)) AS Data FROM (
-                SELECT AGGREGATE_BY(value, $factory) AS value FROM AS_TABLE($input) {group_by}
+                SELECT AGGREGATE_BY(value, $factory) AS value FROM $input {group_by}
             );
         )", "finish"_a = Optional ? "Just($state)" : "$state", "default"_a = HasDefault ? "42l" : "NULL",
-            "group_by"_a = Keyed ? "GROUP BY key" : "");
-        const auto result = GetQueryClient()->ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+            "input"_a = InputTopic, "group_by"_a = Keyed ? "GROUP BY key" : "");
+        auto future = GetQueryClient()->ExecuteQuery(query, NQuery::TTxControl::NoTx(),
             NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
-                .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
+                .ClientTimeout(TEST_OPERATION_TIMEOUT));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":1})", {}}, {1, R"({"key":"a","value":2})", {}},
+            {2, R"({"key":"b","value":3})", {}}, {3, R"({"key":"a","value":4})", {}},
+        });
+        const auto result = future.ExtractValueSync();
+        readSession->ExpectSessionClosed();
         CheckFiniteResult(result, Keyed ? std::vector<std::string>{"1", "3", "3", "7"}
-            : std::vector<std::string>{"1", "3", "6", "10"}, /* expectShuffle */ false);
+            : std::vector<std::string>{"1", "3", "6", "10"}, /* expectShuffle */ Keyed, /* expectStreaming */ true);
 
         // Check the public result type as well as the per-row values and the streaming plan.
         const auto columns = result.GetResultSet(0).GetColumnsMeta();
@@ -2008,7 +2067,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             CREATE STREAMING QUERY aggregation AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";
                 PRAGMA ydb.MaxTasksPerStage = "1";
-                PRAGMA ydb.EnableStreamingAggregation = "TRUE";
                 PRAGMA ydb.StreamingAggregationStateTablePath = "aggregationState";
                 INSERT INTO `source`.`{output}`
                 SELECT Unwrap(key || ":" || CAST(SUM(value) AS String)) AS Data
@@ -2047,27 +2105,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         ExecQuery("DROP STREAMING QUERY aggregation;");
     }
 
-    Y_UNIT_TEST_QUAD_F(StateTableUsesQueryUserToken, TableInput, DataQuery, TStreamingAggregationTestFixture) {
+    Y_UNIT_TEST_F(StateTableUsesQueryUserToken, TStreamingAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(true);
+        CreateAggregationTopics();
         const TString user = "aggregation_user@builtin";
+        ExecQuery(fmt::format("GRANT \"ydb.generic.read\" ON `source` TO `{}`;", user));
         ExecQuery(fmt::format(R"(
             GRANT CONNECT ON `/Root` TO `{user}`;
             GRANT "ydb.generic.read", "ydb.generic.write" ON `/Root/aggregationState` TO `{user}`;
         )", "user"_a = user));
-        if constexpr (TableInput) {
-            ExecQuery(R"(
-                CREATE TABLE aggregationInput (
-                    id Uint64 NOT NULL, key String NOT NULL, value Int64 NOT NULL,
-                    PRIMARY KEY (id)
-                );
-            )");
-            ExecQuery(R"(
-                UPSERT INTO aggregationInput (id, key, value) VALUES
-                    (1, "a", 1), (2, "b", 2), (3, "a", 1);
-            )");
-            ExecQuery(fmt::format("GRANT \"ydb.generic.read\" ON `/Root/aggregationInput` TO `{}`;", user));
-        }
-
         struct TRequests {
             std::atomic<ui32> Selects = 0;
             std::atomic<ui32> Upserts = 0;
@@ -2086,47 +2133,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             return false;
         });
 
-        if constexpr (DataQuery) {
-            NYdb::NTable::TTableClient client(*GetInternalDriver(), NYdb::NTable::TClientSettings().AuthToken(user));
-            const auto sessionResult = client.CreateSession().ExtractValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-            auto session = sessionResult.GetSession();
-            const auto result = session.ExecuteDataQuery(MakeStateTableQuery(TableInput),
-                NYdb::NTable::TTxControl::BeginTx().CommitTx(),
-                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            TResultSetParser parser(result.GetResultSet(0));
-            std::vector<std::string> actual;
-            while (parser.TryNextRow()) {
-                actual.push_back(parser.ColumnParser("Data").GetString());
-            }
-            Sort(actual);
-            UNIT_ASSERT_VALUES_EQUAL(actual, (std::vector<std::string>{"a:1", "a:2", "b:2"}));
-            CheckPersistedState();
-        } else {
-            NQuery::TQueryClient client(*GetInternalDriver(), NQuery::TClientSettings().AuthToken(user));
-            const auto result = client.ExecuteQuery(MakeStateTableQuery(TableInput), NQuery::TTxControl::NoTx(),
-                NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
-                    .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
-            CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, TableInput);
-        }
+        NQuery::TQueryClient client(*GetInternalDriver(), NQuery::TClientSettings().AuthToken(user));
+        const auto result = ExecuteStateTableQuery(client, pqGateway);
+        CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, /* expectShuffle */ true, /* expectStreaming */ true);
         UNIT_ASSERT(requests->Selects.load() > 0);
         UNIT_ASSERT(requests->Upserts.load() > 0);
         UNIT_ASSERT(requests->SameIdentity.load());
     }
 
     Y_UNIT_TEST_TWIN_F(StateTableEnforcesQueryUserPermissions, WriteFailure, TStreamingAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(true);
+        CreateAggregationTopics();
         const TString user = "aggregation_user@builtin";
+        ExecQuery(fmt::format("GRANT \"ydb.generic.read\" ON `source` TO `{}`;", user));
         ExecQuery(fmt::format("GRANT CONNECT ON `/Root` TO `{}`;", user));
         if constexpr (WriteFailure) {
             ExecQuery(fmt::format("GRANT \"ydb.generic.read\" ON `/Root/aggregationState` TO `{}`;", user));
         }
         NQuery::TQueryClient client(*GetInternalDriver(), NQuery::TClientSettings().AuthToken(user));
-        const auto result = client.ExecuteQuery(MakeStateTableQuery(), NQuery::TTxControl::NoTx(),
-            NQuery::TExecuteQuerySettings().ClientTimeout(TEST_OPERATION_TIMEOUT)
-                .RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).ExtractValueSync();
+        const auto result = ExecuteStateTableQuery(client, pqGateway);
         UNIT_ASSERT_C(!result.IsSuccess(), "State table access must use the query user's permissions");
         const TString operation = WriteFailure ? "UPSERT" : "SELECT";
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
@@ -2134,7 +2160,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
     }
 
     Y_UNIT_TEST_TWIN_F(StateTableDoesNotRetryUnauthorized, WriteFailure, TStreamingAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(true);
+        CreateAggregationTopics();
         const auto attempts = std::make_shared<std::atomic<ui32>>(0);
         TScopedStateTableQueryProxy proxy(GetRuntime(), [attempts](const auto& request, auto& response) {
             if (request.GetQuery().Contains("UPSERT INTO") != WriteFailure) {
@@ -2146,16 +2174,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             return true;
         });
 
-        const auto result = GetQueryClient()->ExecuteQuery(MakeStateTableQuery(), NQuery::TTxControl::NoTx(),
-            NQuery::TExecuteQuerySettings().ClientTimeout(TEST_OPERATION_TIMEOUT)
-                .RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).ExtractValueSync();
+        const auto result = ExecuteStateTableQuery(*GetQueryClient(), pqGateway);
         UNIT_ASSERT_C(!result.IsSuccess(), "Unauthorized state table queries must fail the aggregation");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Injected state table permission failure");
         UNIT_ASSERT_VALUES_EQUAL(attempts->load(), 1);
     }
 
     Y_UNIT_TEST_QUAD_F(StateTableRetriesTransientFailures, WriteFailure, ExhaustRetries, TStreamingAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(true);
+        CreateAggregationTopics();
         const auto attempts = std::make_shared<std::atomic<ui32>>(0);
         TScopedStateTableQueryProxy proxy(GetRuntime(), [attempts](const auto& request, auto& response) {
             if (request.GetQuery().Contains("UPSERT INTO") != WriteFailure) {
@@ -2172,16 +2200,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             return true;
         });
 
-        const auto result = GetQueryClient()->ExecuteQuery(MakeStateTableQuery(), NQuery::TTxControl::NoTx(),
-            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
-                .ClientTimeout(TEST_OPERATION_TIMEOUT)
-                .RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).ExtractValueSync();
+        const auto result = ExecuteStateTableQuery(*GetQueryClient(), pqGateway);
         if constexpr (ExhaustRetries) {
             UNIT_ASSERT_C(!result.IsSuccess(), "Exhausted retries must fail the aggregation");
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Injected state table transient failure");
             UNIT_ASSERT(attempts->load() > 1);
         } else {
-            CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, false);
+            CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, /* expectShuffle */ true, /* expectStreaming */ true);
             UNIT_ASSERT(attempts->load() >= 5);
         }
     }
@@ -2190,5 +2215,595 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         CheckStateTableFailure(WriteFailure);
     }
 } // Y_UNIT_TEST_SUITE(KqpStreamingAggregation)
+
+namespace {
+
+struct TOutputStateTestSettings {
+    TString Aggregation = "SELECT key, subkey, SUM(value) AS value FROM $input GROUP BY key, subkey";
+    TString Columns = "value Int64, other Int64";
+    TString ExpectedStateTable;
+    bool ExpectNoStateTable = false;
+    bool CheckRuntime = false;
+    EStatus ExpectedErrorStatus = EStatus::GENERIC_ERROR;
+};
+
+class TStreamingAggregationValidationFixture : public TStreamingAggregationTestFixture {
+public:
+    explicit TStreamingAggregationValidationFixture(bool enableInMemory = true)
+        : TStreamingAggregationTestFixture(true, enableInMemory)
+    {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+    }
+
+    void CheckValidation(const TString& select, const TString& primaryKey = "key, subkey",
+        const TString& expectedError = "", const TString& inputFilter = "", const TString& extraWrite = "",
+        const TString& prelude = "", bool streamLookup = false, const TOutputStateTestSettings& settings = {})
+    {
+        if (streamLookup) {
+            AggregationAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            AggregationAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+        }
+        const auto pqGateway = SetupMockPqGateway();
+        CreateStateTable(false);
+        CreateAggregationTopics();
+        for (const TStringBuf table : {"aggregateResult", "secondResult"}) {
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE {} (key String, subkey String, {}, PRIMARY KEY ({}));
+            )", table, settings.Columns, primaryKey));
+        }
+        if (streamLookup) {
+            ExecQuery("CREATE TABLE lookup (key String, subkey String, value Int64, PRIMARY KEY (key, subkey));");
+        }
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY aggregation AS DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
+                {prelude}
+                $input = SELECT * FROM `source`.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (key String NOT NULL, subkey String NOT NULL, value Int64 NOT NULL)) {input_filter};
+                $agg = {aggregation};
+                UPSERT INTO aggregateResult {select};
+                {extra_write}
+            END DO;
+        )", "input"_a = InputTopic, "select"_a = select, "input_filter"_a = inputFilter,
+            "extra_write"_a = extraWrite, "prelude"_a = prelude, "aggregation"_a = settings.Aggregation,
+            "disable_checkpoints"_a = settings.CheckRuntime ? "FALSE" : "TRUE"),
+            expectedError ? settings.ExpectedErrorStatus : EStatus::SUCCESS, expectedError);
+        if (!expectedError) {
+            WaitStreamingQueryStatus("aggregation");
+            ValidateStreamingQueryAst("aggregation", [streamLookup, &settings](const TString& ast) {
+                UNIT_ASSERT_STRING_CONTAINS(ast, "KqpStreamingAggregation");
+                if (streamLookup) {
+                    UNIT_ASSERT_STRING_CONTAINS(ast, "DqCnStreamLookup");
+                }
+                const auto state = ast.find("output_state_table");
+                if (settings.ExpectedStateTable) {
+                    UNIT_ASSERT_C(state != TString::npos, ast);
+                    const auto parsed = NYql::ParseAst(ast);
+                    UNIT_ASSERT_C(parsed.IsOk(), ast);
+                    NYql::TExprContext ctx;
+                    NYql::TExprNode::TPtr root;
+                    UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+                    ui32 assigned = 0;
+                    NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+                        if (node->IsCallable("KqpStreamingAggregation")) {
+                            if (const auto table = NYql::GetSetting(node->Tail(), "output_state_table")) {
+                                UNIT_ASSERT_VALUES_EQUAL(table->Tail().Head().Content(), settings.ExpectedStateTable);
+                                ++assigned;
+                            }
+                        }
+                        return true;
+                    });
+                    UNIT_ASSERT(assigned);
+                }
+                if (settings.ExpectNoStateTable) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(state, TString::npos, ast);
+                }
+            });
+            if (settings.CheckRuntime) {
+                const auto readSession = pqGateway->WaitReadSession(InputTopic);
+                readSession->AddDataReceivedEvent({
+                    {0, R"({"key":"a","subkey":"b","value":2})", {}},
+                    {1, R"({"key":"a","subkey":"b","value":3})", {}},
+                });
+                NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "aggregation output table", [&]() {
+                    const auto result = ExecQuery("SELECT value FROM aggregateResult WHERE key = 'a' AND subkey = 'b';");
+                    if (result.at(0).RowsCount() != 1) {
+                        return false;
+                    }
+                    TResultSetParser row(result.at(0));
+                    UNIT_ASSERT(row.TryNextRow());
+                    return row.ColumnParser("value").GetOptionalInt64() == 5;
+                });
+            }
+            ExecQuery("DROP STREAMING QUERY aggregation;");
+        }
+    }
+};
+
+class TStreamingAggregationOutputStateFixture : public TStreamingAggregationValidationFixture {
+public:
+    TStreamingAggregationOutputStateFixture()
+        : TStreamingAggregationValidationFixture(false)
+    {
+        // Exercise the feature defaults, without either aggregation flag being set.
+        AggregationAppConfig.MutableFeatureFlags()->ClearEnableStreamingAggregation();
+        AggregationAppConfig.MutableFeatureFlags()->ClearEnableStreamingAggregationAdvanced();
+    }
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpStreamingAggregationValidation) {
+    Y_UNIT_TEST_F(ProjectionAndReorderedPrimaryKey, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "subkey, key");
+    }
+
+    Y_UNIT_TEST_F(RenamedKeys, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT subkey AS key, key AS subkey, value FROM $agg");
+    }
+
+    Y_UNIT_TEST_F(FilterBeforeAggregation, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "WHERE value > 0");
+    }
+
+    Y_UNIT_TEST_F(FilterInsideRowValue, TStreamingAggregationValidationFixture) {
+        CheckValidation(R"(SELECT key, subkey,
+            CAST(ListLength(ListFilter(AsList(value, -value), ($v) -> ($v > 0))) AS Int64) AS value FROM $agg)");
+    }
+
+    Y_UNIT_TEST_F(FilterAfterAggregation, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg WHERE value > 0", "key, subkey", "streaming aggregation results");
+    }
+
+    Y_UNIT_TEST_F(LimitAfterAggregation, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg LIMIT 1", "key, subkey", "streaming aggregation results");
+    }
+
+    Y_UNIT_TEST_F(DroppedKey, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT key, value FROM $agg", "key", "Please consume all aggregation keys and write into table");
+    }
+
+    Y_UNIT_TEST_F(PrimaryKeySubset, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key", "must exactly match the primary key");
+    }
+
+    Y_UNIT_TEST_F(PrimaryKeySuperset, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey, value", "must exactly match the primary key");
+    }
+
+    Y_UNIT_TEST_F(MultipleTableWrites, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "",
+            "UPSERT INTO secondResult SELECT key, subkey, value + 1 AS value FROM $agg;");
+    }
+
+    Y_UNIT_TEST_F(FilteredSecondConsumer, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "streaming aggregation results", "",
+            "UPSERT INTO secondResult SELECT * FROM $agg WHERE value > 0;");
+    }
+
+    Y_UNIT_TEST_F(UnrelatedRawOutput, TStreamingAggregationValidationFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "",
+            "UPSERT INTO secondResult SELECT * FROM $input WHERE value > 0;");
+    }
+
+    Y_UNIT_TEST_TWIN_F(MapJoinWithoutDistinctRejected, Left, TStreamingAggregationValidationFixture) {
+        // The map join's list-valued dictionary does not preserve Distinct, even for LEFT ANY.
+        CheckValidation(TStringBuilder() << R"(
+            SELECT a.key AS key, a.subkey AS subkey, a.value + Coalesce(r.value, 0l) AS value
+            FROM $agg AS a )" << (Left ? "LEFT" : "INNER") << R"( JOIN ANY
+                AS_TABLE(AsList(AsStruct("a" AS key, "b" AS subkey, 1l AS value),
+                    AsStruct("c" AS key, "d" AS subkey, 2l AS value))) AS r
+                ON a.key = r.key AND a.subkey = r.subkey
+        )", "key, subkey", Left ? "distinct constraint for aggregation key was lost" : "LEFT ANY", "", "",
+            "PRAGMA ydb.HashJoinMode = 'map';");
+    }
+
+    Y_UNIT_TEST_TWIN_F(StreamLookupJoin, Left, TStreamingAggregationValidationFixture) {
+        CheckValidation(TStringBuilder() << R"(
+            SELECT a.key AS key, a.subkey AS subkey, a.value + Coalesce(r.value, 0l) AS value
+            FROM $agg AS a )" << (Left ? "LEFT" : "INNER") << R"( JOIN /*+ streamlookup(TTL 1) */ ANY lookup AS r
+                ON a.key = r.key AND a.subkey = r.subkey
+        )", "key, subkey", Left ? "" : "Streamlookup supports only LEFT JOIN", "", "", "", /* streamLookup */ true);
+    }
+
+    Y_UNIT_TEST_F(TopicOutputRejected, TStreamingAggregationValidationFixture) {
+        StartAggregation(false, "Data String NOT NULL, value Int64 NOT NULL", "Data", "Data", "",
+            {.ExpectedError = "Streaming aggregation output must be written to a table"});
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
+    Y_UNIT_TEST_TWIN_F(StandardAggregatesUseDefaults, Nullable, TStreamingTestFixture) {
+        // Use the base fixture: no aggregation flags, KQP settings, or SQL pragmas are overridden.
+        const auto pqGateway = SetupMockPqGateway();
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        const TString inputTopic = TStringBuilder() << "builtinAggregationInput_" << CreateGuidAsString();
+        CreateTopic(inputTopic);
+        CreatePqSource("source");
+        ExecQuery(R"(
+            CREATE TABLE aggregateResult (
+                key String NOT NULL,
+                count_all Uint64, count_value Uint64, count_if Uint64,
+                sum_value Int64, sum_if Int64, min_value Int32, max_value Int32, some_value Int32,
+                bool_and Bool, bool_or Bool, bool_xor Bool,
+                bit_and Uint32, bit_or Uint32, bit_xor Uint32,
+                sum_unsigned Uint64, sum_real Double, sum_decimal Decimal(35, 2),
+                PRIMARY KEY (key)
+            );
+        )");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY aggregation AS DO BEGIN
+                UPSERT INTO aggregateResult
+                SELECT key,
+                    COUNT(*) AS count_all, COUNT(value) AS count_value, COUNT_IF(flag) AS count_if,
+                    SUM(value) AS sum_value, SUM_IF(value, flag) AS sum_if,
+                    MIN(value) AS min_value, MAX(value) AS max_value, SOME(value) AS some_value,
+                    BOOL_AND(flag) AS bool_and, BOOL_OR(flag) AS bool_or, BOOL_XOR(flag) AS bool_xor,
+                    BIT_AND(CAST(value AS Uint32)) AS bit_and,
+                    BIT_OR(CAST(value AS Uint32)) AS bit_or, BIT_XOR(CAST(value AS Uint32)) AS bit_xor,
+                    SUM(CAST(value AS Uint32)) AS sum_unsigned,
+                    SUM(CAST(value AS Double) / 2.0) AS sum_real,
+                    SUM(CAST(value AS Decimal(22, 2))) AS sum_decimal
+                FROM `source`.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (key String NOT NULL, value Int32 {required}, flag Bool {required})
+                )
+                GROUP BY key;
+            END DO;
+        )", "input"_a = inputTopic, "required"_a = Nullable ? "" : "NOT NULL"));
+        WaitStreamingQueryStatus("aggregation");
+        ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
+            const auto parsed = NYql::ParseAst(ast);
+            UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+            NYql::TExprContext ctx;
+            NYql::TExprNode::TPtr root;
+            UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+            ui32 aggregations = 0;
+            NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+                if (node->IsCallable("KqpStreamingAggregation")) {
+                    const auto table = NYql::GetSetting(node->Tail(), "output_state_table");
+                    UNIT_ASSERT_C(table, ast);
+                    UNIT_ASSERT_VALUES_EQUAL(table->Tail().Head().Content(), "/Root/aggregateResult");
+                    UNIT_ASSERT(!NYql::GetSetting(node->Tail(), "state_table_path"));
+                    ++aggregations;
+                }
+                return true;
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(aggregations, 1, ast);
+        });
+
+        struct TExpectedRow {
+            TString Key;
+            ui64 CountAll;
+            ui64 CountValue;
+            ui64 CountIf;
+            std::optional<i64> Sum;
+            std::optional<i64> SumIf;
+            std::optional<i32> Min;
+            std::optional<i32> Max;
+            std::vector<i32> SomeValues;
+            std::optional<bool> BoolAnd;
+            std::optional<bool> BoolOr;
+            std::optional<bool> BoolXor;
+            std::optional<ui32> BitAnd;
+            std::optional<ui32> BitOr;
+            std::optional<ui32> BitXor;
+        };
+        const auto check = [&](const std::vector<TExpectedRow>& expected) {
+            NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "default aggregate results in table", [&](TString& error) {
+                const auto result = ExecQuery("SELECT * FROM aggregateResult ORDER BY key;");
+                if (result.at(0).RowsCount() != expected.size()) {
+                    error = TStringBuilder() << "Expected " << expected.size() << " keys, got " << result.at(0).RowsCount();
+                    return false;
+                }
+                TResultSetParser rows(result.at(0));
+                for (const auto& e : expected) {
+                    UNIT_ASSERT(rows.TryNextRow());
+                    const auto equal = [&](const auto& actual, const auto& wanted, TStringBuf column) {
+                        if (actual != wanted) {
+                            error = TStringBuilder() << "Unexpected " << column << " for key " << e.Key;
+                            return false;
+                        }
+                        return true;
+                    };
+                    const auto decimal = rows.ColumnParser("sum_decimal").GetOptionalDecimal();
+                    const std::optional<TString> decimalText = decimal ? std::make_optional(TString(decimal->ToString())) : std::nullopt;
+                    if (!equal(rows.ColumnParser("key").GetString(), e.Key, "key")
+                        || !equal(rows.ColumnParser("count_all").GetOptionalUint64(), e.CountAll, "COUNT(*)")
+                        || !equal(rows.ColumnParser("count_value").GetOptionalUint64(), e.CountValue, "COUNT(value)")
+                        || !equal(rows.ColumnParser("count_if").GetOptionalUint64(), e.CountIf, "COUNT_IF")
+                        || !equal(rows.ColumnParser("sum_value").GetOptionalInt64(), e.Sum, "SUM(Int32)")
+                        || !equal(rows.ColumnParser("sum_if").GetOptionalInt64(), e.SumIf, "SUM_IF")
+                        || !equal(rows.ColumnParser("min_value").GetOptionalInt32(), e.Min, "MIN")
+                        || !equal(rows.ColumnParser("max_value").GetOptionalInt32(), e.Max, "MAX")
+                        || !equal(rows.ColumnParser("bool_and").GetOptionalBool(), e.BoolAnd, "BOOL_AND")
+                        || !equal(rows.ColumnParser("bool_or").GetOptionalBool(), e.BoolOr, "BOOL_OR")
+                        || !equal(rows.ColumnParser("bool_xor").GetOptionalBool(), e.BoolXor, "BOOL_XOR")
+                        || !equal(rows.ColumnParser("bit_and").GetOptionalUint32(), e.BitAnd, "BIT_AND")
+                        || !equal(rows.ColumnParser("bit_or").GetOptionalUint32(), e.BitOr, "BIT_OR")
+                        || !equal(rows.ColumnParser("bit_xor").GetOptionalUint32(), e.BitXor, "BIT_XOR")
+                        || !equal(rows.ColumnParser("sum_unsigned").GetOptionalUint64(),
+                            e.Sum ? std::make_optional<ui64>(*e.Sum) : std::nullopt, "SUM(Uint32)")
+                        || !equal(rows.ColumnParser("sum_real").GetOptionalDouble(),
+                            e.Sum ? std::make_optional(*e.Sum / 2.0) : std::nullopt, "SUM(Double)")
+                        || !equal(decimalText, e.Sum ? std::make_optional(ToString(*e.Sum)) : std::nullopt, "SUM(Decimal)")) {
+                        return false;
+                    }
+                    const auto some = rows.ColumnParser("some_value").GetOptionalInt32();
+                    if (some ? std::find(e.SomeValues.begin(), e.SomeValues.end(), *some) == e.SomeValues.end() : !e.SomeValues.empty()) {
+                        error = TStringBuilder() << "SOME returned a value outside its group for key " << e.Key;
+                        return false;
+                    }
+                }
+                return true;
+            });
+        };
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopic);
+        ui64 offset = 0;
+        const auto write = [&](const TString& message) {
+            readSession->AddDataReceivedEvent(offset++, message);
+        };
+        if (Nullable) {
+            // Start with empty optional states, and later update them with non-null values.
+            write(R"({"key":"a","value":null,"flag":null})");
+            write(R"({"key":"c","value":null,"flag":null})");
+        }
+        write(R"({"key":"a","value":6,"flag":true})");
+        write(R"({"key":"a","value":3,"flag":false})");
+        write(R"({"key":"b","value":4,"flag":true})");
+        std::vector<TExpectedRow> expected = {
+            {"a", Nullable ? 3u : 2u, 2, 1, 9, 6, 3, 6, {6, 3}, false, true,
+                Nullable ? std::nullopt : std::make_optional(true), 2, 7, 5},
+            {"b", 1, 1, 1, 4, 4, 4, 4, {4}, true, true, true, 4, 4, 4},
+        };
+        if (Nullable) {
+            expected.push_back({"c", 1, 0, 0, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                {}, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
+        }
+        check(expected);
+
+        // A second batch verifies that later updates use the accumulated state of each key.
+        write(R"({"key":"a","value":5,"flag":true})");
+        write(R"({"key":"b","value":2,"flag":false})");
+        expected = {
+            {"a", Nullable ? 4u : 3u, 3, 2, 14, 11, 3, 6, {6, 3, 5}, false, true,
+                Nullable ? std::nullopt : std::make_optional(false), 0, 7, 0},
+            {"b", 2, 2, 1, 6, 4, 2, 4, {4, 2}, false, true, true, 0, 6, 6},
+        };
+        if (Nullable) {
+            write(R"({"key":"c","value":7,"flag":true})");
+            expected.push_back({"c", 2, 1, 1, 7, 7, 7, 7, {7}, std::nullopt, true, std::nullopt, 7, 7, 7});
+        }
+        check(expected);
+        ExecQuery("DROP STREAMING QUERY aggregation;");
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_TWIN_F(UdafSerializationUseDefaults, ValidLoad, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        const TString inputTopic = TStringBuilder() << "udafAggregationInput_" << CreateGuidAsString();
+        CreateTopic(inputTopic);
+        CreatePqSource("source");
+        ExecQuery(R"(
+            CREATE TABLE aggregateResult (
+                key String NOT NULL, raw_count Int64, serialized_value String, PRIMARY KEY (key)
+            );
+        )");
+        const TString load = ValidLoad ? "Unwrap(CAST($saved AS Int64))" : "$saved";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY aggregation AS DO BEGIN
+                $init = ($item) -> ($item);
+                $update = ($state, $item) -> ($state + $item);
+                $save = ($state) -> (CAST($state AS String));
+                $load = ($saved) -> ({load});
+                $raw = AggregationFactory("UDAF", ($item) -> (1l), ($state, $item) -> ($state + 1l),
+                    NULL, ($state) -> ($state), $save, $load);
+                $serialized = AggregationFactory("UDAF", $init, $update, NULL,
+                    ($finished) -> (CAST($finished AS String)), $save, $load);
+                UPSERT INTO aggregateResult
+                SELECT key, AGGREGATE_BY(value, $raw) AS raw_count,
+                    AGGREGATE_BY(value, $serialized) AS serialized_value
+                FROM `source`.`{input}` WITH (
+                    FORMAT = "json_each_row", SCHEMA (key String NOT NULL, value Int64 NOT NULL)
+                )
+                GROUP BY key;
+            END DO;
+        )", "input"_a = inputTopic, "load"_a = load), ValidLoad ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+            ValidLoad ? "" : "Mismatch state type after load");
+        if (!ValidLoad) {
+            return;
+        }
+        WaitStreamingQueryStatus("aggregation");
+        ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
+            const auto parsed = NYql::ParseAst(ast);
+            UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+            NYql::TExprContext ctx;
+            NYql::TExprNode::TPtr root;
+            UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+            ui32 aggregations = 0;
+            NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+                if (node->IsCallable("KqpStreamingAggregation")) {
+                    const auto table = NYql::GetSetting(node->Tail(), "output_state_table");
+                    UNIT_ASSERT_C(table, ast);
+                    UNIT_ASSERT_VALUES_EQUAL(table->Tail().Head().Content(), "/Root/aggregateResult");
+                    UNIT_ASSERT_VALUES_EQUAL(table->Tail().ChildrenSize(), 2);
+                    THashMap<TStringBuf, TStringBuf> columns;
+                    for (const auto& pair : table->Tail().Child(1)->Children()) {
+                        columns.emplace(pair->Head().Content(), pair->Tail().Content());
+                    }
+                    const auto handlers = NYql::NNodes::TKqpStreamingAggregation(node).Handlers();
+                    UNIT_ASSERT_VALUES_EQUAL(handlers.Size(), 2);
+                    THashSet<TStringBuf> stateColumns;
+                    for (const auto& handler : handlers) {
+                        const auto column = columns.at(handler.Ref().Head().Content());
+                        stateColumns.insert(column);
+                        const auto traits = handler.Trait().Cast<NYql::NNodes::TCoAggregationTraits>();
+                        const NYql::TExprNode* finish = traits.FinishHandler().Raw();
+                        const NYql::TExprNode* save = traits.SaveHandler().Raw();
+                        UNIT_ASSERT(NYql::CompareExprTrees(finish, save));
+                        const bool identity = column == "raw_count";
+                        UNIT_ASSERT_VALUES_EQUAL(NYql::IsIdentityLambda(traits.SaveHandler().Ref()), identity);
+                        UNIT_ASSERT_VALUES_EQUAL(NYql::IsIdentityLambda(traits.LoadHandler().Ref()), identity);
+                    }
+                    UNIT_ASSERT(stateColumns.contains("raw_count"));
+                    UNIT_ASSERT(stateColumns.contains("serialized_value"));
+                    ++aggregations;
+                }
+                return true;
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(aggregations, 1, ast);
+        });
+
+        const auto check = [&](i64 expectedCount, i64 expected) {
+            NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "default UDAF output and parsed state", [&](TString& error) {
+                const auto result = ExecQuery(fmt::format(R"(
+                    $load = ($saved) -> ({load});
+                    $update = ($state, $item) -> ($state + $item);
+                    SELECT raw_count, serialized_value,
+                        $load(Unwrap(serialized_value)) AS parsed_state,
+                        $update($load(Unwrap(serialized_value)), 7l) AS next_state
+                    FROM aggregateResult WHERE key = 'a';
+                )", "load"_a = load));
+                if (result.at(0).RowsCount() != 1) {
+                    error = "No aggregated row in the output table";
+                    return false;
+                }
+                TResultSetParser row(result.at(0));
+                UNIT_ASSERT(row.TryNextRow());
+                if (row.ColumnParser("raw_count").GetOptionalInt64() != expectedCount) {
+                    error = TStringBuilder() << "Expected counter " << expectedCount << ", got "
+                        << row.ColumnParser("raw_count").GetOptionalInt64().value_or(-1);
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("serialized_value").GetOptionalString().value(), ToString(expected));
+                // Check the supplied parser against the actual table representation, and use its
+                // result as an update state. Automatic runtime restoration remains a separate step.
+                UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("parsed_state").GetInt64(), expected);
+                UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("next_state").GetInt64(), expected + 7);
+                return true;
+            });
+        };
+        const auto readSession = pqGateway->WaitReadSession(inputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":6})", {}},
+            {1, R"({"key":"a","value":3})", {}},
+        });
+        check(2, 9);
+        readSession->AddDataReceivedEvent(2, R"({"key":"a","value":5})");
+        check(3, 14);
+        ExecQuery("DROP STREAMING QUERY aggregation;");
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_F(DefaultSelectsOutputTable, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "", "", "", false,
+            {.ExpectedStateTable = "/Root/aggregateResult", .CheckRuntime = true});
+    }
+
+    Y_UNIT_TEST_F(RenamesAndOptionality, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT subkey AS key, key AS subkey, Just(value) AS value FROM $agg", "subkey, key", "", "", "", "", false,
+            {.ExpectedStateTable = "/Root/aggregateResult"});
+    }
+
+    Y_UNIT_TEST_F(ModifiedValuesRejected, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "requires an output state table");
+    }
+
+    Y_UNIT_TEST_F(ExplicitPragmaAllowsInMemory, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "", "", "",
+            "PRAGMA ydb.UseInMemoryStreamingAggregation = 'true';", false, {.ExpectNoStateTable = true});
+    }
+
+    Y_UNIT_TEST_F(ExplicitFalseRejectsInMemory, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "requires an output state table", "", "",
+            "PRAGMA ydb.UseInMemoryStreamingAggregation = 'false';");
+    }
+
+    Y_UNIT_TEST_F(DisablingConstraintValidationAllowsInMemory, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "", "", "",
+            "PRAGMA ydb.OptValidateStreamingConstraints = 'false';", false, {.ExpectNoStateTable = true});
+    }
+
+    Y_UNIT_TEST_F(OtherConsumerChecksKeepTheirValidationSwitch, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "",
+            "UPSERT INTO secondResult SELECT * FROM $agg WHERE value > 0;",
+            "PRAGMA ydb.OptValidateStreamingConstraints = 'false';", false,
+            {.ExpectNoStateTable = true, .CheckRuntime = true});
+    }
+
+    Y_UNIT_TEST_F(SelectsUnmodifiedSecondTable, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "", "",
+            "UPSERT INTO secondResult SELECT * FROM $agg;", "", false, {.ExpectedStateTable = "/Root/secondResult"});
+    }
+
+    Y_UNIT_TEST_F(FilteredTableWithValidationDisabled, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value + 1 AS value FROM $agg", "key, subkey", "", "",
+            "UPSERT INTO secondResult SELECT * FROM $agg WHERE value > 0;",
+            "PRAGMA ydb.OptValidateStreamingConstraints = 'false';", false, {.ExpectNoStateTable = true});
+    }
+
+    Y_UNIT_TEST_F(StoresEveryAggregate, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "", "", "", "", false,
+            {.Aggregation = "SELECT key, subkey, SUM(value) AS value, MIN(value) AS other FROM $input GROUP BY key, subkey",
+             .ExpectedStateTable = "/Root/aggregateResult"});
+    }
+
+    Y_UNIT_TEST_F(AggregatesSplitAcrossTablesRejected, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value FROM $agg", "key, subkey", "requires an output state table", "",
+            "UPSERT INTO secondResult SELECT key, subkey, other FROM $agg;", "", false,
+            {.Aggregation = "SELECT key, subkey, SUM(value) AS value, MIN(value) AS other FROM $input GROUP BY key, subkey"});
+    }
+
+    Y_UNIT_TEST_F(OneOfSeveralAggregateValuesModified, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT key, subkey, value, other + 1 AS other FROM $agg", "key, subkey", "requires an output state table", "", "", "", false,
+            {.Aggregation = "SELECT key, subkey, SUM(value) AS value, MIN(value) AS other FROM $input GROUP BY key, subkey"});
+    }
+
+    Y_UNIT_TEST_F(OtherWriteRejected, TStreamingAggregationOutputStateFixture) {
+        // SQL splits conflicting writes into transactions, which streaming queries already reject.
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "queries with intermediate writes", "",
+            "UPSERT INTO aggregateResult SELECT 'x' AS key, 'y' AS subkey, value FROM $input;", "", false,
+            {.ExpectedErrorStatus = EStatus::UNSUPPORTED});
+    }
+
+    Y_UNIT_TEST_F(AverageFinalizerRejected, TStreamingAggregationOutputStateFixture) {
+        CheckValidation("SELECT * FROM $agg", "key, subkey", "require an identity finalizer or a finalizer equal to serialization", "", "", "", false,
+            {.Aggregation = "SELECT key, subkey, AVG(value) AS value FROM $input GROUP BY key, subkey", .Columns = "value Double"});
+    }
+
+    Y_UNIT_TEST_TWIN_F(FinalizerAndSerialization, Same, TStreamingAggregationOutputStateFixture) {
+        const TString prelude = TStringBuilder() << R"(
+            $init = ($item) -> ($item);
+            $update = ($state, $item) -> ($state + $item);
+            $finish = ($state) -> ($state + 1l);
+            $save = ($saved) -> ($saved + )" << (Same ? "1l" : "2l") << R"();
+            $load = ($saved) -> ($saved - 1l);
+            $factory = AggregationFactory("UDAF", $init, $update, NULL, $finish, $save, $load);
+        )";
+        CheckValidation("SELECT * FROM $agg", "key, subkey", Same ? "" : "require an identity finalizer or a finalizer equal to serialization", "", "", prelude, false,
+            {.Aggregation = "SELECT key, subkey, AGGREGATE_BY(value, $factory) AS value FROM $input GROUP BY key, subkey",
+             .ExpectedStateTable = Same ? "/Root/aggregateResult" : ""});
+    }
+
+    Y_UNIT_TEST_F(LeftLookupPreservesStateValues, TStreamingAggregationOutputStateFixture) {
+        CheckValidation(R"(SELECT a.key AS key, a.subkey AS subkey, a.value AS value, r.value AS other
+            FROM $agg AS a LEFT JOIN /*+ streamlookup(TTL 1) */ ANY lookup AS r
+            ON a.key = r.key AND a.subkey = r.subkey)", "key, subkey", "", "", "", "", true,
+            {.ExpectedStateTable = "/Root/aggregateResult"});
+    }
+
+    Y_UNIT_TEST_F(ExplicitStateTableWithoutInMemoryPragma, TStreamingAggregationOutputStateFixture) {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingAggregationAdvanced(true);
+        StartAggregation(true, "key String NOT NULL, value Int64 NOT NULL",
+            R"(key || ":" || CAST(SUM(value) AS String))", "key", "",
+            {.Prelude = "PRAGMA ydb.OptValidateStreamingConstraints = 'false';"});
+        WriteAndCheck({R"({"key":"a","value":2})", R"({"key":"b","value":1})", R"({"key":"a","value":3})"},
+            {"a:2", "b:1", "a:5"});
+        FinishAggregation();
+    }
+}
 
 } // namespace NKikimr::NKqp

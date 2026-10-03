@@ -2,6 +2,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
+#include <google/protobuf/util/message_differencer.h>
 
 Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 

@@ -13,6 +13,7 @@
 #include <util/system/unaligned_mem.h>
 
 #include <format>
+#include <util/stream/format.h>
 
 namespace NKikimr::NSqsTopic {
 

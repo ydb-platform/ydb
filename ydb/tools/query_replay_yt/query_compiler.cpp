@@ -23,6 +23,7 @@
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
 
 #include <memory>
+#include <util/stream/file.h>
 
 using namespace NKikimrConfig;
 using namespace NThreading;

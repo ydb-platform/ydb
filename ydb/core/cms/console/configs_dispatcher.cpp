@@ -30,6 +30,7 @@
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
 #include <util/string/subst.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 

@@ -1,6 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 #include "sentinel.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 

@@ -8,6 +8,7 @@
 
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/path.h>
 
 namespace NFq {
 

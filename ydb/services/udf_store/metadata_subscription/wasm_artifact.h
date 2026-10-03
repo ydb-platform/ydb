@@ -4,6 +4,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NUdfStore {
 

@@ -12,6 +12,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <google/protobuf/util/time_util.h>
 

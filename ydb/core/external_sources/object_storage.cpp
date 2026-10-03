@@ -32,6 +32,7 @@
 #include <util/string/strip.h>
 
 #include <array>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 

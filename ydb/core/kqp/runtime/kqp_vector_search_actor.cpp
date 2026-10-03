@@ -17,6 +17,7 @@
 #include <util/string/vector.h>
 
 #include <algorithm>
+#include <ydb/core/protos/base.pb.h>
 
 namespace NKikimr {
     namespace NKqp {

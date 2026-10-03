@@ -41,6 +41,7 @@
 #include <util/string/builder.h>
 
 #include <google/protobuf/util/json_util.h>
+#include <ydb/core/persqueue/writer/partition_chooser.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY_SCHEME_CACHE
 

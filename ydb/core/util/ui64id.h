@@ -1,10 +1,13 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/base/defs.h>
 
 #include <util/system/types.h>
 #include <util/system/type_name.h>
 #include <util/stream/output.h>
+#include <util/str_stl.h>
+
+#include <type_traits>
 
 namespace NKikimr {
 
@@ -91,45 +94,6 @@ public:
     }
 };
 
-namespace NIceDb {
-
-template <typename TColumnType, class TTag>
-struct TConvertValue<TColumnType, TRawTypeValue, NKikimr::TUi64Id<TTag>> {
-    typedef NKikimr::TUi64Id<TTag> TSourceType;
-
-    ui64 Store;
-    TTypeValue Value;
-
-    TConvertValue(const TSourceType& value)
-        : Store(ui64(value))
-        , Value(Store, TColumnType::ColumnType)
-    {
-        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint64, "use TUi64Id only with Uint64");
-    }
-
-    operator const TRawTypeValue&() const {
-        return Value;
-    }
-};
-
-template <typename TColumnType, class TTag>
-struct TConvertValue<TColumnType, NKikimr::TUi64Id<TTag>, TRawTypeValue> {
-    typedef NKikimr::TUi64Id<TTag> TTargetType;
-
-    TTypeValue Value;
-
-    TConvertValue(const TRawTypeValue& value)
-        : Value(value)
-    {
-        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint64, "use TUi64Id only with Uint64");
-    }
-
-    operator TTargetType() const {
-        return TTargetType(ui64(Value));
-    }
-};
-
-}
 }
 
 template <class TTag>

@@ -8,9 +8,14 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/monotonic.h>
 
 #include <util/generic/fwd.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
 

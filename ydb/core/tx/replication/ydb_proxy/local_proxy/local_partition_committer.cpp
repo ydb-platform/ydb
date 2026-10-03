@@ -6,6 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 

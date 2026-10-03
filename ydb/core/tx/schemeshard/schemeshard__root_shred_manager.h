@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/operation_queue_timer.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>

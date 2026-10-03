@@ -6,6 +6,8 @@
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/string/vector.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 

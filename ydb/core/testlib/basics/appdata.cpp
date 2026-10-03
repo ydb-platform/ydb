@@ -6,6 +6,7 @@
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/library/pdisk_io/aio.h>
 
 namespace NKikimr {
 

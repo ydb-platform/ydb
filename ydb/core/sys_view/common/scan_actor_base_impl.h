@@ -19,6 +19,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr {
 namespace NSysView {

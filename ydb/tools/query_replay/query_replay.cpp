@@ -15,6 +15,7 @@
 
 #include <optional>
 #include <unordered_set>
+#include <util/stream/file.h>
 
 using namespace NYdb;
 using namespace NActors;

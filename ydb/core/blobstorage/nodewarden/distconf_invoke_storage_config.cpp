@@ -12,6 +12,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/streams/zstd/zstd.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 

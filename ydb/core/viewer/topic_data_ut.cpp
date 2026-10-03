@@ -17,6 +17,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace NKikimr;
 using namespace Tests;

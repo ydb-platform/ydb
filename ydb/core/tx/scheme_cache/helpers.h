@@ -6,6 +6,7 @@
 #include <util/string/builder.h>
 
 #include <functional>
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NSchemeCache {
 

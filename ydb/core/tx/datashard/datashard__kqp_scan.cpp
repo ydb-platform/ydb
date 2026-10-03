@@ -11,6 +11,7 @@
 
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <util/stream/format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 

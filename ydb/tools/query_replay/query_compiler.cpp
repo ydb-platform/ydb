@@ -25,6 +25,7 @@
 
 #include <map>
 #include <memory>
+#include <util/stream/file.h>
 
 static const TString YqlName = "CompileActor";
 

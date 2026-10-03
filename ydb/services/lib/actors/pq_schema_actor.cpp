@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/public/constants.h>
 
 #include <expected>
+#include <ydb/core/persqueue/public/utils.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {

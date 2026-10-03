@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 

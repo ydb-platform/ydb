@@ -7,6 +7,7 @@
 #include <ydb/services/metadata/manager/preparation_controller.h>
 
 #include <util/datetime/base.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NUdfStore {
 

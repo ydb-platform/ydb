@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 
 namespace NKikimr {
 namespace NTableIndex {

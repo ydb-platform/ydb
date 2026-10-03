@@ -9,6 +9,7 @@
 #include <ydb/library/table_creator/table_creator.h>
 
 #include <queue>
+#include <ydb/core/base/path.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 

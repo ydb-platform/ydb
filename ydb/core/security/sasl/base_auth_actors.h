@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/login/sasl/scram.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 
 namespace NKikimr::NSasl {

@@ -20,6 +20,7 @@
 #include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 
 #include <util/generic/algorithm.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/fwd.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;

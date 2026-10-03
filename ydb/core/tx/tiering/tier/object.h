@@ -6,6 +6,7 @@
 #include <ydb/services/metadata/secret/accessor/snapshot.h>
 
 #include <library/cpp/json/writer/json_value.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NMetadata::NSecret {
 class TSnapshot;

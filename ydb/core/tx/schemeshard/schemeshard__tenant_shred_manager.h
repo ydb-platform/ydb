@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/circular_queue.h>
 
 #include <util/generic/ptr.h>

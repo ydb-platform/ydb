@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <library/cpp/json/json_writer.h>
+#include <ydb/core/base/appdata.h>
 
 
 namespace NKikimr {

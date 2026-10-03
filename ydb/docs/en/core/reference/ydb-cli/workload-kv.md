@@ -34,7 +34,7 @@ Parameter name | Parameter description
 ---|---
 `--init-upserts <value>` | Number of insertion operations to be performed during initialization. Default: 1000.
 `--min-partitions` | Minimum number of shards for tables. Default: 40.
-`--partition-size` | Maximum size of one shard (the `AUTO_PARTITIONING_PARTITION_SIZE_MB` setting). Default: 2000.
+`--partition-size` | Maximum shard size in mebibytes (`AUTO_PARTITIONING_PARTITION_SIZE_MB`). Default: 2048.
 `--auto-partition` | Enabling/disabling auto-sharding. Possible values: 0 or 1. Default: 1.
 `--max-first-key` | Maximum value of the primary key of the table. Default: $2^{64} — 1$.
 `--len` | The size of the rows in bytes that are inserted into the table as values. Default: 8.

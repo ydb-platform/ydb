@@ -3,6 +3,7 @@ YQL_LIBRARY()
 PEERDIR(
     library/cpp/containers/absl
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/accessor/common
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/accessor/dictionary
@@ -30,7 +31,6 @@ SRCS(
     dense_encoding/encoding.cpp
     dense_encoding/constructors.cpp
     direct_builder.cpp
-    types.cpp
     settings.cpp
     stats.cpp
     others_storage.cpp

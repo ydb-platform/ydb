@@ -1478,19 +1478,22 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
 }
 
 NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot(
-    EDbgMonSnapshotDetail detail) const
+    size_t vChunkFrom,
+    size_t vChunkCount) const
 {
     auto promise = NewPromise<TDbgSnapshot>();
     auto future = promise.GetFuture();
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
          index = DirectBlockGroupIndex,
-         detail,
+         vChunkFrom,
+         vChunkCount,
          promise = std::move(promise)]   //
         () mutable
         {
             if (auto self = weakSelf.lock()) {
-                promise.SetValue(self->DoBuildMonSnapshot(detail));
+                promise.SetValue(
+                    self->DoBuildMonSnapshot(vChunkFrom, vChunkCount));
             } else {
                 promise.SetValue({.Index = index});
             }
@@ -2329,7 +2332,8 @@ void TDirectBlockGroup::DoBalanceDDisks(EDDiskBalanceStrategy strategy)
 }
 
 TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot(
-    EDbgMonSnapshotDetail detail) const
+    size_t vChunkFrom,
+    size_t vChunkCount) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -2354,13 +2358,15 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot(
     TCountAndSize pBuffersUsage;
     THashMap<ui32, THostMask> freshDDisks;
     TVector<TDbgVChunkSnapshot> vChunks;
-    const bool collectVChunkStats = detail == EDbgMonSnapshotDetail::PerVChunk;
-    if (collectVChunkStats) {
-        vChunks.reserve(VChunks.size());
-    }
+    const size_t availableVChunks =
+        VChunks.size() - Min(vChunkFrom, VChunks.size());
+    vChunks.reserve(Min(vChunkCount, availableVChunks));
 
-    for (const auto& weakVChunk: VChunks) {
+    for (size_t i = 0; i < VChunks.size(); ++i) {
+        const auto& weakVChunk = VChunks[i];
         if (auto vChunk = weakVChunk.lock()) {
+            const bool collectVChunkStats =
+                i >= vChunkFrom && i - vChunkFrom < vChunkCount;
             THostMask fresh;
             ui64 freshBytes = 0;
             ui64 rottenBytes = 0;
@@ -2399,6 +2405,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot(
 
     return {
         .Index = DirectBlockGroupIndex,
+        .VChunkCount = VChunks.size(),
         .VChunks = std::move(vChunks),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),

@@ -487,9 +487,11 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 }
 
 NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot(
-    EDbgMonSnapshotDetail detail) const
+    size_t vChunkFrom,
+    size_t vChunkCount) const
 {
-    Y_UNUSED(detail);
+    Y_UNUSED(vChunkFrom);
+    Y_UNUSED(vChunkCount);
     return NThreading::MakeFuture(TDbgSnapshot{});
 }
 

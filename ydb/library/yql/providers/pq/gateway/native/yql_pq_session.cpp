@@ -179,9 +179,8 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
     YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
-        NYdb::NTopic::TDescribeTopicSettings settings;
-        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
-            .Apply([path](const TAsyncDescribeTopicResult& f) {
+        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeStream(TString(path))
+            .Apply([path](const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamTopicDescription>>& f) {
                 IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
 
                 TString error;
@@ -192,14 +191,13 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 try {
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
-                        const auto& topicDescription = response.GetTopicDescription();
-                        info.PartitionsCount = topicDescription.GetTotalPartitionsCount();
-                        info.Consumers.reserve(topicDescription.GetConsumers().size());
-                        for (const auto& consumer : topicDescription.GetConsumers()) {
-                            info.Consumers.emplace(consumer.GetConsumerName());
+                        info.PartitionsCount = response.Value.PartitionsCount;
+                        info.Consumers.reserve(response.Value.Consumers.size());
+                        for (const auto& consumer : response.Value.Consumers) {
+                            info.Consumers.emplace(consumer.Name);
                         }
                     } else {
-                        setError(response.GetIssues().ToString());
+                        setError(response.Issues.ToOneLineString());
                     }
                 } catch (...) {
                     setError(FormatCurrentException());

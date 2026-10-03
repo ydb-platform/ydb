@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+        TVector<TMessageStreamMessage> messages;
         for (size_t i = 0; i < 5; ++i) {
             messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));
         }
@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         );
         CheckSuccess(Parser->ChangeConsumer(ParserHandler));
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+        TVector<TMessageStreamMessage> messages;
         messages.reserve(rows);
         for (size_t i = 0; i < rows; ++i) {
             messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));

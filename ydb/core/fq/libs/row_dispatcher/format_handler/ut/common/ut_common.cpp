@@ -216,9 +216,11 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     }
 }
 
-NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage TBaseFixture::GetMessage(ui64 offset, const TString& data) {
-    NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation info(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "");
-    return NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage(data, nullptr, info, nullptr);
+TMessageStreamMessage TBaseFixture::GetMessage(ui64 offset, const TString& data) {
+    TMessageStreamMessage message;
+    message.Data = data;
+    message.Offset.Offset = offset;
+    return message;
 }
 
 //// Functions

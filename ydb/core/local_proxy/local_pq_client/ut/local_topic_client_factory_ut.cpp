@@ -9,9 +9,9 @@ Y_UNIT_TEST_SUITE(TLocalTopicClientFactory) {
         auto factory = CreateLocalTopicClientFactory(LocalClientSettings());
         auto client = factory->CreateTopicClient(ClientSettings());
         factory.Reset();
-        const auto result = client->DescribeTopic("topic").GetValue(TEST_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetTopicDescription().GetTotalPartitionsCount(), 1);
+        const auto result = client->DescribeStream("topic").GetValue(TEST_TIMEOUT);
+        UNIT_ASSERT_C(result.IsSuccess(), result.Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.Value.PartitionsCount, 1);
     }
 
     Y_UNIT_TEST_F(CreateFederatedTopicClient, TLocalTopicClientFixture) {

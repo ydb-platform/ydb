@@ -101,7 +101,7 @@ public:
         (*ClusterConfigs)[cluster.GetName()] = cluster;
     }
 
-    ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
         const bool hasEndpoint = HasEndpoint(driver, settings);
         if (!hasEndpoint && LocalTopicClientFactory) {
             return LocalTopicClientFactory->CreateTopicClient(settings);

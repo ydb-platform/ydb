@@ -1,6 +1,8 @@
 #include "yql_pq_file_topic_client.h"
 #include "yql_pq_blocking_queue.h"
 
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
+
 #include <library/cpp/threading/future/async.h>
 
 #include <util/folder/path.h>
@@ -395,7 +397,7 @@ private:
     NThreading::TPromise<TConfirmSessionInfo> Promise;
 };
 
-class TFileTopicClient final : public ITopicClient {
+class TFileTopicClient final : public NFq::IMessageStreamClient {
 public:
     TFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings)
         : Database(settings.Database)
@@ -403,37 +405,33 @@ public:
         , AllowSkipDatabasePrefix(settings.SkipDatabasePrefix)
     {}
 
-    TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
-        Y_UNUSED(settings);
-        Ydb::Topic::DescribeTopicResult describeTopicResult;
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamTopicDescription>> DescribeStream(const TString& path) override {
+        NFq::TMessageStreamResult<NFq::TMessageStreamTopicDescription> result;
         const TClusterNPath key { "pq", SkipDatabasePrefix(path) };
         const auto topicsIt = Topics.find(key);
         if (topicsIt == Topics.end()) {
-            NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found");
-            return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::NOT_FOUND, std::move(issues)), {}));
+            result.Status = NFq::EMessageStreamStatus::NotFound;
+            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found"));
+            return NThreading::MakeFuture(std::move(result));
         }
-        for (size_t partition = 0; partition < topicsIt->second.PartitionsCount; ++partition) {
-            auto& partitionInfo = *describeTopicResult.add_partitions();
-            partitionInfo.set_partition_id(partition);
-            partitionInfo.set_active(true);
-        }
-        return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::SUCCESS, {}), std::move(describeTopicResult)));
+        result.Value.PartitionsCount = topicsIt->second.PartitionsCount;
+        return NThreading::MakeFuture(std::move(result));
     }
 
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings) final {
-        Y_UNUSED(path, consumer, settings);
-        return NThreading::MakeFuture(TDescribeConsumerResult(TStatus(EStatus::SUCCESS, {}), {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString&, const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override
+    {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>{});
     }
 
-    TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings) final {
-        Y_UNUSED(path, partitionId, settings);
-        return NThreading::MakeFuture(TDescribePartitionResult(TStatus(EStatus::SUCCESS, {}), {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(const TString&, ui64) override {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>{});
     }
 
-    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
-        Y_ENSURE(!settings.Topics_.empty());
-        const auto& topic = settings.Topics_.front();
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSettings& settings) override {
+        const auto sdkSettings = ToSdkReadSettings(settings);
+        Y_ENSURE(!sdkSettings.Topics_.empty());
+        const auto& topic = sdkSettings.Topics_.front();
         const TString topicPath(topic.Path_);
 
         Y_ENSURE(topic.PartitionIds_.size() >= 1);
@@ -453,21 +451,16 @@ public:
         }
         auto promise = NThreading::NewPromise<TConfirmSessionInfo>();
 
-        return std::make_shared<TFileTopicReadSession>(
+        return WrapYdbReadSession(std::make_shared<TFileTopicReadSession>(
             TFile(*filePath, EOpenMode::TEnum::RdOnly),
             MakeIntrusive<TDummyPartitionSession>(static_cast<ui64>(0), TString(topicPath), partitionId, promise),
             "",
             topicsIt->second.CancelOnFileFinish,
             promise.GetFuture()
-        );
+        ));
     }
 
-    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) final {
-        Y_UNUSED(settings);
-        return nullptr;
-    }
-
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings) final {
+    std::shared_ptr<IWriteSession> CreateSdkWriteSession(const TWriteSessionSettings& settings) {
         const auto& key = std::make_pair("pq", SkipDatabasePrefix(TString(settings.Path_)));
         const auto topicsIt = Topics.find(key);
         Y_ENSURE(topicsIt != Topics.end(), "Cluster: " << key.first << ", topic: " << key.second << " not found");
@@ -477,9 +470,12 @@ public:
         return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::WrOnly | EOpenMode::TEnum::ForAppend));
     }
 
-    TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset, const TCommitOffsetSettings& settings) final {
-        Y_UNUSED(path, partitionId, consumerName, offset, settings);
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamOffset>> CommitOffset(
+        const TString&, ui64 partitionId, const TString&, ui64 offset) override
+    {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamOffset>{
+            .Value = {.PartitionId = partitionId, .Offset = offset},
+        });
     }
 
 private:
@@ -494,8 +490,16 @@ private:
 
 } // anonymous namespace
 
-ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings) {
-    return MakeIntrusive<TFileTopicClient>(topics, settings);
+std::shared_ptr<NFq::IMessageStreamClient> CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings) {
+    return std::make_shared<TFileTopicClient>(topics, settings);
+}
+
+std::shared_ptr<NYdb::NTopic::IWriteSession> CreateFileTopicWriteSession(
+    const THashMap<TClusterNPath, TDummyTopic>& topics,
+    const TFileTopicClientSettings& settings,
+    const NYdb::NTopic::TWriteSessionSettings& writeSettings)
+{
+    return TFileTopicClient(topics, settings).CreateSdkWriteSession(writeSettings);
 }
 
 } // namespace NYql

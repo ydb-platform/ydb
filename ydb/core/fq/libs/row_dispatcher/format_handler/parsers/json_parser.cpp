@@ -80,10 +80,10 @@ struct TJsonParserBuffer : public TNonCopyable {
         Offsets.reserve(numberValues);
     }
 
-    void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    void AddMessage(const TMessageStreamMessage& message) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
-        const auto offset = message.GetOffset();
+        const auto offset = message.Offset.Offset;
         if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
             YDB_LOG_WARN("Got message with offset which is less than previous offset",
                 {"logPrefix", LogPrefix},
@@ -91,7 +91,7 @@ struct TJsonParserBuffer : public TNonCopyable {
                 {"offsetsBack", Offsets.back()});
         }
 
-        const auto& data = message.GetData();
+        const auto& data = message.Data;
         try {
             MessageOffsets.emplace_back(Values.size());
             Offsets.emplace_back(offset);
@@ -927,7 +927,7 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<TMessageStreamMessage>& messages) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
             {"messages", messages.size()});

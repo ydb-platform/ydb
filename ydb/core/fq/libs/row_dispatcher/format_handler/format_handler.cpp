@@ -495,7 +495,7 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseMessages(const std::vector<TMessageStreamMessage>& messages) override {
         if (FatalErrorStatus) {
             return;
         }
@@ -505,7 +505,7 @@ public:
             {"messages", messages.size()});
 
         if (!messages.empty()) {
-            CurrentOffset = messages.back().GetOffset();
+            CurrentOffset = messages.back().Offset.Offset;
         }
 
         if (Parser) {

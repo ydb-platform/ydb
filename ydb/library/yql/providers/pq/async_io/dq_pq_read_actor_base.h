@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
-#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_topic_client.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
@@ -85,7 +85,7 @@ protected:
     void InitConsumerOffsets(
         const NActors::TActorId& selfId,
         const NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo& cluster,
-        ITopicClient::TPtr topicClient,
+        std::shared_ptr<NFq::IMessageStreamClient> topicClient,
         ui32 partitionsCount);
 
     bool ConsumerOffsetsInitialized() const;

@@ -99,45 +99,6 @@ public:
             return SamplingContinuation && SamplingContinuation->GetLastProcessedKeyInclusive();
         }
 
-        void InheritSamplingContinuation(const TShardState& parent, const TTableRange& remaining,
-            TConstArrayRef<NScheme::TTypeInfo> keyTypes)
-        {
-            if (!parent.SamplingContinuation) {
-                return;
-            }
-
-            SamplingContinuation.ConstructInPlace();
-            SamplingContinuation->SetLastProcessedKeyInclusive(remaining.InclusiveFrom);
-            if (!parent.SamplingContinuation->HasPendingSelectedUnit()) {
-                return;
-            }
-
-            const auto& pending = parent.SamplingContinuation->GetPendingSelectedUnit();
-            TSerializedCellVec first(pending.GetFirstKey());
-            TSerializedCellVec last(pending.GetLastKey());
-            TVector<TCell> minusInfinity(keyTypes.size());
-            TTableRange selected(first.GetCells().empty() ? TConstArrayRef<TCell>(minusInfinity) : first.GetCells(),
-                first.GetCells().empty() || pending.GetFirstInclusive(),
-                last.GetCells(), last.GetCells().empty() || pending.GetLastInclusive());
-            if (CompareRanges(selected, remaining, keyTypes) != 0) {
-                return;
-            }
-
-            const auto clipped = Intersect(keyTypes, selected, remaining);
-            // SchemeShard::FillSplitPartitioning pads user-specified prefix
-            // boundaries with NULLs, including PARTITION_AT_KEYS and splits.
-            // A remaining short key here denotes a +infinity suffix in
-            // TTableRange, so padding it with NULLs would change the interval.
-            YQL_ENSURE(clipped.From.size() == keyTypes.size()
-                && (clipped.To.empty() || clipped.To.size() == keyTypes.size()),
-                "Sampling does not support shard boundaries with +infinity suffixes");
-            auto* bounds = SamplingContinuation->MutablePendingSelectedUnit();
-            bounds->SetFirstKey(TSerializedCellVec::Serialize(clipped.From));
-            bounds->SetFirstInclusive(clipped.InclusiveFrom);
-            bounds->SetLastKey(TSerializedCellVec::Serialize(clipped.To));
-            bounds->SetLastInclusive(clipped.InclusiveTo);
-        }
-
         TTableRange GetBounds(bool reverse) {
             if (Ranges.empty()) {
                 YQL_ENSURE(!Points.empty());
@@ -356,7 +317,7 @@ public:
     struct TReadState {
         TShardState* Shard = nullptr;
         bool Finished = false;
-        ui64 LastSeqNo = 0;
+        ui64 LastSeqNo;
         bool SamplingCheckpoint = false;
         TMaybe<TString> SerializedContinuationToken;
 
@@ -767,10 +728,11 @@ public:
                             {"range", DebugPrintRange(KeyColumnTypes, intersection, tr)});
 
                         newShard->AddRange(TSerializedTableRange(intersection));
-                        if (j == 0) {
-                            // Pending state belongs only to the first remaining
-                            // range, even when a child receives later ranges too.
-                            newShard->InheritSamplingContinuation(*state, intersection, KeyColumnTypes);
+                        if (j == 0 && state->SamplingContinuation) {
+                            // Only the first remaining range inherits the pending
+                            // selection. DataShard clips it to the child's range.
+                            newShard->SamplingContinuation = state->SamplingContinuation;
+                            newShard->SamplingContinuation->SetLastProcessedKeyInclusive(intersection.InclusiveFrom);
                         }
                     } else {
                         break;
@@ -957,7 +919,9 @@ public:
 
         if (Settings->HasSampling()) {
             *record.MutableSampling() = Settings->GetSampling();
-            YQL_ENSURE(state->HasRanges(), "Sampling does not support key lookups");
+            if (!state->HasRanges()) {
+                return RuntimeError("Sampling does not support key lookups", NDqProto::StatusIds::BAD_REQUEST);
+            }
         }
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
@@ -1596,7 +1560,7 @@ public:
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
                 auto& record = msg.Record;
-                if (!Reads[id].Finished && !Reads[id].SamplingCheckpoint) {
+                if (!Reads[id].Finished && (!Settings->HasSampling() || !Reads[id].SamplingCheckpoint)) {
                     TMaybe<ui64> limit;
                     if (Settings->GetItemsLimit()) {
                         limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);

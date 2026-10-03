@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
     }
 
-    Y_UNIT_TEST(SamplingHintReachesReadAndStreamsAcrossAcks) {
+    Y_UNIT_TEST_TWIN(SamplingHintReachesReadAndStreamsAcrossAcks, batchHint) {
         auto server = MakeSamplingServer();
         TTestSetup setup(ETestActorType::SorceRead, "/Root/Sampling", server.Get());
         CreateSamplingTable(setup);
@@ -556,7 +556,10 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         ui32 acks = 0;
         ui32 partialResults = 0;
         auto observeRead = setup.Runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
-            const auto& record = ev->Get()->Record;
+            auto& record = ev->Get()->Record;
+            if (batchHint) {
+                record.SetHints(record.GetHints() | TEvDataShard::TEvRead::HINT_BATCH);
+            }
             UNIT_ASSERT(record.HasSampling());
             UNIT_ASSERT_VALUES_EQUAL(record.GetSampling().GetRate(), 1.0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetSampling().GetSeed(), 42u);
@@ -619,6 +622,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto shards = setup.Shards();
         SetSamplingQuota(2);
         TBlockEvents<TEvDataShard::TEvReadAck> blockedAcks(*setup.Runtime);
+        THashMap<TActorId, THashSet<ui64>> resumedReaders;
         ui32 resumedReads = 0;
         ui32 independentRanges = 0;
         auto reads = setup.Runtime->AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
@@ -632,17 +636,21 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             const auto& range = read->Ranges.front();
             if (sampling.GetContinuation().HasPendingSelectedUnit()) {
                 ++resumedReads;
-                const auto& pending = sampling.GetContinuation().GetPendingSelectedUnit();
-                UNIT_ASSERT_VALUES_EQUAL(pending.GetFirstKey(), range.From.GetBuffer());
-                UNIT_ASSERT_VALUES_EQUAL(pending.GetFirstInclusive(), range.FromInclusive);
-                UNIT_ASSERT_VALUES_EQUAL(pending.GetLastKey(), range.To.GetBuffer());
-                if (!range.To.GetCells().empty()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pending.GetLastInclusive(), range.ToInclusive);
-                }
+                resumedReaders[ev->Sender].insert(read->Record.GetReadId());
+                UNIT_ASSERT_VALUES_EQUAL(sampling.GetContinuation().GetLastProcessedKeyInclusive(), range.FromInclusive);
             } else {
                 UNIT_ASSERT(multipleRanges);
                 UNIT_ASSERT_VALUES_EQUAL(range.From.GetCells().front().AsValue<ui64>(), 6u);
                 ++independentRanges;
+            }
+        });
+        auto results = setup.Runtime->AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            const auto reader = resumedReaders.find(ev->GetRecipientRewrite());
+            if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS
+                && reader != resumedReaders.end() && reader->second.contains(record.GetReadId()))
+            {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetSamplingStats().GetUnitsTotal(), 0u);
             }
         });
         setup.SendScanQuery(SamplingQuery() + (multipleRanges ? " WHERE Key < 4u OR Key >= 6u" : ""));
@@ -698,23 +706,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             const auto* read = static_cast<const TEvDataShard::TEvRead*>(forward->Ev.Get());
             const auto& continuation = read->Record.GetSampling().GetContinuation();
             UNIT_ASSERT(continuation.HasPendingSelectedUnit());
-            const auto& pending = continuation.GetPendingSelectedUnit();
-            const TSerializedCellVec first(pending.GetFirstKey());
-            const TSerializedCellVec last(pending.GetLastKey());
-            UNIT_ASSERT_VALUES_EQUAL(first.GetCells().size(), 2u);
-            UNIT_ASSERT_VALUES_EQUAL(last.GetCells().size(), 2u);
-            if (first.GetCells()[0].AsValue<ui64>() == 5u) {
-                UNIT_ASSERT(first.GetCells()[1].IsNull());
-                UNIT_ASSERT(pending.GetFirstInclusive());
-                UNIT_ASSERT_VALUES_EQUAL(last.GetCells()[0].AsValue<ui64>(), 10u);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(first.GetCells()[0].AsValue<ui64>(), 0u);
-                UNIT_ASSERT_VALUES_EQUAL(first.GetCells()[1].AsValue<ui64>(), 1u);
-                UNIT_ASSERT(!pending.GetFirstInclusive());
-                UNIT_ASSERT_VALUES_EQUAL(last.GetCells()[0].AsValue<ui64>(), 5u);
-            }
-            UNIT_ASSERT(last.GetCells()[1].IsNull());
-            UNIT_ASSERT(!pending.GetLastInclusive());
+            UNIT_ASSERT_VALUES_EQUAL(read->Ranges.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(continuation.GetLastProcessedKeyInclusive(), read->Ranges.front().FromInclusive);
             resumedReaders[ev->Sender].insert(read->Record.GetReadId());
             ++resumedReads;
         });
@@ -741,6 +734,34 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         AssertSamplingKeys(setup, 36);
         UNIT_ASSERT_VALUES_EQUAL(resumedReads, 2u);
         UNIT_ASSERT_VALUES_EQUAL(resumedRows, 28u);
+    }
+
+    Y_UNIT_TEST(SamplingRejectsParameterizedLookup) {
+        auto server = MakeSamplingServer();
+        TTestSetup setup(ETestActorType::SorceRead, "/Root/Sampling", server.Get());
+        CreateSamplingTable(setup);
+        ui32 reads = 0;
+        auto requests = setup.Runtime->AddObserver<TEvDataShard::TEvRead>([&](auto&) {
+            ++reads;
+        });
+
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
+        auto& request = *ev->Record.MutableRequest();
+        request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+        request.SetKeepSession(false);
+        auto& parameter = (*request.MutableYdbParameters())["$key"];
+        request.SetQuery("DECLARE $key AS Uint64?; " + SamplingQuery() + " WHERE Key = $key");
+        parameter.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+        parameter.mutable_value()->set_uint64_value(1);
+        ActorIdToProto(setup.Sender, ev->Record.MutableRequestActorId());
+        setup.Runtime->Send(new IEventHandle(setup.KqpProxy, setup.Sender, ev.release()));
+
+        auto reply = setup.Runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(setup.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.DebugString(), "Sampling does not support key lookups");
+        UNIT_ASSERT(setup.CollectedKeys.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reads, 0u);
     }
 
     Y_UNIT_TEST(SamplingRejectsUnsampledFinishedResult) {

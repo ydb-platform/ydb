@@ -105,6 +105,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();
         tableService->SetEnableNewRBO(true);
         tableService->SetEnableFallbackToYqlOptimizer(false);
+        tableService->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         tableService->SetEnableAstCache(AstCache);
         tableService->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
@@ -155,6 +156,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore);
         UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
 
+        // Cached ASTs need the same explicit translation mode as the RBO tests.
+        auto ordinary = kikimr.GetQueryClient().ExecuteQuery(
+            "PRAGMA YqlSelect = 'force'; SELECT Key FROM `/Root/FourShard` ORDER BY Key",
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(ordinary.IsSuccess(), ordinary.GetIssues().ToString());
+        CompareYson(fullResult, FormatResultSetYson(ordinary.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
+
         if (!AstCache) {
             auto unsupported = kikimr.GetQueryClient().ExecuteQuery(R"(
                 SELECT Key FROM `/Root/FourShard` WITH (foo="bar");
@@ -167,8 +177,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     Y_UNIT_TEST_TWIN(RejectUnsupportedSamplingHints, NewRbo) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
+        settings.SetInitFederatedQuerySetupFactory(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -202,6 +215,24 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             auto part = it.ReadNext().GetValueSync();
             UNIT_ASSERT_C(!part.IsSuccess(), suffix);
             UNIT_ASSERT_STRING_CONTAINS(part.GetIssues().ToString(), expectedIssue);
+        }
+
+        for (const TString hint : {"", R"(WITH (sampling_rate="0.5"))"}) {
+            if (NewRbo && hint.empty()) {
+                continue; // New RBO does not support explicit streamlookup joins.
+            }
+            const TString query = TStringBuilder()
+                << "SELECT r.Key FROM `/Root/SamplingHints` AS l"
+                << " LEFT JOIN /*+ streamlookup() */ ANY `/Root/SamplingHints` " << hint
+                << " AS r ON l.Key = r.Key";
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query,
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (hint.empty()) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!result.IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Sampling is not supported for lookups");
+            }
         }
     }
 

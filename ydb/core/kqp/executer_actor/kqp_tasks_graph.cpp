@@ -3089,7 +3089,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
     }
 
     const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
-    if (partitions.empty()) {
+    if (source.HasSampling() && partitions.empty()) {
         return size_t(0);
     }
     const bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0
@@ -3622,8 +3622,6 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats,
     const TPlacementParams& placementParams)
 {
-    AllocateSamplingShardBudget();
-
     // Counting tasks via MaxTasksGraph
 
     if (!resourcesSnapshot.empty()) {
@@ -4093,6 +4091,9 @@ void TKqpTasksGraph::CountScanTasksFromSource(TStageInfo& stageInfo, bool limitT
     }
     const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
     const auto& source = stage.GetSources(0).GetReadRangesSource();
+    if (source.HasSampling() && !stageInfo.Meta.SamplingMaxInFlightShards) {
+        AllocateSamplingShardBudget();
+    }
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
     bool singlePartitionedStage = stage.GetIsSinglePartition();
 

@@ -28,11 +28,13 @@ using TStatus = IGraphTransformer::TStatus;
 namespace {
 
 bool ValidateReadSampling(const TCoNameValueTupleList& settingsNode, bool index, TExprContext& ctx) {
-    const auto settings = TKqpReadTableSettings::Parse(settingsNode);
-    if (!settings.Sampling) {
+    const bool sampling = HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingRateSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingSeedSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingMemtableStrideSettingName);
+    if (!sampling) {
         return true;
     }
-    if (index || settings.IsReverse()) {
+    if (index || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::ReverseSettingName)) {
         ctx.AddError(TIssue(ctx.GetPosition(settingsNode.Pos()), index
             ? "Sampling is not supported for index reads"
             : "Sampling is not supported for reverse reads"));

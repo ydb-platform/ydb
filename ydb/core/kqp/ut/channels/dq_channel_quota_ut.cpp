@@ -25,6 +25,13 @@ struct TQuotaAbortTest : public TSessionTest {
 // message of the channel does not fit
 struct TOutputQuotaTest : public TQuotaAbortTest {
 
+    void Prepare() override {
+        // the abort can overtake the data on the interconnect: a leading message after it leaves an unbound descriptor
+        Limits.CleanupPeriod = TDuration::MilliSeconds(50);
+        Limits.UnboundWaitPeriod = TDuration::MilliSeconds(200);
+        TQuotaAbortTest::Prepare();
+    }
+
     void Run() override {
         Prepare();
         UseDebugSessions = true;
@@ -36,8 +43,7 @@ struct TOutputQuotaTest : public TQuotaAbortTest {
         ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
 
         Debug0->PauseChannelAck();
-        // the consumer binds first: aborted before its bind it would leave the descriptor the leading
-        // message creates to the unbound cleanup
+        // the consumer binds first, so that the abort usually finds both sides bound
         auto producer = Runtime->Register(new TProducerActor(Service0, 1, ProducerSettings, OutputQuotaManager), NodeIndex0);
         auto consumer = Runtime->Register(new TConsumerActor(Service1, 1, ConsumerSettings, InputQuotaManager), NodeIndex1);
         Actors.insert(producer);

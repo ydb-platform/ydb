@@ -1685,7 +1685,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
 
 namespace {
 
-class THistoryTestClient final : public NYql::ITopicClient {
+class THistoryTestClient final : public NFq::IMessageStreamClient {
 public:
     bool Expired = false;
     TMaybe<ui64> FirstRetainedWriteTimeUs;
@@ -1695,55 +1695,46 @@ public:
     std::shared_ptr<NYdb::TDriver> Driver;
     NTestUtils::IMockPqGateway::TPtr Gateway;
 
-    NYdb::NTopic::TAsyncDescribePartitionResult DescribePartition(const TString& topicPath, i64 partitionId,
-            const NYdb::NTopic::TDescribePartitionSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(const TString& topicPath, ui64 partitionId) override {
         ++Describes;
         DescribedPartitions.emplace_back(topicPath, partitionId);
-        Ydb::Topic::DescribePartitionResult description;
-        auto* partition = description.mutable_partition();
-        partition->set_partition_id(partitionId);
-        auto* stats = partition->mutable_partition_stats();
-        stats->mutable_partition_offsets()->set_start(FirstRetainedWriteTimeUs ? 10 : (Expired ? 100 : 0));
-        stats->mutable_partition_offsets()->set_end(100);
-        return NThreading::MakeFuture(NYdb::NTopic::TDescribePartitionResult(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(description)));
+        NFq::TMessageStreamPartitionDescription description;
+        description.PartitionId = partitionId;
+        description.StartOffset = FirstRetainedWriteTimeUs ? 10 : (Expired ? 100 : 0);
+        description.EndOffset = 100;
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>{.Value = description});
     }
-    NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString&, const NYdb::NTopic::TDescribeTopicSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamTopicDescription>> DescribeStream(const TString&) override {
         ythrow yexception() << "Unexpected DescribeTopic";
     }
-    NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString&, const TString&, const NYdb::NTopic::TDescribeConsumerSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString&, const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override
+    {
         ythrow yexception() << "Unexpected DescribeConsumer";
     }
-    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSettings& settings) override {
         UNIT_ASSERT(FirstRetainedWriteTimeUs);
-        UNIT_ASSERT(settings.WithoutConsumer_);
+        UNIT_ASSERT(settings.WithoutConsumer);
         ++Reads;
         Driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig{});
         Gateway = NTestUtils::CreateMockPqGateway();
         auto client = Gateway->GetTopicClient(*Driver, {});
         auto session = client->CreateReadSession(settings);
-        UNIT_ASSERT_VALUES_EQUAL(settings.Topics_.size(), 1);
-        Gateway->WaitReadSession(TString(settings.Topics_.front().Path_))->AddDataReceivedEvent(
+        Gateway->WaitReadSession(settings.Stream)->AddDataReceivedEvent(
             FirstRetainedWriteTimeUs ? 10 : 100, "unused", TInstant::MicroSeconds(FirstRetainedWriteTimeUs.GetOrElse(600 * Second)));
         return session;
     }
-    std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const NYdb::NTopic::TWriteSessionSettings&) override {
-        ythrow yexception() << "Unexpected write session";
-    }
-    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings&) override {
-        ythrow yexception() << "Unexpected write session";
-    }
-    NYdb::TAsyncStatus CommitOffset(const TString&, ui64, const TString&, ui64, const NYdb::NTopic::TCommitOffsetSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamOffset>> CommitOffset(const TString&, ui64, const TString&, ui64) override {
         ythrow yexception() << "Replay validation must not commit consumer offsets";
     }
 };
 
 class THistoryTestGateway final : public NYql::IPqStaticGateway {
 public:
-    std::function<NYql::ITopicClient::TPtr(const NYdb::NTopic::TTopicClientSettings&)> Factory;
+    std::function<std::shared_ptr<NFq::IMessageStreamClient>(const NYdb::NTopic::TTopicClientSettings&)> Factory;
 
     NYql::IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver&, const NYdb::TCommonClientSettings&) override { return {}; }
-    NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings& settings) override { return Factory(settings); }
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings& settings) override { return Factory(settings); }
     NYql::IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings&) override { return {}; }
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override { return {}; }
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override { return {}; }
@@ -1779,7 +1770,7 @@ void CheckResolver(bool force, bool expired, bool enabled = true, TMaybe<ui64> f
     THistoryTestRuntime runtime(enabled);
     const auto owner = runtime.AllocateEdgeActor();
     const auto storage = runtime.AllocateEdgeActor();
-    auto client = MakeIntrusive<THistoryTestClient>();
+    auto client = std::make_shared<THistoryTestClient>();
     client->Expired = expired;
     client->FirstRetainedWriteTimeUs = firstRetainedWriteTimeUs;
     TReplayTestGraph old;
@@ -1858,8 +1849,8 @@ void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool e
     THistoryTestRuntime runtime;
     const auto owner = runtime.AllocateEdgeActor();
     const auto storage = runtime.AllocateEdgeActor();
-    auto east = MakeIntrusive<THistoryTestClient>();
-    auto west = MakeIntrusive<THistoryTestClient>();
+    auto east = std::make_shared<THistoryTestClient>();
+    auto west = std::make_shared<THistoryTestClient>();
     west->Expired = expired;
     if (readFirstRetained) {
         east->FirstRetainedWriteTimeUs = 200 * Second;

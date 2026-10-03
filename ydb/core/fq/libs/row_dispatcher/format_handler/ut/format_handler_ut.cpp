@@ -286,17 +286,17 @@ public:
         return TStatus::Success();
     }
 
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages, TVector<ui64> expectedOffsets = {}) {
+    void ParseMessages(const TVector<TMessageStreamMessage>& messages, TVector<ui64> expectedOffsets = {}) {
         for (auto& client : Clients) {
-            client->ExpectOffsets(expectedOffsets ? expectedOffsets : TVector<ui64>{messages.back().GetOffset()});
+            client->ExpectOffsets(expectedOffsets ? expectedOffsets : TVector<ui64>{messages.back().Offset.Offset});
         }
         FormatHandler->ParseMessages(messages);
         ExtractClientsData();
     }
 
-    void CheckClientError(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages, NActors::TActorId clientId, TStatusCode statusCode, const TString& message) {
+    void CheckClientError(const TVector<TMessageStreamMessage>& messages, NActors::TActorId clientId, TStatusCode statusCode, const TString& message) {
         for (auto& client : Clients) {
-            client->ExpectOffsets({messages.back().GetOffset()});
+            client->ExpectOffsets({messages.back().Offset.Offset});
             if (client->GetClientId() == clientId) {
                 client->ExpectError(statusCode, message);
             }
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             NYql::NUdf::TUnboxedValue foreignValue = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
             const auto foreignAllocated = Alloc.GetAllocated();
             for (size_t batch = 0; batch < 2; ++batch) {
-                TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+                TVector<TMessageStreamMessage> messages;
                 TVector<ui64> expectedOffsets;
                 for (size_t i = 0; i < rows; ++i) {
                     messages.push_back(GetMessage(batch * rows + i, "x"));

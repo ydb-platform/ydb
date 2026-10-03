@@ -154,7 +154,7 @@ public:
     }
 };
 
-class TRecoveryClient : public ITopicClient {
+class TRecoveryClient : public NFq::IMessageStreamClient {
 public:
     enum class EBlockedOperation {
         None,
@@ -176,71 +176,82 @@ public:
     bool FailRead = false;
     bool WithoutConsumer = false;
     EBlockedOperation BlockedOperation = EBlockedOperation::None;
-    TPromise<TDescribeConsumerResult> PendingConsumer = NewPromise<TDescribeConsumerResult>();
-    TPromise<TDescribePartitionResult> PendingPartition = NewPromise<TDescribePartitionResult>();
-    TPromise<TStatus> PendingCommit = NewPromise<TStatus>();
+    TPromise<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> PendingConsumer =
+        NewPromise<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>>();
+    TPromise<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> PendingPartition =
+        NewPromise<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>>();
+    TPromise<NFq::TMessageStreamResult<NFq::TMessageStreamOffset>> PendingCommit =
+        NewPromise<NFq::TMessageStreamResult<NFq::TMessageStreamOffset>>();
     TVector<std::pair<ui64, ui64>> Commits;
     std::shared_ptr<TDriver> Driver;
     NTestUtils::IMockPqGateway::TPtr Gateway;
 
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString&, const TString&, const TDescribeConsumerSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamTopicDescription>> DescribeStream(const TString&) override {
+        UNIT_FAIL("Unexpected describe topic");
+        return {};
+    }
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString&, const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override
+    {
         ++Describes;
         if (BlockedOperation == EBlockedOperation::DescribeConsumer) {
             return PendingConsumer.GetFuture();
         }
-        Ydb::Topic::DescribeConsumerResult description;
+        NFq::TMessageStreamConsumerDescription description;
+        description.Partitions.reserve(PartitionCount);
         for (ui64 id = 0; id < PartitionCount; ++id) {
-            auto* partition = description.add_partitions();
-            partition->set_partition_id(id);
-            auto* stats = partition->mutable_partition_stats();
-            stats->mutable_partition_offsets()->set_start(Start);
-            stats->mutable_partition_offsets()->set_end(End);
-            stats->mutable_last_write_time()->set_seconds(LastWriteTimeMs / 1000);
-            stats->mutable_last_write_time()->set_nanos(LastWriteTimeMs % 1000 * 1000000);
-            partition->mutable_partition_consumer_stats()->set_committed_offset(Committed);
+            NFq::TMessageStreamConsumerPartition partition;
+            partition.PartitionId = id;
+            partition.StartOffset = Start;
+            partition.EndOffset = End;
+            partition.CommittedOffset = Committed;
+            partition.LastWriteTime = TInstant::MilliSeconds(LastWriteTimeMs);
+            description.Partitions.push_back(std::move(partition));
         }
-        return MakeFuture(TDescribeConsumerResult(TStatus(EStatus::SUCCESS, {}), std::move(description)));
+        return MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>{.Value = std::move(description)});
     }
 
-    TAsyncDescribeTopicResult DescribeTopic(const TString&, const TDescribeTopicSettings&) override { UNIT_FAIL("Unexpected describe topic"); return {}; }
-    TAsyncDescribePartitionResult DescribePartition(const TString&, i64 id, const TDescribePartitionSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(const TString&, ui64 id) override {
         UNIT_ASSERT(WithoutConsumer);
         ++Describes;
         if (BlockedOperation == EBlockedOperation::DescribePartition) {
             return PendingPartition.GetFuture();
         }
-        Ydb::Topic::DescribePartitionResult description;
-        auto* partition = description.mutable_partition();
-        partition->set_partition_id(id);
-        auto* stats = partition->mutable_partition_stats();
-        stats->mutable_partition_offsets()->set_start(Start);
-        stats->mutable_partition_offsets()->set_end(End);
-        stats->mutable_last_write_time()->set_seconds(LastWriteTimeMs / 1000);
-        stats->mutable_last_write_time()->set_nanos(LastWriteTimeMs % 1000 * 1000000);
-        return MakeFuture(TDescribePartitionResult(TStatus(EStatus::SUCCESS, {}), std::move(description)));
+        NFq::TMessageStreamPartitionDescription description;
+        description.PartitionId = id;
+        description.StartOffset = Start;
+        description.EndOffset = End;
+        return MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>{.Value = description});
     }
-    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings&) override { UNIT_FAIL("Unexpected write"); return {}; }
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings&) override { UNIT_FAIL("Unexpected write"); return {}; }
 
-    TAsyncStatus CommitOffset(const TString&, ui64 partition, const TString&, ui64 offset, const TCommitOffsetSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamOffset>> CommitOffset(
+        const TString&, ui64 partition, const TString&, ui64 offset) override
+    {
         Commits.emplace_back(partition, offset);
         if (BlockedOperation == EBlockedOperation::CommitOffset) {
             return PendingCommit.GetFuture();
         }
-        return MakeFuture(TStatus(FailCommit ? EStatus::UNAUTHORIZED : EStatus::SUCCESS, {}));
+        NFq::TMessageStreamResult<NFq::TMessageStreamOffset> result;
+        result.Status = FailCommit ? NFq::EMessageStreamStatus::Unauthorized : NFq::EMessageStreamStatus::Success;
+        if (FailCommit) {
+            result.Issues.AddIssue(NYql::TIssue("commit failed"));
+        }
+        result.Value = {.PartitionId = partition, .Offset = offset};
+        return MakeFuture(std::move(result));
     }
 
-    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) override {
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSettings& settings) override {
         ++Reads;
         UNIT_ASSERT_C(Start < End, "An empty partition cannot provide a retained message");
         Y_ENSURE(!FailRead, "Test read session failure");
-        UNIT_ASSERT(!settings.WithoutConsumer_);
-        UNIT_ASSERT_VALUES_EQUAL(settings.ConsumerName_, "consumer");
+        UNIT_ASSERT(!settings.WithoutConsumer);
+        UNIT_ASSERT_VALUES_EQUAL(settings.Consumer, "consumer");
         Driver = std::make_shared<TDriver>(TDriverConfig{});
         Gateway = NTestUtils::CreateMockPqGateway();
         auto session = Gateway->GetTopicClient(*Driver, {})->CreateReadSession(settings);
         if (BlockedOperation != EBlockedOperation::Read) {
-            Gateway->WaitReadSession(TString(settings.Topics_.front().Path_))->AddDataReceivedEvent(Start, "probe", TInstant::MilliSeconds(FirstWriteTimeMs));
+            Gateway->WaitReadSession(settings.Stream)->AddDataReceivedEvent(Start, "probe", TInstant::MilliSeconds(FirstWriteTimeMs));
         }
         return session;
     }
@@ -248,7 +259,7 @@ public:
 
 class TGateway : public IPqStaticGateway {
 public:
-    const TIntrusivePtr<TRecoveryClient> RecoveryClient = MakeIntrusive<TRecoveryClient>();
+    const std::shared_ptr<TRecoveryClient> RecoveryClient = std::make_shared<TRecoveryClient>();
     const TIntrusivePtr<TClient> Client = MakeIntrusive<TClient>();
     std::atomic<size_t> CreatedClients = 0;
     std::optional<TString> ExpectedAuth;
@@ -258,7 +269,7 @@ public:
         return Client;
     }
 
-    ITopicClient::TPtr GetTopicClient(const TDriver&, const TTopicClientSettings& settings) override { CheckClientSettings(settings); return RecoveryClient; }
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TDriver&, const TTopicClientSettings& settings) override { CheckClientSettings(settings); return RecoveryClient; }
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver&, const NFederatedTopic::TFederatedTopicClientSettings&) override { return {}; }
     TTopicClientSettings GetTopicClientSettings() const override { return {}; }
     NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override { return {}; }

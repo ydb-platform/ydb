@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/pq/gateway/clients/composite
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     yql/essentials/sql/pg_dummy
 )
 

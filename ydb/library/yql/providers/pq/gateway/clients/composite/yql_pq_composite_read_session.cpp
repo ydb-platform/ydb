@@ -38,7 +38,6 @@ namespace {
 
 using namespace NActors;
 using namespace NKikimr::NOlap::NCounters;
-using namespace NYdb::NTopic;
 
 class ICompositeTopicReadSessionControlImpl : public ICompositeTopicReadSessionControl {
 public:
@@ -167,7 +166,7 @@ class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancer
             NPq::NProto::TEvDqPqUpdateCounterValue value;
 
             value.SetCounterId(BuildCounterName(settings.InputIndex, "partition_counter"));
-            value.SetAggSum(settings.BaseSettings.Topics_[0].PartitionIds_.size());
+            value.SetAggSum(settings.BaseSettings.PartitionIds.size());
 
             auto& aggSettings = *value.MutableSettings();
             aggSettings.SetScalarAggDeltaThreshold(0);
@@ -230,7 +229,7 @@ public:
         : TxId(settings.TxId)
         , TaskId(settings.TaskId)
         , Cluster(settings.Cluster)
-        , TopicPath(settings.BaseSettings.Topics_[0].Path_)
+        , TopicPath(settings.BaseSettings.Stream)
         , Controller(std::move(controller))
         , AmountPartitionsCount(settings.AmountPartitionsCount)
         , Metrics(settings)
@@ -410,7 +409,7 @@ private:
 // Partition reading strategy:
 // - Read by round-robin events from all not suspended partitions
 // - First read most old partitions
-class TCompositeTopicReadSession final : public IReadSession, public ICompositeTopicReadSessionControlImpl {
+class TCompositeTopicReadSession final : public NFq::IMessageStreamReadSession, public ICompositeTopicReadSessionControlImpl {
     class TMetrics {
     public:
         explicit TMetrics(NMonitoring::TDynamicCounterPtr counters)
@@ -438,35 +437,18 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
             Size = sizeof(ev);
         }
 
-        void operator()(const TReadSessionEvent::TDataReceivedEvent& ev) {
+        void operator()(const NFq::TMessageStreamDataEvent& ev) {
             Size = sizeof(ev);
-
-            auto messagesCount = ev.GetMessagesCount();
-            if (ev.HasCompressedMessages()) {
-                const auto& compressedMessages = ev.GetCompressedMessages();
-                messagesCount -= compressedMessages.size();
-
-                for (const auto& compressedMessage : compressedMessages) {
-                    Size += sizeof(compressedMessage);
-                    Size += compressedMessage.GetProducerId().size() + compressedMessage.GetMessageGroupId().size();
-                    Size += compressedMessage.GetData().size();
-                }
-            }
-
-            if (messagesCount) {
-                for (const auto& message : ev.GetMessages()) {
-                    Size += sizeof(message);
-                    Size += message.GetProducerId().size() + message.GetMessageGroupId().size();
-                    if (message.HasException()) {
-                        Size += message.GetBrokenData().size();
-                    } else {
-                        Size += message.GetData().size();
-                    }
+            for (const auto& message : ev.Messages) {
+                Size += sizeof(message);
+                Size += message.MessageGroupId.size() + message.Data.size();
+                if (message.DecompressionError) {
+                    Size += message.DecompressionError->size();
                 }
             }
         }
 
-        static ui64 GetEventSize(const TReadSessionEvent::TEvent& event) {
+        static ui64 GetEventSize(const NFq::TMessageStreamReadEvent& event) {
             TTopicEventSizeVisitor visitor;
             std::visit(visitor, event);
             return visitor.Size;
@@ -480,7 +462,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
     public:
         using TPtr = std::shared_ptr<TPartitionSession>;
 
-        TPartitionSession(ui64 partitionId, std::shared_ptr<IReadSession> readSession, const TCompositeTopicReadSessionSettings& settings)
+        TPartitionSession(ui64 partitionId, std::shared_ptr<NFq::IMessageStreamReadSession> readSession, const TCompositeTopicReadSessionSettings& settings)
             : IdleTimeout(settings.IdleTimeout)
             , MaxPartitionReadSkew(settings.MaxPartitionReadSkew)
             , ReadSession(std::move(readSession))
@@ -495,16 +477,21 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
             return ReadSession->WaitEvent();
         }
 
-        bool Close() const {
-            return ReadSession->Close(TDuration::Zero());
+        void Close() const {
+            ReadSession->Close();
         }
 
-        std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) {
-            if (auto event = ReadSession->GetEvent(settings)) {
-                LastEventReadTime = TInstant::Now();
-                return event;
+        NThreading::TFuture<void> CommitOffset(const NFq::TMessageStreamOffset& offset) const {
+            return ReadSession->CommitOffset(offset);
+        }
+
+        std::optional<NFq::TMessageStreamReadEvent> GetEvent(const NFq::TMessageStreamReadEventSettings& settings) {
+            auto events = ReadSession->GetEvents(settings);
+            if (events.empty()) {
+                return std::nullopt;
             }
-            return std::nullopt;
+            LastEventReadTime = TInstant::Now();
+            return std::move(events.front());
         }
 
         // Read session info
@@ -529,7 +516,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
         // Settings
         const TDuration IdleTimeout;
         const TDuration MaxPartitionReadSkew;
-        const std::shared_ptr<IReadSession> ReadSession;
+        const std::shared_ptr<NFq::IMessageStreamReadSession> ReadSession;
         YDB_READONLY_CONST(ui64, PartitionId);
 
         // Read info
@@ -563,7 +550,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
     using TPartitionSet = std::set<TPartitionKey>;
 
 public:
-    TCompositeTopicReadSession(const TActorSystem* actorSystem, ITopicDataClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
+    TCompositeTopicReadSession(const TActorSystem* actorSystem, NFq::IMessageStreamDataClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
         : MaxPartitionReadSkew(settings.MaxPartitionReadSkew)
         , ActorSystem(actorSystem)
         , Metrics(settings.Counters)
@@ -572,12 +559,11 @@ public:
     {
         Y_VALIDATE(MaxPartitionReadSkew, "MaxPartitionReadSkew must be positive");
         Y_VALIDATE(ActorSystem, "ActorSystem must be set");
-        Y_VALIDATE(settings.BaseSettings.Topics_.size() == 1, "Supported only single topic reading");
+        Y_VALIDATE(!settings.BaseSettings.Stream.empty(), "Supported only single topic reading");
 
-        const auto& topic = settings.BaseSettings.Topics_[0];
-        LogPrefix = TStringBuilder() << "[" << __func__ << "] TxId: " << settings.TxId << ", TaskId: " << settings.TaskId << ", Cluster: " << settings.Cluster << ", TopicPath: " << topic.Path_ << ". ";
+        LogPrefix = TStringBuilder() << "[" << __func__ << "] TxId: " << settings.TxId << ", TaskId: " << settings.TaskId << ", Cluster: " << settings.Cluster << ", TopicPath: " << settings.BaseSettings.Stream << ". ";
 
-        const auto& partitions = topic.PartitionIds_;
+        const auto& partitions = settings.BaseSettings.PartitionIds;
         Y_VALIDATE(partitions.size() > 0, "Cannot start read session without partitions");
         SRC_LOG_AS_I("Created"
             << ", MaxPartitionReadSkew: " << MaxPartitionReadSkew
@@ -587,11 +573,11 @@ public:
             << ", AggregatorActor: " << settings.AggregatorActor);
 
         TStringBuilder sessionIdBuilder;
-        auto sessionSettings = settings.BaseSettings;
         PartitionSessions.reserve(partitions.size());
         for (auto partitionId : partitions) {
-            sessionSettings.Topics_[0].PartitionIds_.clear();
-            sessionSettings.Topics_[0].AppendPartitionIds(partitionId);
+            auto sessionSettings = settings.BaseSettings;
+            sessionSettings.PartitionIds = {partitionId};
+            sessionSettings.PartitionId.reset();
             auto readSession = topicClient.CreateReadSession(sessionSettings);
 
             sessionIdBuilder << partitionId << "=" << readSession->GetSessionId() << ";";
@@ -623,8 +609,6 @@ public:
     void SetBalancerActor(const TActorId& balancerActor) {
         BalancerActor = balancerActor;
     }
-
-    // IReadSession
 
     NThreading::TFuture<void> WaitEvent() final {
         ui64 waitPendingPartitions = 0;
@@ -667,78 +651,72 @@ public:
         return NThreading::WaitAny(futures);
     }
 
-    std::vector<TReadSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) final {
-        Y_VALIDATE(!block, "Block methods are not supported");
-        return GetEvents(TReadSessionGetEventSettings()
-            .MaxByteSize(maxByteSize)
-            .MaxEventsCount(maxEventsCount)
-        );
-    }
+    std::vector<NFq::TMessageStreamReadEvent> GetEvents(const NFq::TMessageStreamReadEventSettings& settings) final {
+        Y_VALIDATE(!settings.Block, "Block methods are not supported");
 
-    std::vector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) final {
-        Y_VALIDATE(!settings.Block_, "Block methods are not supported");
-
-        if (!settings.MaxByteSize_) {
+        if (!settings.MaxByteSize) {
             return {};
         }
 
-        auto getEventSettings = TReadSessionGetEventSettings(settings)
-            .MaxEventsCount(1)
-            .MaxByteSize(settings.MaxByteSize_);
+        auto getEventSettings = settings;
+        getEventSettings.MaxEventsCount = 1;
 
         ui64 usedSize = 0;
-        std::vector<TReadSessionEvent::TEvent> result;
+        std::vector<NFq::TMessageStreamReadEvent> result;
         while (auto event = GetEvent(getEventSettings)) {
             result.emplace_back(std::move(*event));
             usedSize += TTopicEventSizeVisitor::GetEventSize(result.back());
 
-            if ((settings.MaxEventsCount_ && result.size() >= *settings.MaxEventsCount_) || usedSize >= settings.MaxByteSize_) {
+            if ((settings.MaxEventsCount && result.size() >= *settings.MaxEventsCount) || usedSize >= settings.MaxByteSize) {
                 break;
             }
 
-            getEventSettings.MaxByteSize(settings.MaxByteSize_ - usedSize);
+            getEventSettings.MaxByteSize = settings.MaxByteSize - usedSize;
         }
 
         return result;
     }
 
-    std::optional<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) final {
-        Y_VALIDATE(!block, "Block methods are not supported");
-        return GetEvent(TReadSessionGetEventSettings()
-            .MaxByteSize(maxByteSize)
-            .MaxEventsCount(1)
-        );
+    NThreading::TFuture<void> CommitOffset(const NFq::TMessageStreamOffset& offset) final {
+        const auto it = PartitionSessions.find(offset.PartitionId);
+        Y_ENSURE(it != PartitionSessions.end(), "Unknown partition " << offset.PartitionId);
+        return it->second->CommitOffset(offset);
     }
 
-    std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
-        Y_VALIDATE(!settings.Block_, "Block methods are not supported");
-
-        if (!settings.MaxByteSize_) {
+    std::optional<NFq::TMessageStreamReadEvent> GetEvent(const NFq::TMessageStreamReadEventSettings& settings) {
+        Y_VALIDATE(!settings.Block, "Block methods are not supported");
+        if (!settings.MaxByteSize) {
             return std::nullopt;
         }
 
-        auto maybeEvent = ReadEventFromReadyPartitions(settings);
+        // A ready WaitEvent can be a commit acknowledgement. The adapter drops it, so
+        // GetEvents is empty even though the SDK event was consumed. Keep scanning.
+        while (true) {
+            auto maybeEvent = ReadEventFromReadyPartitions(settings);
+            if (maybeEvent) {
+                RefreshReadyPartitions();
+                SRC_LOG_AS_T("GetEvent, suspended partitions #" << SuspendedPartitions.size() << ", ready partitions #" << ReadyPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
+                return maybeEvent;
+            }
 
-        RefreshReadyPartitions();
-        SRC_LOG_AS_T("GetEvent, suspended partitions #" << SuspendedPartitions.size() << ", ready partitions #" << ReadyPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
-
-        if (!maybeEvent) {
-            maybeEvent = ReadEventFromReadyPartitions(settings);
+            if (ReadyPartitions.empty()) {
+                RefreshReadyPartitions();
+                if (ReadyPartitions.empty()) {
+                    SRC_LOG_AS_T("GetEvent, suspended partitions #" << SuspendedPartitions.size() << ", ready partitions #" << ReadyPartitions.size() << ", pending partitions #" << PendingPartitions.size() << ", idle partitions #" << IdlePartitions.size());
+                    return std::nullopt;
+                }
+            }
         }
-
-        return maybeEvent;
     }
 
-    bool Close(TDuration timeout) final {
-        Y_VALIDATE(!timeout, "Timeout is not supported");
+    NThreading::TFuture<void> Close() final {
         SRC_LOG_AS_I("Closing session");
         ClearBalancerActor();
 
-        bool success = true;
         TStringBuilder errors;
         for (const auto& [_, session] : PartitionSessions) {
             try {
-                success = session->Close() && success;
+                session->Close();
             } catch (const std::exception& e) {
                 errors << e.what() << "; " << Endl;
             }
@@ -748,14 +726,10 @@ public:
             throw yexception() << "Failed to close composite read session: " << errors;
         }
 
-        return success;
+        return NThreading::MakeFuture();
     }
 
-    TReaderCounters::TPtr GetCounters() const final {
-        return nullptr;
-    }
-
-    std::string GetSessionId() const final {
+    TString GetSessionId() const final {
         return SessionId;
     }
 
@@ -924,7 +898,7 @@ private:
         return result;
     }
 
-    std::optional<TReadSessionEvent::TEvent> ReadEventFromReadyPartitions(const TReadSessionGetEventSettings& settings) {
+    std::optional<NFq::TMessageStreamReadEvent> ReadEventFromReadyPartitions(const NFq::TMessageStreamReadEventSettings& settings) {
         if (ReadyPartitions.empty()) {
             return std::nullopt;
         }
@@ -935,7 +909,16 @@ private:
 
         const auto key = *NextReadyPartition;
         auto event = key->GetEvent(settings);
-        Y_VALIDATE(event, "Unexpected empty event for ready partition");
+        if (!event) {
+            // An acknowledgement was the only queued event: the adapter consumed it and
+            // the SDK queue is empty. A still-ready WaitEvent means the next event did
+            // not fit MaxByteSize and is still queued.
+            Y_VALIDATE(!key->WaitEvent().IsReady(), "Unexpected empty event for ready partition");
+            NextReadyPartition = ReadyPartitions.erase(NextReadyPartition);
+            DistributePartitionSession(key);
+            UpdateMetrics();
+            return std::nullopt;
+        }
 
         if (!key->WaitEvent().IsReady()) {
             // There are no ready events in this partition, so move it to pending / idle
@@ -1019,9 +1002,9 @@ private:
 
 } // anonymous namespace
 
-std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
+std::pair<std::shared_ptr<NFq::IMessageStreamReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
     const TActorContext& ctx,
-    ITopicDataClient& topicClient,
+    NFq::IMessageStreamDataClient& topicClient,
     const TCompositeTopicReadSessionSettings& settings
 ) {
     const auto compositeReadSession = std::make_shared<TCompositeTopicReadSession>(ctx.ActorSystem(), topicClient, settings);

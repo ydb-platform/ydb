@@ -106,7 +106,7 @@ void TDummyPqGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
     Y_UNUSED(cluster);
 }
 
-ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) {
+std::shared_ptr<NFq::IMessageStreamClient> TDummyPqGateway::GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) {
     return CreateFileTopicClient(Topics, {
         .Database = settings.Database_.value_or(driver.GetConfig().GetDatabase()),
         .SkipDatabasePrefix = AllowSkipDatabasePrefix,

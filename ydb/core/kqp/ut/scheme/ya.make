@@ -28,6 +28,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/yql/udfs/common/knn
     ydb/services/workload_manager/ut/common
     ydb/core/tx/columnshard/hooks/testing
     ydb/public/sdk/cpp/src/client/arrow

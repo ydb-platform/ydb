@@ -3,3 +3,5 @@ items:
   href: setup.md
 - name: Передача внешнего trace-id
   href: external-traces.md
+- name: Трассировка выполнения запросов
+  href: query-spans.md

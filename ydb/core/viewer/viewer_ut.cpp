@@ -1421,7 +1421,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto sender = runtime.AllocateEdgeActor();
         bool withSample = true;
         bool includeDDisks = false;
+        ui32 storagePoolRequests = 0;
+        ui32 groupRequests = 0;
+        std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> cachedPools;
+        std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> cachedGroups;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
+                ++storagePoolRequests;
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
+                ++groupRequests;
+            }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
                 record.ClearEntries();
@@ -1438,6 +1447,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 ordinary->MutableKey()->SetPDiskId(1);
                 ordinary->MutableKey()->SetVSlotId(1001);
                 ordinary->MutableInfo()->SetGroupId(43);
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetBoxId(1);
+                entry->MutableKey()->SetStoragePoolId(7);
+                entry->MutableInfo()->SetName("ddisk-pool");
+                cachedPools = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
+                cachedPools->Record.CopyFrom(record);
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(42);
+                entry->MutableInfo()->SetBoxId(1);
+                entry->MutableInfo()->SetStoragePoolId(7);
+                cachedGroups = std::make_shared<NSysView::TEvSysView::TEvGetGroupsResponse>();
+                cachedGroups->Record.CopyFrom(record);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateRequest) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvWhiteboard::TEvPDiskStateRequest>()->Record.GetIncludeDDiskState(), includeDDisks);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
@@ -1526,19 +1553,57 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
                 checkDisks(json["Whiteboard"], sample, true);
                 for (bool offload : {false, true}) {
-                    NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
-                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
+                    storagePoolRequests = 0;
+                    groupRequests = 0;
+                    NHttp::THttpIncomingRequestPtr minimalRequest = new NHttp::THttpIncomingRequest(
+                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId"
                             << extraParams << "&offload_merge=" << (offload ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
                     runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(nodesRequest)));
-                    TAutoPtr<IEventHandle> nodesHandle;
-                    auto* nodesResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(nodesHandle);
-                    NJson::TJsonValue nodesJson;
-                    NJson::ReadJsonTree(nodesResult->Response->Body, &nodesJson, true);
-                    const auto& nodes = nodesJson["Nodes"].GetArray();
-                    UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
-                    // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
-                    checkDisks(nodes[0], sample, false);
+                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(minimalRequest)));
+                    TAutoPtr<IEventHandle> minimalHandle;
+                    auto* minimalResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(minimalHandle);
+                    NJson::TJsonValue minimalJson;
+                    NJson::ReadJsonTree(minimalResult->Response->Body, &minimalJson, true);
+                    UNIT_ASSERT_VALUES_EQUAL(minimalJson["Nodes"].GetArray().size(), 1);
+                    UNIT_ASSERT(!minimalJson["Nodes"][0].Has("DDisks"));
+                    UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                    for (bool useCache : {false, true}) {
+                        if (useCache && includeDDisks) {
+                            // Refresh the cache on the local viewer service before the request.
+                            UNIT_ASSERT(cachedPools && cachedGroups);
+                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedPools)));
+                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedGroups)));
+                        }
+                        storagePoolRequests = 0;
+                        groupRequests = 0;
+                        NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
+                            TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
+                                << extraParams << "&offload_merge=" << (offload ? "true" : "false")
+                                << "&use_cache=" << (useCache ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
+                        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(nodesRequest)));
+                        TAutoPtr<IEventHandle> nodesHandle;
+                        auto* nodesResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(nodesHandle);
+                        NJson::TJsonValue nodesJson;
+                        NJson::ReadJsonTree(nodesResult->Response->Body, &nodesJson, true);
+                        const auto& nodes = nodesJson["Nodes"].GetArray();
+                        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
+                        // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
+                        checkDisks(nodes[0], sample, false);
+                        if (includeDDisks) {
+                            for (ui32 i = 0; i < 3; ++i) {
+                                UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"][i]["StoragePoolName"].GetString(), "ddisk-pool");
+                            }
+                        }
+                        if (useCache && includeDDisks) {
+                            // Completed cached responses must provide metadata without controller requests.
+                            UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                        }
+                    }
                 }
             }
         }

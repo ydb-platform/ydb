@@ -13,18 +13,13 @@ namespace NAux {
 
 /**
  * The holder for parsed application counter definitions from .proto files.
- *
- * @tparam AppCountersDesc The function, which returns the enum description to parse
- * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ * The type-independent part of TAppParsedOpts.
  */
-template <
-    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
-    bool ParseSourceCounters = false
->
-struct TAppParsedOpts {
+struct TAppParsedOptsBase {
 public:
     const size_t Size;
 protected:
+    const NProtoBuf::EnumDescriptor* const AppDesc;
     TVector<TString> NamesStrings;
     TVector<const char*> Names;
     TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
@@ -41,116 +36,50 @@ protected:
     TVector<TVector<TSourceCounter>> SourceCounters;
 
 public:
-    explicit TAppParsedOpts(const size_t diff = 0)
-        : Size(AppCountersDesc()->value_count() + diff)
-    {
-        const NProtoBuf::EnumDescriptor* appDesc = AppCountersDesc();
-        NamesStrings.reserve(Size);
-        Names.reserve(Size);
-        Ranges.reserve(Size);
-        Integral.reserve(Size);
-        LeaderOnly.reserve(Size);
-
-        if constexpr (ParseSourceCounters) {
-            SourceCounters.reserve(Size);
-        }
-
-        // Parse protobuf options for enum values for app counters
-        for (int i = 0; i < appDesc->value_count(); i++) {
-            const NProtoBuf::EnumValueDescriptor* vdesc = appDesc->value(i);
-            Y_ABORT_UNLESS(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
-                   vdesc->full_name().c_str(), vdesc->number(), vdesc->index());
-            if (!vdesc->options().HasExtension(CounterOpts)) {
-                NamesStrings.emplace_back(); // empty name
-                Ranges.emplace_back(); // empty ranges
-                Integral.push_back(false);
-                LeaderOnly.push_back(false);
-
-                Y_ABORT_UNLESS(
-                    !ParseSourceCounters,
-                    "ParseSourceCounters is set, but the counter '%s' (value %d) is not defined using CounterOpts",
-                    vdesc->full_name().c_str(),
-                    vdesc->number()
-                );
-
-                continue;
-            }
-            const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts);
-            TString cntName = co.GetName();
-            Y_ABORT_UNLESS(!cntName.empty(), "counter '%s' number (%d) cannot have an empty counter name",
-                    vdesc->full_name().c_str(), vdesc->number());
-            TString nameString;
-            if (IsHistogramAggregateSimpleName(cntName)) {
-                nameString = cntName;
-            } else {
-                nameString = GetFilePrefix(appDesc->file()) + cntName;
-            }
-            NamesStrings.emplace_back(nameString);
-            Ranges.push_back(ParseRanges(co));
-            Integral.push_back(co.GetIntegral());
-            LeaderOnly.push_back(co.GetLeaderOnly());
-
-            if constexpr (ParseSourceCounters) {
-                // Parse SourceCounters but make sure there is always at least one
-                Y_ABORT_UNLESS(
-                    co.SourceCountersSize() != 0,
-                    "ParseSourceCounters is set, but the counter '%s' (value %d) does not define SourceCounters",
-                    vdesc->full_name().c_str(),
-                    vdesc->number()
-                );
-
-                TVector<TSourceCounter> allSourceCounters;
-                allSourceCounters.reserve(co.SourceCountersSize());
-
-                for (const auto& counter : co.GetSourceCounters()) {
-                    allSourceCounters.emplace_back(counter);
-                }
-
-                SourceCounters.emplace_back(std::move(allSourceCounters));
-            }
-        }
-
-        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        for (const TString& s : NamesStrings) {
-            Names.push_back(s.empty() ? nullptr : s.c_str());
-        }
-
-        // Parse protobuf options for enums itself
-        AppGlobalRanges = ParseRanges(appDesc->options().GetExtension(GlobalCounterOpts));
-    }
-    virtual ~TAppParsedOpts()
-    {}
+    /**
+     * @param appDesc The enum description to parse
+     * @param parseSourceCounters Indicates whether to parse the SourceCounters fields
+     * @param diff The number of additional counters reserved after the app counters
+     */
+    TAppParsedOptsBase(const NProtoBuf::EnumDescriptor* appDesc, bool parseSourceCounters, size_t diff);
+    virtual ~TAppParsedOptsBase();
 
     const char* const * GetNames() const
     {
         return Names.data();
     }
 
-    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
-    {
-        Y_ABORT_UNLESS(idx < Size);
-        if (!Ranges[idx].empty()) {
-            return Ranges[idx];
-        } else {
-            if (!AppGlobalRanges.empty())
-                return AppGlobalRanges;
-        }
-        Y_ABORT("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
-    }
+    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const;
 
-    virtual bool GetIntegral(size_t idx) const {
-        Y_ABORT_UNLESS(idx < Size);
-        return Integral[idx];
-    }
+    virtual bool GetIntegral(size_t idx) const;
 
     /**
      * @return Whether the counter at idx is meaningful only on leaders
      *         (TCounterOptions::LeaderOnly, step 09.5)
      */
-    virtual bool GetLeaderOnly(size_t idx) const {
-        Y_ABORT_UNLESS(idx < Size);
-        return LeaderOnly[idx];
-    }
+    virtual bool GetLeaderOnly(size_t idx) const;
+
+protected:
+    static TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc);
+
+    static TVector<TTabletPercentileCounter::TRangeDef> ParseRanges(const TCounterOptions& co);
+};
+
+/**
+ * The holder for parsed application counter definitions from .proto files.
+ *
+ * @tparam AppCountersDesc The function, which returns the enum description to parse
+ * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ */
+template <
+    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+    bool ParseSourceCounters = false
+>
+struct TAppParsedOpts : public TAppParsedOptsBase {
+public:
+    explicit TAppParsedOpts(const size_t diff = 0)
+        : TAppParsedOptsBase(AppCountersDesc(), ParseSourceCounters, diff)
+    {}
 
     /**
      * Return the source counters for the given enum index.
@@ -167,120 +96,37 @@ public:
 
         return SourceCounters[index];
     }
+};
 
-protected:
-    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
-        if (desc->options().HasExtension(TabletTypeName)) {
-            return desc->options().GetExtension(TabletTypeName) + "/";
-        } else {
-            return TString();
-        }
-    }
+// The type-independent part of TParsedOpts
+struct TParsedOptsBase : public TAppParsedOptsBase {
+typedef TAppParsedOptsBase TBase;
+public:
+    const size_t TxOffset;
+    const size_t TxCountersSize;
+    using TBase::Size;
+private:
+    const NProtoBuf::EnumDescriptor* const TxDesc;
+    TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
+public:
+    TParsedOptsBase(const NProtoBuf::EnumDescriptor* appDesc,
+                    const NProtoBuf::EnumDescriptor* txDesc,
+                    const NProtoBuf::EnumDescriptor* typesDesc);
 
-    TVector<TTabletPercentileCounter::TRangeDef> ParseRanges(const TCounterOptions& co)
-    {
-        TVector<TTabletPercentileCounter::TRangeDef> ranges;
-        ranges.reserve(co.RangesSize());
-        for (size_t j = 0; j < co.RangesSize(); j++) {
-            const TRange& r = co.GetRanges(j);
-            ranges.push_back(TTabletPercentileCounter::TRangeDef{r.GetValue(), r.GetName().c_str()});
-        }
-        return ranges;
-    }
+    virtual ~TParsedOptsBase();
+
+    const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const override;
 };
 
 // Class that incapsulates protobuf options parsing for tx types and app counters
 template <const NProtoBuf::EnumDescriptor* AppCountersDesc(),
           const NProtoBuf::EnumDescriptor* TxCountersDesc(),
           const NProtoBuf::EnumDescriptor* TxTypesDesc()>
-struct TParsedOpts : public TAppParsedOpts<AppCountersDesc> {
-typedef TAppParsedOpts<AppCountersDesc> TBase;
-public:
-    const size_t TxOffset;
-    const size_t TxCountersSize;
-    using TBase::Size;
-private:
-    using TBase::NamesStrings;
-    using TBase::Names;
-    using TBase::Ranges;
-    using TBase::Integral;
-    using TBase::LeaderOnly;
-    using TBase::AppGlobalRanges;
-    TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
+struct TParsedOpts : public TParsedOptsBase {
 public:
     TParsedOpts()
-        : TAppParsedOpts<AppCountersDesc>(TxCountersDesc()->value_count() * TxTypesDesc()->value_count())
-        , TxOffset(AppCountersDesc()->value_count())
-        , TxCountersSize(TxCountersDesc()->value_count())
-    {
-        const NProtoBuf::EnumDescriptor* txDesc = TxCountersDesc();
-        const NProtoBuf::EnumDescriptor* typesDesc = TxTypesDesc();
-
-        // Parse protobuf options for enum values for tx counters
-        // Create a group of tx counters for each tx type
-        for (int j = 0; j < typesDesc->value_count(); j++) {
-            const NProtoBuf::EnumValueDescriptor* tt = typesDesc->value(j);
-            TTxType txType = tt->number();
-            Y_ABORT_UNLESS((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
-                   tt->full_name().c_str(), txType, tt->index());
-            Y_ABORT_UNLESS(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
-                    tt->full_name().c_str(), txType);
-            const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
-            TString txPrefix = tto.GetName() + "/";
-            for (int i = 0; i < txDesc->value_count(); i++) {
-                const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
-                Y_ABORT_UNLESS(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
-                       v->full_name().c_str(), v->number(), v->index());
-                if (!v->options().HasExtension(CounterOpts)) {
-                    NamesStrings.emplace_back(); // empty name
-                    Ranges.emplace_back(); // empty ranges
-                    Integral.push_back(false);
-                    LeaderOnly.push_back(false);
-                    continue;
-                }
-                const TCounterOptions& co = v->options().GetExtension(CounterOpts);
-                Y_ABORT_UNLESS(!co.GetName().empty(), "counter '%s' number (%d) has an empty name",
-                        v->full_name().c_str(), v->number());
-                TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co);
-                NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
-                Ranges.push_back(TBase::ParseRanges(co));
-                Integral.push_back(co.GetIntegral());
-                LeaderOnly.push_back(co.GetLeaderOnly());
-            }
-        }
-        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        for (size_t i = TxOffset; i < Size; ++i) {
-            const TString& s = NamesStrings[i];
-            Names.push_back(s.empty() ? nullptr : s.c_str());
-        }
-
-        // Parse protobuf options for enums itself
-        TxGlobalRanges = TBase::ParseRanges(txDesc->options().GetExtension(GlobalCounterOpts));
-    }
-
-    virtual ~TParsedOpts()
+        : TParsedOptsBase(AppCountersDesc(), TxCountersDesc(), TxTypesDesc())
     {}
-
-    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
-    {
-        Y_ABORT_UNLESS(idx < Size);
-        if (!Ranges[idx].empty()) {
-            return Ranges[idx];
-        } else {
-            if (idx < TxOffset) {
-                if (!AppGlobalRanges.empty())
-                    return AppGlobalRanges;
-            } else if (!TxGlobalRanges.empty()) {
-                return TxGlobalRanges;
-            }
-        }
-        if (idx < TxOffset) {
-            Y_ABORT("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
-        } else {
-            size_t idx2 = (idx - TxOffset) % TxCountersSize;
-            Y_ABORT("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str());
-        }
-    }
 };
 
 

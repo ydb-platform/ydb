@@ -61,6 +61,16 @@ void TCreateMessageArg::OutputProtobufEnum(IOutputStream& s, int enumValue, cons
     }
 }
 
+void TCreateMessageArg::AppendSubMessage(TKeyName&& name, const TStructuredMessage& message) {
+    TCreateMessageGuard::GetBuildMessage().AppendSubMessage(std::move(name), message);
+}
+
+void TCreateMessageArg::AppendOutput(TKeyName&& name, TOutputFunc output, const void* value) {
+    TStringStream stream;
+    output(stream, value);
+    TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
+}
+
 TCreateMessageArg::TCreateMessageArg(const TStructuredMessage& message) {
     TCreateMessageGuard::GetBuildMessage().AppendMessage(message);
 }

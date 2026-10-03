@@ -58,6 +58,40 @@ public:
     bool EnableSQSMigrationFinished_;
 };
 
+// Type-independent parts of TActionActor, defined in action.cpp.
+
+// References to the TActionActor fields filled from the request's auth information.
+struct TActionAuthFields {
+    TString& SecurityToken;
+    TString& UserName;
+    TString& FolderId;
+    TString& UserSID;
+    TString& MaskedToken;
+    TString& AuthType;
+    TString& SourceAddress;
+};
+
+// Fills auth fields from the set request of sourceSqsRequest and sets requestId
+// on the matching sub-response of response. Aborts if no request is set.
+void FillAuthFromSqsRequest(const NKikimrClient::TSqsRequest& sourceSqsRequest,
+                            NKikimrClient::TSqsResponse& response,
+                            const TString& requestId,
+                            const TActionAuthFields& auth);
+
+// Writes audit log entries for the response of a schema modifying request.
+void AuditLogSqsResponse(const NKikimrClient::TSqsResponse& response,
+                         const TString& requestId,
+                         const TString& userSID,
+                         const TString& userName,
+                         const TString& queueName,
+                         EAction action);
+
+// Fills the per-action part of topic metrics. Returns false if the action has no topic metrics.
+bool FillTopicSqsActionMetrics(EAction action, size_t errors, TDuration duration, TDuration workingDuration,
+                               NKikimrPQ::TEvTopicSqsActionMetrics& metrics);
+
+size_t CalculateSqsPathDepth(const TString& path);
+
 template <typename TDerived>
 class TActionActor
     : public TActorBootstrapped<TDerived>
@@ -144,14 +178,15 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext&) {
-        #define SQS_REQUEST_CASE(action)                                        \
-            const auto& request = SourceSqsRequest_.Y_CAT(Get, action)();       \
-            auto response = Response_.Y_CAT(Mutable, action)();                 \
-            FillAuthInformation(request);                                       \
-            response->SetRequestId(RequestId_);
-
-        SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false));
-        #undef SQS_REQUEST_CASE
+        FillAuthFromSqsRequest(SourceSqsRequest_, Response_, RequestId_, TActionAuthFields{
+            .SecurityToken = SecurityToken_,
+            .UserName = UserName_,
+            .FolderId = FolderId_,
+            .UserSID = UserSID_,
+            .MaskedToken = MaskedToken_,
+            .AuthType = AuthType_,
+            .SourceAddress = SourceAddress_,
+        });
 
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
         StartTs_ = TActivationContext::Now();
@@ -325,78 +360,7 @@ protected:
         }
 
         NKikimrPQ::TEvTopicSqsActionMetrics metrics;
-        const ui32 errorsCount = static_cast<ui32>(errors);
-        const ui64 durationMs = duration.MilliSeconds();
-        const ui64 workingDurationMs = workingDuration.MilliSeconds();
-
-        auto fillProxyAction = [&](NKikimrPQ::TEvTopicSqsActionMetrics::TTopicSqsProxyActionMetrics* action) {
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-        };
-
-        switch (Action_) {
-        case EAction::ChangeMessageVisibility:
-            fillProxyAction(metrics.MutableChangeMessageVisibility());
-            break;
-        case EAction::ChangeMessageVisibilityBatch:
-            fillProxyAction(metrics.MutableChangeMessageVisibilityBatch());
-            break;
-        case EAction::DeleteMessage: {
-            auto* action = metrics.MutableDeleteMessage();
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-            break;
-        }
-        case EAction::DeleteMessageBatch: {
-            auto* action = metrics.MutableDeleteMessageBatch();
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-            break;
-        }
-        case EAction::GetQueueAttributes:
-            fillProxyAction(metrics.MutableGetQueueAttributes());
-            break;
-        case EAction::GetQueueUrl:
-            fillProxyAction(metrics.MutableGetQueueUrl());
-            break;
-        case EAction::PurgeQueue:
-            fillProxyAction(metrics.MutablePurgeQueue());
-            break;
-        case EAction::ReceiveMessage: {
-            auto* action = metrics.MutableReceiveMessage();
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-            action->SetWorkingDurationMs(workingDurationMs);
-            break;
-        }
-        case EAction::SendMessage: {
-            auto* action = metrics.MutableSendMessage();
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-            break;
-        }
-        case EAction::SendMessageBatch: {
-            auto* action = metrics.MutableSendMessageBatch();
-            action->SetErrorsCount(errorsCount);
-            action->SetDurationMs(durationMs);
-            break;
-        }
-        case EAction::SetQueueAttributes:
-            fillProxyAction(metrics.MutableSetQueueAttributes());
-            break;
-        case EAction::ListDeadLetterSourceQueues:
-            fillProxyAction(metrics.MutableListDeadLetterSourceQueues());
-            break;
-        case EAction::ListQueueTags:
-            fillProxyAction(metrics.MutableListQueueTags());
-            break;
-        case EAction::TagQueue:
-            fillProxyAction(metrics.MutableTagQueue());
-            break;
-        case EAction::UntagQueue:
-            fillProxyAction(metrics.MutableUntagQueue());
-            break;
-        default:
+        if (!FillTopicSqsActionMetrics(Action_, errors, duration, workingDuration, metrics)) {
             return;
         }
 
@@ -474,89 +438,11 @@ protected:
 
     void AuditLog() {
         if (IsModifySchemaRequest(SourceSqsRequest_)) {
-            #define RESPONSE_CASE(action)                                       \
-                case NKikimrClient::TSqsResponse::Y_CAT(k, action): {           \
-                    AuditLogEntry(Response_.Y_CAT(Get, action)(), RequestId_);  \
-                    break;                                                      \
-                }
-
-            #define RESPONSE_BATCH_CASE(action)                                                 \
-                case NKikimrClient::TSqsResponse::Y_CAT(k, action): {                           \
-                    const auto& resp = Response_.Y_CAT(Get, action)();                          \
-                    const TError* globalError = resp.HasError() ? &resp.GetError() : nullptr;   \
-                    for (size_t i = 0; i < resp.EntriesSize(); ++i) {                           \
-                        TString reqId = TStringBuilder() << RequestId_ << "_" << i;             \
-                        AuditLogEntry(resp.GetEntries()[i], reqId, globalError);                \
-                    }                                                                           \
-                    break;                                                                      \
-                }
-
-            switch (Response_.GetResponseCase()) {
-                RESPONSE_CASE(ChangeMessageVisibility)
-                RESPONSE_BATCH_CASE(ChangeMessageVisibilityBatch)
-                RESPONSE_CASE(CreateQueue)
-                RESPONSE_CASE(CreateUser)
-                RESPONSE_CASE(DeleteMessage)
-                RESPONSE_BATCH_CASE(DeleteMessageBatch)
-                RESPONSE_CASE(DeleteQueue)
-                RESPONSE_CASE(DeleteUser)
-                RESPONSE_CASE(ListPermissions)
-                RESPONSE_CASE(GetQueueAttributes)
-                RESPONSE_CASE(GetQueueUrl)
-                RESPONSE_CASE(ListQueues)
-                RESPONSE_CASE(ListUsers)
-                RESPONSE_CASE(ModifyPermissions)
-                RESPONSE_CASE(PurgeQueue)
-                RESPONSE_CASE(ReceiveMessage)
-                RESPONSE_CASE(SendMessage)
-                RESPONSE_BATCH_CASE(SendMessageBatch)
-                RESPONSE_CASE(SetQueueAttributes)
-                RESPONSE_CASE(ListDeadLetterSourceQueues)
-                RESPONSE_CASE(CountQueues)
-                RESPONSE_CASE(ListQueueTags)
-                RESPONSE_CASE(TagQueue)
-                RESPONSE_CASE(UntagQueue)
-            case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
-            case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
-            case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
-                // DeleteQueueBatch, GetQueueAttributesBatch, PurgeQueueBatch - generates not batch queries inside
-            case NKikimrClient::TSqsResponse::RESPONSE_NOT_SET:
-                break;
-            }
-
-            #undef RESPONSE_BATCH_CASE
-            #undef RESPONSE_CASE
+            AuditLogSqsResponse(Response_, RequestId_, UserSID_, UserName_, GetQueueName(), Action_);
         }
-    }
-
-private:
-    void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
-        static const TString EmptyValue = "{none}";
-        AUDIT_LOG(
-            AUDIT_PART("component", "ymq")
-            AUDIT_PART("request_id", requestId)
-            AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
-            AUDIT_PART("account", UserName_)
-            AUDIT_PART("cloud_id", UserName_, Cfg().GetYandexCloudMode())
-            AUDIT_PART("folder_id", Response_.GetFolderId(), Cfg().GetYandexCloudMode())
-            AUDIT_PART("resource_id", GetQueueName(), Cfg().GetYandexCloudMode())
-            AUDIT_PART("operation", ActionToCloudConvMethod(Action_))
-            AUDIT_PART("queue", GetQueueName())
-            AUDIT_PART("status", error ? "ERROR": "SUCCESS")
-            AUDIT_PART("reason", error->GetMessage(), error)
-            AUDIT_PART("detailed_status", error->GetErrorCode(), error)
-        );
     }
 
 protected:
-    template <class TResponse>
-    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
-        if (!error && response.HasError()) {
-            error = &response.GetError();
-        }
-        AuditLogEntryImpl(requestId, error);
-    }
-
     void PassAway() {
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             if (TString queueName = GetQueueName()) {
@@ -630,15 +516,7 @@ protected:
     }
 
     size_t CalculatePathDepth(const TString& path) const {
-        const TString sanitizedResource = TFsPath(path).Fix().GetPath();
-        size_t count = 0;
-        for (size_t i = 0, sz = sanitizedResource.size(); i < sz; ++i) {
-            if (sanitizedResource[i] == '/') {
-                ++count;
-            }
-        }
-
-        return count;
+        return CalculateSqsPathDepth(path);
     }
 
     bool IsCloud() const {
@@ -712,31 +590,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvClearance, HandleQuota);
             hFunc(TEvWakeup, HandleWakeup);
-        }
-    }
-
-    template<class TReq>
-    void FillAuthInformation(const TReq& request) {
-        SecurityToken_ = ExtractSecurityToken(request);
-        UserName_ = request.GetAuth().GetUserName();
-        FolderId_ = request.GetAuth().GetFolderId();
-        UserSID_ = request.GetAuth().GetUserSID();
-        MaskedToken_ = request.GetAuth().GetMaskedToken();
-        AuthType_ = request.GetAuth().GetAuthType();
-
-        if (request.GetAuth().HasSourceAddress()) {
-            SourceAddress_ = request.GetAuth().GetSourceAddress();
-        } else if constexpr (requires { request.GetSourceAddress(); }) {
-            SourceAddress_ = request.GetSourceAddress();
-        } else {
-            SourceAddress_.clear();
-        }
-
-        if (IsCloud() && !FolderId_) {
-            auto items = ParseCloudSecurityToken(SecurityToken_);
-            UserName_ = std::get<0>(items);
-            FolderId_ = std::get<1>(items);
-            UserSID_ = std::get<2>(items);
         }
     }
 

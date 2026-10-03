@@ -127,6 +127,33 @@ DO BEGIN
 END DO
 ```
 
+### Reading with a Consumer {#example-consumer}
+
+An example of reading from a topic with a [consumer](../../../concepts/datamodel/topic.md#consumer) attached via the `PRAGMA pq.Consumer` pragma. For more about consumers, see the [Using a Consumer](#consumer-usage) section.
+
+```yql
+CREATE STREAMING QUERY my_streaming_query AS
+DO BEGIN
+
+PRAGMA pq.Consumer = "my_consumer";
+
+UPSERT INTO output_table
+SELECT
+    Id,
+    Name
+FROM
+    input_topic -- or external topic ext_source.input_topic
+WITH (
+    FORMAT = json_each_row,  -- Input data format
+    SCHEMA = (               -- Input data schema
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+);
+
+END DO
+```
+
 
 ### Running in a Resource Pool {#example-resource-pool}
 

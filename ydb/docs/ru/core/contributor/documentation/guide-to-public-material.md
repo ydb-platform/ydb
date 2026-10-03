@@ -29,7 +29,12 @@
 - `@[youtube](https://youtu.be/Dy0VtzQatag?)`
 - `@[rutube](6840af8411a8be4e7da9f82cb4a25103)`
 
-- `@[](https://runtime.strm.yandex.ru/player/episode/vplekzpruxb4htfcgqwm?autoplay=0&mute=1&color=white&rel=0)`
+-
+
+  ```text
+  @[](https://runtime.strm.yandex.ru/player/episode/vplekzpruxb4htfcgqwm
+  ?autoplay=0&mute=1&color=white&rel=0)
+  ```
 
 - `@[vk](https://vk.com/video_ext.php?oid=-34475478&id=456239479&hd=2&autoplay=1)`
 
@@ -39,7 +44,13 @@
 
 С Yandex достаточно скопировать ссылку на видео, а название хостинга в квадратных скобках указывать необязательно.
 
-При работе со ссылками VK-видео необходимо учитывать, что воспроизводимый формат превью получается только при формате ссылки вида `https://vk.com/video_ext.php?oid=-84793390&id=456239888&hd=2&autoplay=0`
+При работе со ссылками VK-видео необходимо учитывать, что воспроизводимый формат превью получается только при формате ссылки вида:
+
+```text
+https://vk.com/video_ext.php
+?oid=-84793390&id=456239888&hd=2&autoplay=0
+```
+
 Тогда как при копировании ссылки на видео вк, формат будет выглядеть так:
 `https://vkvideo.ru/video-84793390_456239888`.
 

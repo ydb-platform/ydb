@@ -2,6 +2,7 @@
 #include "log.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/path.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -1435,6 +1436,9 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            Database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, Database);
+        }
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database) {

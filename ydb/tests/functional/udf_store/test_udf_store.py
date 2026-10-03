@@ -1023,7 +1023,7 @@ def test_ydb_udf_administrator_access(database_admin):
             assert "No permission to connect to the database" in str(responses[0].operation.issues)
 
             for user, allowed in [("root@builtin", True), ("owner@builtin", database_admin), ("ordinary@builtin", False)]:
-                metadata = (("x-ydb-database", database), ("x-ydb-auth-ticket", user))
+                metadata = (("x-ydb-database", "test" if database_admin else database), ("x-ydb-auth-ticket", user))
                 expected = StatusIds.SUCCESS if allowed else StatusIds.UNAUTHORIZED
                 name = user.split("@")[0]
                 manifest = json.dumps(dict(module_name=name, module_type="library", module_kind="wasm"))
@@ -1666,7 +1666,8 @@ def _make_cluster(
     )
     if database_admin is not None:
         configurator.yaml_config.setdefault("feature_flags", {}).update(
-            enable_database_admin=database_admin, check_database_access_permission=True)
+            enable_database_admin=database_admin, check_database_access_permission=True,
+            enable_relative_paths=database_admin)
         # An empty registration SID list exempts every authenticated caller
         # from the database connect check. Restrict it to the bootstrap token.
         configurator.yaml_config["domains_config"]["security_config"].update(

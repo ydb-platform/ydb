@@ -42,9 +42,9 @@ namespace NKikimr {
                         auto* table = out.Add();
                         table->SetTablePath(i ? TablePath + ToString(i) : TablePath);
                         table->SetLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
-                        auto* counters = table->MutableTableCounters()->MutableAppCounters();
-                        counters->AddSimple(0);
-                        counters->AddSimple(PackCount);
+                        auto* metrics = table->MutableTableMetrics();
+                        metrics->AddSimple(0);
+                        metrics->AddSimple(PackCount);
                         for (int j = 0; j < Leaves; ++j) {
                             table->AddLeaves()->SetTabletId(j);
                         }
@@ -208,7 +208,7 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackCount, 2);
                 UNIT_ASSERT_VALUES_EQUAL(followerStub->PackCount, 2);
                 for (const auto& detailed : req3.GetDetailedCounters()) {
-                    UNIT_ASSERT_VALUES_EQUAL(detailed.GetTables(0).GetTableCounters().GetAppCounters().GetSimple(1), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(detailed.GetTables(0).GetTableMetrics().GetSimple(1), 2);
                 }
             }
 
@@ -290,7 +290,7 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(
-                    req.GetDetailedCounters(0).GetTables(0).GetTableCounters().GetAppCounters().GetSimple(1), 2);
+                    req.GetDetailedCounters(0).GetTables(0).GetTableMetrics().GetSimple(1), 2);
             }
 
             Y_UNIT_TEST(ShrunkDetailedPayloadReleasedLater) {

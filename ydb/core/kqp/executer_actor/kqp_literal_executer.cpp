@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
@@ -204,6 +205,7 @@ public:
         protoTask.SetStageId(task.StageId.StageId);
         protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
+        KqpRuntimeSettings.ApplyTo(*protoTask.MutableProgram()->MutableRuntimeSettings());
 
         std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
@@ -442,6 +444,7 @@ private:
     }
 
 private:
+    TKqpRuntimeSettings KqpRuntimeSettings;
     IKqpGateway::TExecPhysicalRequest Request;
     TKqpRequestCounters::TPtr Counters;
     TInstant StartTime;

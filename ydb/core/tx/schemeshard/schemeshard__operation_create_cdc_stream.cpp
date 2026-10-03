@@ -703,8 +703,6 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
             total = maxParts;
         }
         minParts = total;
-    } else if (total < minParts) {
-        total = minParts;
     } else if (total > maxParts) {
         total = maxParts;
     }

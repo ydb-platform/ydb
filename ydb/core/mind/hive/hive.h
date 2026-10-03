@@ -270,6 +270,12 @@ struct IReassignCallback {
     virtual ~IReassignCallback() = default;
 };
 
+struct IMoveDataCallback {
+    virtual IEventBase* MakeEvent(bool success, ui64 tabletsDone) = 0;
+
+    virtual ~IMoveDataCallback() = default;
+};
+
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues);

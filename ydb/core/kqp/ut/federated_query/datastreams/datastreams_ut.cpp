@@ -2026,7 +2026,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") GROUP BY Data;
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Streaming aggregation output must be written to a table"
         );
 
         // Distinct agg
@@ -2034,7 +2034,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SELECT DISTINCT Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Streaming aggregation output must be written to a table"
         );
 
         // Agg by sessions
@@ -2043,7 +2043,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 GROUP BY Data, SessionWindow(CAST(Data AS Timestamp), Interval("PT1S"));
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Session windows are not supported for streaming aggregation"
         );
 
         //// Window functions ////

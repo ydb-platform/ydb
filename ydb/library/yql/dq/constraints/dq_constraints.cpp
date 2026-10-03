@@ -286,12 +286,38 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx, bool
 }
 
 TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx, bool processSortConstraint) {
-    Y_UNUSED(ctx);
     const auto cn = TDqConnection(input);
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(cn.Output().Ref(), input);
+
+    TCopyConstraint<TEmptyConstraintNode, TStreamingConstraintNode>::Do(cn.Output().Ref(), input);
+
+    if (const auto lookup = cn.Maybe<TDqCnStreamLookup>()) {
+        const auto multiMatches = lookup.Cast().IsMultiMatches();
+        if (!multiMatches || !FromString<bool>(multiMatches.Cast().Value())) {
+            const auto label = lookup.Cast().LeftLabel().Maybe<TCoAtom>();
+            const auto rename = [&](const TPartOfConstraintBase::TPathType& path) {
+                auto out = path;
+                if (!out.empty() && label && !label.Cast().Value().empty()) {
+                    out.front() = ctx.AppendString(TStringBuilder() << label.Cast().Value() << '.' << out.front());
+                }
+                return std::vector<TPartOfConstraintBase::TPathType>{std::move(out)};
+            };
+
+            if (const auto* unique = cn.Output().Ref().GetConstraint<TUniqueConstraintNode>()) {
+                input->AddConstraint(unique->RenameFields(ctx, rename));
+            }
+
+            if (const auto* distinct = cn.Output().Ref().GetConstraint<TDistinctConstraintNode>()) {
+                input->AddConstraint(distinct->RenameFields(ctx, rename));
+            }
+        }
+    } else {
+        TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode>::Do(cn.Output().Ref(), input);
+    }
+
     if (processSortConstraint && TDqCnUnionAll::Match(input.Get()) && cn.Output().Ref().GetConstraint<TDqConsolidateConstraintNode>()) {
         TCopyConstraint<TSortedConstraintNode>::Do(cn.Output().Ref(), input);
     }
+
     return TStatus::Ok;
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 // Shared harness of the DQ Channels 2.0 tests: producer / consumer worker actors driving IChannelBuffer
-// directly, a two node TKikimrRunner whose nodes talk over the interconnect mock of the test runtime, and
+// directly, a two node TKikimrRunner whose nodes talk over the real interconnect, and
 // direct access to the node sessions of both channel services.
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>

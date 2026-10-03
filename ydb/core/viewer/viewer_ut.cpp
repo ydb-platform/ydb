@@ -240,6 +240,75 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "Data has merged" << Endl;
     }
 
+    void CheckViewerLocationResponded(bool merge) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId whiteboardNodeId = runtime.GetNodeId(0);
+        const TNodeId emptyResponseNodeId = runtime.GetNodeId(1);
+        const TNodeId timeoutNodeId = runtime.GetNodeId(2);
+        bool droppedResponse = false;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
+                if (ev->Cookie == timeoutNodeId) {
+                    droppedResponse = true;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
+                record.ClearPDiskStateInfo();
+                if (ev->Cookie == whiteboardNodeId) {
+                    auto* pdisk = record.AddPDiskStateInfo();
+                    pdisk->SetPDiskId(1);
+                    pdisk->SetPath("/dev/whiteboard");
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto request = MakeHolder<TEvViewer::TEvViewerRequest>();
+        request->Record.SetTimeout(100);
+        request->Record.MutablePDiskRequest();
+        for (TNodeId nodeId : {whiteboardNodeId, emptyResponseNodeId, timeoutNodeId}) {
+            request->Record.MutableLocation()->AddNodeId(nodeId);
+        }
+        if (merge) {
+            request->Record.SetMergeFields("NodeId,PDiskId");
+        }
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEvent<TEvViewer::TEvViewerResponse>(handle);
+
+        UNIT_ASSERT(droppedResponse);
+        const auto& locationResponded = response->Record.GetLocationResponded();
+        UNIT_ASSERT_VALUES_EQUAL(locationResponded.NodeIdSize(), 2);
+        const std::unordered_set<TNodeId> responded(locationResponded.GetNodeId().begin(),
+                                                  locationResponded.GetNodeId().end());
+        UNIT_ASSERT(responded.contains(whiteboardNodeId));
+        UNIT_ASSERT(responded.contains(emptyResponseNodeId));
+        const auto& pdisks = response->Record.GetPDiskResponse();
+        UNIT_ASSERT_VALUES_EQUAL(pdisks.PDiskStateInfoSize(), 1);
+        const auto& pdisk = pdisks.GetPDiskStateInfo(0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetNodeId(), whiteboardNodeId);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetPDiskId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetPath(), "/dev/whiteboard");
+    }
+
+    Y_UNIT_TEST(ViewerLocationRespondedWithoutMerge) {
+        CheckViewerLocationResponded(false);
+    }
+
+    Y_UNIT_TEST(ViewerLocationRespondedWithMerge) {
+        CheckViewerLocationResponded(true);
+    }
+
     class TMonPage: public IMonPage {
     public:
         TMonPage(const TString &path, const TString &title)

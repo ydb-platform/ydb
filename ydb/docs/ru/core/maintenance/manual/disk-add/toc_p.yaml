@@ -1,0 +1,8 @@
+items:
+- name: Подготовка к добавлению диска
+  href: disk-add-preparation.md
+- name: Добавление диска с использованием конфигурации V1
+  href: disk-add-configuration-v1.md
+- name: Добавление диска с использованием конфигурации V2
+  href: disk-add-configuration-v2.md
+  

@@ -687,6 +687,8 @@ public:
                         .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
+                        // a channel with checkpoints may carry them after the finish
+                        .FinishOnPop = inputChannelDesc.GetCheckpointingMode() == NDqProto::CHECKPOINTING_MODE_DISABLED,
                     };
 
                     IDqInputChannel::TPtr inputChannel;

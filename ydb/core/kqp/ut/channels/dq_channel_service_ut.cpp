@@ -187,6 +187,8 @@ struct TWorkerSettings {
     bool FinishOnStep = false;
     // bound to the output buffer of the producer, which increments it when it becomes finished
     std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
+    // the consumer lets the buffer go as soon as it pops the finish, as an input finished on pop does
+    bool LeaveAfterFinishChunk = false;
 };
 
 struct TFailureSettings {
@@ -370,7 +372,7 @@ public:
             }
             MessageIndex++;
         }
-        if (Buffer->IsFinished()) {
+        if (Buffer->IsFinished() || (Settings.LeaveAfterFinishChunk && data.Finished)) {
             LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
             // the finish itself is popped as one more message
             auto error = Settings.CheckOrder && MessageIndex != Settings.MessageCount + 1;
@@ -2219,6 +2221,44 @@ struct TOrderTest : public TLoadTest {
     }
 };
 
+// An input finished on the pop of the finish lets its buffer go before the producer has confirmed the finish. The
+// descriptor stays with the session until the confirmation comes, for the final update to reach the producer, and
+// goes then: the producers finish and nothing is left behind.
+struct TLeaveAfterFinishTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        const ui32 channelCount = 20;
+        ProducerSettings = TWorkerSettings{ .MessageCount = 10, .MinMessageSize = 10, .MaxMessageSize = 1000, .CheckOrder = true };
+        ConsumerSettings = ProducerSettings;
+        ConsumerSettings.LeaveAfterFinishChunk = true;
+        for (ui32 channelId = 1; channelId <= channelCount; ++channelId) {
+            StartChannel(channelId, true);
+        }
+        for (ui32 i = 0; i < channelCount; ++i) {
+            WaitChannel("leave after the finish chunk");
+        }
+
+        auto receiver = FindNodeState(Service1, Runtime->GetNodeId(0));
+        auto sender = FindNodeState(Service0, Runtime->GetNodeId(1));
+        UNIT_ASSERT_C(receiver && sender, "node sessions not found");
+        // a confirmation which found no descriptor would not be acked and stay in the queue of the sender
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) == 0; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the queue of the sender holds " << GetQueueSize(sender) << " message(s)");
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 0 && GetCounter(Service1, "InputBuffer/Count") == 0; },
+            TDuration::Seconds(10)), TStringBuilder() << "input descriptors left: " << GetInputCount(receiver)
+            << ", InputBuffer/Count=" << GetCounter(Service1, "InputBuffer/Count"));
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -2533,6 +2573,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(FreeQuotaOutsideSessionLock) {
         TFreeQuotaTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(InputLetGoBeforeFinishConfirmed2n) {
+        TLeaveAfterFinishTest test;
 
         test.Local = false;
 

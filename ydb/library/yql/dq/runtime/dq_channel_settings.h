@@ -30,6 +30,12 @@ struct TDqChannelSettings {
     ui64 MaxStoredBytes = 8_MB;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
 
+    // Input channels settings
+
+    // nothing but the finish comes after the finish, no checkpoints: the input is finished as soon as it pops the finish,
+    // without waiting for the confirmation of the producer (channels 2.0)
+    bool FinishOnPop = false;
+
     // Output channels settings (may changed in future)
 
     ui64 MaxChunkBytes = 2_MB;

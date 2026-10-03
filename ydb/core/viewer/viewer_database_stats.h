@@ -229,6 +229,8 @@ public:
             }
             if (PDiskStateResponse.count(nodeId) == 0) {
                 auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
+                request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
                 PDiskStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
             if (VDiskStateResponse.count(nodeId) == 0) {

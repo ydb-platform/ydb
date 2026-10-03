@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(101), 100);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(102), 200);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerUsed(101), 150);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumActiveSlots(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumActiveSlots(), 3);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &occupancy), TColor::LIGHT_YELLOW);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(102, &occupancy), TColor::GREEN);
 

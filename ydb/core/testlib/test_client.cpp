@@ -1670,7 +1670,8 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
-        {
+        // the runtime has one: replacing it races with the interconnect sessions, a lookup may then find none
+        if (!Runtime->GetLocalServiceId(MakePollerActorId(), nodeIdx)) {
             IActor* actor = CreatePollerActor();
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);

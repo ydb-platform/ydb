@@ -52,7 +52,7 @@ Reads are performed from a consistent data snapshot committed before the first r
 
 **Features.** Low latency and high throughput due to reading from replicas. The read replica is usually selected in the same availability zone, but the exact location is not guaranteed.
 
-**Guarantees.** Data consistency at the key level within **one** ``SELECT`` expression; between **different** ``SELECT`` expressions in the same transaction, consistency is **not** guaranteed.
+**Guarantees.** Data consistency at the key level within **one** `SELECT` expression; between **different** `SELECT` expressions in the same transaction, consistency is **not** guaranteed.
 
 **Limitations.** There is no single snapshot for the entire transaction; there may be a delay relative to the data on the leader (the data may not be the freshest). Using replicas for reads is possible only if all read rows are in one shard. If the read spans multiple shards, the read will be performed from leaders with a snapshot taken similarly to Snapshot Read-Only. Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) in this mode is not supported (see the warning below). Interactive transactions are not supported. For additional limitations and nuances on query types, see the SDK documentation for the selected language.
 
@@ -93,13 +93,13 @@ In this mode, {{ ydb-short-name }} determines based on the query whether to exec
 #### Behavior for different types of statements
 
 - **[Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL) statements**
-  DDL statements (such as [`CREATE` `TABLE`](../../yql/reference/syntax/create_table/index.md), [`DROP` `TABLE`](../../yql/reference/syntax/drop_table.md), etc.) are executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
+  DDL statements (such as [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md), [`DROP TABLE`](../../yql/reference/syntax/drop_table.md), etc.) are executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
 
 - **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) statements**
   DML statements (such as [`UPSERT`](../../yql/reference/syntax/upsert_into.md), [`SELECT`](../../yql/reference/syntax/select/index.md), [`UPDATE`](../../yql/reference/syntax/update.md), etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On successful execution, changes are committed, and if an error occurs, they are rolled back.
 
 - **Batch modification statements**
-  Batch modification statements (such as [`BATCH` `UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH` `DELETE` FROM](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can consist only of one batch modification statement. If an error occurs, the statement's changes are not rolled back.
+  Batch modification statements (such as [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH DELETE FROM`](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can consist only of one batch modification statement. If an error occurs, the statement's changes are not rolled back.
 
 #### Summary table
 
@@ -112,7 +112,7 @@ In this mode, {{ ydb-short-name }} determines based on the query whether to exec
 To explicitly set a transaction mode, use the appropriate settings at each entry point:
 
 * [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — select a transaction mode in the execution settings on the **Query** tab.
-* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for the subcommand [`table query execute`](../../reference/ydb-cli/table-query-execute.md) for queries of type `data` set the parameter [``--tx-mode``](../../reference/ydb-cli/table-query-execute.md#options) (default `serializable-rw`, which corresponds to *Serializable* mode).
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for the subcommand [`table query execute`](../../reference/ydb-cli/table-query-execute.md) for queries of type `data` set the parameter [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) (default `serializable-rw`, which corresponds to *Serializable* mode).
 * [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — see [setting the mode in the {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 
 ## YQL language {#language-yql}
@@ -121,9 +121,9 @@ Implemented YQL constructs can be divided into two classes: [data definition lan
 
 For more information about supported YQL constructs, see the [YQL documentation](../../yql/reference/index.md).
 
-Below are the features and limitations of YQL support in {{ ydb-short-name }}that are worth paying attention to:
+Below are the features and limitations of YQL support in {{ ydb-short-name }} that are worth paying attention to:
 
-* Multistatement transactions are allowed, that is, transactions consisting of a sequence of YQL expressions. During transaction execution, interaction with the client program is allowed; in other words, client interaction with the database may look like this: `начать транзакцию и выполнить `SELECT`; проанализировать результаты `SELECT` на клиенте; ...; выполнить `UPDATE` и коммит транзакции`. Each of the queries within a transaction can also contain multiple YQL expressions. It is worth noting that if the transaction body is fully formed before accessing the database, the transaction can be processed more efficiently;
+* Multistatement transactions are allowed, that is, transactions consisting of a sequence of YQL expressions. During transaction execution, interaction with the client program is allowed; in other words, client interaction with the database may look like this: `begin a transaction and execute SELECT; analyze the SELECT results on the client; ...; execute UPDATE and commit the transaction`. Each of the queries within a transaction can also contain multiple YQL expressions. It is worth noting that if the transaction body is fully formed before accessing the database, the transaction can be processed more efficiently;
 * In {{ ydb-short-name }} it is not supported to mix DDL and DML queries in one transaction. The traditional concept of an [ACID](https://en.wikipedia.org/wiki/ACID) transaction applies specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, that is, repeatable in case of an error. If you need to perform an action with a schema, each action will be transactional, but a set of actions will not;
 * Any errors invalidate the entire transaction as a whole, not an individual query, so after a transaction completes with an error reporting a [temporary failure](../../reference/ydb-sdk/error_handling.md), the transaction must be retried from the very beginning;
 * Reads in a transaction see all data changes that were made earlier in the same transaction;

@@ -2531,6 +2531,48 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
 }
 
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+
+    auto it = Topics.find(msg->Topic);
+    if (it == Topics.end()) {
+        return;
+    }
+
+    TPartitionActorInfo* partitionInfo = nullptr;
+    for (auto& [_, p] : Partitions) {
+        if (p.Partition.Partition == msg->PartitionId) {
+            partitionInfo = &p;
+            break;
+        }
+    }
+
+    if (!partitionInfo) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+            << "Inconsistent state #05", ctx);
+    }
+
+    partitionInfo->EndOffset = msg->EndOffset;
+    partitionInfo->ReadingFinished = true;
+
+    // The partition is still alive: the client's read window (max_offset) is
+    // exhausted, not the partition itself. The read balancer is deliberately
+    // NOT notified - it treats Finish as a closed-by-split/merge partition.
+    // The partition stays locked to this session until the session is closed;
+    // the balancer releases it on session disconnect.
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto* r = result.mutable_end_partition_session();
+        r->set_partition_session_id(partitionInfo->Partition.AssignId);
+
+        LOG_I("Sending to client end partition stream event (max_offset reached)");
+        SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+    }
+}
+
 
 // explicit instantation
 template struct TFormedReadResponse<PersQueue::V1::MigrationStreamingReadServerMessage>;

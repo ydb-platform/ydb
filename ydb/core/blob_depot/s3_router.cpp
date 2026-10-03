@@ -13,7 +13,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-#include <util/digest/city.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
@@ -265,7 +265,7 @@ namespace NKikimr::NBlobDepot {
             auto root = GetServiceCounters(AppData()->Counters, "tablets")
                 ->GetSubgroup("subsystem", "blob_depot")
                 ->GetSubgroup("module_id", "s3_router");
-            auto group = root->GetSubgroup("tablet", ::ToString(TabletId));
+            auto group = root->GetSubgroup("tablet", ToString(TabletId));
 
             Mon.Balancer = MakeRouteMonCounters(group->GetSubgroup("route", "Balancer"));
             Mon.NonBalancer = MakeRouteMonCounters(group->GetSubgroup("route", "NonBalancer"));
@@ -285,14 +285,14 @@ namespace NKikimr::NBlobDepot {
 
             auto hostBuckets = root->GetSubgroup("component", "BalancerResolveByHostBucket");
             for (size_t i = 0; i < Mon.BalancerHostBuckets.size(); ++i) {
-                auto bucket = hostBuckets->GetSubgroup("host_bucket", ::ToString(i));
+                auto bucket = hostBuckets->GetSubgroup("host_bucket", ToString(i));
                 Mon.BalancerHostBuckets[i].Selections = bucket->GetCounter("Selections", true);
                 Mon.BalancerHostBuckets[i].Latency = bucket->GetHistogram("LatencyMs", MakeLatencyHistogram());
             }
         }
 
         void RecordBalancerHostSelection(TStringBuf host, TDuration latency) {
-            const size_t bucket = CityHash64(host.data(), host.size()) % Mon.BalancerHostBuckets.size();
+            const size_t bucket = THash<TStringBuf>{}(host) % Mon.BalancerHostBuckets.size();
             IncCounter(Mon.BalancerHostBuckets[bucket].Selections);
             CollectHistogram(Mon.BalancerHostBuckets[bucket].Latency, latency.MilliSeconds());
         }

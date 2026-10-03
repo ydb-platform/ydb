@@ -19,6 +19,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/network/sock.h>
@@ -342,33 +343,21 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         auto hostBuckets = module->FindSubgroup("component", "BalancerResolveByHostBucket");
         UNIT_ASSERT(hostBuckets);
 
-        static constexpr size_t hostBucketCount = 16;
-        auto countSelections = [&] {
-            ui64 selections = 0;
-            for (size_t i = 0; i < hostBucketCount; ++i) {
-                auto bucket = hostBuckets->FindSubgroup("host_bucket", ::ToString(i));
-                UNIT_ASSERT(bucket);
-                auto counter = bucket->FindCounter("Selections");
-                UNIT_ASSERT(counter);
-                selections += *counter;
-            }
+        static constexpr size_t HostBucketCount = 16;
+        const size_t hostBucket = THash<TStringBuf>{}(hostname) % HostBucketCount;
+        auto bucket = hostBuckets->FindSubgroup("host_bucket", ToString(hostBucket));
+        UNIT_ASSERT(bucket);
+        auto selections = bucket->FindCounter("Selections");
+        UNIT_ASSERT(selections);
+        WaitReal(runtime, [&] { return *selections > 0; });
 
-            return selections;
-        };
-
-        WaitReal(runtime, [&] { return countSelections() > 0; });
-
+        auto latency = bucket->FindHistogram("LatencyMs");
+        UNIT_ASSERT(latency);
+        const auto snapshot = latency->Snapshot();
         ui64 latencySamples = 0;
-        for (size_t i = 0; i < hostBucketCount; ++i) {
-            auto bucket = hostBuckets->FindSubgroup("host_bucket", ::ToString(i));
-            auto latency = bucket->FindHistogram("LatencyMs");
-            UNIT_ASSERT(latency);
-            const auto snapshot = latency->Snapshot();
-            for (ui32 j = 0; j < snapshot->Count(); ++j) {
-                latencySamples += snapshot->Value(j);
-            }
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            latencySamples += snapshot->Value(i);
         }
-
         UNIT_ASSERT(latencySamples > 0);
     }
 

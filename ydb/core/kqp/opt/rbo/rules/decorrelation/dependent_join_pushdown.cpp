@@ -17,6 +17,11 @@ bool ColumnsIntersect(const TUnorderedIUs& left, const TUnorderedIUs& right) {
     return false;
 }
 
+// QuickMatch of a rule with the pattern DependentJoin <- kind.
+bool IsDependentJoinOver(const TIntrusivePtr<IOperator>& input, EOperator kind) {
+    return input->Kind == EOperator::DependentJoin && CastOperator<TOpDependentJoin>(*input).GetInput()->Kind == kind;
+}
+
 bool HasOperatorBelow(const TIntrusivePtr<IOperator>& op, EOperator kind) {
     if (op->Kind == kind) {
         return true;
@@ -95,19 +100,58 @@ TIntrusivePtr<TOpDependentJoin> PushIntoCopy(const TIntrusivePtr<IOperator>& pus
     return MakeIntrusive<TOpDependentJoin>(domain, newInput, dependentJoin->Dependencies, dependentJoin->Pos, std::move(domainColumns));
 }
 
+bool IsDeterministic(const TExpression& expression) {
+    static const THashSet<TStringBuf> nondeterministic = {
+        "Random", "RandomNumber", "RandomUuid", "Now",
+        "CurrentUtcDate", "CurrentUtcDatetime", "CurrentUtcTimestamp",
+        "CurrentTzDate", "CurrentTzDatetime", "CurrentTzTimestamp",
+        // Nothing says which UDFs are deterministic.
+        "Udf", "ScriptUdf", "SqlCall",
+    };
+    return !FindNode(expression.GetLambda(), [](const TExprNode::TPtr& node) {
+        return node->IsCallable() && nondeterministic.contains(node->Content());
+    });
+}
+
+bool IsDeterministicAggregation(const TString& function) {
+    static const THashSet<TStringBuf> deterministic = {"count", "sum", "min", "max", "avg", "distinct", "variance_1_1"};
+    return deterministic.contains(function);
+}
+
+// A Replicate gives every consumer the same rows, but a copy is evaluated on its own.
+// So only an operator that returns the same rows for the same input can be copied.
 bool CanCopyForConsumer(const IOperator& op) {
+    for (const auto& expression : op.GetExpressions()) {
+        if (!IsDeterministic(expression)) {
+            return false;
+        }
+    }
+
     switch (op.Kind) {
         case EOperator::Replicate:
         case EOperator::AddDependencies:
         case EOperator::Filter:
         case EOperator::Map:
-        case EOperator::Aggregate:
         case EOperator::UnionAll:
         case EOperator::Join:
             return true;
+        case EOperator::Aggregate:
+            return std::ranges::all_of(CastOperator<TOpAggregate>(op).GetAggregationTraits().Items() | std::views::values,
+                                       [](const TOpAggregationTraits& traits) { return IsDeterministicAggregation(traits.AggFunction); });
+        // Without a total order a limit can take other rows in every copy.
+        case EOperator::Sort:
+            return !CastOperator<TOpSort>(op).LimitCond;
         default:
             return false;
     }
+}
+
+TSortIUs SubstituteSortKeys(const TSortIUs& keys, const TSubstitutions& substitutions) {
+    TSortIUs result;
+    for (const auto& [iu, order] : keys.Items()) {
+        result.Append(Substitute(iu, substitutions), order);
+    }
+    return result;
 }
 
 // A copy of the port's producer for this consumer only: the top operator with
@@ -197,6 +241,9 @@ TIntrusivePtr<IOperator> CopyForConsumer(TOpReplicate& port, TSubstitutions& out
             copy = MakeIntrusive<TOpJoin>(inputs[0], inputs[1], pos, join->JoinKind, std::move(joinKeys), joinFilters);
             break;
         }
+        case EOperator::Sort:
+            copy = MakeIntrusive<TOpSort>(inputs[0], pos, SubstituteSortKeys(CastOperator<TOpSort>(producer)->GetSortElements(), copied));
+            break;
         default:
             Y_ENSURE(false, "Cannot copy " << producer->GetExplainName() << " for a correlated consumer");
     }
@@ -248,6 +295,51 @@ TIntrusivePtr<IOperator> RestoreEmptyGroupCounts(const TIntrusivePtr<TOpDependen
 
     return MakeIntrusive<TOpMap>(join, pos, resultElements);
 }
+
+// The keys of the sort that orders the rows a limit takes, under the limit's IDs. Maps, filters and
+// Replicate ports keep the order and the sort keys; a port exposes them under its own IDs.
+TSortIUs FindLimitOrdering(const TIntrusivePtr<IOperator>& input) {
+    TVector<TOpReplicate*> ports;
+    auto* op = input.Get();
+    while (op->Kind == EOperator::Map || op->Kind == EOperator::Filter || op->Kind == EOperator::Replicate) {
+        if (op->Kind == EOperator::Replicate && !CastOperator<TOpReplicate>(*op).IsPrimary()) {
+            ports.push_back(&CastOperator<TOpReplicate>(*op));
+        }
+        op = op->GetChild(0).Get();
+    }
+    if (op->Kind != EOperator::Sort) {
+        return {};
+    }
+
+    auto keys = CastOperator<TOpSort>(*op).GetSortElements();
+    for (auto it = ports.rbegin(); it != ports.rend(); ++it) {
+        keys = SubstituteSortKeys(keys, (*it)->GetRebindings());
+    }
+    return keys;
+}
+
+// Neumann's limit unnesting: a limit applies to each domain value, so the rows are numbered per domain value.
+// D ⋈ limit(k, o, sort(T)) = filter(o < rn <= o + k, window(rn: row_number() over (partition by D order by sort), D ⋈ T)).
+TIntrusivePtr<IOperator> LimitPerDomainValue(const TIntrusivePtr<TOpDependentJoin>& dependentJoin, const TIntrusivePtr<IOperator>& input,
+                                             const TSortIUs& sortKeys, const TExpression& limit, const std::optional<TExpression>& offset,
+                                             TPositionHandle pos, TRBOContext& ctx, TPlanProps& props) {
+    const auto rowNumber = props.InfoUnitRegistry.AddGenerated("row_number");
+    TWindowIUs functions;
+    functions.Add(rowNumber, TOpWindowFunc{"rownumber", EWindowFuncKind::Native, {}});
+    const auto domainColumns = dependentJoin->GetDomainColumns();
+    auto window = MakeIntrusive<TOpWindow>(PushInto(dependentJoin, input), pos, std::move(functions),
+                                           TOrderedIUs<>(domainColumns.begin(), domainColumns.end()), sortKeys, TOpWindowFrame{});
+
+    auto position = MakeColumnAccess(rowNumber, pos, &ctx.ExprCtx, &props);
+    TVector<TExpression> conjuncts;
+    if (offset) {
+        conjuncts.push_back(MakeBinaryPredicate(">", position, *offset));
+        // Subtract instead of adding the offset to the limit, which can overflow.
+        position = MakeBinaryPredicate("-", position, *offset);
+    }
+    conjuncts.push_back(MakeBinaryPredicate("<=", position, limit));
+    return MakeIntrusive<TOpFilter>(window, pos, MakeConjunction(conjuncts));
+}
 } // anonymous namespace
 
 // Domain projection is a distinct on free variables.
@@ -267,10 +359,9 @@ bool IsNullableIU(const TIntrusivePtr<IOperator>& input, TInfoUnitId iu, TExprCo
 }
 
 TJoinIUs MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
-                                       const TJoinIUs& joinKeys, TPositionHandle pos, TRBOContext& ctx,
-                                       TPlanProps& props) {
+                              const TJoinIUs& joinKeys, TPositionHandle pos, TRBOContext& ctx,
+                              TPlanProps& props) {
     TJoinIUs result;
-
     const bool nativeEqualNulls =
         ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetEnableBlockHashJoinEqualNulls();
 
@@ -324,7 +415,7 @@ bool HasFreeCorrelation(const TIntrusivePtr<IOperator>& op, const TUnorderedIUs&
 }
 
 bool TRewriteDependentJoinToCrossJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::AddDependencies);
 }
 
 TIntrusivePtr<IOperator> TRewriteDependentJoinToCrossJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -376,7 +467,7 @@ TIntrusivePtr<IOperator> TRewriteDependentJoinToCrossJoinNoFreeVarsRule::SimpleM
 }
 
 bool TEliminateDependentJoinDomainRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Filter);
 }
 
 // We can eliminate dependent join by rewriting it into map -> filter.
@@ -479,7 +570,7 @@ TIntrusivePtr<IOperator> TEliminateDependentJoinDomainRule::SimpleMatchAndApply(
 }
 
 bool TPushDependentJoinThroughFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Filter);
 }
 
 TIntrusivePtr<IOperator> TPushDependentJoinThroughFilterRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
@@ -496,7 +587,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughFilterRule::SimpleMatchAndAppl
 }
 
 bool TPushDependentJoinThroughMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Map);
 }
 
 TIntrusivePtr<IOperator> TPushDependentJoinThroughMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -521,7 +612,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughMapRule::SimpleMatchAndApply(c
 }
 
 bool TPushDependentJoinThroughAggregateRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Aggregate);
 }
 
 TIntrusivePtr<IOperator> TPushDependentJoinThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
@@ -576,7 +667,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughAggregateRule::SimpleMatchAndA
 }
 
 bool TPushDependentJoinThroughUnionAllRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::UnionAll);
 }
 
 TIntrusivePtr<IOperator> TPushDependentJoinThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
@@ -619,7 +710,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughUnionAllRule::SimpleMatchAndAp
 }
 
 bool TPushDependentJoinThroughJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Join);
 }
 
 TIntrusivePtr<IOperator> TPushDependentJoinThroughJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -682,7 +773,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughJoinRule::SimpleMatchAndApply(
 }
 
 bool TPushDependentJoinThroughReplicateRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::DependentJoin;
+    return IsDependentJoinOver(input, EOperator::Replicate);
 }
 
 // Only Replicate ports share an operator. Push through a port as through any
@@ -707,6 +798,52 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughReplicateRule::SimpleMatchAndA
     auto copy = CopyForConsumer(*port, outputs, props);
     RebindConsumers(*dependentJoin, outputs, props.Subplans);
     return PushInto(dependentJoin, copy);
+}
+
+bool TPushDependentJoinThroughSortRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return IsDependentJoinOver(input, EOperator::Sort);
+}
+
+TIntrusivePtr<IOperator> TPushDependentJoinThroughSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
+                                                                                TPlanProps& props) {
+    auto dependentJoin = CastOperator<TOpDependentJoin>(input);
+    auto body = dependentJoin->GetInput();
+    if (body->Kind != EOperator::Sort) {
+        return input;
+    }
+
+    auto sort = CastOperator<TOpSort>(body);
+    // The output of a dependent join has no order, a limit above already took the sort keys.
+    if (!sort->LimitCond) {
+        return PushInto(dependentJoin, sort->GetInput());
+    }
+    if (!sort->LimitCond->GetRawInputIUs().Empty()) {
+        return input;
+    }
+    return LimitPerDomainValue(dependentJoin, sort->GetInput(), sort->GetSortElements(), *sort->LimitCond, std::nullopt, sort->Pos, ctx, props);
+}
+
+bool TPushDependentJoinThroughLimitRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return IsDependentJoinOver(input, EOperator::Limit);
+}
+
+TIntrusivePtr<IOperator> TPushDependentJoinThroughLimitRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
+                                                                                 TPlanProps& props) {
+    auto dependentJoin = CastOperator<TOpDependentJoin>(input);
+    auto body = dependentJoin->GetInput();
+    if (body->Kind != EOperator::Limit) {
+        return input;
+    }
+
+    auto limit = CastOperator<TOpLimit>(body);
+    // Row numbers are compared with the same bounds for every domain value.
+    if (!limit->GetUniqueRawInputIUs().Empty()) {
+        return input;
+    }
+
+    // Without a sort a limit takes any rows.
+    return LimitPerDomainValue(dependentJoin, limit->GetInput(), FindLimitOrdering(limit->GetInput()), limit->GetLimitCond(),
+                               limit->GetOffsetCond(), limit->Pos, ctx, props);
 }
 
 bool TDependentJoinNotSupportedRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {

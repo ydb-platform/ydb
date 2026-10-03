@@ -27,9 +27,8 @@ public:
             TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
         for (auto& [key, batch] : Self->PendingCreateTabletBatches) {
-            if (!batch.Scheduled) {
-                batch.Scheduled = true;
-                PendingBatches.emplace_back(Self->CreateCreateTablet(batch.CreateTablet, batch.Sender, batch.Cookie, batch.Generation));
+            if (auto* tx = Self->SchedulePendingCreateTabletBatch(batch)) {
+                PendingBatches.emplace_back(tx);
             }
         }
         for (auto& handle : Self->PendingOperations) {

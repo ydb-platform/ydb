@@ -31,6 +31,192 @@ duration_t GetBasePerformance() {
 
 static double BASE_PERF = GetBasePerformance().count();
 
+Y_UNIT_TEST_SUITE(THivePendingCreateBatchesTest) {
+    class TIndexedHive : public TTestHive {
+    public:
+        using TTestHive::TTestHive;
+        using THive::CancelPendingCreateTabletBatches;
+        using THive::IndexPendingCreateTabletBatch;
+        using THive::RemovePendingCreateTabletBatch;
+        using THive::PendingCreateTabletBatches;
+        using THive::PendingCreateTabletBatchIndex;
+        using THive::PendingCreateTabletBatchIds;
+        using THive::TPendingCreateTabletCancellationStats;
+
+        auto AddBatch(ui64 owner, const TVector<ui64>& indices, THashSet<ui64> needed, bool range = false) {
+            const auto key = std::make_pair(owner, indices.front());
+            auto [it, inserted] = PendingCreateTabletBatches.emplace(key, TPendingCreateTabletBatch{});
+            UNIT_ASSERT(inserted);
+            auto& batch = it->second;
+            batch.CreateTablet.SetOwner(owner);
+            if (range) {
+                batch.CreateTablet.SetOwnerIdx(indices.front());
+                batch.CreateTablet.SetCount(static_cast<ui32>(indices.size()));
+            } else {
+                for (ui64 idx : indices) {
+                    batch.CreateTablet.AddOwnerIdxs(idx);
+                }
+            }
+            batch.NeededOwnerIdxs = std::move(needed);
+            PendingCreateTabletBatchIds += batch.NeededOwnerIdxs.size();
+            IndexPendingCreateTabletBatch(key, batch);
+            return key;
+        }
+    };
+
+    Y_UNIT_TEST(CancelByIndexAndOwner) {
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TIndexedHive hive(storage.Get(), TActorId());
+        const auto first = hive.AddBatch(1, {10, 11, 12}, {11, 12}, true);
+        const auto second = hive.AddBatch(1, {11, 12, 13}, {11, 12, 13});
+        const auto otherOwner = hive.AddBatch(2, {10, 11}, {10, 11});
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 7);
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIndex.at(1).at(12).size(), 2);
+
+        // No intersection: do not change batches or reserve/cancel any IDs.
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, 999).empty());
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(3).empty());
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 7);
+
+        // Existing tablets are indexed too, but cancelling them does not reduce ID demand.
+        auto affected = hive.CancelPendingCreateTabletBatches(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(affected.size(), 1);
+        UNIT_ASSERT(affected.contains(first));
+        UNIT_ASSERT(hive.PendingCreateTabletBatches.at(first).CancelledOwnerIdxs.contains(10));
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 7);
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, 10).empty());
+
+        // One index can occur in several batches; cancel it in every matching batch.
+        affected = hive.CancelPendingCreateTabletBatches(1, 12);
+        UNIT_ASSERT_VALUES_EQUAL(affected.size(), 2);
+        UNIT_ASSERT(affected.contains(first));
+        UNIT_ASSERT(affected.contains(second));
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 5);
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.at(1).contains(12));
+        // Re-indexing a waiting batch must not bring cancelled indices back.
+        hive.IndexPendingCreateTabletBatch(first, hive.PendingCreateTabletBatches.at(first));
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.at(1).contains(10));
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.at(1).contains(12));
+
+        affected = hive.CancelPendingCreateTabletBatches(1);
+        UNIT_ASSERT_VALUES_EQUAL(affected.size(), 2);
+        UNIT_ASSERT(affected.contains(first));
+        UNIT_ASSERT(affected.contains(second));
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 2);
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.contains(1));
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1).empty());
+        UNIT_ASSERT(hive.PendingCreateTabletBatches.at(otherOwner).CancelledOwnerIdxs.empty());
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIndex.at(2).size(), 2);
+        hive.RemovePendingCreateTabletBatch(first);
+        hive.RemovePendingCreateTabletBatch(second);
+        hive.RemovePendingCreateTabletBatch(otherOwner);
+        UNIT_ASSERT(hive.PendingCreateTabletBatches.empty());
+        UNIT_ASSERT(hive.PendingCreateTabletBatchIndex.empty());
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 0);
+    }
+
+    Y_UNIT_TEST(CancellationWorkIsLimitedToMatchingEntries) {
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TIndexedHive hive(storage.Get(), TActorId());
+        constexpr ui64 PendingPerOwner = 100000;
+        constexpr ui64 FirstPendingIdx = 100000;
+        constexpr ui64 PointDeletes = 10000;
+        constexpr ui64 BatchSize = TEvHive::TEvCreateTablet::MaxBatchSize;
+        constexpr ui64 BatchesPerOwner = (PendingPerOwner + BatchSize - 1) / BatchSize;
+        for (ui64 owner : {1, 2}) {
+            for (ui64 begin = 0; begin < PendingPerOwner; begin += BatchSize) {
+                TVector<ui64> indices;
+                THashSet<ui64> needed;
+                for (ui64 offset = 0; offset < BatchSize && begin + offset < PendingPerOwner; ++offset) {
+                    const ui64 idx = FirstPendingIdx + begin + offset;
+                    indices.push_back(idx);
+                    needed.insert(idx);
+                }
+                hive.AddBatch(owner, indices, std::move(needed), true);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 2 * PendingPerOwner);
+
+        // No timing thresholds: 10K unrelated deletions must not visit 100K pending entries each.
+        TIndexedHive::TPendingCreateTabletCancellationStats pointStats;
+        for (ui64 idx = 0; idx < PointDeletes; ++idx) {
+            UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, idx, &pointStats).empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pointStats.OwnerLookups, PointDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(pointStats.IndexLookups, PointDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(pointStats.VisitedBatchEntries, 0);
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 2 * PendingPerOwner);
+
+        // Owner cancellation visits its entries once, without touching the other owner's work.
+        TIndexedHive::TPendingCreateTabletCancellationStats ownerStats;
+        const auto affected = hive.CancelPendingCreateTabletBatches(1, std::nullopt, &ownerStats);
+        UNIT_ASSERT_VALUES_EQUAL(ownerStats.OwnerLookups, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ownerStats.IndexLookups, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ownerStats.VisitedBatchEntries, PendingPerOwner);
+        UNIT_ASSERT_VALUES_EQUAL(affected.size(), BatchesPerOwner);
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, PendingPerOwner);
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.contains(1));
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIndex.at(2).size(), PendingPerOwner);
+        for (const auto& [key, batch] : hive.PendingCreateTabletBatches) {
+            if (key.first == 1) {
+                UNIT_ASSERT(affected.contains(key));
+                UNIT_ASSERT(batch.NeededOwnerIdxs.empty());
+                UNIT_ASSERT_VALUES_EQUAL(batch.CancelledOwnerIdxs.size(), batch.CreateTablet.GetCount());
+            } else {
+                UNIT_ASSERT(!affected.contains(key));
+                UNIT_ASSERT(batch.CancelledOwnerIdxs.empty());
+                UNIT_ASSERT_VALUES_EQUAL(batch.NeededOwnerIdxs.size(), batch.CreateTablet.GetCount());
+            }
+        }
+
+        // Subsequent delete completions must not scan even the already-cancelled batches.
+        TIndexedHive::TPendingCreateTabletCancellationStats repeatStats;
+        for (ui64 offset = 0; offset < PointDeletes; ++offset) {
+            UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, FirstPendingIdx + offset, &repeatStats).empty());
+        }
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, std::nullopt, &repeatStats).empty());
+        UNIT_ASSERT_VALUES_EQUAL(repeatStats.OwnerLookups, PointDeletes + 1);
+        UNIT_ASSERT_VALUES_EQUAL(repeatStats.IndexLookups, 0);
+        UNIT_ASSERT_VALUES_EQUAL(repeatStats.VisitedBatchEntries, 0);
+
+        // A matching point deletion performs exactly one visit, despite the large remaining queue.
+        TIndexedHive::TPendingCreateTabletCancellationStats matchStats;
+        UNIT_ASSERT_VALUES_EQUAL(hive.CancelPendingCreateTabletBatches(2, FirstPendingIdx, &matchStats).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(matchStats.OwnerLookups, 1);
+        UNIT_ASSERT_VALUES_EQUAL(matchStats.IndexLookups, 1);
+        UNIT_ASSERT_VALUES_EQUAL(matchStats.VisitedBatchEntries, 1);
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, PendingPerOwner - 1);
+    }
+
+    Y_UNIT_TEST(RemoveBatchCleansOnlyItsIndexEntries) {
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TIndexedHive hive(storage.Get(), TActorId());
+        const auto first = hive.AddBatch(1, {10, 11}, {10, 11}, true);
+        const auto second = hive.AddBatch(1, {11, 12}, {11, 12});
+        hive.RemovePendingCreateTabletBatch(first);
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 2);
+        UNIT_ASSERT(!hive.PendingCreateTabletBatchIndex.at(1).contains(10));
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIndex.at(1).at(11).size(), 1);
+        UNIT_ASSERT(hive.PendingCreateTabletBatchIndex.at(1).at(11).contains(11));
+        UNIT_ASSERT(hive.CancelPendingCreateTabletBatches(1, 10).empty());
+
+        // Reusing a completed batch key must not leave old subscriptions behind.
+        const auto replacement = hive.AddBatch(1, {10, 20}, {10, 20});
+        const auto affected = hive.CancelPendingCreateTabletBatches(1, 11);
+        UNIT_ASSERT_VALUES_EQUAL(affected.size(), 1);
+        UNIT_ASSERT(affected.contains(second));
+        UNIT_ASSERT(hive.PendingCreateTabletBatches.at(replacement).CancelledOwnerIdxs.empty());
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 3);
+        hive.RemovePendingCreateTabletBatch(second);
+        hive.RemovePendingCreateTabletBatch(replacement);
+        UNIT_ASSERT(hive.PendingCreateTabletBatchIndex.empty());
+        UNIT_ASSERT_VALUES_EQUAL(hive.PendingCreateTabletBatchIds, 0);
+    }
+}
+
 Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(BootQueueSpeed) {
         TBootQueue bootQueue;

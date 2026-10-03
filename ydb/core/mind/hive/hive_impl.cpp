@@ -4025,18 +4025,103 @@ void THive::RequestFreeSequence() {
     }
 }
 
-void THive::CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx) {
-    for (auto& [key, batch] : PendingCreateTabletBatches) {
-        if (key.first != owner) {
-            continue;
+void THive::IndexPendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, const TPendingCreateTabletBatch& batch) {
+    const auto& record = batch.CreateTablet;
+    const size_t count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
+    for (size_t i = 0; i < count; ++i) {
+        const ui64 idx = record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i);
+        if (!batch.CancelledOwnerIdxs.contains(idx)) {
+            PendingCreateTabletBatchIndex[key.first][idx].insert(key.second);
         }
-        const auto& record = batch.CreateTablet;
+    }
+}
+
+void THive::RemovePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key) {
+    const auto pending = PendingCreateTabletBatches.find(key);
+    Y_ABORT_UNLESS(pending != PendingCreateTabletBatches.end());
+    auto owner = PendingCreateTabletBatchIndex.find(key.first);
+    if (owner != PendingCreateTabletBatchIndex.end()) {
+        const auto& record = pending->second.CreateTablet;
         const size_t count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
         for (size_t i = 0; i < count; ++i) {
             const ui64 idx = record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i);
-            if ((!ownerIdx || idx == *ownerIdx) && batch.CancelledOwnerIdxs.insert(idx).second
-                    && batch.NeededOwnerIdxs.erase(idx)) {
-                --PendingCreateTabletBatchIds;
+            auto entry = owner->second.find(idx);
+            if (entry != owner->second.end()) {
+                entry->second.erase(key.second);
+                if (entry->second.empty()) {
+                    owner->second.erase(entry);
+                }
+            }
+        }
+        if (owner->second.empty()) {
+            PendingCreateTabletBatchIndex.erase(owner);
+        }
+    }
+    PendingCreateTabletBatchIds -= pending->second.NeededOwnerIdxs.size();
+    PendingCreateTabletBatches.erase(pending);
+}
+
+THive::TPendingCreateTabletBatchKeys THive::CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx,
+        TPendingCreateTabletCancellationStats* stats) {
+    TPendingCreateTabletBatchKeys affected;
+    if (stats) {
+        ++stats->OwnerLookups;
+    }
+    auto byOwner = PendingCreateTabletBatchIndex.find(owner);
+    if (byOwner == PendingCreateTabletBatchIndex.end()) {
+        return affected;
+    }
+    auto cancelIndex = [&](ui64 idx, const THashSet<ui64>& firstIndices) {
+        for (ui64 firstIdx : firstIndices) {
+            if (stats) {
+                ++stats->VisitedBatchEntries;
+            }
+            const auto key = std::make_pair(owner, firstIdx);
+            auto& batch = PendingCreateTabletBatches.at(key);
+            if (batch.CancelledOwnerIdxs.insert(idx).second) {
+                if (batch.NeededOwnerIdxs.erase(idx)) {
+                    --PendingCreateTabletBatchIds;
+                }
+                affected.insert(key);
+            }
+        }
+    };
+    if (ownerIdx) {
+        if (stats) {
+            ++stats->IndexLookups;
+        }
+        auto entry = byOwner->second.find(*ownerIdx);
+        if (entry != byOwner->second.end()) {
+            cancelIndex(entry->first, entry->second);
+            byOwner->second.erase(entry);
+        }
+        if (byOwner->second.empty()) {
+            PendingCreateTabletBatchIndex.erase(byOwner);
+        }
+    } else {
+        for (const auto& [idx, firstIndices] : byOwner->second) {
+            cancelIndex(idx, firstIndices);
+        }
+        PendingCreateTabletBatchIndex.erase(byOwner);
+    }
+    return affected;
+}
+
+ITransaction* THive::SchedulePendingCreateTabletBatch(TPendingCreateTabletBatch& batch) {
+    if (batch.Scheduled) {
+        return nullptr;
+    }
+    batch.Scheduled = true;
+    return CreateCreateTablet(batch.CreateTablet, batch.Sender, batch.Cookie, batch.Generation);
+}
+
+void THive::ProcessPendingCreateTabletBatches(const TPendingCreateTabletBatchKeys& keys) {
+    // Called after the cancelling transaction commits. Unrelated batches need no wakeup.
+    for (const auto& key : keys) {
+        auto pending = PendingCreateTabletBatches.find(key);
+        if (pending != PendingCreateTabletBatches.end()) {
+            if (auto* tx = SchedulePendingCreateTabletBatch(pending->second)) {
+                Execute(tx);
             }
         }
     }

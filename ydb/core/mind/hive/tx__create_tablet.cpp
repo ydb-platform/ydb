@@ -38,6 +38,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
 
     TSideEffects SideEffects;
     THolder<TEvHive::TEvCreateTabletReply> BatchReply;
+    TVector<std::pair<TActorId, ui64>> BatchWaiters;
     THashMap<std::pair<TTabletId, TFollowerGroupId>, std::pair<ui32, bool>> StoredFollowerCounts;
 
 public:
@@ -306,7 +307,41 @@ public:
         auto pending = Self->PendingCreateTabletBatches.find(batchKey);
         if (PendingBatchGeneration && (pending == Self->PendingCreateTabletBatches.end()
                 || pending->second.Generation != PendingBatchGeneration)) {
-            return true; // A newer request replaced this queued attempt.
+            return true; // This queued attempt is no longer current.
+        }
+        if (!PendingBatchGeneration && pending != Self->PendingCreateTabletBatches.end()) {
+            auto& batch = pending->second;
+            if (batch.CreateTablet.SerializeAsString() == RequestData.SerializeAsString()) {
+                const auto waiter = std::make_pair(Sender, Cookie);
+                if (Find(batch.Waiters, waiter) != batch.Waiters.end()) {
+                    return true;
+                }
+                if (batch.Waiters.size() < THive::TPendingCreateTabletBatch::MaxWaiters) {
+                    batch.Waiters.push_back(waiter);
+                    return true; // Also notify a caller that reconnected/rebooted while IDs were pending.
+                }
+            }
+            // Sharing the first index does not make two batches the same request.
+            // Preserve the pending work and all its reply destinations. Different
+            // requests (or excess waiters) may retry once this batch completes.
+            YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute batch key is already pending",
+                {"logPrefix", GetLogPrefix()},
+                {"ownerId", OwnerId},
+                {"firstOwnerIdx", batchKey.second});
+            auto response = MakeHolder<TEvHive::TEvCreateTabletReply>();
+            auto& reply = response->Record;
+            reply.SetIsBatch(true);
+            reply.SetStatus(NKikimrProto::OK);
+            reply.SetOwner(OwnerId);
+            reply.SetOrigin(Self->TabletID());
+            for (ui32 i = 0; i < count; ++i) {
+                auto* result = reply.AddResults();
+                result->SetOwnerIdx(RequestData.HasCount() ? RequestData.GetOwnerIdx() + i : RequestData.GetOwnerIdxs(i));
+                result->SetStatus(NKikimrProto::TRYLATER);
+                result->SetErrorReason(NKikimrHive::ERROR_REASON_UNKNOWN);
+            }
+            SideEffects.Send(Sender, response.Release(), 0, Cookie);
+            return true;
         }
         const THashSet<ui64> cancelled = pending == Self->PendingCreateTabletBatches.end()
             ? THashSet<ui64>{} : pending->second.CancelledOwnerIdxs;
@@ -346,6 +381,7 @@ public:
         // request in Hive, without a partial TRYLATER reply and a caller-side timer.
         if (Self->AreWeSubDomainHive() && neededOwnerIdxs.size() > Self->Sequencer.FreeSize()
                 && !Self->BlockedOwners.contains(OwnerId) && TabletType != TTabletTypes::BSController) {
+            const bool isNew = pending == Self->PendingCreateTabletBatches.end();
             auto& batch = Self->PendingCreateTabletBatches[batchKey];
             Self->PendingCreateTabletBatchIds -= batch.NeededOwnerIdxs.size();
             batch.CreateTablet = RequestData;
@@ -356,12 +392,17 @@ public:
             batch.Scheduled = false;
             batch.CancelledOwnerIdxs = cancelled;
             Self->PendingCreateTabletBatchIds += batch.NeededOwnerIdxs.size();
+            if (isNew) {
+                batch.Waiters.emplace_back(Sender, Cookie);
+                Self->IndexPendingCreateTabletBatch(batchKey, batch);
+            }
             RequestFreeSequence();
             return true;
         }
+        BatchWaiters.clear();
         if (pending != Self->PendingCreateTabletBatches.end()) {
-            Self->PendingCreateTabletBatchIds -= pending->second.NeededOwnerIdxs.size();
-            Self->PendingCreateTabletBatches.erase(pending);
+            BatchWaiters = pending->second.Waiters;
+            Self->RemovePendingCreateTabletBatch(batchKey);
         }
         BatchReply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         auto& reply = BatchReply->Record;
@@ -381,6 +422,40 @@ public:
             }
             // ExecuteOne only uses Hive's in-memory metadata and does not page-fault.
             Y_ABORT_UNLESS(ExecuteOne(txc, ctx));
+        }
+        // Preserve creation-ready notifications as well as the batch reply for
+        // callers that joined while the original request was waiting for IDs.
+        THashSet<TActorId> additionalActors;
+        for (const auto& waiter : BatchWaiters) {
+            if (waiter.first != Sender) {
+                additionalActors.insert(waiter.first);
+            }
+        }
+        for (const auto& result : reply.GetResults()) {
+            if (result.GetStatus() != NKikimrProto::OK || additionalActors.empty()) {
+                continue;
+            }
+            auto* tablet = Self->FindTablet(result.GetTabletID());
+            Y_ABORT_UNLESS(tablet);
+            bool changed = false;
+            for (const auto& actor : additionalActors) {
+                if (tablet->IsRunning() || (tablet->IsBootingSuppressed() && !tablet->IsReadyToAssignGroups())) {
+                    SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, tablet->Id));
+                } else if (Find(tablet->ActorsToNotify, actor) == tablet->ActorsToNotify.end()) {
+                    tablet->ActorsToNotify.push_back(actor);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ActorsToNotify>(tablet->ActorsToNotify);
+            }
+        }
+        for (const auto& [actor, cookie] : BatchWaiters) {
+            if (actor != Sender || cookie != Cookie) {
+                auto response = MakeHolder<TEvHive::TEvCreateTabletReply>();
+                response->Record = reply;
+                SideEffects.Send(actor, response.Release(), 0, cookie);
+            }
         }
         SideEffects.Send(Sender, BatchReply.Release(), 0, Cookie);
         return true;

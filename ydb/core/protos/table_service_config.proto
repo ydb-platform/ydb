@@ -77,7 +77,7 @@ message TTableServiceConfig {
         // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
         // As with every field of this section, a dynamic config item that carries the section without the field
         // resets it to the default.
-        optional bool EnableMemoryArena = 35 [default = true];
+        optional bool EnableMemoryArena = 35 [default = false];
         // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
         // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
         // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
@@ -571,7 +571,7 @@ message TTableServiceConfig {
         // Channels tell their consumers and producers what changed, rather than being polled: a union of inputs
         // visits the channels which have something for it, and a compute actor checks its output channels for
         // finish only once one of them has. Kill switch: off, the channels are polled as before
-        optional bool EnableChannelNotifications = 10 [default = true];
+        optional bool EnableChannelNotifications = 10 [default = false];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

@@ -1,3 +1,4 @@
+ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
@@ -58,6 +59,13 @@ ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableAnd
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3]
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerRecreatesDroppedBalancerTable

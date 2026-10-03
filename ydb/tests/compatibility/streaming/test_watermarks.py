@@ -12,10 +12,12 @@ from ydb.tests.library.compatibility.fixtures import (
 )
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 from ydb.tests.fq.streaming_common.common import (
     MessageAcceptor,
     YdbClient,
     read_and_check_data,
+    wait_completed_checkpoints,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
-            "enable_shared_reading_in_streaming_queries",
+            "enable_streaming_queries_counters",
         ]
 
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
@@ -147,29 +149,14 @@ class StreamingTestBase:
             END DO;
         """)
 
-    def create_simple_streaming_query(self: Self) -> None:
-        logger.debug("create_simple_streaming_query")
-        self.query_name = "my_queries/query_name"
-        self.ydb_client.query(f"""
-            CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
-            $precompute_data = SELECT value FROM table_name LIMIT 1;
-
-            $input = (
-                SELECT
-                    *
-                FROM
-                    {self.input_object} WITH (
-                        FORMAT = 'json_each_row',
-                        SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL),
-                        WATERMARK = CAST(time AS Timestamp) - Interval('PT1M')
-                    )
-            );
-
-            INSERT INTO {self.output_object}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) || Unwrap($precompute_data)
-            FROM $input;
-            END DO;
-        """)
+    def wait_first_checkpoint(self: Self) -> None:
+        wait_completed_checkpoints(
+            self.cluster,
+            f"/Root/{self.query_name}",
+            timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            checkpoints_count=1,
+            wait_delta=False,
+        )
 
     def do_write_read(self: Self, input_data: list[str], acceptor: MessageAcceptor) -> None:
         logger.debug("do_write_read")
@@ -251,6 +238,7 @@ class TestWatermarksRestartToAnotherVersion(StreamingTestBase, RestartToAnotherV
     def test_restart_to_another_version(self: Self, external: bool) -> None:
         self.create_objects(external)
         self.create_streaming_query()
+        self.wait_first_checkpoint()
         acceptor = MessageAcceptor()
         self.do_test_part1(acceptor)
         self.change_cluster_version()
@@ -267,16 +255,30 @@ class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgrade
     @pytest.mark.parametrize("external", [True, False])
     def test_rolling_upgrade(self: Self, external: bool) -> None:
         self.create_objects(external)
-        self.create_simple_streaming_query()
+        self.create_streaming_query()
+        self.wait_first_checkpoint()
         suffix = 'value1'
         acceptor = MessageAcceptor()
 
+        first_year = 2025
+        # Every next message closes the previous window and leaves one open window for the next restart.
+        self.ydb_client.topic_write(
+            self.input_topic,
+            [f'{{"time": "{first_year}-01-01T00:01:00.000000Z", "level": "error", "host": "host-0"}}'],
+        )
+
         for i, _ in enumerate(self.roll()):
+            window_year = first_year + i
             input_data = [
-                f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}',
+                f'{{"time": "{window_year + 1}-01-01T00:01:00.000000Z", "level": "error", "host": "host-{i + 1}"}}',
             ]
             acceptor.reset()
             acceptor.accept(
-                [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}' + suffix],
+                [f'{{"error_count":1,"host":"host-{i}",' f'"ts":"{window_year}-01-01T00:00:00Z"}}' + suffix],
             )
             self.do_write_read(input_data, acceptor)
+            wait_completed_checkpoints(
+                self.cluster,
+                f"/Root/{self.query_name}",
+                timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            )

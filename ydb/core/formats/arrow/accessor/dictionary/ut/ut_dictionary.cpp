@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -333,5 +334,30 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             UNIT_ASSERT(dict->IsNull(i));
         }
         UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(dict->GetChunkedArray()->ToString()), R"([[null,null,null]])");
+    }
+
+    Y_UNIT_TEST(LegacyNullDefaultUsesReferencedNull) {
+        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::utf8(), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 3);
+
+        const auto checkNulls = [](const std::shared_ptr<TDictionaryArray>& array) {
+            UNIT_ASSERT_VALUES_EQUAL(array->GetPositions()->null_count(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(array->GetDictionary()->null_count(), 1);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT(array->IsNull(i));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(array->GetNullsCount(), 3);
+        };
+
+        auto legacy = std::make_shared<TDictionaryArray>(dictionary, positions);
+        checkNulls(legacy);
+
+        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), serializer);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(legacy, info);
+        TChunkConstructionData infoWithMeta(3, nullptr, arrow::utf8(), serializer, std::nullopt, blobAndMeta.Meta);
+        auto restored = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
+        checkNulls(restored);
     }
 };

@@ -180,7 +180,12 @@ struct TFixture {
         TestDescribeResult(description, {NLs::Finished, NLs::IsStreamingQuery});
         const auto& path = description.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(path.GetSelf().GetVersion().GetStreamingQueryVersion(), version);
-        const auto& properties = path.GetStreamingQueryDescription().GetProperties().GetProperties();
+        auto properties = path.GetStreamingQueryDescription().GetProperties().GetProperties();
+        // Audit properties are maintained by SchemeShard independently of operation tracking.
+        for (const char* key : {"__created_by", "__modified_by", "__started_by",
+                               "__stopped_by", "__created_at", "__modified_at"}) {
+            properties.erase(key);
+        }
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), properties.contains("__operation_owner_user_token") ? 2 : 1);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), run);
     }

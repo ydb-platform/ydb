@@ -2490,12 +2490,21 @@ namespace NKikimr {
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);
+            // Donors stay at zero, so the gauges count the disks that serve the group. A donor never touches them:
+            // its counter chain may coincide with the acceptor's when both live on the same PDisk.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.SetHeapAllocatorStripe(Config->UseHeapAllocator);
+            }
         }
 
         void PassAway() override {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             DisconnectClients(ctx);
             ActiveActors.KillAndClear(ctx);
+            // Zero before the unlink so a scrape during teardown does not keep a stale 1.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.ClearHeapAllocatorMode();
+            }
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));

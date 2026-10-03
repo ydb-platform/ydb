@@ -183,6 +183,9 @@ namespace NKikimr::NStorage {
         bool EnableProxyMock = false;
         NKikimrBlobStorage::TMockDevicesConfig MockDevicesConfig;
         NKikimrBlobStorage::TInferPDiskSlotCountSettings InferPDiskSlotCountSettings;
+        // blob_storage_config.vdisk_heap_allocator_num_leading_disks; unset is 0. Config notifications refresh it
+        // and do not restart VDisks.
+        ui32 VDiskHeapAllocatorNumLeadingDisks = 0;
 
         struct TEvPrivate {
             enum EEv {

@@ -645,17 +645,20 @@ struct TNullModeTest : public TOutboundTest {
     }
 };
 
-// The consumer early-finishes on a node session which has not heard of its peer yet. Its update has nobody to
-// go to and waits for the discovery, it must not take the interconnect subscription of the session with it:
-// the end of the interconnect session reaches the node sessions of both nodes
+// An early finish before the peer is known must not use up the interconnect subscription (#54893): a disconnect
+// reaches both node sessions
 struct TEarlyFinishSubscribeTest : public TSessionTest {
+
+    void Prepare() override {
+        ExpectReconciliation = true;
+        TSessionTest::Prepare();
+    }
 
     void Run() override {
         Prepare();
         Init();
-        ExpectReconciliation = true;
 
-        // debug sessions, not started: neither has sent its discovery yet
+        // not started: no discovery yet
         Debug0 = Service0->CreateDebugNodeState(Runtime->GetNodeId(1));
         Debug1 = Service1->CreateDebugNodeState(Runtime->GetNodeId(0));
 
@@ -765,12 +768,6 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
         test.Run();
     }
 
-    Y_UNIT_TEST(EarlyFinishBeforeDiscoveryKeepsSubscription2n) {
-        TEarlyFinishSubscribeTest test;
-        test.Local = false;
-        test.Run();
-    }
-
     Y_UNIT_TEST(PeerSessionGoneUnderWarmChannel2n) {
         TUndeliveredTest test;
         test.Local = false;
@@ -812,6 +809,12 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     Y_UNIT_TEST(NullModeSenderOnly2n) {
         TNullModeTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(EarlyFinishBeforeDiscoveryKeepsSubscription2n) {
+        TEarlyFinishSubscribeTest test;
         test.Local = false;
         test.Run();
     }

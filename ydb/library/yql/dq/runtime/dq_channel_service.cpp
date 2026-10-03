@@ -1821,9 +1821,10 @@ void TNodeState::ResendUpdates() {
     if (!OutputNodeActorId) {
         return;
     }
+    // pairs with the fence in SendUpdateProgress, for a consumer which found no peer
+    std::atomic_thread_fence(std::memory_order_seq_cst);
     // after ConnectSession has published the peer: an update a consumer sends meanwhile to the previous one is
     // either before this resend under UpdateMutex, or reads the new peer itself
-    std::atomic_thread_fence(std::memory_order_seq_cst);
     for (auto& [_, descriptor] : InputDescriptors) {
         if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
             UpdateProgress(descriptor);
@@ -2252,13 +2253,12 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
 
     auto peer = ReadPeer();
     if (!peer.ActorId) {
-        // pairs with the fence in ResendUpdates: either it sees this update's progress, or this sees its peer
+        // pairs with the fence in ResendUpdates: either this sees the peer or the resend sees the update
         std::atomic_thread_fence(std::memory_order_seq_cst);
         peer = ReadPeer();
     }
     if (!peer.ActorId) {
-        // no discovery from the peer yet: ResendUpdates sends the update once the peer is known. A send to nobody
-        // would only bounce, and it would spend FlagSubscribeOnSession without subscribing
+        // sent after the discovery, by ResendUpdates or the next pop; a send to nobody would spend FlagSubscribeOnSession
         return;
     }
 
@@ -2828,8 +2828,8 @@ void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr
 void TNodeState::HandlePoison() {
     std::lock_guard lock(Mutex);
     FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
-    // the interconnect session would keep this dead id as a subscriber until its hourly liveness check. Subscribed
-    // stays set, so that a late send from a buffer still bound does not subscribe it again
+    // a dead subscriber lingers until the hourly liveness check. Subscribed stays set so that later sends do not
+    // resubscribe; one which has already taken the flag still can
     if (Subscribed.exchange(true)) {
         ActorSystem->Send(new NActors::IEventHandle(ActorSystem->InterconnectProxy(NodeId), NodeActorId,
             new NActors::TEvents::TEvUnsubscribe()));

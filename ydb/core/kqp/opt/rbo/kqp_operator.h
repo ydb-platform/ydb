@@ -295,6 +295,11 @@ public:
 
     virtual void ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TIntrusivePtr<IOperator> newChild);
 
+    // Copy this subtree, e.g. for another consumer of a Replicate. A definition
+    // takes the ID `renames` maps it to, or a fresh one added there; uses follow
+    // `renames`. Returns nullptr if some operator cannot be copied.
+    TIntrusivePtr<IOperator> Copy(TInfoUnitRegistry& registry, TSubstitutions& renames) const;
+
     /**
      * Simultaneously substitute input IDs without changing owned definitions.
      * Forwarded keys change too; external labels and positional contracts do not.
@@ -329,6 +334,10 @@ public:
     TVector<std::pair<IOperator*, ui32>> Parents;
 
 protected:
+    // Rebuild this operator over the copies of its children. Base: not copyable.
+    virtual TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const;
+
     TVector<TIntrusivePtr<IOperator>> Children_;
 
     // Operators exposing owned/forwarded ID sets need no cached output copy.
@@ -559,6 +568,11 @@ public:
 
     // Represents a custom input, basically it is an external param.
     TExprNode::TPtr Input;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     TUnorderedIUs Columns;
 };
@@ -628,6 +642,10 @@ public:
     ESortDir SortDir{ESortDir::None};
     std::optional<TRangeInfo> RangeInfo;
 
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     // Each ID's registry ColumnName is the physical column to fetch. Multiple
     // IDs may name the same column; internal row fields use their decimal IDs.
@@ -696,6 +714,8 @@ public:
     bool NeedToPush = false;
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -791,6 +811,8 @@ public:
     bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -908,6 +930,8 @@ public:
     void SetSortElements(TSortIUs keys) { SortElements = std::move(keys); }
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -943,6 +967,10 @@ public:
     void SetFilterExpression(TExpression filterExpr);
 
     bool PartiallyPushedDown = false;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TExpression FilterExpr;
@@ -998,6 +1026,8 @@ public:
     TVector<TExpression> JoinFilters;
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 private:
     mutable TUnorderedIUs RawInputIUs;
@@ -1066,6 +1096,10 @@ public:
 
     bool Ordered;
 
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     TUnionAllIUs Columns;
 };
@@ -1100,6 +1134,10 @@ public:
     // Make private.
     TExpression LimitCond;
 
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     std::optional<TExpression> OffsetCond;
     EOpPhase LimitPhase{EOpPhase::Undefined};
@@ -1131,6 +1169,10 @@ public:
     TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     std::optional<TExpression> LimitCond;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TSortIUs SortElements;

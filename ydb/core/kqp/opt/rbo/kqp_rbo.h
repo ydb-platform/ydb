@@ -15,7 +15,9 @@ enum ERuleProperties: ui32 {
     RequireTypes           = 0x04 | RequireOutputIUs,
     RequireMetadata        = 0x08 | RequireOutputIUs,
     RequireStatistics      = 0x10 | RequireTypes | RequireMetadata,
-    RequireLiveness        = 0x20 | RequireOutputIUs
+    RequireLiveness        = 0x20 | RequireOutputIUs,
+    // Also match Replicate ports, replacing only the port's own slot.
+    MatchReplicatePorts    = 0x40
   };
 
 /**

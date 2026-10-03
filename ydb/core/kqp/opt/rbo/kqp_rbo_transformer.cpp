@@ -662,6 +662,10 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Prune before inlining"));
     RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline definitions"));
 
+    TVector<std::unique_ptr<IRule>> expandReplicateRules;
+    expandReplicateRules.emplace_back(std::make_unique<TExpandReplicateRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand Replicate", std::move(expandReplicateRules)));
+
     TVector<std::unique_ptr<IRule>> pushMapRules;
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());

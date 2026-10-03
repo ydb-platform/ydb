@@ -135,10 +135,11 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         for (const auto& iter : root) {
             // Replicate ports are binding boundaries, not removable unary
             // pass-through operators. Producer rewrites use their shared slot.
-            if (iter.Current->Kind == EOperator::Replicate) {
-                continue;
-            }
+            const bool port = iter.Current->Kind == EOperator::Replicate;
             for (const auto& rule : Rules) {
+                if (port && !HasProperty(rule->Props, ERuleProperties::MatchReplicatePorts)) {
+                    continue;
+                }
                 if (!rule->QuickMatch(TIntrusivePtr<IOperator>(iter.Current), root.PlanProps)) {
                     continue;
                 }

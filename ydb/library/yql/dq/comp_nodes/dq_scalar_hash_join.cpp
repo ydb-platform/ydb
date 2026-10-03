@@ -21,7 +21,7 @@ constexpr ui32 BaseInputs = 7;
 struct TDqScalarJoinMetadata {
     TSides<TVector<TType*>> InputTypes;
     TSides<TVector<ui32>> KeyColumns;
-    TVector<TType*> ResultItemTypes;
+    TVector<TType*> OutputItemTypes;
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<TVector<TType*>> UserTypes;
@@ -128,7 +128,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
     };
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
-        : TBase(&meta->Renames, converters)
+        : TBase(&meta->Renames, converters, meta->OutputItemTypes)
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
     {
@@ -319,7 +319,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     TDqScalarJoinMetadata meta;
     for (auto* type : joinComponents) {
-        meta.ResultItemTypes.push_back(type);
+        meta.OutputItemTypes.push_back(type);
     }
 
     const auto leftType = callable.GetInput(0).GetStaticType();

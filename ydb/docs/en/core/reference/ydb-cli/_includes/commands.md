@@ -117,6 +117,9 @@ Any command can be run from the command line with the `--help` option to get hel
 | [workload clickbench import files](../workload-click-bench.md#load) | Loading the `Clickbench` dataset from files |
 | [workload clickbench run](../workload-click-bench.md#run) | Running the `Clickbench` benchmark |
 | [workload clickbench clean](../workload-click-bench.md#cleanup) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Clickbench` workload initialization |
+| [workload splitmerge init](../workload-splitmerge.md#init) | Creating and initializing [tables](../../../concepts/glossary.md#table) for the split/merge pressure workload |
+| [workload splitmerge run](../workload-splitmerge.md#run) | Running one of the split/merge pressure load types |
+| [workload splitmerge clean](../workload-splitmerge.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the split/merge pressure workload initialization |
 | [workload kv init](../workload-kv.md#init) | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Key-Value` workload |
 | [workload kv run upsert](../workload-kv.md#upsert-kv) | Inserting random tuples into a [table](../../../concepts/glossary.md#table) using `UPSERT` in the `Key-Value` workload |
 | [workload kv run insert](../workload-kv.md#insert-kv) | Inserting random tuples into a [table](../../../concepts/glossary.md#table) using `INSERT` in the `Key-Value` workload |

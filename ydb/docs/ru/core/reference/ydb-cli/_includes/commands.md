@@ -118,6 +118,9 @@ topic consumer describe | Описание [читателя](../../../concepts/
 [workload clickbench import files](../workload-click-bench.md#load) | Загрузка набора данных `Clickbench` из файлов
 [workload clickbench run](../workload-click-bench.md#run) | Выполнение бенчмарка `Clickbench`
 [workload clickbench clean](../workload-click-bench.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации нагрузки `Clickbench`
+[workload splitmerge init](../workload-splitmerge.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки split/merge
+[workload splitmerge run](../workload-splitmerge.md#run) | Запуск одного из видов нагрузки split/merge
+[workload splitmerge clean](../workload-splitmerge.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации нагрузки split/merge
 [workload kv init](../workload-kv.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Key-Value` нагрузки
 [workload kv run upsert](../workload-kv.md#upsert-kv) | Вставка случайных кортежей в [таблицу](../../../concepts/glossary.md#table) при помощи конструкции `UPSERT` в `Key-Value` нагрузке
 [workload kv run insert](../workload-kv.md#insert-kv) | Вставка случайных кортежей в [таблицу](../../../concepts/glossary.md#table) при помощи конструкции `INSERT` в `Key-Value` нагрузке

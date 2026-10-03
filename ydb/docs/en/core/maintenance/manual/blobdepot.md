@@ -23,18 +23,18 @@ Virtual groups are also created within Storage Pools, like physical groups, but 
 A virtual group is created through BS_CONTROLLER by passing a special command. The virtual group creation command is idempotent, so to avoid creating extra blob depots, each virtual group is assigned a name. The name must be unique within the entire cluster. In case of repeated command execution, an error will be returned with the field `Already: true` filled and indicating the number of the previously created virtual group.
 
 ```bash
-dstool -e ... --direct group virtual create `--name` vg1 vg2 --hive-id=72057594037968897 `--storage-pool-name`=/Root:virtual --log-channel-sp=/Root:ssd --data-channel-sp=/Root:ssd*8
+dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037968897 --storage-pool-name=/Root:virtual --log-channel-sp=/Root:ssd --data-channel-sp=/Root:ssd*8
 ```
 
 Command line parameters:
 
 * `--name` unique name for the virtual group (or several virtual groups with similar parameters);
 * `--hive-id=N` number of the Hive tablet that will manage this blob depot; you must specify the Hive of the tenant within which the blob depot is launched;
-* ``--storage-pool-name`=POOL_NAME` name of the Storage Pool within which the blob depot needs to be created;
-* `--storage-pool-id=BOX:POOL` alternative to ``--storage-pool-name``, where you can specify an explicit numeric pool identifier;
+* `--storage-pool-name=POOL_NAME` name of the Storage Pool within which the blob depot needs to be created;
+* `--storage-pool-id=BOX:POOL` alternative to `--storage-pool-name`, where you can specify an explicit numeric pool identifier;
 * `--log-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed;
-* `--snapshot-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed; if not specified, the value from --log-channel-sp is used;
-* --data-channel-sp=POOL_NAME[\*COUNT] name of the pool where data channels are placed; if the COUNT parameter is specified (after the asterisk), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for blob depot in virtual group mode (64..250), to most efficiently use storage;
+* `--snapshot-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed; if not specified, the value from `--log-channel-sp` is used;
+* `--data-channel-sp=POOL_NAME[*COUNT]` name of the pool where data channels are placed; if the COUNT parameter is specified (after the asterisk), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for blob depot in virtual group mode (64..250), to most efficiently use storage;
 * `--wait` wait for blob depot creation to complete; if this option is not specified, the command terminates immediately after responding to the blob depot creation request, without waiting for the creation and launch of the tablets themselves.
 
 ### How to Check that Everything is Running {#vg-check-running}
@@ -42,7 +42,7 @@ Command line parameters:
 You can view the result of virtual group creation in the following ways:
 
 * via the monitoring page BS_CONTROLLER;
-* via the command `dstool group list `--virtual-groups-only``.
+* via the command `dstool group list --virtual-groups-only`.
 
 In both cases, creation should be controlled through the field VirtualGroupName, which should match what was passed in the `--name` parameter. If the command `dstool group virtual create` completed successfully, the virtual group unconditionally appears in the group list, but the field VirtualGroupState can take one of the following values:
 
@@ -51,14 +51,14 @@ In both cases, creation should be controlled through the field VirtualGroupName,
 * `CREATE_FAILED` — an error occurred during group creation, the text description of which can be seen in the field ErrorReason.
 
 ```bash
-$ dstool --cluster=$CLUSTER --direct group list `--virtual-groups-only`
+$ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 ┌────────────┬──────────────┬───────────────┬────────────┬────────────────┬─────────────────┬──────────────┬───────────────────┬──────────────────┬───────────────────┬─────────────┬────────────────┐
 │ GroupId    │ BoxId:PoolId │ PoolName      │ Generation │ ErasureSpecies │ OperatingStatus │ VDisks_TOTAL │ VirtualGroupState │ VirtualGroupName │ BlobDepotId       │ ErrorReason │ DecommitStatus │
 ├────────────┼──────────────┼───────────────┼────────────┼────────────────┼─────────────────┼──────────────┼───────────────────┼──────────────────┼───────────────────┼─────────────┼────────────────┤
-│ 4261412864 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ `WORKING`           │ vg1              │ 72075186224037888 │             │ NONE           │
-│ 4261412865 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ `WORKING`           │ vg2              │ 72075186224037890 │             │ NONE           │
-│ 4261412866 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ `WORKING`           │ vg3              │ 72075186224037889 │             │ NONE           │
-│ 4261412867 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ `WORKING`           │ vg4              │ 72075186224037891 │             │ NONE           │
+│ 4261412864 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg1              │ 72075186224037888 │             │ NONE           │
+│ 4261412865 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg2              │ 72075186224037890 │             │ NONE           │
+│ 4261412866 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg3              │ 72075186224037889 │             │ NONE           │
+│ 4261412867 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg4              │ 72075186224037891 │             │ NONE           │
 └────────────┴──────────────┴───────────────┴────────────┴────────────────┴─────────────────┴──────────────┴───────────────────┴──────────────────┴───────────────────┴─────────────┴────────────────┘
 ```
 

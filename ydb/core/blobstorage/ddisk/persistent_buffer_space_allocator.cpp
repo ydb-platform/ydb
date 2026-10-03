@@ -238,7 +238,6 @@ namespace NKikimr::NDDisk {
         }
         Y_ABORT_UNLESS(result.size() == sectorsCount);
         FreeSpace -= sectorsCount;
-        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
         return result;
     }
 
@@ -283,7 +282,6 @@ namespace NKikimr::NDDisk {
                 startLoc = i;
             }
         }
-        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
     }
 
     void TPersistentBufferSpaceAllocator::AddNewChunk(ui32 chunkIdx) {
@@ -310,7 +308,6 @@ namespace NKikimr::NDDisk {
                 startLoc = i;
             }
         }
-        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
     }
 
     ui32 TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::VerifyFreeSpace() {

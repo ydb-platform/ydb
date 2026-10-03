@@ -1456,7 +1456,9 @@ void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const
             FailureDoubleSend.store(failCount - 1);
             auto ev2 = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
             ev2->Record = ev->Record;
-            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(), flags, item.SeqNo));
+            // one subscription per flag: two dropped ones would bring two TEvNodeDisconnected
+            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(),
+                flags & ~NActors::IEventHandle::FlagSubscribeOnSession, item.SeqNo));
         }
 #endif
         LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item.SeqNo

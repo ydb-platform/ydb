@@ -30,6 +30,11 @@ public:
         return Control->GetDefault();
     }
 
+    // Restore the current default in the shared control.
+    void RestoreDefault() {
+        Control->RestoreDefault();
+    }
+
     i64 operator=(i64 value) {
         Control->Set(value);
         return value;

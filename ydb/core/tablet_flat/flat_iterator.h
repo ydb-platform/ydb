@@ -1007,6 +1007,8 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
+                    // Savepoint seq num is only meaningful for uncommitted positions
+                    DeltaSavepointSeqNum = 0;
                     committed = true;
                     found = true;
                 }
@@ -1044,6 +1046,8 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
+                    // Savepoint seq num is only meaningful for uncommitted positions
+                    DeltaSavepointSeqNum = 0;
                     committed = true;
                     found = true;
                 }

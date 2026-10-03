@@ -191,6 +191,37 @@ Y_UNIT_TEST_SUITE(NPage) {
             TCheckIter wrap(eggs, { });
             wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, "c"));
         }
+
+        {
+            // A part spanning many pages, where only the page with a seq num delta becomes version 2
+            const TString value(100, 'x');
+            TPartCook cook(lay, conf);
+            for (ui32 key = 1; key <= 300; ++key) {
+                if (key == 10) {
+                    cook.Delta(123).AddN(key, value);
+                }
+                if (key == 150) {
+                    cook.Delta(123, 9).AddN(key, value);
+                }
+                cook.Ver().AddN(key, value);
+            }
+            auto eggs = cook.Finish();
+
+            TSet<ui16> versions;
+            auto deltas = CollectDeltas(eggs, versions);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1,2");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
+            UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
+                { 123, 0, ELockMode::None },
+                { 123, 9, ELockMode::None },
+            }));
+
+            // Rows from version 1 and version 2 pages are readable through the regular iterator
+            TCheckIter wrap(eggs, { });
+            wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, value));
+            wrap.To(2).Has(*TSchemedCookRow(*lay).Col(150_u32, value));
+            wrap.To(3).Has(*TSchemedCookRow(*lay).Col(300_u32, value));
+        }
     }
 
     Y_UNIT_TEST(GroupIdEncoding) {

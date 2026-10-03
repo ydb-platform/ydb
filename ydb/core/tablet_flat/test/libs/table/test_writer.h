@@ -343,7 +343,8 @@ namespace NTest {
             return *this;
         }
 
-        // Locks the next new key before its deltas are written
+        // Locks the next new key before its deltas are written. The next Add must start
+        // a new key, otherwise it fails instead of silently dropping the lock.
         inline TPartCook& Lock(ELockMode mode, ui64 txId)
         {
             NextLockMode = mode;
@@ -418,9 +419,11 @@ namespace NTest {
                 CurrentVersions = 0;
 
                 if (NextLockMode != ELockMode::None) {
-                    Writer->AddKeyLock(std::exchange(NextLockMode, ELockMode::None), NextLockTxId);
+                    Writer->AddKeyLock(std::exchange(NextLockMode, ELockMode::None), std::exchange(NextLockTxId, 0));
                 }
             }
+
+            Y_ENSURE(NextLockMode == ELockMode::None, "Lock() must be followed by a row of a new key");
 
             if (NextTxId != 0) {
                 Y_ENSURE(CurrentVersions == 0, "Cannot write deltas after committed versions");

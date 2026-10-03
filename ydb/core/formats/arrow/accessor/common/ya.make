@@ -16,8 +16,6 @@ SRCS(
     json_value_view.cpp
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE_FOR_TESTS(

@@ -1,4 +1,5 @@
 #include "harmonizer.h"
+#include "harmonizer_metrics.h"
 #include "history.h"
 #include "pool.h"
 #include "waiting_stats.h"
@@ -32,25 +33,17 @@ namespace NActors {
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
+using namespace NHarmonizerMetrics;
+
 
 class THarmonizer: public IHarmonizer {
 public:
     struct TInMemoryMetricWriters {
-        using TFloatMetricLine = TLine<TRawLineFrontend<float>>;
         using TOnChangeFloatMetricLine = TLine<TOnChangeLineFrontend<float>>;
         using TOnChangeBoolMetricLine = TLine<TOnChangeLineFrontend<bool>>;
 
-        struct TGlobalMetricWriters {
-            TFloatMetricLine AvgAwakeningTimeUs;
-            TFloatMetricLine AvgWakingUpTimeUs;
-            TFloatMetricLine Budget;
-            TFloatMetricLine SharedFreeCpu;
-        };
-
         struct TPoolMetricWriters {
-            TFloatMetricLine AvgUsedCpu;
-            TFloatMetricLine AvgElapsedCpu;
-            TFloatMetricLine PotentialMaxThreadCount;
+            TLine<TPoolFrontend> Cpu;
             TOnChangeFloatMetricLine SharedCpuQuota;
             TOnChangeBoolMetricLine IsNeedy;
             TOnChangeBoolMetricLine IsStarved;
@@ -61,7 +54,7 @@ public:
         bool Enabled = false;
         bool PreStopRegistered = false;
         TActorSystem* ActorSystem = nullptr;
-        TGlobalMetricWriters Global;
+        TLine<TGlobalFrontend> Global;
         TVector<TPoolMetricWriters> Pools;
     };
 
@@ -123,14 +116,6 @@ public:
 
 namespace {
 
-    constexpr TStringBuf AvgAwakeningTimeUsMetric = "harmonizer.avg_awakening_time_us";
-    constexpr TStringBuf AvgWakingUpTimeUsMetric = "harmonizer.avg_waking_up_time_us";
-    constexpr TStringBuf BudgetMetric = "harmonizer.budget";
-    constexpr TStringBuf SharedFreeCpuMetric = "harmonizer.shared_free_cpu";
-
-    constexpr TStringBuf PoolAvgUsedCpuMetric = "harmonizer.pool.avg_used_cpu";
-    constexpr TStringBuf PoolAvgElapsedCpuMetric = "harmonizer.pool.avg_elapsed_cpu";
-    constexpr TStringBuf PoolPotentialMaxThreadCountMetric = "harmonizer.pool.potential_max_thread_count";
     constexpr TStringBuf PoolSharedCpuQuotaMetric = "harmonizer.pool.shared_cpu_quota";
     constexpr TStringBuf PoolIsNeedyMetric = "harmonizer.pool.is_needy";
     constexpr TStringBuf PoolIsStarvedMetric = "harmonizer.pool.is_starved";
@@ -158,10 +143,7 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
     }
 
     const std::span<const TLabel> noLabels;
-    InMemoryMetrics.Global.AvgAwakeningTimeUs = registry->CreateLine<TRawLineFrontend<float>>(AvgAwakeningTimeUsMetric, noLabels);
-    InMemoryMetrics.Global.AvgWakingUpTimeUs = registry->CreateLine<TRawLineFrontend<float>>(AvgWakingUpTimeUsMetric, noLabels);
-    InMemoryMetrics.Global.Budget = registry->CreateLine<TRawLineFrontend<float>>(BudgetMetric, noLabels);
-    InMemoryMetrics.Global.SharedFreeCpu = registry->CreateLine<TRawLineFrontend<float>>(SharedFreeCpuMetric, noLabels);
+    InMemoryMetrics.Global = registry->CreateLine<TGlobalFrontend>(TGlobal::Name, noLabels);
 
     InMemoryMetrics.Pools.clear();
     InMemoryMetrics.Pools.resize(Pools.size());
@@ -172,9 +154,7 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
             TLabel{.Name = "pool_id", .Value = ToString(pool.Pool->PoolId)},
         }};
         auto& writers = InMemoryMetrics.Pools[poolIdx];
-        writers.AvgUsedCpu = registry->CreateLine<TRawLineFrontend<float>>(PoolAvgUsedCpuMetric, labels);
-        writers.AvgElapsedCpu = registry->CreateLine<TRawLineFrontend<float>>(PoolAvgElapsedCpuMetric, labels);
-        writers.PotentialMaxThreadCount = registry->CreateLine<TRawLineFrontend<float>>(PoolPotentialMaxThreadCountMetric, labels);
+        writers.Cpu = registry->CreateLine<TPoolFrontend>(TPool::Name, labels);
         writers.SharedCpuQuota = registry->CreateLine<TOnChangeLineFrontend<float>>(
             PoolSharedCpuQuotaMetric,
             labels);
@@ -201,18 +181,22 @@ void THarmonizer::ReportInMemoryMetrics() {
     THarmonizerStats stats;
     GetStats(stats);
 
-    InMemoryMetrics.Global.AvgAwakeningTimeUs.Append(stats.AvgAwakeningTimeUs);
-    InMemoryMetrics.Global.AvgWakingUpTimeUs.Append(stats.AvgWakingUpTimeUs);
-    InMemoryMetrics.Global.Budget.Append(stats.Budget);
-    InMemoryMetrics.Global.SharedFreeCpu.Append(stats.SharedFreeCpu);
+    InMemoryMetrics.Global.Append({
+        TGlobalFrontend::Value<TGlobal::TAvgAwakeningTimeUs>(stats.AvgAwakeningTimeUs),
+        TGlobalFrontend::Value<TGlobal::TAvgWakingUpTimeUs>(stats.AvgWakingUpTimeUs),
+        TGlobalFrontend::Value<TGlobal::TBudget>(stats.Budget),
+        TGlobalFrontend::Value<TGlobal::TSharedFreeCpu>(stats.SharedFreeCpu),
+    });
 
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         const auto poolStats = GetPoolStats(poolIdx);
         auto& writers = InMemoryMetrics.Pools[poolIdx];
 
-        writers.AvgUsedCpu.Append(poolStats.AvgUsedCpu);
-        writers.AvgElapsedCpu.Append(poolStats.AvgElapsedCpu);
-        writers.PotentialMaxThreadCount.Append(poolStats.PotentialMaxThreadCount);
+        writers.Cpu.Append({
+            TPoolFrontend::Value<TPool::TAvgUsedCpu>(poolStats.AvgUsedCpu),
+            TPoolFrontend::Value<TPool::TAvgElapsedCpu>(poolStats.AvgElapsedCpu),
+            TPoolFrontend::Value<TPool::TPotentialMaxThreadCount>(poolStats.PotentialMaxThreadCount),
+        });
         writers.SharedCpuQuota.Append(poolStats.SharedCpuQuota);
         writers.IsNeedy.Append(poolStats.IsNeedy);
         writers.IsStarved.Append(poolStats.IsStarved);

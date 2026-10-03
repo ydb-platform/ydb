@@ -23,6 +23,29 @@ namespace NNative {
 
 namespace {
 
+TStaticFileWithMd5 ResolveMrJobBinary(const TYtStaticGatewayConfig& config, const TString& label) {
+    if (label.empty()) {
+        TStaticFileWithMd5 binary;
+        binary.SetFile(config.GetMrJobBin());
+        if (config.HasMrJobBinMd5()) {
+            binary.SetMd5(config.GetMrJobBinMd5());
+        }
+        return binary;
+    }
+
+    const TStaticFileWithMd5* selectedBinary = nullptr;
+    for (const auto& entry : config.GetMrJobBinaries()) {
+        const auto& binaryLabel = entry.GetLabel();
+        YQL_ENSURE(!binaryLabel.empty(), "MrJob binary label must not be empty");
+        YQL_ENSURE(!entry.GetBinary().GetFile().empty(), "MrJob binary path is empty for label '" << binaryLabel << "'");
+        if (binaryLabel == label) {
+            selectedBinary = &entry.GetBinary();
+        }
+    }
+    YQL_ENSURE(selectedBinary, "Unknown MrJob label '" << label << "'");
+    return *selectedBinary;
+}
+
 ui64 GetCombiningDataSizePerJob(ui64 dataSizePerJob, TMaybe<ui64> minChunkSize) {
     static const ui64 DefaultCombineChunkSize = 1_GB;
     ui64 result = dataSizePerJob;
@@ -644,11 +667,12 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     const TString& bridgeBinaryPath)
 {
     auto cluster = execCtx.Cluster_;
-    auto mrJobBin = execCtx.StaticConfig_->GetMrJobBin();
+    const auto mrJobBinary = ResolveMrJobBinary(*execCtx.StaticConfig_, execCtx.Session_->MrJobLabel_);
+    auto mrJobBin = mrJobBinary.GetFile();
     TMaybe<TString> mrJobBinMd5;
     if (!mrJobBin.empty()) {
-        if (execCtx.StaticConfig_->HasMrJobBinMd5()) {
-            mrJobBinMd5 = execCtx.StaticConfig_->GetMrJobBinMd5();
+        if (mrJobBinary.HasMd5()) {
+            mrJobBinMd5 = mrJobBinary.GetMd5();
         } else {
             YQL_CLOG(WARN, ProviderYt) << "MrJobBin without MD5";
         }

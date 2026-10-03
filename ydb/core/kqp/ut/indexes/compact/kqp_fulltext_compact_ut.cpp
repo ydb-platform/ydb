@@ -1513,6 +1513,35 @@ Y_UNIT_TEST(WriteMaintenanceNoStreamWriteRowidReturning) {
     }
 }
 
+Y_UNIT_TEST_TWIN(FulltextReadYourOwnWrite, Compact) {
+    auto kikimr = KikimrWithCompact(Compact);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "fulltext_plain");
+
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    auto insertResult = session.ExecuteQuery(R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Zebras live here.", "zebras data")
+    )sql", NQuery::TTxControl::BeginTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+    auto tx = insertResult.GetTransaction();
+    UNIT_ASSERT(tx && tx->IsActive());
+
+    // The row inserted above must be visible through the index in the same transaction.
+    auto selectResult = session.ExecuteQuery(R"sql(
+        SELECT `Key`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "zebras")
+        ORDER BY `Key`;
+    )sql", NQuery::TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    CompareYson(R"([[[150u]]])", NYdb::FormatResultSetYson(selectResult.GetResultSet(0)));
+}
+
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)
 
 Y_UNIT_TEST_SUITE(KqpJsonCompact) {
@@ -1722,6 +1751,50 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 
     NYdb::TResultSetParser parser(ReadIndex(db));
     UNIT_ASSERT(parser.RowsCount() > 0);
+}
+
+Y_UNIT_TEST_TWIN(JsonReadYourOwnWrite, Compact) {
+    auto kikimr = KikimrWithCompact(Compact);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '"hello"', "data1")
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX json_idx
+            GLOBAL USING json ON (Text)
+    )sql");
+
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    auto insertResult = session.ExecuteQuery(R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, '{"marker":"zebra"}', "data3")
+    )sql", NQuery::TTxControl::BeginTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+    auto tx = insertResult.GetTransaction();
+    UNIT_ASSERT(tx && tx->IsActive());
+
+    // The row inserted above must be visible through the JSON index in the same transaction.
+    auto selectResult = session.ExecuteQuery(R"sql(
+        SELECT Key
+        FROM `/Root/Texts` VIEW json_idx
+        WHERE JSON_EXISTS(Text, '$.marker')
+        ORDER BY Key;
+    )sql", NQuery::TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    CompareYson(R"([[[150u]]])", NYdb::FormatResultSetYson(selectResult.GetResultSet(0)));
 }
 
 } // Y_UNIT_TEST_SUITE(KqpJsonCompact)

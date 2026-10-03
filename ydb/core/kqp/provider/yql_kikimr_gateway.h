@@ -1861,6 +1861,9 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> KillSession(const TString& cluster,
+        const TString& sessionId, bool isParameter) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;

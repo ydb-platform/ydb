@@ -8,15 +8,12 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
-#include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NColumnShard {
 
 inline constexpr ui32 FirstDataChannel = 2;
-
-using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 struct TLimits {
 private:

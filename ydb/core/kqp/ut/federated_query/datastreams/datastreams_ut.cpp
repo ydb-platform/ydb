@@ -243,6 +243,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 PRIMARY KEY (id)
             );
         )");
+        Y_DEFER {
+            ExecExternalQuery(R"(DROP TABLE regularTable;)");
+        };
         CreatePqSource("sourceName");
 
         const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);

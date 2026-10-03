@@ -502,6 +502,10 @@ class TLocalTableWriter
 
         for (auto& r : ev->Get()->Records) {
             auto offset = r.GetOffset();
+            if (IndexBuild && offset < BuildProgress.GetOffset()) {
+                continue; // Durable apply may be ahead of the CDC checkpoint.
+            }
+
             auto& data = r.GetData();
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
 
@@ -519,6 +523,10 @@ class TLocalTableWriter
                 break;
             }
             if (PendingSchemaChange) {
+                if (IndexBuild) {
+                    return LogCritAndLeave("Schema changes during replicated index build are not supported");
+                }
+
                 break;
             }
 
@@ -527,12 +535,30 @@ class TLocalTableWriter
 
                 if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
                     PendingHeartbeat = version;
+                    if (IndexBuild) {
+                        BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+                        version.ToProto(BuildProgress.MutableHeartbeat());
+                        if (!BuildProgress.HasSwitchOffset()) {
+                            BuildProgress.SetSwitchOffset(BuildProgress.GetOffset());
+                            break;
+                        }
+                    }
+
                     continue;
                 } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
                     Y_ABORT("Unexpected record kind");
                 }
 
-                if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                if (IndexBuild && (!BuildProgress.HasSwitchOffset() || offset < BuildProgress.GetSwitchOffset())) {
+                    const auto maxVersion = Max(version, TRowVersion::FromProto(BuildProgress.GetMaxVersion()));
+                    maxVersion.ToProto(BuildProgress.MutableMaxVersion());
+                    BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+                    records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+                    Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
+                    continue;
+                }
+
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
                     record->RewriteTxId(it->second);
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
@@ -545,6 +571,10 @@ class TLocalTableWriter
                 }
             } else {
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+            }
+
+            if (IndexBuild) {
+                BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
             }
 
             Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
@@ -578,6 +608,37 @@ class TLocalTableWriter
             {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+        if (IndexBuild) {
+            for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
+                const auto begin = TRowVersion::FromProto(assignment.GetBegin());
+                const auto end = TRowVersion::FromProto(assignment.GetVersion());
+                for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+                    auto& record = PendingRecords.at(*it);
+                    const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+                    if (begin <= version && version < end) {
+                        record->RewriteTxId(assignment.GetTxId());
+                        BlockedRecords.insert(*it);
+                        it = PendingTxId.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+            if (PendingTxId.empty()) {
+                // Replies can cross in flight at C. Preserve topic order by
+                // draining the batch only after both scopes have answered.
+                for (const auto offset : BlockedRecords) {
+                    const auto& record = PendingRecords.at(offset);
+                    records.emplace_back(offset, TablePathId, record->GetBody().size());
+                }
+                BlockedRecords.clear();
+                if (!records.empty()) {
+                    EnqueueRecords(std::move(records));
+                }
+            }
+
+            return;
+        }
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
             const auto version = TRowVersion::FromProto(kv.GetVersion());
@@ -590,7 +651,8 @@ class TLocalTableWriter
                 Y_ABORT_UNLESS(PendingRecords.contains(*it));
                 auto& record = PendingRecords.at(*it);
 
-                if (TRowVersion(record->GetStep(), record->GetTxId()) >= version) {
+                const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
+                if (recordVersion >= version) {
                     return false;
                 }
 
@@ -668,7 +730,21 @@ class TLocalTableWriter
         }
     }
 
+    void Handle(TEvService::TEvIndexBuildProgressResult::TPtr& ev) {
+        if (IndexBuild) {
+            BuildProgress.CopyFrom(ev->Get()->Record.GetProgress());
+        }
+    }
+
     void FinishBatch() {
+        if (IndexBuild) {
+            PendingHeartbeat = TRowVersion::Min();
+            auto progress = MakeHolder<TEvService::TEvIndexBuildProgress>();
+            progress->Record.MutableProgress()->CopyFrom(BuildProgress);
+            Send(Worker, std::move(progress));
+            return;
+        }
+
         if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
             TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
             Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
@@ -763,16 +839,21 @@ public:
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
-            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
+            const NKikimrReplication::TLocalTableWriterSettings* settings)
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , Mode(mode)
+        , IndexBuild(settings && settings->GetIndexBuild())
         , Database(database)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
         , CreateResolverFn(std::move(createResolverFn))
     {
+        if (IndexBuild) {
+            BuildProgress.CopyFrom(settings->GetIndexBuildProgress());
+        }
     }
 
     TPathId GetChangeSenderIdentity() const override final {
@@ -788,6 +869,7 @@ public:
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
+            hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -802,6 +884,8 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const EWriteMode Mode;
+    bool IndexBuild = false;
+    NKikimrReplication::TIndexBuildProgress BuildProgress;
     const TString Database;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
@@ -834,9 +918,9 @@ IActor* CreateLocalTableWriter(
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
         std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
-        EWriteMode mode)
+        EWriteMode mode, const NKikimrReplication::TLocalTableWriterSettings* settings)
 {
-    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn), settings);
 }
 
 } // namespace NKikimr::NReplication::NService

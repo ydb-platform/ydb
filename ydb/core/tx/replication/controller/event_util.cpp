@@ -1,26 +1,7 @@
 #include "event_util.h"
 #include "target_transfer.h"
 
-#include <ydb/core/base/path.h>
-
 namespace NKikimr::NReplication::NController {
-
-const TReplication::ITarget* FindBaseTableTarget(
-        const TReplication& replication, const TReplication::ITarget& indexTarget)
-{
-    if (indexTarget.GetKind() != TReplication::ETargetKind::IndexTable) {
-        return nullptr;
-    }
-    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcPath())));
-    for (const auto* target : replication.GetTargets()) {
-        if (target->GetKind() == TReplication::ETargetKind::Table
-            && CanonizePath(target->GetSrcPath()) == path)
-        {
-            return target;
-        }
-    }
-    return nullptr;
-}
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TReplication::TPtr replication,
@@ -41,7 +22,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetDatabase(),
         replication->GetConfig().GetMetricsConfig().GetLevel(),
         replication->GetLocation());
-    const auto* base = FindBaseTableTarget(*replication, target);
+    const auto* base = replication->FindBaseTableTarget(target);
     ev->Record.MutableCommand()->MutableRemoteTopicReader()->SetRetryOnSchemeError(
         base && base->GetStreamSchemaChanges().value_or(false));
     return ev;

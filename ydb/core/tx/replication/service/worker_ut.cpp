@@ -58,7 +58,15 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
             env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
             runtime.Send(new IEventHandle(service, edge, run.Release()));
             runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(edge);
-            UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"({"tableChanges":[{"table":{"schemaVersion":2,"indexes":{},"columns":{"key":{"type":"Uint32"},"value":{"type":"Utf8"}},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"));
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"json({
+                "tableChanges": [{"table": {
+                    "schemaVersion": 2,
+                    "indexes": {},
+                    "columns": {"key": {"type": "Uint32"}, "value": {"type": "Utf8"}},
+                    "primaryKeyColumnNames": ["key"]
+                }}],
+                "ts": [1, 1]
+            })json"));
             const auto first = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetSchema().HasIndexes(), supportsIndexes);
             auto next = MakeHolder<TEvService::TEvHandshake>(42, 2);

@@ -236,6 +236,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (status.IsSuccess() && Kind == TReplication::ETargetKind::Table) {
             return DescribeStreamTable();
         }
+
         Finish(std::move(status));
     }
 
@@ -261,9 +262,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             if (IsRetryableError(result)) {
                 return Schedule(RetryDelay, new TEvents::TEvWakeup());
             }
+
             auto issues = result.GetIssues();
             return Finish(NYdb::TStatus(result.GetStatus(), std::move(issues)));
         }
+
         for (const auto& stream : result.GetTableDescription().GetChangefeedDescriptions()) {
             if (stream.GetName() == Changefeed.GetName()) {
                 return Finish(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()), stream.GetSchemaChanges());
@@ -367,7 +370,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
     const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
-    const bool skipInitialScan = config.GetSkipInitialScan();
+    const bool skipInitialScan = config.GetSkipInitialScan() && !target->IsIndexBuild();
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),

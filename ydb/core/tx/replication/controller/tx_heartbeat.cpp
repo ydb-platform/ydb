@@ -22,7 +22,13 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId
 
 bool TController::IsHeartbeatParticipant(const TWorkerId& id) const {
     const auto* target = FindTarget(id);
-    return target && target->GetDstState() != TReplication::EDstState::Removing;
+    return target && target->GetDstState() != TReplication::EDstState::Removing && !target->IsIndexBuild();
+}
+
+size_t TController::CountHeartbeatParticipants() const {
+    return CountIf(Workers, [this](const auto& item) {
+        return IsHeartbeatParticipant(item.first);
+    });
 }
 
 bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
@@ -32,7 +38,8 @@ bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
 
     const auto barrierVersion = TRowVersion::FromProto(barrier.Schema.GetVersion());
     return AllOf(Workers, [this, barrierVersion](const auto& item) {
-        return !IsHeartbeatParticipant(item.first) || (item.second.HasHeartbeat() && item.second.GetHeartbeat() > barrierVersion);
+        return !IsHeartbeatParticipant(item.first)
+            || (item.second.HasHeartbeat() && item.second.GetHeartbeat() > barrierVersion);
     });
 }
 
@@ -78,6 +85,7 @@ void TController::AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db) {
 class TController::TTxHeartbeat: public TTxBase {
     // TODO(ilnaz): configurable
     static constexpr ui32 MaxBatchSize = 1000;
+    bool HadHeartbeats = false;
 
     THolder<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
 
@@ -96,6 +104,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
             {"pending", Self->PendingHeartbeats.size()});
 
+        HadHeartbeats = !Self->PendingHeartbeats.empty();
         if (Self->Workers.empty()) {
             YDB_LOG_WARN_CTX(ctx, "There are no workers");
             return true;
@@ -149,9 +158,7 @@ public:
             Self->PendingHeartbeats.erase(it);
         }
 
-        const size_t participants = CountIf(Self->Workers, [this](const auto& item) {
-            return Self->IsHeartbeatParticipant(item.first);
-        });
+        const auto participants = Self->CountHeartbeatParticipants();
         if (!participants || participants != Self->WorkersWithHeartbeat.size()) {
             return true; // no quorum
         }
@@ -177,8 +184,12 @@ public:
             return true; // version has not been changed
         }
 
+        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+            return true;
+        }
+
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;
     }
@@ -197,8 +208,12 @@ public:
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
+        if (HadHeartbeats) {
+            Self->RunTxIndexBuild(ctx);
+        }
+
         for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasActiveSchemaBarrier(replicationId)) {
+            if (!Self->HasPendingAlter(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
         }
@@ -257,19 +272,34 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-            CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
+            CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
 
+        for (auto& [key, build] : Self->IndexBuilds) {
+            const bool joining = build.GetPhase() == NKikimrReplication::TIndexBuildState::JOINING;
+            if (joining && it->first >= TRowVersion::FromProto(build.GetJoinVersion())) {
+                build.SetPhase(NKikimrReplication::TIndexBuildState::MAKING_READY);
+                Self->SaveIndexBuild(db, key, build);
+            }
+        }
+        auto& frontier = Self->CommittedVersions[replication->GetId()];
+        frontier = Max(frontier, it->first);
+        db.Table<Schema::Replications>().Key(replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::CommittedStep>(frontier.Step),
+            NIceDb::TUpdate<Schema::Replications::CommittedTxId>(frontier.TxId)
+        );
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
 
         Self->AdvanceVerifyingSchemaBarriers(db);
 
-        if (it == Self->AssignedTxIds.end() || Self->WorkersByHeartbeat.empty()) {
+        if (it == Self->AssignedTxIds.end() || Self->WorkersByHeartbeat.empty()
+            || Self->CountHeartbeatParticipants() != Self->WorkersWithHeartbeat.size())
+        {
             return true;
         }
 
@@ -283,8 +313,12 @@ public:
             return true;
         }
 
+        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+            return true;
+        }
+
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;
     }
@@ -301,6 +335,11 @@ public:
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
+        Self->RunTxIndexBuild(ctx);
+        if (!Self->PendingTxId.empty()) {
+            Self->RunTxAssignTxId(ctx);
+        }
+
         if (!Self->CommittingTxId) {
             for (const auto& [key, barrier] : Self->SchemaBarriers) {
                 if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
@@ -310,7 +349,7 @@ public:
         }
 
         for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasActiveSchemaBarrier(replicationId)) {
+            if (!Self->HasPendingAlter(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
         }
@@ -321,6 +360,18 @@ public:
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
+
+    if (auto commit = IndexCommits.find(ev->Cookie); commit != IndexCommits.end()) {
+        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
+        IndexCommits.erase(commit);
+        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+            // Completion is persisted by the next index-build transaction.
+            CompletedIndexCommits.insert(ev->Cookie);
+        }
+
+        RunTxIndexBuild(ctx);
+        return;
+    }
 
     if (auto flush = SchemaTargetFlushes.find(ev->Cookie); flush != SchemaTargetFlushes.end()) {
         const auto key = flush->second;

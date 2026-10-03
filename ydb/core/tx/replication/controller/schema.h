@@ -31,6 +31,9 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr bool Default = false;
         };
 
+        struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -42,7 +45,9 @@ struct TControllerSchema: NIceDb::Schema {
             NextTargetId,
             DesiredState,
             Database,
-            DeferredAlter
+            DeferredAlter,
+            CommittedStep,
+            CommittedTxId
         >;
     };
 
@@ -92,6 +97,8 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
 
+        struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
             ReplicationId,
@@ -112,7 +119,8 @@ struct TControllerSchema: NIceDb::Schema {
             DstAlterTxId,
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
-            PendingDstPathLocalId
+            PendingDstPathLocalId,
+            IndexBuild
         >;
     };
 
@@ -164,6 +172,17 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata>;
     };
 
+    // Checkpoints outlive live Workers rows: re-registration must retain the
+    // write mode, and retired partitions' scan maxima must still bound the join.
+    struct IndexBuildWorkers: Table<9> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Progress: Column<4, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Progress>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
@@ -171,7 +190,8 @@ struct TControllerSchema: NIceDb::Schema {
         SrcStreams,
         TxIds,
         Workers,
-        SchemaBarrierWorkers
+        SchemaBarrierWorkers,
+        IndexBuildWorkers
     >;
 
 }; // TControllerSchema

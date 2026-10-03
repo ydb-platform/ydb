@@ -81,6 +81,8 @@ public:
 
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
+        virtual bool IsIndexBuild() const = 0;
+        virtual void SetIndexBuild(bool value) = 0;
 
         virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
@@ -147,6 +149,7 @@ public:
     ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
+    const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
     TVector<TString> GetTargetTablePaths() const;

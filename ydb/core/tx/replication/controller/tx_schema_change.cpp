@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "dst_schema_changer.h"
+#include "target_table.h"
 
 #include <ydb/core/base/path.h>
 
@@ -14,22 +15,26 @@ namespace NKikimr::NReplication::NController {
 namespace {
 
 bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
-    if (!schema.HasVersion()
-        || !schema.GetSourceSchemaVersion()
-        || !schema.ColumnsSize()
-        || !schema.PrimaryKeyColumnNamesSize())
-    {
+    if (!schema.HasVersion() || !schema.GetSourceSchemaVersion()) {
+        return false;
+    }
+
+    if (!schema.ColumnsSize() || !schema.PrimaryKeyColumnNamesSize()) {
         return false;
     }
 
     THashSet<TString> families;
     if (schema.FamiliesSize()) {
         for (const auto& family : schema.GetFamilies()) {
-            if (!family.GetName() || !families.insert(family.GetName()).second
-                || !IsValidCompression(family.GetCompression())
-                || !IsValidCacheMode(family.GetCacheMode())
-                || (family.HasMedia() && family.GetMedia().empty()))
-            {
+            if (!family.GetName() || !families.insert(family.GetName()).second) {
+                return false;
+            }
+
+            if (!IsValidCompression(family.GetCompression()) || !IsValidCacheMode(family.GetCacheMode())) {
+                return false;
+            }
+
+            if (family.HasMedia() && family.GetMedia().empty()) {
                 return false;
             }
         }
@@ -62,11 +67,10 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
 
     THashSet<TString> indexes;
     for (const auto& index : schema.GetIndexes().GetItems()) {
-        if (!index.GetName() || !index.GetType() || !index.IndexColumnsSize()
-            || !indexes.insert(index.GetName()).second)
-        {
+        if (!index.GetName() || !index.GetType() || !index.IndexColumnsSize() || !indexes.insert(index.GetName()).second) {
             return false;
         }
+
         THashSet<TString> indexColumns;
         for (const auto& name : index.GetIndexColumns()) {
             if (!columns.contains(name) || !indexColumns.insert(name).second) {
@@ -111,6 +115,7 @@ ESchemaChangeRelation CompareSchemaChanges(
     if (IsSameSchemaChange(reported, barrier)) {
         return ESchemaChangeRelation::Same;
     }
+
     if (IsNewerSchemaChange(reported, barrier)) {
         return ESchemaChangeRelation::Newer;
     }
@@ -159,6 +164,7 @@ void TController::SendSchemaChangeResult(
         // Old workers compare serialized schemas, including unknown fields.
         event->Record.MutableSchema()->ClearIndexes();
     }
+
     event->Record.SetOffset(offset);
 
     auto& controller = *event->Record.MutableController();
@@ -470,6 +476,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
         if (!schema.HasIndexes()) {
             return;
         }
+
         auto replication = Self->Find(key.first);
         auto* table = replication ? replication->FindTarget(key.second) : nullptr;
         if (!table || table->GetKind() != TReplication::ETargetKind::Table) {
@@ -480,12 +487,18 @@ class TController::TTxSchemaChangeReport: public TTxBase {
         for (const auto& index : schema.GetIndexes().GetItems()) {
             retained.insert(CanonizePath(ChildPath(SplitPath(table->GetSrcPath()), index.GetName())));
         }
+
+        const auto tablePath = CanonizePath(table->GetSrcPath());
         for (auto* target : replication->GetTargets()) {
-            if (target->GetKind() != TReplication::ETargetKind::IndexTable
-                || CanonizePath(TString(ExtractParent(target->GetSrcPath()))) != CanonizePath(table->GetSrcPath())
-                || retained.contains(CanonizePath(target->GetSrcPath()))
-                || target->GetDstState() == TReplication::EDstState::Removing)
-            {
+            const auto kind = target->GetKind();
+            const auto state = target->GetDstState();
+            if (kind != TReplication::ETargetKind::IndexTable || state == TReplication::EDstState::Removing) {
+                continue;
+            }
+
+            const auto sourcePath = CanonizePath(target->GetSrcPath());
+            const auto parentPath = CanonizePath(TString(ExtractParent(target->GetSrcPath())));
+            if (parentPath != tablePath || retained.contains(sourcePath)) {
                 continue;
             }
 
@@ -494,9 +507,11 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             target->SetDstState(TReplication::EDstState::Removing);
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::Targets>().Key(key.first, target->GetId()).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
+            );
             db.Table<Schema::SrcStreams>().Key(key.first, target->GetId()).Update(
-                NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
+            );
 
             for (const auto wid : target->GetWorkers()) {
                 const TWorkerId id(key.first, target->GetId(), wid);
@@ -548,8 +563,10 @@ class TController::TTxSchemaChangeReport: public TTxBase {
         if (!barrier.Schema.HasIndexes() && record.GetSchema().HasIndexes()) {
             barrier.Schema.MutableIndexes()->CopyFrom(record.GetSchema().GetIndexes());
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
-                NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString()));
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString())
+            );
         }
+
         RemoveDroppedIndexTargets(key, barrier.Schema, db);
 
         if (barrier.ReportedWorkers.insert(id).second) {
@@ -568,8 +585,8 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 {"workers", barrier.ExpectedWorkers.size()});
             auto replication = Self->Find(key.first);
             NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
-            if (replication && IsGlobalConsistency(*replication) && !Self->AssignedTxIds.empty()
-                && !barrier.Schema.HasIndexes()) {
+            const bool pendingWrites = replication && IsGlobalConsistency(*replication) && !Self->AssignedTxIds.empty();
+            if (pendingWrites && !barrier.Schema.HasIndexes()) {
                 // Commit the old-schema writes to this destination before its
                 // DDL. Keep the IDs globally assigned so the next ordinary
                 // commit remains an idempotent all-target operation.
@@ -651,28 +668,28 @@ public:
 
         auto& barrier = *barrierPtr;
         const auto relation = CompareSchemaChanges(schema, barrier.Schema);
-        if (relation == ESchemaChangeRelation::Same
-            && barrier.ExpectedWorkers.contains(id))
-        {
+        if (relation == ESchemaChangeRelation::Same && barrier.ExpectedWorkers.contains(id)) {
             if (schema.HasIndexes()) {
                 barrier.IndexMetadataWorkers.insert(id);
             } else {
                 barrier.IndexMetadataWorkers.erase(id);
             }
+
             db.Table<Schema::SchemaBarrierWorkers>()
                 .Key(id.ReplicationId(), id.TargetId(), id.WorkerId()).Update(
                     NIceDb::TUpdate<Schema::SchemaBarrierWorkers::IndexMetadata>(schema.HasIndexes()));
 
-            if (barrier.Phase != ESchemaBarrierPhase::Collecting
-                && barrier.Phase != ESchemaBarrierPhase::Error
-                && !barrier.Schema.HasIndexes() && schema.HasIndexes())
-            {
+            const auto phase = barrier.Phase;
+            const bool pastCollection = phase != ESchemaBarrierPhase::Collecting && phase != ESchemaBarrierPhase::Error;
+            const bool missingIndexes = !barrier.Schema.HasIndexes() && schema.HasIndexes();
+            if (pastCollection && missingIndexes) {
                 // A barrier written by an older controller may already have
                 // left collection without the index snapshot. Reconcile it
                 // before accepting another report or releasing its workers.
                 barrier.Schema.MutableIndexes()->CopyFrom(schema.GetIndexes());
                 db.Table<Schema::Targets>().Key(key.first, key.second).Update(
-                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString()));
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString())
+                );
                 RemoveDroppedIndexTargets(key, barrier.Schema, db);
                 if (barrier.Phase != ESchemaBarrierPhase::FlushingTarget) {
                     const bool oldAlterMayBeActive = barrier.Phase == ESchemaBarrierPhase::Altering;
@@ -685,17 +702,21 @@ public:
                     if (!oldAlterMayBeActive) {
                         barrier.DstAlterTxId = 0;
                     }
+
                     db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                         NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(static_cast<ui8>(barrier.Phase)),
-                        NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(barrier.DstAlterTxId));
+                        NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(barrier.DstAlterTxId)
+                    );
                     RestartAlter = true;
                     StartAlter = true;
                 }
             }
         }
+
         if (RestartAlter && GetSchemaReportStage(record) != ESchemaReportStage::Observed) {
             return true;
         }
+
         switch (GetSchemaReportStage(record)) {
         case ESchemaReportStage::Completed:
             HandleCompletedReport(id, relation, barrier, record, db, ctx);
@@ -713,7 +734,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (ProgressReplication) {
-            if (const auto id = TWorkerId::Parse(Event->Get()->Record.GetWorker()); auto replication = Self->Find(id.ReplicationId())) {
+            const auto id = TWorkerId::Parse(Event->Get()->Record.GetWorker());
+            if (auto replication = Self->Find(id.ReplicationId())) {
                 replication->Progress(ctx);
             }
             return;
@@ -724,11 +746,13 @@ public:
         if (RestartAlter) {
             Self->StopSchemaChangeDstAlter({id.ReplicationId(), id.TargetId()}, ctx);
         }
+
         if (ProgressRemovedIndexes) {
             if (auto replication = Self->Find(id.ReplicationId())) {
                 replication->Progress(ctx);
             }
         }
+
         if (ReporterReply != EReporterReply::None) {
             const bool applied = ReporterReply == EReporterReply::Applied
                 || ReporterReply == EReporterReply::Completed;
@@ -740,9 +764,10 @@ public:
             return;
         }
 
+        Self->RunTxIndexBuild(ctx);
         if (ResumeDeferredAlters) {
             for (const auto replicationId : Self->DeferredAlters) {
-                if (!Self->HasActiveSchemaBarrier(replicationId)) {
+                if (!Self->HasPendingAlter(replicationId)) {
                     ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
                 }
             }
@@ -774,14 +799,22 @@ void TController::StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, co
     auto* target = FindTarget(id);
     auto replication = Find(key.first);
     auto it = SchemaBarriers.find(key);
-    if (!target || !replication || replication->GetState() == TReplication::EState::Removing || it == SchemaBarriers.end()) {
+    if (!target || !replication || it == SchemaBarriers.end()) {
         return;
     }
 
+    if (replication->GetState() == TReplication::EState::Removing) {
+        return;
+    }
+
+    const bool global = IsGlobalConsistency(*replication);
+    const TSchemaChangeDstAlterSettings settings{
+        .TxId = it->second.DstAlterTxId,
+        .RequireTargetFlush = global && !AssignedTxIds.empty() && it->second.TargetFlushTxIds.empty(),
+        .GlobalConsistency = global,
+    };
     const auto actorId = ctx.Register(CreateSchemaChangeDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        key.first, key.second, target->GetKind(), target->GetDstPathId(), it->second.Schema,
-        it->second.DstAlterTxId, IsGlobalConsistency(*replication)
-            && !AssignedTxIds.empty() && it->second.TargetFlushTxIds.empty()));
+        key.first, key.second, target->GetKind(), target->GetDstPathId(), it->second.Schema, settings));
     SchemaChangeDstAlterers.emplace(key, actorId);
 }
 
@@ -814,9 +847,11 @@ public:
         const auto key = std::make_pair(Event->Get()->ReplicationId, Event->Get()->TargetId);
         auto it = Self->SchemaBarriers.find(key);
         auto alterer = Self->SchemaChangeDstAlterers.find(key);
-        if (it == Self->SchemaBarriers.end() || it->second.Phase != ESchemaBarrierPhase::Altering
-            || alterer == Self->SchemaChangeDstAlterers.end() || alterer->second != Event->Sender)
-        {
+        if (alterer == Self->SchemaChangeDstAlterers.end() || alterer->second != Event->Sender) {
+            return true;
+        }
+
+        if (it == Self->SchemaBarriers.end() || it->second.Phase != ESchemaBarrierPhase::Altering) {
             return true;
         }
 
@@ -846,7 +881,11 @@ void TController::RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAl
 
 void TController::StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx) {
     const auto barrierIt = SchemaBarriers.find(key);
-    if (CommittingTxId || barrierIt == SchemaBarriers.end() || barrierIt->second.Phase != ESchemaBarrierPhase::FlushingTarget) {
+    if (CommittingTxId || barrierIt == SchemaBarriers.end()) {
+        return;
+    }
+
+    if (barrierIt->second.Phase != ESchemaBarrierPhase::FlushingTarget) {
         return;
     }
 
@@ -870,11 +909,11 @@ void TController::StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key,
     const ui64 writeTxId = barrier.TargetFlushTxIds[barrier.NextTargetFlushTxId];
     auto replication = Find(key.first);
     auto* target = FindTarget(TWorkerId(key.first, key.second, 0));
-    if (!replication
-        || replication->GetState() == TReplication::EState::Removing
-        || !target
-        || SchemaTargetFlushes.contains(writeTxId))
-    {
+    if (!replication || replication->GetState() == TReplication::EState::Removing) {
+        return;
+    }
+
+    if (!target || SchemaTargetFlushes.contains(writeTxId)) {
         return;
     }
 
@@ -926,12 +965,15 @@ public:
         const auto key = std::make_pair(Event->Get()->ReplicationId, Event->Get()->TargetId);
         auto it = Self->SchemaBarriers.find(key);
         auto alterer = Self->SchemaChangeDstAlterers.find(key);
-        if (it == Self->SchemaBarriers.end()
-            || it->second.Phase != ESchemaBarrierPhase::Altering
-            || it->second.DstAlterTxId != Event->Get()->DstAlterTxId
-            || alterer == Self->SchemaChangeDstAlterers.end()
-            || alterer->second != Event->Sender)
-        {
+        if (alterer == Self->SchemaChangeDstAlterers.end() || alterer->second != Event->Sender) {
+            return true;
+        }
+
+        if (it == Self->SchemaBarriers.end() || it->second.Phase != ESchemaBarrierPhase::Altering) {
+            return true;
+        }
+
+        if (it->second.DstAlterTxId != Event->Get()->DstAlterTxId) {
             return true;
         }
 
@@ -973,13 +1015,52 @@ public:
             }
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(static_cast<ui8>(barrier.Phase)),
-                NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(flushTxIds.SerializeAsString()));
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(flushTxIds.SerializeAsString())
+            );
             StartTargetFlush = !Self->AssignedTxIds.empty();
             RestartAlter = !StartTargetFlush;
             return true;
         }
 
         auto replication = Self->Find(key.first);
+        if (replication && it->second.Schema.HasIndexes()) {
+            auto* base = replication->FindTarget(key.second);
+            if (base && base->GetKind() == TReplication::ETargetKind::Table) {
+                for (const auto& index : it->second.Schema.GetIndexes().GetItems()) {
+                    if (index.GetType() != "GlobalSync") {
+                        continue;
+                    }
+
+                    const auto src = CanonizePath(ChildPath(SplitPath(base->GetSrcPath()), index.GetName()));
+                    bool exists = false;
+                    for (const auto* target : replication->GetTargets()) {
+                        exists |= CanonizePath(target->GetSrcPath()) == src;
+                    }
+                    if (exists) {
+                        continue;
+                    }
+
+                    const auto dst = CanonizePath(ChildPath(SplitPath(base->GetDstPath()),
+                        {index.GetName(), "indexImplTable"}));
+                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst);
+                    const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
+                    replication->FindTarget(tid)->SetIndexBuild(true);
+                    auto& build = Self->IndexBuilds[{key.first, tid}];
+                    build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
+                    build.SetSnapshotTxId(it->second.DstAlterTxId);
+                    db.Table<Schema::Targets>().Key(key.first, tid).Update(
+                        NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::IndexTable),
+                        NIceDb::TUpdate<Schema::Targets::SrcPath>(src),
+                        NIceDb::TUpdate<Schema::Targets::DstPath>(dst),
+                        NIceDb::TUpdate<Schema::Targets::IndexBuild>(build.SerializeAsString())
+                    );
+                }
+                db.Table<Schema::Replications>().Key(key.first).Update(
+                    NIceDb::TUpdate<Schema::Replications::NextTargetId>(replication->GetNextTargetId())
+                );
+            }
+        }
+
         AwaitPostSchemaHeartbeats = replication && IsGlobalConsistency(*replication);
         it->second.Phase = AwaitPostSchemaHeartbeats
             ? ESchemaBarrierPhase::Verifying
@@ -1031,6 +1112,10 @@ public:
             }
         }
 
+        if (auto replication = Self->Find(key.first)) {
+            replication->Progress(ctx);
+        }
+
         for (const auto& id : Release) {
             Self->SendSchemaChangeResult(id, Schema, ReleaseOffsets.at(id), false, false, ctx);
         }
@@ -1041,8 +1126,9 @@ public:
             }
         }
 
+        Self->RunTxIndexBuild(ctx);
         for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasActiveSchemaBarrier(replicationId)) {
+            if (!Self->HasPendingAlter(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
         }

@@ -9,6 +9,7 @@
 #include "tenant_resolver.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -371,6 +372,21 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
 
 void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
+}
+
+const TReplication::ITarget* TReplication::FindBaseTableTarget(const ITarget& indexTarget) const {
+    if (indexTarget.GetKind() != TReplication::ETargetKind::IndexTable) {
+        return nullptr;
+    }
+
+    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcPath())));
+    for (const auto* target : GetTargets()) {
+        if (target->GetKind() == TReplication::ETargetKind::Table && CanonizePath(target->GetSrcPath()) == path) {
+            return target;
+        }
+    }
+
+    return nullptr;
 }
 
 TVector<TReplication::ITarget*> TReplication::GetTargets() const {

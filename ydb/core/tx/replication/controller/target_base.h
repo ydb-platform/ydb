@@ -51,6 +51,8 @@ public:
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
+    bool IsIndexBuild() const override { return IndexBuild; }
+    void SetIndexBuild(bool value) override { IndexBuild = value; }
 
     const IConfig::TPtr& GetConfig() const override;
     const TString& GetSrcPath() const override;
@@ -103,6 +105,7 @@ private:
     EStreamState StreamState = EStreamState::Ready;
     std::optional<bool> StreamSchemaChanges;
     TString Issue;
+    bool IndexBuild = false;
 
     TActorId DstCreator;
     TActorId DstAlterer;

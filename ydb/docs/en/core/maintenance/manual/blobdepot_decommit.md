@@ -21,26 +21,26 @@ It is worth noting once again that from the moment of blocking writes to the phy
 
 ## How to Launch
 
-To start decommissioning, a command is executed BS_CONTROLLER, in which you need to specify the list of groups to be decommissioned, as well as the number of the Hive tablet that will manage the blob depots of the decommissioned groups. You can also specify a list of pools where the blob depot will store its data. If this list is not specified, then BS_CONTROLLER automatically selects the same pools where the decommissioned groups are located for data storage, and the number of data channels is made equal to the number of physical groups in these pools (but no more than 250).
+To start decommissioning, a `BS_CONTROLLER` command is executed, in which you need to specify the list of groups to be decommissioned, as well as the number of the Hive tablet that will manage the blob depots of the decommissioned groups. You can also specify a list of pools where the blob depot will store its data. If this list is not specified, then `BS_CONTROLLER` automatically selects the same pools where the decommissioned groups are located for data storage, and the number of data channels is made equal to the number of physical groups in these pools (but no more than 250).
 
 ```bash
-dstool -e ... --direct group decommit `--group-ids` 2181038080 --database=/Root/db1 `--wait`
+dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db1 --wait
 ```
 
 Command line parameters:
 
-* `--wait` wait for the decommission to start; if a startup error occurs, the error is displayed on the screen and the decommission is canceled automatically (only when this option is specified);
-* `--group-ids` GROUP_ID GROUP_ID list of groups for which decommissioning can be performed;
-* `--database=DB` specify the tenant in which decommissioning should be done (or the domain, if decommission is performed for groups within the domain);
-* ``--log-channel-sp`=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed;
-* ``--snapshot-channel-sp`=POOL_NAME` name of the pool where channel 1 of the blob depot tablet will be placed; if not specified, the value from `--log-channel-sp` is used;
-* `--data-channel-sp`=POOL_NAME[\*`COUNT`] name of the pool where data channels are placed; if the `COUNT` parameter is specified (after the asterisk), `COUNT` data channels are created in the specified pool.
+* `--wait` — wait for the decommission to start; if a startup error occurs, the error is displayed on the screen and the decommission is canceled automatically (only when this option is specified).
+* `--group-ids` GROUP_ID — GROUP_ID list of groups for which decommissioning can be performed.
+* `--database=DB` — specify the tenant in which decommissioning should be done (or the domain, if decommission is performed for groups within the domain).
+* `--log-channel-sp=POOL_NAME` — name of the pool where channel 0 of the blob depot tablet will be placed.
+* `--snapshot-channel-sp=POOL_NAME` — name of the pool where channel 1 of the blob depot tablet will be placed; if not specified, the value from `--log-channel-sp` is used.
+* `--data-channel-sp=POOL_NAME[*COUNT]` — name of the pool where data channels are placed; if the `COUNT` parameter is specified (after the asterisk), `COUNT` data channels are created in the specified pool.
 
 If neither `--log-channel-sp`, nor `--snapshot-channel-sp`, nor `--data-channel-sp` are specified, then the storage pool to which the decommissioned group belongs is automatically found, and the zero and first channels of the blob depot are created in it, as well as N data channels, where N is the number of remaining physical groups in this pool.
 
 ## How to Check that Everything is Running {#decommit-check-running}
 
-You can view the decommissioning result similarly to creating virtual groups. For decommissioned groups, an additional field appears DecommitStatus, which can take one of the following values:
+You can view the decommissioning result similarly to creating virtual groups. For decommissioned groups, an additional `DecommitStatus` field appears, which can take one of the following values:
 
 * `NONE` — decommissioning is not performed for the specified group;
 * `PENDING` — group decommissioning is expected but not yet performed (blob depot is being created);
@@ -52,12 +52,12 @@ $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 ┌────────────┬──────────────┬───────────────┬────────────┬────────────────┬─────────────────┬──────────────┬───────────────────┬──────────────────┬───────────────────┬─────────────┬────────────────┐
 │ GroupId    │ BoxId:PoolId │ PoolName      │ Generation │ ErasureSpecies │ OperatingStatus │ VDisks_TOTAL │ VirtualGroupState │ VirtualGroupName │ BlobDepotId       │ ErrorReason │ DecommitStatus │
 ├────────────┼──────────────┼───────────────┼────────────┼────────────────┼─────────────────┼──────────────┼───────────────────┼──────────────────┼───────────────────┼─────────────┼────────────────┤
-│ 2181038080 │ [1:1]        │ /Root:ssd     │ 2          │ block-4-2      │ FULL            │ 8            │ WORKING           │                  │ 72075186224038160 │             │ `IN_PROGRESS`    │
-│ 2181038081 │ [1:1]        │ /Root:ssd     │ 2          │ block-4-2      │ FULL            │ 8            │ WORKING           │                  │ 72075186224038161 │             │ `IN_PROGRESS`    │
-│ 4261412864 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg1              │ 72075186224037888 │             │ `NONE`           │
-│ 4261412865 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg2              │ 72075186224037890 │             │ `NONE`           │
-│ 4261412866 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg3              │ 72075186224037889 │             │ `NONE`           │
-│ 4261412867 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg4              │ 72075186224037891 │             │ `NONE`           │
+│ 2181038080 │ [1:1]        │ /Root:ssd     │ 2          │ block-4-2      │ FULL            │ 8            │ WORKING           │                  │ 72075186224038160 │             │ IN_PROGRESS    │
+│ 2181038081 │ [1:1]        │ /Root:ssd     │ 2          │ block-4-2      │ FULL            │ 8            │ WORKING           │                  │ 72075186224038161 │             │ IN_PROGRESS    │
+│ 4261412864 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg1              │ 72075186224037888 │             │ NONE           │
+│ 4261412865 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg2              │ 72075186224037890 │             │ NONE           │
+│ 4261412866 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg3              │ 72075186224037889 │             │ NONE           │
+│ 4261412867 │ [1:2]        │ /Root:virtual │ 0          │ none           │ DISINTEGRATED   │ 0            │ WORKING           │ vg4              │ 72075186224037891 │             │ NONE           │
 └────────────┴──────────────┴───────────────┴────────────┴────────────────┴─────────────────┴──────────────┴───────────────────┴──────────────────┴───────────────────┴─────────────┴────────────────┘
 ```
 

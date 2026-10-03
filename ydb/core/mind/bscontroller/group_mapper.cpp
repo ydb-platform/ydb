@@ -1611,7 +1611,8 @@ namespace NKikimr::NBsController {
                 }
                 if (maxSlotSizeInBytes) {
                     // Reserve the full quota even for an empty or replicating VDisk.
-                    const ui64 totalUnits = *maxSlotSizeInBytes / disk.SlotSizeInBytes;
+                    const ui64 unitSize = disk.Space->EnforcedDynamicSlotSize.value_or(disk.SlotSizeInBytes);
+                    const ui64 totalUnits = unitSize ? *maxSlotSizeInBytes / unitSize : 0;
                     availableCapacityInUnits = i64(Min(totalUnits, ui64(Max<i64>())))
                         - i64(Min(disk.NumActiveUnits, ui64(Max<i64>())));
                     *maxSlotSizeInBytes = *maxSlotSizeInBytes * (1000 - State->Mapper.Options.SpaceMarginPromille) / 1000;

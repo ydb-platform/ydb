@@ -903,6 +903,38 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT(!canAllocate(true, 1000, 10, 1001));
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeCapacityUsesRoundedUnit) {
+        for (const auto& [enforcedUnitSize, expectedUnits] :
+                std::vector<std::pair<std::optional<ui64>, ui32>>{{96, 3}, {std::nullopt, 2}, {0, 0}}) {
+            NKikimrBlobStorage::TPDiskMetrics metrics;
+            metrics.SetTotalSize(400);
+            metrics.SetAvailableSize(400);
+            metrics.SetUserChunkPoolSize(288);
+            if (enforcedUnitSize) {
+                metrics.SetEnforcedDynamicSlotSize(*enforcedUnitSize);
+            }
+            TGroupMapper::TPlacementSnapshot state;
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(1, 1),
+                .Location = MakeTestLocation(1),
+                .ExpectedSlotCount = 8,
+                .SlotSizeInBytes = 101,
+                .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                .Operational = true,
+            });
+            TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+            mapper.Populate(std::move(state));
+            TGroupMapperError error;
+            // Three rounded quotas fit; older metrics fall back to two configured units.
+            for (ui32 groupId = 1; groupId <= expectedUnits; ++groupId) {
+                TGroupMapper::TGroupDefinition group;
+                UNIT_ASSERT_C(mapper.AllocateGroup(groupId, group, {}, {}, 1, 0, false, {}, error), error.ErrorMessage);
+            }
+            TGroupMapper::TGroupDefinition excess;
+            UNIT_ASSERT(!mapper.AllocateGroup(expectedUnits + 1, excess, {}, {}, 1, 0, false, {}, error));
+        }
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeReservesCapacityForEmptyVDisks) {
         for (const auto& [existingUnits, fitsSingle, expectedSlots, remainingUnits] :
                 std::vector<std::tuple<ui32, bool, ui32, i64>>{{2, true, 3, 0}, {5, false, 4, -2}}) {

@@ -245,14 +245,19 @@ struct TPressureFlipTest : public TSessionTest {
         Runtime->Send(channel.second, Control1, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback}, NodeIndex1, true);
         Sleep(TDuration::MilliSeconds(200));
         UNIT_ASSERT_C(!descriptor->PeerMemoryPressure.load(), "the empty pop reported the pressure");
-        UNIT_ASSERT_C(WaitFor([&]() { return descriptor->PeerMemoryPressure.load(); }, TDuration::Seconds(10)), "pressure not reported");
-        UNIT_ASSERT_VALUES_EQUAL(GetCounter(Service0, "OutputBuffer/ThrottledCount"), 1);
+        // the session updates the gauge after the flag
+        UNIT_ASSERT_C(WaitFor([&]() {
+            return descriptor->PeerMemoryPressure.load() && GetCounter(Service0, "OutputBuffer/ThrottledCount") == 1;
+        }, TDuration::Seconds(10)), TStringBuilder() << "pressure not reported, PeerMemoryPressure=" << descriptor->PeerMemoryPressure.load()
+            << ", ThrottledCount=" << GetCounter(Service0, "OutputBuffer/ThrottledCount"));
 
         // the release is refreshed at the latest by the push of the finish, and reported by its pop
         InputQuotaManager->MemoryPressure = false;
         Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
-        UNIT_ASSERT_C(WaitFor([&]() { return !descriptor->PeerMemoryPressure.load(); }, TDuration::Seconds(10)), "the release was not reported");
-        UNIT_ASSERT_VALUES_EQUAL(GetCounter(Service0, "OutputBuffer/ThrottledCount"), 0);
+        UNIT_ASSERT_C(WaitFor([&]() {
+            return !descriptor->PeerMemoryPressure.load() && GetCounter(Service0, "OutputBuffer/ThrottledCount") == 0;
+        }, TDuration::Seconds(10)), TStringBuilder() << "the release was not reported, PeerMemoryPressure=" << descriptor->PeerMemoryPressure.load()
+            << ", ThrottledCount=" << GetCounter(Service0, "OutputBuffer/ThrottledCount"));
 
         WaitChannel("pressure flip");
         descriptor.reset();

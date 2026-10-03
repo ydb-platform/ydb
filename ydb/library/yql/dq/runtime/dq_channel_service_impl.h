@@ -960,7 +960,7 @@ public:
     // Lose the acks confirming up to this SeqNo, 0 for none. Only an OK one: a RESEND is what the peer is
     // waiting for, and losing it would stall the session rather than the channel
     std::atomic<ui64> DropOkAckUpToSeqNo = 0;
-    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    // Data parked on arrival and not taken out for delivery yet, for a test to wait on.
     std::atomic<ui64> PendingDataCount = 0;
     std::atomic<bool> HoldWaiterDequeue = false;
     std::atomic<bool> WaiterDequeueHeld = false;
@@ -1608,10 +1608,11 @@ public:
         // session is paused; a running queue drains its remainder below.
         if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                auto delivered = DeliverChannelData(PendingChannelData.front());
+                // off the count before the delivery, whose ack lets the peer send the next message
+                auto pending = std::move(PendingChannelData.front());
                 PendingChannelData.pop();
                 NodeState->PendingDataCount--;
-                if (delivered && maxCount && --maxCount == 0) {
+                if (DeliverChannelData(pending) && maxCount && --maxCount == 0) {
                     break;
                 }
             }

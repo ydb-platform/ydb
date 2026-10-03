@@ -5,6 +5,22 @@
 
 namespace NKikimr {
 
+    TEvGetVDiskSpaceReportRequest::TEvGetVDiskSpaceReportRequest() = default;
+
+    TEvGetVDiskSpaceReportResponse::TEvGetVDiskSpaceReportResponse() = default;
+
+    TEvGetVDiskSpaceReportResponse::TEvGetVDiskSpaceReportResponse(
+            NKikimrProto::EReplyStatus status, const TString& errorReason,
+            const TInstant& now, const ::NMonitoring::TDynamicCounters::TCounterPtr& counterPtr,
+            const NVDiskMon::TLtcHistoPtr& histoPtr)
+        : TEvVResultBasePB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG)
+    {
+        Record.SetStatus(NKikimrProto::EReplyStatus_Name(status));
+        if (errorReason) {
+            Record.SetErrorReason(errorReason);
+        }
+    }
+
     TEvBlobStorage::TEvVPutResult::TEvVPutResult() = default;
 
     TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status,

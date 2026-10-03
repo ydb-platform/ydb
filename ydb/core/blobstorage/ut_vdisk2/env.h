@@ -90,12 +90,20 @@ namespace NKikimr {
             return Runtime.get();
         }
 
+        const TActorId& GetVDiskServiceId() const {
+            return VDiskServiceId;
+        }
+
         TIntrusivePtr<TPDiskMockState> GetPDiskMockState() {
             return PDiskMockState;
         }
 
         ::NMonitoring::TDynamicCounterPtr GetCounters() {
             return Counters;
+        }
+
+        void SetSpaceReportPeriodSeconds(ui64 seconds) {
+            VDiskConfig->SpaceReportPeriodSeconds = seconds;
         }
 
         void Compact(bool freshOnly = false) {
@@ -198,6 +206,9 @@ namespace NKikimr {
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
             VDiskConfig->UseCostTracker = false;
+            // Periodic background scans make otherwise unrelated VDisk tests
+            // time-dependent. SpaceReport tests trigger a cold refresh explicitly.
+            VDiskConfig->SpaceReportPeriodSeconds = 0;
 
             // create and register actor
             std::unique_ptr<IActor> vdisk(NKikimr::CreateVDisk(VDiskConfig, Info, Counters->GetSubgroup("subsystem", "vdisk")));

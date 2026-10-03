@@ -303,6 +303,14 @@ class TestViewer(object):
             'database': cls.dedicated_db,
             'query': 'grant select on `' + cls.dedicated_db + '` to monitoring;'
         })
+        params = {
+            'database': cls.serverless_db,
+            'query': f"GRANT 'ydb.granular.describe_schema' ON `{cls.serverless_db}` "
+                     "TO database, viewer, monitoring;",
+            'schema': 'multi',
+        }
+        response = cls.call_viewer_api_post('/viewer/query?' + urlencode(params))
+        assert response.status_code == 200, response.text
         cls.database_session_id = cls.login_user({'user': 'database', 'password': '2345'}).cookies.get('ydb_session_id')
         cls.viewer_session_id = cls.login_user({'user': 'viewer', 'password': '3456'}).cookies.get('ydb_session_id')
         cls.monitoring_session_id = cls.login_user({'user': 'monitoring', 'password': '4567'}).cookies.get('ydb_session_id')
@@ -960,6 +968,52 @@ class TestViewer(object):
             },
         }
         return result
+
+    @classmethod
+    def check_storage_groups_restricted_to_database_pools(cls, database, storage_database):
+        def group_ids(params, headers=None):
+            result = cls.get_viewer('/storage/groups', params, headers=headers)
+            assert 'status_code' not in result, result
+            return {int(group['GroupId']) for group in result.get('StorageGroups') or []}
+
+        own_groups = group_ids({'database': storage_database})
+        assert own_groups, 'the database must have storage groups'
+        assert group_ids({}) - own_groups, 'the cluster must have storage groups outside the database pools'
+        own_group = min(own_groups)
+        cases = (
+            # List all groups of the database with the default fields.
+            {},
+            # Select a known group of the database, as the UI does when opening its details.
+            {'group_id': str(own_group)},
+            # Explicitly request GroupId without naming PoolName; database filtering must still apply.
+            {'fields_required': 'GroupId'},
+        )
+        users = {
+            'database': cls.make_cookie_headers(cls.database_session_id),
+            'viewer': cls.make_cookie_headers(cls.viewer_session_id),
+            'monitoring': cls.make_cookie_headers(cls.monitoring_session_id),
+            'root': cls.default_headers,
+        }
+        for whiteboard_only in (0, 1):
+            for user, headers in users.items():
+                for extra_params in cases:
+                    params = {'database': database, 'whiteboard_only': whiteboard_only, **extra_params}
+                    groups = group_ids(params, headers)
+                    if 'group_id' in extra_params:
+                        expected_groups = {own_group}
+                    else:
+                        expected_groups = own_groups
+                    assert groups == expected_groups, (user, params, groups, expected_groups)
+
+    # Dedicated database requests return only groups from that database's storage pools.
+    @classmethod
+    def test_storage_groups_restricted_to_database_pools_for_dedicated_database(cls):
+        cls.check_storage_groups_restricted_to_database_pools(cls.dedicated_db, cls.dedicated_db)
+
+    # Serverless requests return groups from shared storage pools without requiring access to the shared database.
+    @classmethod
+    def test_storage_groups_restricted_to_database_pools_for_serverless_database(cls):
+        cls.check_storage_groups_restricted_to_database_pools(cls.serverless_db, cls.shared_db)
 
     # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
     # filter is validated against the storage of the database, so the handler has to fetch GroupId,

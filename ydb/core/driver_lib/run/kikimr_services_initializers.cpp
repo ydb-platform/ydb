@@ -632,7 +632,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
         .MemoryBytes = 8ull << 20,
         .MaxLines = 4096,
-        .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer.", "actor_system.", "inmemory_metrics."},
     }));
 
     if (auto* mon = appData->Mon) {

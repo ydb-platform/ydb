@@ -205,8 +205,8 @@ public:
         AFL_VERIFY(ControlPoints == 1);
         builder.ValidateDataSchema(DataSchema);
         bool cpReachedFlag = false;
-        std::shared_ptr<TSortableScanData> resultScanData;
-        ui64 resultPosition;
+        std::shared_ptr<TSortableScanData> resultScanData = nullptr;
+        ui64 resultPosition = 0;
         while (SortHeap.Size() && !cpReachedFlag && !builder.IsBufferExhausted()) {
             if (SortHeap.Current().IsControlPoint()) {
                 auto keyColumns = SortHeap.Current().GetKeyColumns().BuildSortingCursor();

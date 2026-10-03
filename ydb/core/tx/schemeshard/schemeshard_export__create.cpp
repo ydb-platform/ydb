@@ -18,6 +18,7 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
@@ -611,6 +612,7 @@ private:
         }
 
         const TString sourcePathRoot = exportSettings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(exportSettings.source_path());
+        THashSet<TString> sourcePaths;
 
         for (ui32 itemIndex = 1; itemIndex <= static_cast<ui32>(exportSettings.items_size()); ++itemIndex) {
             auto& exportItem = *exportSettings.mutable_items(itemIndex - 1);
@@ -618,10 +620,16 @@ private:
 
             // remove source path prefix
             TString exportPath = CanonizePath(exportItem.source_path());
-            if (exportPath.StartsWith(sourcePathRoot)) {
+            if (exportPath == sourcePathRoot) {
+                exportPath.clear();
+            } else if (exportPath.StartsWith(sourcePathRoot + '/')) {
                 exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
             }
             exportPath = NBackup::NormalizeItemPath(exportPath); // Path without leading slash
+            if (!sourcePaths.insert(exportPath).second) {
+                issues = TStringBuilder() << "Duplicate backup source path: " << exportPath;
+                return false;
+            }
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;

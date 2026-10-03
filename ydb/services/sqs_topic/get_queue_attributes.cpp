@@ -5,6 +5,7 @@
 #include "request.h"
 #include "utils.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -299,9 +300,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (HasDlq()) {
                     redrivePolicy["maxReceiveCount"] = ConsumerConfig->GetMaxProcessingAttempts();
                     if (const TString& dlq = ConsumerConfig->GetDeadLetterQueue(); !dlq.empty()) {
+                        const TString databasePrefix = QueueUrl_->Database + "/";
                         TRichQueueUrl dlqUrl{
                             .Database = QueueUrl_->Database,
-                            .TopicPath = dlq,
+                            .TopicPath = AppData()->FeatureFlags.GetEnableRelativePaths() && dlq.StartsWith(databasePrefix)
+                                ? dlq.substr(databasePrefix.size()) : dlq,
                             .Consumer = QueueUrl_->Consumer,
                             .Fifo = QueueUrl_->Fifo,
                         };

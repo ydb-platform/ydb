@@ -31,6 +31,7 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/path_aliasing
+    sdk/cpp/relative_database
     sdk/cpp/sdk_credprovider
     secrets
     security

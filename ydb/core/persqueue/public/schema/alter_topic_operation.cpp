@@ -52,7 +52,8 @@ private:
             {
                 .UserToken = Settings.UserToken,
                 .AccessRights = NACLib::EAccessRights::AlterSchema,
-                .ForceSyncVersion = true
+                .ForceSyncVersion = true,
+                .EnableRelativePaths = Settings.EnableRelativePaths,
             }));
     }
 
@@ -203,7 +204,8 @@ private:
                 ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
                 oldConfig,
                 TCheckDlqTopicsSettings{
-                    .UserToken = Settings.UserToken
+                    .UserToken = Settings.UserToken,
+                    .EnableRelativePaths = Settings.EnableRelativePaths,
                 }))
         {
             Become(&TAlterTopicOperationActor::CheckDlqState);

@@ -413,7 +413,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     }
     if constexpr (Protocol == EProtocol::Topic) {
         if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
-            topic_path = Request->NormalizePath(topic_path);
+            topic_path = Request->GetDatabaseRelativePath(topic_path);
             InitRequest.set_path(topic_path);
         }
     }
@@ -446,7 +446,8 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),

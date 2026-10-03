@@ -1459,11 +1459,12 @@ void BackupGroupMembers(TDriver driver, const TString& dbPath, const TFsPath& fo
     WriteCreationQueryToFile(alterGroupQuery.Str(), folderPath, NDump::NFiles::AlterGroup());
 }
 
-void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
+void BackupDatabaseImpl(TDriver driver, TString dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
     LOG_I("Backup database " << dbPath.Quote() << " to " << folderPath.GetPath().Quote());
     folderPath.MkDirs();
 
     auto status = GetDatabaseStatus(driver, dbPath);
+    dbPath = TString(status.GetPath());
     Ydb::Cms::CreateDatabaseRequest proto;
     status.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Database());
@@ -1549,18 +1550,24 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
     }
 }
 
-// relDbPath - relative path to directory/table to be backuped
+// dbPath - resource path to directory/table to be backed up
 // folderPath - relative path to folder in local filesystem where backup will be stored
-void BackupFolder(const TDriver& driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
+void BackupFolder(const TDriver& driver, const TString& database, const TString& dbPath, TFsPath folderPath,
         const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
+    // Resolve an explicitly specified relative database against the actual
+    // cluster root for backup metadata and SQL references.
+    const TString canonicalDatabase = database.empty() || database.StartsWith('/')
+        ? database
+        : ResolveBackupPath(FindClusterRootPath(driver), database);
+    const TString dbPrefix = ResolveBackupPath(canonicalDatabase, dbPath);
+
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
     }
     CheckedCreateBackupFolder(folderPath);
 
-    TString dbPrefix = JoinDatabasePath(database, relDbPath);
     LOG_I("Backup " << dbPrefix.Quote() << " to " << folderPath.GetPath().Quote());
 
     // full path to temporal directory in database
@@ -1568,12 +1575,12 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
     try {
         if (!schemaOnly && !avoidCopy) {
             // Create temporal folder in database's root directory
-            tmpDbFolder = JoinDatabasePath(database, "~" + temporalBackupPostfix);
+            tmpDbFolder = JoinDatabasePath(canonicalDatabase, "~" + temporalBackupPostfix);
             CreateClusterDirectory(driver, tmpDbFolder, true);
         }
 
         NYql::TIssues issues;
-        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, canonicalDatabase, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 

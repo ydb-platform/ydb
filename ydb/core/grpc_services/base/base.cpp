@@ -1,6 +1,22 @@
 #include "base.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+
 namespace NKikimr::NGRpcService {
+
+IRequestProxyCtx::IRequestProxyCtx() {
+    if (HasAppData()) {
+        InitRootPath(AppData());
+    }
+}
+
+void IRequestProxyCtx::InitRootPath(const TAppData* appData) {
+    if (RootPath.empty() && appData && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+        RootPath = "/" + appData->DomainsInfo->Domain->Name;
+        RelativePathsEnabled_ = appData->FeatureFlags.GetEnableRelativePaths();
+    }
+}
 
 void IRequestProxyCtx::CountRequestPaths() const {
     if (const auto database = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)) {
@@ -25,6 +41,28 @@ void IRequestProxyCtx::CountResourcePath(TStringBuf path) const {
             RelativeResourceCounted_ = true;
         }
     }
+}
+
+const TMaybe<TString> IRequestProxyCtx::GetDatabaseName() const {
+    if (PathNormalizationInitialized_) {
+        return EffectiveDatabaseName_;
+    }
+    if (DatabaseName) {
+        return DatabaseName;
+    }
+    const auto database = GetDatabaseNameFromRequest();
+    if (RootPath.empty() || !database || database->empty()) {
+        return database;
+    }
+    DatabaseName = RelativePathsEnabled_ ? PrependDomainIfNeeded(RootPath, *database) : *database;
+    return DatabaseName;
+}
+
+TString IAuditCtx::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
+    const TString normalizedPath = NormalizePath(path);
+    return AppData()->FeatureFlags.GetEnableRelativePaths()
+        ? ResolvePathToDatabase(base.empty() ? GetDatabaseName().GetOrElse(TString()) : TString(base), normalizedPath)
+        : normalizedPath;
 }
 
 } // namespace NKikimr::NGRpcService

@@ -1324,9 +1324,9 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
         case TEvTablet::TEvCutTabletHistory::EventType:
-            if (CutHistoryScan && ev->Cookie && ev->Cookie <= CutHistoryScan->Intervals.size()) {
-                CutHistoryScan->Intervals[ev->Cookie - 1].Attempted = false;
-                CutHistoryScan->RetryDelivery = true;
+            if (UnusedHistoryScan && ev->Cookie && ev->Cookie <= UnusedHistoryScan->Intervals.size()) {
+                UnusedHistoryScan->Intervals[ev->Cookie - 1].Attempted = false;
+                UnusedHistoryScan->RetryDelivery = true;
             }
             break;
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
@@ -2009,8 +2009,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
-        HFunc(TEvPrivate::TEvContinueCutHistory, Handle);
-        HFunc(TEvPrivate::TEvCutHistoryPortionsReady, Handle);
+        HFunc(TEvPrivate::TEvContinueUnusedHistory, Handle);
+        HFunc(TEvPrivate::TEvUnusedHistoryPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);

@@ -45,7 +45,7 @@ bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionCon
     if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
         return false;
     }
-    Self->InitCutHistoryScan();
+    Self->InitUnusedHistoryScan();
     return true;
 }
 

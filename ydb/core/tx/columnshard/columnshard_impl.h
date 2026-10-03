@@ -217,7 +217,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxSaveCutHistoryRequests;
-    friend class TCutHistoryResultProcessor;
+    friend class TUnusedHistoryResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -604,14 +604,14 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    std::optional<TCutHistoryScan> CutHistoryScan;
-    void InitCutHistoryScan();
-    void StartCutHistoryScan(const TActorContext& ctx);
-    void AbortCutHistoryScan();
-    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result);
+    std::optional<TUnusedHistoryScan> UnusedHistoryScan;
+    void InitUnusedHistoryScan();
+    void StartUnusedHistoryScan(const TActorContext& ctx);
+    void AbortUnusedHistoryScan();
+    void FinishUnusedHistoryBatch(const NOlap::TDataAccessorsResult& result);
     void TryCutHistory(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinueCutHistory::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinueUnusedHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvUnusedHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();

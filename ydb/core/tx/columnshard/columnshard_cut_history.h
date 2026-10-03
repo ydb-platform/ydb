@@ -16,7 +16,7 @@ namespace NKikimr::NColumnShard {
 
 inline constexpr ui64 CutHistoryRequestLimit = 64;
 
-struct TCutHistoryInterval {
+struct THistoryInterval {
     ui32 Channel = 0;
     ui32 From = 0;
     ui32 To = 0;
@@ -26,8 +26,8 @@ struct TCutHistoryInterval {
     bool ReadyToSend = false;
 };
 
-struct TCutHistoryScan {
-    std::vector<TCutHistoryInterval> Intervals;
+struct TUnusedHistoryScan {
+    std::vector<THistoryInterval> Intervals;
     std::vector<std::pair<TInternalPathId, ui64>> Portions;
     size_t Position = 0;
     size_t Pending = 0;

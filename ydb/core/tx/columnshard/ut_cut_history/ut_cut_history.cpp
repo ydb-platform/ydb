@@ -52,7 +52,7 @@ public:
         });
         Runtime.SetScheduledEventFilter(
             [this, previous](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-                if (event->HasEvent() && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(event->GetBase())) {
+                if (event->HasEvent() && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(event->GetBase())) {
                     ContinuationDelays.push_back(delay);
                     return false;
                 }
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+            if (dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
                 ++batches;
             } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
                        cut && cut->Record.GetChannel() == FirstDataChannel) {
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
                 UNIT_ASSERT(!continuation);
                 continuation = ev.Release();
             } else if (dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
                 continuation = ev.Release();
             } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
                        holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {
@@ -692,7 +692,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdContinuation && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+            if (holdContinuation && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
                 continuation = ev.Release();
             } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
                        holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {

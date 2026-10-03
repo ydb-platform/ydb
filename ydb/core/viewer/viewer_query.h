@@ -7,8 +7,10 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr::NViewer {
 
@@ -25,6 +27,8 @@ class TJsonQuery : public TViewerPipeClient {
     TString QueryId;
     TString ResourcePool;
     TString TransactionMode;
+    ::google::protobuf::Map<TString, Ydb::TypedValue> Parameters;
+    TString ParametersError;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
@@ -92,6 +96,50 @@ private:
         }
         if (!ExecutionId.empty()) {
             jsonResponse["execution_id"] = ExecutionId;
+        }
+    }
+
+    // Parses the "parameters" field from the JSON POST body.
+    // Expected format: a JSON object mapping parameter names to Ydb.TypedValue objects.
+    // Example:
+    //   {
+    //     "parameters": {
+    //       "$id": {"type": {"type_id": "INT64"}, "value": {"int64_value": 42}},
+    //       "$name": {"type": {"type_id": "UTF8"}, "value": {"text_value": "foo"}}
+    //     }
+    //   }
+    // Uses google::protobuf::util::JsonStringToMessage for JSON-to-proto conversion,
+    // which handles all Ydb.Type and Ydb.Value variants automatically.
+    void ParseParametersFromJson(const NJson::TJsonValue& jsonData) {
+        if (!jsonData.IsMap() || !jsonData.GetMap().contains("parameters")) {
+            return;
+        }
+        const auto& paramsJson = jsonData["parameters"];
+        if (!paramsJson.IsMap()) {
+            ParametersError = "parameters must be a JSON object";
+            return;
+        }
+        for (const auto& [name, paramJson] : paramsJson.GetMap()) {
+            // Validate parameter name: must start with '$'
+            if (name.empty() || name[0] != '$') {
+                ParametersError = "parameter name must start with '$': " + name;
+                return;
+            }
+            if (!paramJson.IsMap()) {
+                ParametersError = "parameter value must be a JSON object: " + name;
+                return;
+            }
+            // Serialize the parameter JSON to a string and use protobuf's
+            // JsonStringToMessage to parse it into Ydb::TypedValue.
+            TString jsonStr = NJson::WriteJson(paramJson, false);
+            Ydb::TypedValue typedValue;
+            auto status = google::protobuf::util::JsonStringToMessage(
+                std::string_view(jsonStr.data(), jsonStr.size()), &typedValue);
+            if (!status.ok()) {
+                ParametersError = "invalid parameter format for '" + name + "': " + status.ToString();
+                return;
+            }
+            Parameters[name] = std::move(typedValue);
         }
     }
 
@@ -381,11 +429,15 @@ public:
         : TBase(viewer, ev)
     {
         InitConfig(Params);
+        ParseParametersFromJson(PostData);
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
+        }
+        if (!ParametersError.empty()) {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", ParametersError), "InvalidParameters");
         }
         if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
@@ -661,6 +713,9 @@ public:
             }
         }
         request.SetIsInternalCall(InternalCall);
+        if (!Parameters.empty()) {
+            *request.MutableYdbParameters() = Parameters;
+        }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         if (Forget && !QueryRequestStartTime) {
             QueryRequestStartTime = TActivationContext::Now();
@@ -1628,6 +1683,18 @@ public:
                         schema:
                             type: object
                             description: the same properties as in query parameters
+                            properties:
+                                parameters:
+                                    type: object
+                                    description: >
+                                        Query parameters in Ydb.TypedValue format.
+                                        Each key is a parameter name, each value is an object with
+                                        "type" (Ydb.Type) and "value" (Ydb.Value) fields.
+                                        Example:
+                                        {
+                                          "id": {"type": {"type_id": "INT64"}, "value": {"int64_value": 42}},
+                                          "name": {"type": {"type_id": "UTF8"}, "value": {"text_value": "foo"}}
+                                        }
             responses:
                 200:
                     description: OK

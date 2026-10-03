@@ -46,10 +46,13 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     struct TPutBatchedBucket {
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         TEvBlobStorage::TEvPut::ETactic Tactic;
+        bool ReduceInterpileTraffic;
 
-        TPutBatchedBucket(NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic)
+        TPutBatchedBucket(NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
+                bool reduceInterpileTraffic)
             : HandleClass(handleClass)
             , Tactic(tactic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic)
         {
             Y_ABORT_UNLESS(NKikimrBlobStorage::EPutHandleClass_MIN <= handleClass &&
                     NKikimrBlobStorage::EPutHandleClass_MAX >= handleClass, "incorrect PutHandleClass");
@@ -97,9 +100,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     static constexpr ui64 PutTacticCount = TEvBlobStorage::TEvPut::TacticCount;
     static_assert(PutTacticCount <= 10);
 
-    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount];
-    static constexpr ui64 PutBatchecBucketCount = PutHandleClassCount * PutTacticCount;
-    TStackVec<TPutBatchedBucket, PutBatchecBucketCount> PutBatchedBucketQueue;
+    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount][2];
+    static constexpr ui64 PutBatchedBucketCount = PutHandleClassCount * PutTacticCount * 2;
+    TStackVec<TPutBatchedBucket, PutBatchedBucketCount> PutBatchedBucketQueue;
     THashSet<TLogoBlobID> BatchedPutIds;
 
     TEvStopBatchingGetRequests::TPtr StopGetBatchingEvent;
@@ -274,7 +277,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     }
 
     void ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts, NKikimrBlobStorage::EPutHandleClass handleClass,
-        TEvBlobStorage::TEvPut::ETactic tactic);
+        TEvBlobStorage::TEvPut::ETactic tactic, bool reduceInterpileTraffic);
     void Handle(TEvStopBatchingPutRequests::TPtr& ev);
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 

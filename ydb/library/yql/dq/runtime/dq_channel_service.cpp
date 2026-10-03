@@ -1448,6 +1448,9 @@ void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
+        if (flags & NActors::IEventHandle::FlagSubscribeOnSession) {
+            Subscribed.store(false); // the lost send has not subscribed
+        }
     } else {
         if (auto failCount = FailureDoubleSend.load(); failCount > 0) {
             FailureDoubleSend.store(failCount - 1);

@@ -1879,6 +1879,55 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";");
     }
 
+    Y_UNIT_TEST(PredicatePushdown_IgnoreCaseUdfNotNullColumns) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto createResult = session.ExecuteQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                str String NOT NULL,
+                u_str Utf8 NOT NULL,
+                PRIMARY KEY(id)
+            )
+            WITH (STORE = COLUMN);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues());
+        const auto insertResult = session.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                (1, "foobar", "foobar"),
+                (2, "barfoo", "barfoo"),
+                (3, "foo", "foo"),
+                (4, "baz", "baz")
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues());
+
+        const std::vector<std::pair<TString, TString>> patterns = {
+            {"foo", "[[3]]"},
+            {"foo%", "[[1];[3]]"},
+            {"%foo", "[[2];[3]]"},
+            {"%FOO%", "[[1];[2];[3]]"},
+        };
+        for (const TString extraPragma : {"", "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";"}) {
+            for (const TString column : {"str", "u_str"}) {
+                for (const auto& [pattern, expected] : patterns) {
+                    const auto query = Sprintf(R"(
+                        PRAGMA OptimizeSimpleILike;
+                        PRAGMA AnsiLike;
+                        %s
+                        SELECT id FROM `/Root/foo` WHERE %s ILIKE "%s" ORDER BY id;
+                    )", extraPragma.c_str(), column.c_str(), pattern.c_str());
+                    const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                    UNIT_ASSERT_C(res.IsSuccess(), query << res.GetIssues().ToString());
+                    CompareYson(expected, FormatResultSetYson(res.GetResultSet(0)));
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

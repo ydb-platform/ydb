@@ -2368,6 +2368,7 @@ THive::THiveStats THive::GetStats() const {
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
+    stats.MinResourceNormValues = minValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -2516,16 +2517,35 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 balancerType = EBalancerType::Scatter;
                 break;
         }
-        BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
-                   << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
-        StartHiveBalancer({
-            .Type = balancerType,
-            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-            .MaxInFlight = GetBalancerInflight(),
-            .ResourceToBalance = *scatteredResource,
-        });
-        return;
+        const auto resource = *scatteredResource;
+        const double minScatter = TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), resource);
+        if (minScatter >= 0.0 && minScatter < 1.0) {
+            const double minUsage = TTabletInfo::ExtractResourceUsage(stats.MinResourceNormValues, resource);
+            const double usageThreshold = minUsage / (1.0 - minScatter);
+
+            std::vector<TNodeId> nodeIds;
+            nodeIds.reserve(stats.Values.size());
+            for (const auto& node : stats.Values) {
+                const double usage = TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource);
+                if (usage > usageThreshold) {
+                    nodeIds.push_back(node.NodeId);
+                }
+            }
+            // An empty filter means all nodes to the balancer.
+            if (!nodeIds.empty()) {
+                BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
+                           << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
+                StartHiveBalancer({
+                    .Type = balancerType,
+                    .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+                    .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+                    .MaxInFlight = GetBalancerInflight(),
+                    .FilterNodeIds = std::move(nodeIds),
+                    .ResourceToBalance = *scatteredResource,
+                });
+                return;
+            }
+        }
     }
 
     Send(SelfId(), new TEvPrivate::TEvBalancerOut());

@@ -77,6 +77,22 @@ Y_UNIT_TEST(TestTaggedTypeBuilder) {
     UNIT_ASSERT_VALUES_EQUAL(*reinterpret_cast<int32_t*>(value->address()), 123);
 }
 
+Y_UNIT_TEST(TestEmptyArrayCachedAcrossBuilds) {
+    TArrayBuilderTestData data;
+    const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, /*optional=*/false);
+    const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), intType,
+                                               *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+    const auto first = arrayBuilder->Build(false);
+    const auto second = arrayBuilder->Build(false);
+
+    UNIT_ASSERT(first.is_array());
+    UNIT_ASSERT(second.is_array());
+    UNIT_ASSERT_VALUES_EQUAL(first.length(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(second.length(), 0);
+    UNIT_ASSERT_EQUAL(first.array().get(), second.array().get());
+}
+
 Y_UNIT_TEST(TestTaggedTypeReader) {
     TArrayBuilderTestData data;
     const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, /*optional=*/false);

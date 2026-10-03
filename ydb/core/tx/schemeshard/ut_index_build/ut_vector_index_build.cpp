@@ -16,6 +16,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

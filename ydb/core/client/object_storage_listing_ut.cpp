@@ -1,6 +1,7 @@
 #include "flat_ut_client.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>

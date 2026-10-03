@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/json
     library/cpp/logger
+    library/cpp/testing/common
     library/cpp/threading/future
     ydb/core/base
     ydb/core/blob_depot

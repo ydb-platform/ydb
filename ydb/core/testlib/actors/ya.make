@@ -12,7 +12,7 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     ydb/library/actors/testlib
-    library/cpp/testing/unittest
+    library/cpp/testing/common
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc
@@ -31,5 +31,6 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    gtest
     ut
 )

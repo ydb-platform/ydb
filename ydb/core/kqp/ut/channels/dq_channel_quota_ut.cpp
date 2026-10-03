@@ -65,6 +65,13 @@ struct TOutputQuotaTest : public TQuotaAbortTest {
 // The input quota runs out with the consumer stalled, on a push of the receiver
 struct TInputQuotaTest : public TQuotaAbortTest {
 
+    void Prepare() override {
+        // the producer stops at the rejected message: later data would bring ERROR acks, which can abort the
+        // producer with UNAVAILABLE before the OVERLOADED abort arrives
+        Limits.RemoteChannelColdInflightBytes = 100_KB;
+        TQuotaAbortTest::Prepare();
+    }
+
     void Run() override {
         Prepare();
         Init();
@@ -250,6 +257,9 @@ struct TInputBindQuotaTest : public TSessionTest {
         ConsumerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10000, .MaxMessageSize = 10000, .ExpectAbort = Fails };
         if (Fails) {
             InputQuotaManager->Limit = 100_KB;
+            // no pops: the update which finishes the channel could reach the producer before the abort
+            ConsumerSettings.PauseMessageIndex = 0;
+            ConsumerSettings.PauseDelayMs = 30000;
         }
 
         auto channel = StartChannel(1, false);

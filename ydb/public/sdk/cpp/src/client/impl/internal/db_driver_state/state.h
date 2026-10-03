@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_client/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime/runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
@@ -30,12 +31,33 @@ public:
     using TCb = std::function<NThreading::TFuture<void>()>;
     using TPtr = std::shared_ptr<TDbDriverState>;
 
+    class TClientLease final {
+    public:
+        TClientLease() noexcept = default;
+
+        explicit operator bool() const noexcept;
+        IInternalClient* Get() const noexcept;
+        IInternalClient* operator->() const noexcept;
+        const NYdbGrpc::IQueueClientContextPtr& GetContext() const noexcept;
+
+    private:
+        TClientLease(
+            NYdbGrpc::IQueueClientContextPtr context,
+            IInternalClient* client) noexcept;
+
+        NYdbGrpc::IQueueClientContextPtr Context_;
+        IInternalClient* Client_ = nullptr;
+
+        friend class TDbDriverState;
+    };
+
     TDbDriverState(
         const std::string& database,
         const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
-        IInternalClient* client
+        IInternalClient* client,
+        std::weak_ptr<TDriverScope> driverScope
     );
 
     NThreading::TFuture<void> DiscoveryCompleted() const;
@@ -59,12 +81,12 @@ public:
     std::string GetEndpoint() const;
     bool AreClientTlsCredentialsValid() const;
     const std::string& GetClientTlsValidationDetail() const;
+    TClientLease TryGetClient() const;
 
     const std::string Database;
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
@@ -84,6 +106,8 @@ private:
 #endif
     };
 
+    IInternalClient* const Client_;
+    const std::weak_ptr<TDriverScope> DriverScope_;
     TCredentials Credentials;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
@@ -120,12 +144,14 @@ public:
     NThreading::TFuture<void> SendNotification(
         TDbDriverState::ENotifyType type,
         TNotificationCbRunner cbRunner = {});
+    void SetDriverScope(TDriverScope::TPtr driverScope);
     void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
+    struct TStateStorage;
+
     IInternalClient* DiscoveryClient_;
-    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
-    std::shared_mutex Lock_;
-    std::condition_variable_any Notify_;
+    std::weak_ptr<TDriverScope> DriverScope_;
+    std::shared_ptr<TStateStorage> StateStorage_;
 };
 
 using TDbDriverStatePtr = TDbDriverState::TPtr;

@@ -10,8 +10,9 @@ namespace NYdb::inline Dev {
 
 constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s; // The max delay between GetOperation calls for one operation
 
-TSimpleCbResult::TSimpleCbResult(TSimpleCb&& cb)
-    : UserResponseCb_(std::move(cb))
+TSimpleCbResult::TSimpleCbResult(TSimpleCb&& cb, std::shared_ptr<IQueueClientContext> context)
+    : Context_(std::move(context))
+    , UserResponseCb_(std::move(cb))
 { }
 
 void TSimpleCbResult::Process(void*) {
@@ -88,16 +89,14 @@ void TPeriodicAction::OnAlarm() {
     if (!UserResponseCb_(std::move(issues), EStatus::SUCCESS)) {
         return;
     }
-
-    auto ctx = Connection_->CreateContext();
-    if (!ctx)
+    if (Context_->IsCancelled()) {
         return;
-    Context_ = ctx;
+    }
 
     auto action = MakeIntrusive<TPeriodicAction>(
         std::move(UserResponseCb_),
         Connection_,
-        Context_,
+        std::move(Context_),
         Period_);
     action->Start();
 }

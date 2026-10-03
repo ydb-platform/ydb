@@ -12,6 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/endpoints
     ydb/public/sdk/cpp/src/client/impl/internal/logger
     ydb/public/sdk/cpp/src/client/impl/internal/plain_status
+    ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime
     ydb/public/sdk/cpp/src/client/types/credentials
 )
 

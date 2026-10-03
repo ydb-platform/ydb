@@ -28,23 +28,35 @@ constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pe
 constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case
 constexpr TDeadline::Duration DISCOVERY_RECHECK_PERIOD = 5s; // period to run periodic discovery task
 
+struct TDbDriverStateTracker::TStateStorage {
+    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States;
+    std::shared_mutex Lock;
+    std::condition_variable_any Notify;
+};
+
 TDbDriverState::TDbDriverState(
     const std::string& database,
     const std::string& discoveryEndpoint,
     EDiscoveryMode discoveryMode,
     const TSslCredentials& sslCredentials,
-    IInternalClient* client
+    IInternalClient* client,
+    std::weak_ptr<TDriverScope> driverScope
 )
     : Database(database)
     , DiscoveryEndpoint(discoveryEndpoint)
     , DiscoveryMode(discoveryMode)
     , SslCredentials(sslCredentials)
-    , Client(client)
-    , EndpointPool([this, client]() mutable {
+    , EndpointPool([this]() mutable {
         // this callback will be called just after shared_ptr initialization
         // so this call is safe
         auto self = shared_from_this();
-        return client->GetEndpoints(self);
+        auto client = TryGetClient();
+        if (client) {
+            return client->GetEndpoints(std::move(self));
+        }
+        return NThreading::MakeFuture(TListEndpointsResult{
+            {},
+            TPlainStatus(EStatus::CLIENT_CANCELLED, "YDB driver is stopped")});
     }, client)
     , StatCollector(
         database,
@@ -52,11 +64,49 @@ TDbDriverState::TDbDriverState(
         client->GetExternalMetricRegistry(),
         discoveryEndpoint
     )
-    , Log(Client->GetLog())
+    , Log(client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
+    , Client_(client)
+    , DriverScope_(std::move(driverScope))
 {
     EndpointPool.SetStatCollector(StatCollector);
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
+}
+
+TDbDriverState::TClientLease::TClientLease(
+    NYdbGrpc::IQueueClientContextPtr context,
+    IInternalClient* client) noexcept
+    : Context_(std::move(context))
+    , Client_(client)
+{
+}
+
+TDbDriverState::TClientLease::operator bool() const noexcept {
+    return Client_ && Context_;
+}
+
+IInternalClient* TDbDriverState::TClientLease::Get() const noexcept {
+    return Client_;
+}
+
+IInternalClient* TDbDriverState::TClientLease::operator->() const noexcept {
+    return Client_;
+}
+
+const NYdbGrpc::IQueueClientContextPtr& TDbDriverState::TClientLease::GetContext() const noexcept {
+    return Context_;
+}
+
+TDbDriverState::TClientLease TDbDriverState::TryGetClient() const {
+    auto driverScope = DriverScope_.lock();
+    if (!driverScope) {
+        return {};
+    }
+    auto context = driverScope->TryAdmitContext();
+    if (!context) {
+        return {};
+    }
+    return TClientLease(std::move(context), Client_);
 }
 
 void TDbDriverState::InitCredentials(
@@ -161,7 +211,9 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
                     auto cb = [strong](const NThreading::TFuture<TEndpointUpdateResult>& future) {
                         const auto& updateResult = future.GetValue();
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        strong->Client->DeleteChannels(updateResult.Removed);
+                        if (auto client = strong->TryGetClient()) {
+                            client->DeleteChannels(updateResult.Removed);
+                        }
 #endif
                         if (strong->DiscoveryMode == EDiscoveryMode::Sync) {
                             std::unique_lock guard(strong->LastDiscoveryStatusRWLock);
@@ -178,6 +230,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
 
 TDbDriverStateTracker::TDbDriverStateTracker(IInternalClient* client)
     : DiscoveryClient_(client)
+    , StateStorage_(std::make_shared<TStateStorage>())
 {}
 
 TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
@@ -187,6 +240,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     const TSslCredentials& sslCredentials,
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
+    const auto stateStorage = StateStorage_;
     std::string clientIdentity;
     if (credentialsProviderFactory) {
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
@@ -195,9 +249,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     Quote(quotedDatabase);
     const TStateKey key{quotedDatabase, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
     {
-        std::shared_lock lock(Lock_);
-        auto state = States_.find(key);
-        if (state != States_.end()) {
+        std::shared_lock lock(stateStorage->Lock);
+        auto state = stateStorage->States.find(key);
+        if (state != stateStorage->States.end()) {
             auto strong = state->second.lock();
             if (strong) {
                 return strong;
@@ -207,10 +261,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     }
     TDbDriverStatePtr strongState;
     {
-        std::unique_lock lock(Lock_);
-        Notify_.wait(lock, [&]() {
-            auto state = States_.find(key);
-            if (state == States_.end()) {
+        std::unique_lock lock(stateStorage->Lock);
+        stateStorage->Notify.wait(lock, [&]() {
+            auto state = stateStorage->States.find(key);
+            if (state == stateStorage->States.end()) {
                 return true;
             }
             strongState = state->second.lock();
@@ -223,16 +277,16 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             return strongState;
         }
         {
-            auto deleter = [this, key](TDbDriverState* p) {
+            auto deleter = [stateStorage, key](TDbDriverState* p) {
                 {
-                    std::unique_lock lock(Lock_);
-                    States_.erase(key);
-                    Notify_.notify_all();
+                    std::unique_lock lock(stateStorage->Lock);
+                    stateStorage->States.erase(key);
+                    stateStorage->Notify.notify_all();
                 }
                 delete p;
             };
 
-            auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
+            auto [it, inserted] = stateStorage->States.try_emplace(key); // creates empty weak_ptr
             auto& weakState = it->second;
             lock.unlock(); // temporarily release lock
 
@@ -244,7 +298,8 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         discoveryEndpoint,
                         discoveryMode,
                         sslCredentials,
-                        DiscoveryClient_),
+                        DiscoveryClient_,
+                        DriverScope_),
                     deleter);
 
                 strongState->InitCredentials(
@@ -258,15 +313,15 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             } catch (...) {
                 lock.lock();
                 Y_ABORT_UNLESS(weakState.expired());
-                Y_ABORT_UNLESS(States_.erase(key));
-                Notify_.notify_all();
+                Y_ABORT_UNLESS(stateStorage->States.erase(key));
+                stateStorage->Notify.notify_all();
                 throw;
             }
 
             lock.lock(); // re-acquire lock
             Y_ABORT_UNLESS(weakState.expired());
             weakState = strongState; // reference remains valid
-            Notify_.notify_all();
+            stateStorage->Notify.notify_all();
         }
     }
 
@@ -295,22 +350,30 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 }
 
 void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
-    Client->AddPeriodicTask(std::move(cb), period);
+    if (auto client = TryGetClient()) {
+        client->AddPeriodicTask(std::move(cb), period);
+    } else {
+        NYdb::NIssue::TIssues issues;
+        cb(std::move(issues), EStatus::CLIENT_CANCELLED);
+    }
 }
 
 void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
-    Client->PostToResponseQueue(std::move(f));
+    if (auto client = TryGetClient()) {
+        client->PostToResponseQueue(std::move(f));
+    }
 }
 
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
     TDbDriverState::ENotifyType type,
     TNotificationCbRunner cbRunner
 ) {
+    const auto stateStorage = StateStorage_;
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
-        std::shared_lock lock(Lock_);
-        states.reserve(States_.size());
-        for (auto& weak : States_) {
+        std::shared_lock lock(stateStorage->Lock);
+        states.reserve(stateStorage->States.size());
+        for (auto& weak : stateStorage->States) {
             states.push_back(weak.second);
         }
     }
@@ -341,12 +404,19 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
     return NThreading::WaitExceptionOrAll(results);
 }
 
+void TDbDriverStateTracker::SetDriverScope(TDriverScope::TPtr driverScope) {
+    Y_ABORT_UNLESS(driverScope);
+    Y_ABORT_UNLESS(DriverScope_.expired(), "YDB driver scope is already configured");
+    DriverScope_ = std::move(driverScope);
+}
+
 void TDbDriverStateTracker::SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry) {
+    const auto stateStorage = StateStorage_;
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
-        std::shared_lock lock(Lock_);
-        states.reserve(States_.size());
-        for (auto& weak : States_) {
+        std::shared_lock lock(stateStorage->Lock);
+        states.reserve(stateStorage->States.size());
+        for (auto& weak : stateStorage->States) {
             states.push_back(weak.second);
         }
     }

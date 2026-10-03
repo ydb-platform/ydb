@@ -12,6 +12,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -987,6 +988,14 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     }
 
     Die(ctx);
+}
+
+void TPartition::PassAway() {
+    if (WriteSessionsQuoterNotified) {
+        Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
+            TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+    }
+    TBaseTabletActor<TPartition>::PassAway();
 }
 
 void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)

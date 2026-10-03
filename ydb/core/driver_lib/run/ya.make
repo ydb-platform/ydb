@@ -92,6 +92,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter

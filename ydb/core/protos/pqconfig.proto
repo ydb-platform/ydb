@@ -230,6 +230,8 @@ message TPQConfig {
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
+    // Maximum concurrent write session initializations per topic partition.
+    optional uint64 MaxConcurrentWriteSessionInitializations = 63 [default = 1000];
 }
 
 message TChannelProfile {

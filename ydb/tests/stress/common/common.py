@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import ydb
-import os
 import threading
 import multiprocessing
 import logging
@@ -90,6 +89,8 @@ class WorkloadBase:
         self.stop = stop
         self.workload_entities = []
         self.use_multiprocessing = False
+        self._fatal_errors = []
+        self._fatal_errors_lock = threading.Lock()
 
     def name(self):
         return self.name
@@ -117,17 +118,26 @@ class WorkloadBase:
 
         return True
 
-    @staticmethod
-    def run_with_fatal_handler(f):
+    def run_with_fatal_handler(self, f):
         try:
             f()
         except Exception as e:
             logger.exception(f"FATAL: {e}")
-            os._exit(1)
+            if not self.use_multiprocessing:
+                with self._fatal_errors_lock:
+                    self._fatal_errors.append(e)
+            raise
 
     def join(self, timeout: Optional[float] = None):
         for t in self.workload_entities:
             t.join(timeout)
+        if self.use_multiprocessing:
+            for process in self.workload_entities:
+                if process.exitcode not in (None, 0):
+                    raise RuntimeError(f"{self.name} worker exited with code {process.exitcode}")
+        with self._fatal_errors_lock:
+            if self._fatal_errors:
+                raise RuntimeError(f"{self.name} worker failed") from self._fatal_errors[0]
 
     def wait_stop(self, timeout: Optional[float] = None) -> bool:
         self.join(timeout)

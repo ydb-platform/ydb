@@ -27,13 +27,22 @@ public:
         IgnoreMessages({});
     }
 
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         YDB_LOG_INFO_CTX(context.Ctx, "");
         YDB_LOG_DEBUG_CTX(context.Ctx, "",
             {"message", ev->Get()->Record.ShortDebugString()},
         );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -43,38 +52,50 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
 
-        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDB_LOG_DEBUG_CTX(context.Ctx, "UpdatePartitioningForTableModification");
-            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+        TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
+        Y_ABORT_UNLESS(tablePath.IsResolved());
+
+        if (tablePath->IsTable()) {
+            if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+                YDB_LOG_DEBUG_CTX(context.Ctx, "UpdatePartitioningForTableModification");
+                NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+            }
         }
 
         txState->ClearShardsInProgress();
 
-        TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
-        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-
         Y_ABORT_UNLESS(txState->Shards.size());
-        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
-            auto idx = txState->Shards[i].Idx;
-            auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            TPathId targetPathId = txState->TargetPathId;
+        // One seqNo for all shards: for row tables it is only used in FillSeqNo (not per-shard),
+        // for column tables it is passed to MakeColumnShardProposal.
+        const auto seqNo = context.SS->StartRound(*txState);
 
-            TString txBody;
-            {
-                auto seqNo = context.SS->StartRound(*txState);
+        TString txBody;
+        if (tablePath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-                NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                context.SS->FillSeqNo(tx, seqNo);
-                auto truncateTable = tx.MutableTruncateTable();
-                auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-                truncateTable->SetTableSchemaVersion(table->AlterVersion + 1);
-                targetPathId.ToProto(truncateTable->MutablePathId());
-                Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-            }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto truncateTable = tx.MutableTruncateTable();
+            truncateTable->SetTableSchemaVersion(table->AlterVersion + 1);
+            txState->TargetPathId.ToProto(truncateTable->MutablePathId());
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        } else if (tablePath->IsColumnTable()) {
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto* truncate = tx.MutableTruncateTable();
+            truncate->SetPathId(txState->TargetPathId.LocalPathId);
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        } else {
+            Y_ABORT_UNLESS(false, "Unexpected path type in TPropose::ProgressState");
+        }
 
-            auto event = context.SS->MakeDataShardProposal(targetPathId, OperationId, txBody, context.Ctx);
-            context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
+        for (const auto& shard : txState->Shards) {
+            auto idx = shard.Idx;
+            auto tabletId = context.SS->ShardInfos[idx].TabletID;
+            auto event = context.SS->MakeShardProposal(tablePath, OperationId, seqNo, txBody, context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());
         }
 
         txState->UpdateShardsInProgress(TTxState::ConfigureParts);
@@ -92,14 +113,24 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType,
+                        TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -120,16 +151,25 @@ public:
 
         const auto path = TPath::Init(txState->TargetPathId, context.SS);
 
-        auto table = context.SS->Tables.at(path.Base()->PathId);
-        table->AlterVersion += 1;
-        context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
+        if (path->IsTable()) {
+            auto table = context.SS->Tables.at(path.Base()->PathId);
+            table->AlterVersion += 1;
+            context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
-        // This check means that the table being processed is the main one.
-        if (!path.Parent()->IsTableIndex()) {
-            NTableIndexVersion::SyncChildIndexVersions(
-                path.Base(), table, table->AlterVersion,
-                OperationId, context, db
-            );
+            // This check means that the table being processed is the main one.
+            if (!path.Parent()->IsTableIndex()) {
+                NTableIndexVersion::SyncChildIndexVersions(
+                    path.Base(), table, table->AlterVersion,
+                    OperationId, context, db
+                );
+            }
+        } else if (path->IsColumnTable()) {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
+            auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(txState->TargetPathId);
+            tableInfo->AlterVersion += 1;
+            context.SS->PersistColumnTable(db, txState->TargetPathId, *tableInfo);
+        } else {
+            Y_ABORT_UNLESS(false, "Unexpected path type in TDone::ProgressState");
         }
 
         context.SS->ClearDescribePathCaches(path.Base());
@@ -154,6 +194,100 @@ public:
         }
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
+        return false;
+    }
+};
+
+class TTruncateTableProposedWaitParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    const char* Name() const override {
+        return "TTruncateTableProposedWaitParts";
+    }
+
+public:
+    TTruncateTableProposedWaitParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType,
+                        TEvColumnShard::TEvProposeTransactionResult::EventType,
+                        TEvPrivate::TEvOperationPlan::EventType});
+    }
+
+    template<typename TEvent>
+    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context) {
+        const auto& evRecord = ev->Get()->Record;
+
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
+
+        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
+            YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged: false");
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ReadyForNotifications: false");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        txState->ClearShardsInProgress();
+        for (TTxState::TShardOperation& shard : txState->Shards) {
+            if (shard.Operation < TTxState::ProposedWaitParts) {
+                shard.Operation = TTxState::ProposedWaitParts;
+                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
+            }
+
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+            TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+
+            const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
+
+            if (shardInfo.TabletType == ETabletType::ColumnShard) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            }
+
+            context.OnComplete.RouteByTablet(OperationId, tablet);
+        }
+
+        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
+
+        // Move all notifications that were already received
+        txState->AcceptPendingSchemeNotification();
+
+        // Got notifications from all shards?
+        if (txState->ShardsInProgress.empty()) {
+            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+            return true;
+        }
+
         return false;
     }
 };
@@ -189,7 +323,7 @@ public:
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return MakeHolder<TTruncateTableProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -217,13 +351,48 @@ public:
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .NotDeleted()
-                .NotBackupTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
-                .NotUnderOperation()
-                .IsTable();
+                .NotUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        const bool isColumnTable = tablePath.Base()->IsColumnTable();
+        const bool isTable = tablePath.Base()->IsTable();
+
+        if (!isColumnTable && !isTable) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE is only supported for tables and column tables");
+            return result;
+        }
+
+        if (isColumnTable) {
+            if (!AppData()->FeatureFlags.GetEnableTruncateColumnTable()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE is not supported for column tables");
+                return result;
+            }
+
+            TPath::TChecker colChecks = tablePath.Check();
+            colChecks
+                .IsColumnTable()
+                .NotReadOnlyColumnTable()
+                .NotUnderDeleting()
+                .NotBackupTable();
+
+            if (!colChecks) {
+                result->SetError(colChecks.GetStatus(), colChecks.GetError());
+                return result;
+            }
+        } else {
+            TPath::TChecker tableChecks = tablePath.Check();
+            tableChecks
+                .IsTable()
+                .NotBackupTable();
+
+            if (!tableChecks) {
+                result->SetError(tableChecks.GetStatus(), tableChecks.GetError());
                 return result;
             }
         }
@@ -244,18 +413,29 @@ public:
             }
         }
 
-        // End check conditions
-
         // Begin create local transaction
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
-        Y_ABORT_UNLESS(table->GetPartitions().size());
+        if (isColumnTable) {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(tablePath.Base()->PathId));
+            auto tableInfo = context.SS->ColumnTables.GetVerified(tablePath.Base()->PathId);
 
-        {
+            // TRUNCATE is currently supported only for standalone column tables. Tables that belong to a
+            // column store are rejected here (the same restriction is enforced on the column shard side).
+            if (!tableInfo->IsStandalone()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "TRUNCATE TABLE is not supported for column tables in a column store");
+                return result;
+            }
+
+            // Truncate with TTL eviction to external storage is not supported yet.
+            if (!tableInfo->GetUsedTiers().empty()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot truncate column table with tiering");
+                return result;
+            }
+
             context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
             context.MemChanges.GrabNewTxState(context.SS, OperationId);
-
             context.DbChanges.PersistPath(tablePath.Base()->PathId);
             context.DbChanges.PersistTxState(OperationId);
 
@@ -265,23 +445,60 @@ public:
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
             txState.State = TTxState::ConfigureParts;
 
-            for (const auto* shard : table->GetPartitions()) {
-                auto shardIdx = shard->ShardIdx;
+            for (auto shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
+                Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 context.MemChanges.GrabShard(context.SS, shardIdx);
                 context.DbChanges.PersistShard(shardIdx);
 
                 TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-                txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+                txState.Shards.emplace_back(shardIdx, shardInfo.TabletType, TTxState::ConfigureParts);
                 shardInfo.CurrentTxId = OperationId.GetTxId();
             }
 
-            for (auto splitTx : table->GetSplitOpsInFlight()) {
-                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
-            }
-
             context.OnComplete.ActivateTx(OperationId);
+
+            // TRUNCATE changes data (not schema), but the scheme board must be notified so that
+            // DescribePath reflects the updated state. Clear caches to avoid stale descriptions.
+            context.SS->ClearDescribePathCaches(tablePath.Base());
+            context.OnComplete.PublishToSchemeBoard(OperationId, tablePath.Base()->PathId);
+
             SetState(NextState());
-            Y_ABORT_UNLESS(txState.Shards.size());
+        } else {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+            Y_ABORT_UNLESS(table->GetPartitions().size());
+
+            {
+                context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
+                context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+                context.DbChanges.PersistPath(tablePath.Base()->PathId);
+                context.DbChanges.PersistTxState(OperationId);
+
+                tablePath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+                tablePath.Base()->LastTxId = OperationId.GetTxId();
+
+                TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
+                txState.State = TTxState::ConfigureParts;
+
+                for (const auto* shard : table->GetPartitions()) {
+                    auto shardIdx = shard->ShardIdx;
+                    context.MemChanges.GrabShard(context.SS, shardIdx);
+                    context.DbChanges.PersistShard(shardIdx);
+
+                    TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
+                    txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+                    shardInfo.CurrentTxId = OperationId.GetTxId();
+                }
+
+                for (auto splitTx : table->GetSplitOpsInFlight()) {
+                    context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+                }
+
+                context.OnComplete.ActivateTx(OperationId);
+                SetState(NextState());
+                Y_ABORT_UNLESS(txState.Shards.size());
+            }
         }
 
         // End create local transaction
@@ -316,7 +533,7 @@ enum ESchemeObjectType {
 
 // About DfsOnTableChildrenTree.
 //
-// Traverses the table’s child tree in DFS order (main table -> index objects -> index implementation tables)
+// Traverses the table's child tree in DFS order (main table -> index objects -> index implementation tables)
 // and builds a list of TRUNCATE TABLE sub-operations, so all related tables are truncated as one consistent action.
 //
 // For each node that is a table, the function adds a TRUNCATE TABLE sub-operation to `result`.
@@ -548,12 +765,25 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     // so as not to generate a large set of sub-operations in case even the main table is "wrong".
     TPath::TChecker checks = mainTablePath.Check();
     checks
-        .IsResolved()
-        .IsTable();
+        .IsResolved();
 
     if (!checks) {
-        // We cannot return empty vector of suboperations because of technical features of schemeshard's work
         result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        return result;
+    }
+
+    if (mainTablePath.Base()->IsColumnTable()) {
+        // Column tables: use the unified TruncateTable sub-operation
+        result.push_back(CreateTruncateTable(opId, tx));
+        return result;
+    }
+
+    // Row tables: check that it's a table
+    TPath::TChecker tableChecks = mainTablePath.Check();
+    tableChecks.IsTable();
+
+    if (!tableChecks) {
+        result = {CreateReject(opId, tableChecks.GetStatus(), tableChecks.GetError())};
         return result;
     }
 

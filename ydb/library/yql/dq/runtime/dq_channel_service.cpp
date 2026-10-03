@@ -1820,6 +1820,7 @@ void TNodeState::ResendUpdates() {
     }
     // after ConnectSession has published the peer: an update a consumer sends meanwhile to the previous one is
     // either before this resend under UpdateMutex, or reads the new peer itself
+    std::atomic_thread_fence(std::memory_order_seq_cst);
     for (auto& [_, descriptor] : InputDescriptors) {
         if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
             UpdateProgress(descriptor);
@@ -2245,12 +2246,24 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         && memoryPressure == descriptor->LastSentMemoryPressure) {
         return; // noop
     }
+
+    auto peer = ReadPeer();
+    if (!peer.ActorId) {
+        // pairs with the fence in ResendUpdates: either it sees this update's progress, or this sees its peer
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        peer = ReadPeer();
+    }
+    if (!peer.ActorId) {
+        // no discovery from the peer yet: ResendUpdates sends the update once the peer is known. A send to nobody
+        // would only bounce, and it would spend FlagSubscribeOnSession without subscribing
+        return;
+    }
+
     descriptor->LastSentMemoryPressure = memoryPressure;
     if (memoryPressure) {
         (*InputBufferPressureReports)++;
     }
 
-    auto peer = ReadPeer();
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
     evUpdate->Record.SetGenMajor(peer.GenMajor);

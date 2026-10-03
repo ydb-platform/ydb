@@ -44,6 +44,19 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     return result.Build();
 }
 
+TNodePtr BuildRelativePrefixValue(const TDeferredAtom& relativePath) {
+    const auto pos = relativePath.Build()->GetPos();
+    auto tagged = new TCallNodeImpl(pos, "AsTagged", {relativePath.Build(), BuildQuotedAtom(pos, "RelativePathPrefix")});
+    return new TCallNodeImpl(pos, "Untag", {tagged, BuildQuotedAtom(pos, "RelativePathPrefix")});
+}
+
+TNodePtr EnsureRelativePrefix(TNodePtr path, TNodePtr value) {
+    const auto pos = path->GetPos();
+    auto startsWithSlash = new TCallNodeImpl(pos, "StartsWith", {value, BuildLiteralRawString(pos, "/")});
+    auto isRelative = new TCallNodeImpl(pos, "Not", {startsWithSlash});
+    return new TCallNodeImpl(pos, "Ensure", {path, isRelative, BuildLiteralRawString(pos, "RelativePathPrefix requires a relative path")});
+}
+
 using TPragmaField = bool TContext::*;
 
 // TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
@@ -443,12 +456,58 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     return true;
 }
 
+void TContext::SetRelativePathPrefix(const TString& value) {
+    PathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+    for (auto& [provider, prefix] : ProviderPathPrefixes_) {
+        if (prefix) {
+            prefix = BuildTablePath(prefix, value);
+        }
+    }
+    for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
+        if (prefix) {
+            prefix = BuildTablePath(prefix, value);
+        }
+    }
+}
+
+void TContext::SetRelativePathPrefix(TDeferredAtom value) {
+    RelativePathPrefix_ = std::move(value);
+}
+
+TDeferredAtom TContext::GetPrefixPathAtom(const TString& service, const TDeferredAtom& cluster) {
+    if (!RelativePathPrefix_.HasNode()) {
+        return TDeferredAtom(Pos(), TString(GetPrefixPath(service, cluster)));
+    }
+    auto value = BuildRelativePrefixValue(RelativePathPrefix_);
+    auto prefix = new TCallNodeImpl(Pos(), "BuildTablePath", {BuildLiteralRawString(Pos(), TString(GetPrefixPath(service, cluster))), value});
+    TDeferredAtom result;
+    MakeTableFromExpression(Pos(), *this, EnsureRelativePrefix(prefix, value), result);
+    return result;
+}
+
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
+    if (RelativePathPrefix_.HasNode()) {
+        const auto pos = path.Build()->GetPos();
+        auto value = BuildRelativePrefixValue(RelativePathPrefix_);
+        auto prefix = new TCallNodeImpl(pos, "BuildTablePath", {BuildLiteralRawString(pos, TString(GetPrefixPath(service, cluster))), value});
+        auto pathNode = new TCallNodeImpl(pos, "String", {path.Build()});
+        auto resolved = new TCallNodeImpl(pos, "BuildTablePath", {prefix, pathNode});
+        TDeferredAtom result;
+        MakeTableFromExpression(pos, *this, EnsureRelativePrefix(resolved, value), result);
+        return result.Build();
+    }
     TStringBuf prefixPath = GetPrefixPath(service, cluster);
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
     return path.Build();
+}
+
+TDeferredAtom TContext::GetPrefixedPathAtom(const TString& service, const TDeferredAtom& cluster, const TString& path) {
+    if (RelativePathPrefix_.HasNode()) {
+        return TDeferredAtom(GetPrefixedPath(service, cluster, TDeferredAtom(Pos(), path)), *this);
+    }
+    return TDeferredAtom(Pos(), BuildTablePath(GetPrefixPath(service, cluster), path));
 }
 
 TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {

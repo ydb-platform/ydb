@@ -4,11 +4,14 @@
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 
 #include <util/generic/string.h>
+#include <util/generic/strbuf.h>
 
 #include <map>
 #include <memory>
 
 namespace NKikimr::NKqp {
+
+bool MayUseRelativePathPrefix(TStringBuf queryText);
 
 struct TKqpQueryId {
     TString Cluster;

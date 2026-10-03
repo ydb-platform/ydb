@@ -4,11 +4,19 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/ascii.h>
 #include <util/string/escape.h>
 
+#include <algorithm>
 #include <memory>
 
 namespace NKikimr::NKqp {
+
+bool MayUseRelativePathPrefix(TStringBuf queryText) {
+    const TStringBuf pragma = "relativepathprefix";
+    return std::search(queryText.begin(), queryText.end(), pragma.begin(), pragma.end(),
+        [](char queryChar, char pragmaChar) { return AsciiToLower(queryChar) == pragmaChar; }) != queryText.end();
+}
 
 TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
     const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,

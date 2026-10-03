@@ -69,7 +69,8 @@ public:
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
-        bool usePessimisticLocks)
+        bool usePessimisticLocks,
+        std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> compileParameters)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -97,6 +98,7 @@ public:
         , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
+        , CompileParameters(std::move(compileParameters))
     {
         Config = BuildConfiguration(tableServiceConfig);
         PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
@@ -316,6 +318,7 @@ private:
     }
 
     void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
+        prepareSettings.CompileParameters = CompileParameters;
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
         switch (QueryId.Settings.QueryType) {
@@ -793,6 +796,7 @@ private:
     TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> CompileParameters;
 };
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
@@ -805,7 +809,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks,
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> compileParameters)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -813,7 +818,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks, std::move(compileParameters));
 }
 
 } // namespace NKikimr::NKqp

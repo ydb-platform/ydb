@@ -51,6 +51,7 @@ public:
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
         bool UsePessimisticLocks = false;
+        std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> CompileParameters;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"

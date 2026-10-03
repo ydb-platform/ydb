@@ -178,8 +178,15 @@ public:
     bool UseUnordered(const TTableRef& table) const;
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+    void SetRelativePathPrefix(const TString& value);
+    void SetRelativePathPrefix(TDeferredAtom value);
+    TDeferredAtom GetPrefixPathAtom(const TString& service, const TDeferredAtom& cluster);
+    bool HasDynamicRelativePathPrefix() const {
+        return RelativePathPrefix_.HasNode();
+    }
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
+    TDeferredAtom GetPrefixedPathAtom(const TString& service, const TDeferredAtom& cluster, const TString& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
@@ -314,6 +321,7 @@ private:
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
     TString PathPrefix_;
+    TDeferredAtom RelativePathPrefix_;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

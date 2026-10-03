@@ -551,6 +551,11 @@ TNodePtr TIdentityTranslation::Build(const TRule_grant_permissions_stmt& node) {
     for (const auto& item : node.GetBlock5()) {
         schemaPaths.emplace_back(Ctx_.Pos(), Id(item.GetRule_an_id_schema2(), *this));
     }
+    if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        for (auto& path : schemaPaths) {
+            path = Ctx_.GetPrefixedPathAtom(service, cluster, *path.GetLiteral());
+        }
+    }
 
     TVector<TDeferredAtom> roleNames;
     const bool allowSystemRoles = false;
@@ -591,6 +596,11 @@ TNodePtr TIdentityTranslation::Build(const TRule_revoke_permissions_stmt& node) 
     schemaPaths.emplace_back(Ctx_.Pos(), Id(node.GetRule_an_id_schema5(), *this));
     for (const auto& item : node.GetBlock6()) {
         schemaPaths.emplace_back(Ctx_.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+    }
+    if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        for (auto& path : schemaPaths) {
+            path = Ctx_.GetPrefixedPathAtom(service, cluster, *path.GetLiteral());
+        }
     }
 
     TVector<TDeferredAtom> roleNames;

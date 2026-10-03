@@ -436,5 +436,8 @@ message TFeatureFlags {
     // cluster root for database names, or the database for schema-object paths.
     optional bool EnableRelativePaths = 354 [default = false];
     optional bool EnableKillSession = 355 [default = false];
-    optional bool EnableStreamingQueryTopicAutopartitioning = 356 [default = true];
+    // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
+    optional bool EnableSavepoints = 356 [default = false];
+    optional bool EnablePqSourceRescaling = 357 [default = false];
+    optional bool EnableStreamingQueryTopicAutopartitioning = 358 [default = true];
 }

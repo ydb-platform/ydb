@@ -331,6 +331,11 @@ Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
             auto map = MakeIntrusive<TOpMap>(std::move(join), f.Pos, std::move(definitions));
 
             TPushMapElementsThroughInputRule rule;
+            UNIT_ASSERT(!rule.QuickMatch(map));
+            UNIT_ASSERT(rule.SimpleMatchAndApply(map, f.RboCtx, f.Props).Get() == map.Get());
+
+            map->NeedToPush = true;
+            UNIT_ASSERT(rule.QuickMatch(map));
             auto result = rule.SimpleMatchAndApply(std::move(map), f.RboCtx, f.Props);
             const bool inner = kind == "Inner";
             auto& kept = CastOperator<TOpMap>(*result);

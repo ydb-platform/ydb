@@ -20,6 +20,7 @@ ydb/core/kqp/executer_actor/ut KqpExecuter.OversizedTaskReturnsLimitExceeded
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.CustomQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery06
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery07
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
@@ -127,6 +128,8 @@ ydb/core/kqp/ut/scheme GeneratedStored.StoredComplexExpressionsMaterialize
 ydb/core/kqp/ut/scheme GeneratedStored.StoredGeneratedColumnFamilyLifecycle
 ydb/core/kqp/ut/scheme GeneratedStored.StoredGeneratedRejectedForColumnTable
 ydb/core/kqp/ut/scheme GeneratedStored.StoredMultiShardBatchDeleteMaintainsGeneratedIndex
+ydb/core/kqp/ut/scheme GeneratedStored.StoredMultiShardBatchUpdateRecomputesGeneratedColumn
+ydb/core/kqp/ut/scheme GeneratedStored.StoredMultiShardDmlMatrix
 ydb/core/kqp/ut/scheme GeneratedStored.StoredNullableResultWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.StoredTypesPgDecimalStringUtf8
 ydb/core/kqp/ut/scheme GeneratedStored.StoredTypesTemporal
@@ -177,6 +180,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.DmlAndSchemaChangesIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme GeneratedVirtual.MetadataPersistsAcrossSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadDependencyFreeVirtualColumn
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReadFilterGroupHavingAndOrder
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadJoinAndConditionalDml
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadMultipleVirtualColumnsPreservesRequestedOrder
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
@@ -235,6 +239,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Replace+EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Replace-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NotNullDefault+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NotNullDefault-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NullableDefault+EnableCompileTimeDefaults
@@ -316,7 +321,6 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRW
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
 ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.StrictSerializable_TopicWrite_CommitTimestamp
-ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeInsertsOneShard
 ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeUpsertsMultiShard
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CallDropViewOnTable
@@ -354,6 +358,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.UnauthorizedWithDescribe
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionDifferentDeadlines
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
+ydb/core/persqueue/public/mlp/ut TMLPReaderTests.ReceiveAttemptIdPartitionRouting
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicUnrelatedChangeSucceedsAfterDlqAccessRevoked
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
@@ -386,6 +391,7 @@ ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
+ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
@@ -430,6 +436,7 @@ ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_ttl TSchemeShardTTLTestsWithReboots.CreateTable
 ydb/core/tx/schemeshard/ut_ttl unittest.[*/*] chunk
 ydb/core/tx/sequenceproxy/ut unittest.sole chunk
+ydb/core/tx/sequenceshard/ut unittest.sole chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TieringUsage
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
@@ -461,6 +468,7 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/services/datastreams/ut DataStreams.TestControlPlaneAndMeteringData
 ydb/services/datastreams/ut DataStreams.TestGetRecordsKafkaBatches
 ydb/services/datastreams/ut DataStreams.TestReservedResourcesMetering
+ydb/services/keyvalue/ut KeyValueGRPCService.S3ErrorInIssuesV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCreateAlterDropVolume
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV2
@@ -525,6 +533,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots_legacy_api
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_status_inactive
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
@@ -544,6 +553,7 @@ ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
+ydb/tests/functional/sqs/migration/topic_creation/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
@@ -691,7 +701,6 @@ ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorklo
 ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test

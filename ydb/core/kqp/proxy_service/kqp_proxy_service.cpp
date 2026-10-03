@@ -441,6 +441,7 @@ public:
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
             limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
+            limits.UnboundWaitPeriod = TDuration::MilliSeconds(config.GetUnboundWaitPeriodMs());
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();

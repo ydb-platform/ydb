@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     processor.h
@@ -30,8 +30,6 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/scheme_cache
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

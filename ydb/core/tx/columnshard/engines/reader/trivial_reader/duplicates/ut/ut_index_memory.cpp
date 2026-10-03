@@ -23,7 +23,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>

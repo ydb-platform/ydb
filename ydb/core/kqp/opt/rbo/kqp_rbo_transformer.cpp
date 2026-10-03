@@ -187,6 +187,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 }
 
                 if (Roots.size() > 1) {
+                    if (KqpCtx.Config->GetEnableFallbackOnMultipleStatements()) {
+                        Y_ENSURE(false, "Fallback due to multiple statements flag");
+                    }
                     ResetTypes = true;
                 }
 
@@ -651,6 +654,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughUnionAllRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughJoinRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughReplicateRule>());
+    decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughSortRule>());
+    decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughLimitRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TDependentJoinNotSupportedRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Decorrelation", std::move(decorrelationStageRules)));
 
@@ -660,8 +665,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline definitions"));
 
     TVector<std::unique_ptr<IRule>> pushMapRules;
-    pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+    pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
 
     // Logical state I

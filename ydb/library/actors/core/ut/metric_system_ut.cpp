@@ -1,9 +1,11 @@
 #include "actor_benchmark_helper.h"
 #include "subsystems/metric_system.h"
 #include "harmonizer/harmonizer.h"
+#include "harmonizer/harmonizer_metrics.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <array>
+#include <cstring>
 
 using namespace NActors;
 using namespace NActors::NTests;
@@ -15,6 +17,11 @@ namespace {
         bool Accept = true;
         ui32 CloseCount = 0;
         TVector<ui64> Values;
+        struct TSample {
+            std::array<char, 64> Payload;
+            ui32 UsedBytes;
+        };
+        TVector<TSample> Samples;
 
         bool IsValid() const noexcept override { return true; }
         void Close() noexcept override { ++CloseCount; }
@@ -27,7 +34,11 @@ namespace {
             // A fresh small chunk for each sample is sufficient for this mock.
             alignas(ui64) std::array<char, 64> payload{};
             TWritableChunkMemory memory{.Payload = payload};
-            return access(opaque, memory);
+            if (!access(opaque, memory)) {
+                return false;
+            }
+            Samples.push_back({payload, memory.UsedPayloadBytes});
+            return true;
         }
         std::optional<ui64> GetLastMaterializedValue() const noexcept override {
             return CloseCount || Values.empty() ? std::nullopt : std::optional<ui64>(Values.back());
@@ -130,16 +141,30 @@ Y_UNIT_TEST_SUITE(MetricSystem) {
         auto harmonizer = MakeHarmonizer(Us2Ts(1'000'000));
         harmonizer->SetActorSystem(actorSystem);
         harmonizer->Harmonize(Us2Ts(1'000'000));
-        UNIT_ASSERT_VALUES_EQUAL(recording->Entries.size(), 4);
-        for (const auto& entry : recording->Entries) {
-            UNIT_ASSERT(entry.Key.Name.StartsWith("harmonizer."));
-            UNIT_ASSERT_VALUES_EQUAL(entry.Line->Values.size(), 1);
-        }
+        using namespace NHarmonizerMetrics;
+        UNIT_ASSERT_VALUES_EQUAL(recording->Entries.size(), 1);
+        const auto& entry = recording->Entries.front();
+        UNIT_ASSERT_VALUES_EQUAL(entry.Key.Name, TGlobal::Name);
+        UNIT_ASSERT(entry.Key.Labels.empty());
+        UNIT_ASSERT_EQUAL(entry.Meta.Frontend, &TGlobalFrontend::Descriptor());
+        UNIT_ASSERT_VALUES_EQUAL(entry.Line->Samples.size(), 1);
+        const auto& sample = entry.Line->Samples.front();
+        UNIT_ASSERT_VALUES_EQUAL(sample.UsedBytes,
+            sizeof(TGlobalFrontend::TChunkHeader) + sizeof(TGlobalFrontend::TStorageRecord));
+        TGlobalFrontend::TStorageRecord record;
+        std::memcpy(&record, sample.Payload.data() + sizeof(TGlobalFrontend::TChunkHeader), sizeof(record));
+        UNIT_ASSERT_VALUES_EQUAL(record.TimestampTs, 123);
+        const auto values = TGlobalFrontend::DecodeValue(record.Values,
+            std::make_index_sequence<TGlobalFrontend::FieldCount>{});
+        THarmonizerStats stats;
+        harmonizer->GetStats(stats);
+        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs);
+        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs);
+        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget);
+        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu);
         actorSystem->Stop();
         harmonizer->Harmonize(Us2Ts(2'000'000));
-        for (const auto& entry : recording->Entries) {
-            UNIT_ASSERT_VALUES_EQUAL(entry.Line->Values.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(entry.Line->CloseCount, 1);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(entry.Line->Samples.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.Line->CloseCount, 1);
     }
 }

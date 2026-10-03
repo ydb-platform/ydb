@@ -423,15 +423,21 @@ namespace {
                 {"endpoint", endpoint});
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
-        return GetSchemeEntryTypeImpl(
-                NActors::TActivationContext::ActorSystem(),
-                federatedQuerySetup,
-                endpoint,
-                NKikimr::CanonizePath(database),
-                useTls,
-                federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
-                path,
-                false);
+        try {
+            return GetSchemeEntryTypeImpl(
+                    NActors::TActivationContext::ActorSystem(),
+                    federatedQuerySetup,
+                    endpoint,
+                    NKikimr::CanonizePath(database),
+                    useTls,
+                    federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
+                    path,
+                    false);
+        } catch (const std::exception& e) {
+            TGetSchemeEntryResult result;
+            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
+        }
     };
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {

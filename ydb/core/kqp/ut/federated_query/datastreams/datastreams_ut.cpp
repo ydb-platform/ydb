@@ -1940,14 +1940,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             Sleep(TDuration::Seconds(1));
         }
 
-        // a) Attempt to use existing EDS fails
+        // a) A new query must fail during scheme entry lookup when IAM credentials are disabled.
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
                 )",
                 "pq_source"_a = sourceName,
                 "topic_name"_a = topicName
             ),
-            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+            EStatus::GENERIC_ERROR, "Failed to get scheme entry type: AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
         ExecQuery(fmt::format(

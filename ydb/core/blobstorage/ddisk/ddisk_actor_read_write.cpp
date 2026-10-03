@@ -136,7 +136,8 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
+        auto& tablet = Tablets[creds.TabletId];
+        TChunkRef& chunkRef = tablet.ChunkRefs[selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
             // reserve and OpenDataChunkWritePath only drains already-queued events.
@@ -157,7 +158,7 @@ namespace NKikimr::NDDisk {
         }
 
         Counters.Interface.Write.Request(selector.Size);
-        CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
+        CountTabletIo(creds.TabletId, &tablet.Stats, ETabletOperation::Write, 1, selector.Size);
         const auto requestStartTs = HPNow();
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
@@ -298,14 +299,15 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
+        auto& tablet = Tablets[creds.TabletId];
+        TChunkRef& chunkRef = tablet.ChunkRefs[selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty()) {
             chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
             return;
         }
 
         Counters.Interface.Read.Request(selector.Size);
-        CountTabletIo(creds.TabletId, ETabletOperation::Read, 1, selector.Size);
+        CountTabletIo(creds.TabletId, &tablet.Stats, ETabletOperation::Read, 1, selector.Size);
 
         // No chunk allocated: the whole range was never written.
         if (!chunkRef.ChunkIdx) {
@@ -358,7 +360,7 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH, TString(StoppingReason)));
             return;
         }
-        TChunkRef& chunkRef = ChunkRefs.at(creds.TabletId).at(selector.VChunkIndex);
+        TChunkRef& chunkRef = Tablets.at(creds.TabletId).ChunkRefs.at(selector.VChunkIndex);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev.TraceId), "DDisk.Read",
             NWilson::EFlags::NONE, TActivationContext::ActorSystem());
@@ -408,10 +410,10 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvDDiskIoResult::TPtr ev) {
         auto& msg = *ev->Get();
         Y_ABORT_UNLESS(msg.HasChunkKey);
-        const auto tabletIt = ChunkRefs.find(msg.TabletId);
-        Y_ABORT_UNLESS(tabletIt != ChunkRefs.end());
-        const auto chunkIt = tabletIt->second.find(msg.VChunkIndex);
-        Y_ABORT_UNLESS(chunkIt != tabletIt->second.end());
+        const auto tabletIt = Tablets.find(msg.TabletId);
+        Y_ABORT_UNLESS(tabletIt != Tablets.end());
+        const auto chunkIt = tabletIt->second.ChunkRefs.find(msg.VChunkIndex);
+        Y_ABORT_UNLESS(chunkIt != tabletIt->second.ChunkRefs.end());
         Y_ABORT_UNLESS(chunkIt->second.InFlightDataIo > 0);
         --chunkIt->second.InFlightDataIo;
 

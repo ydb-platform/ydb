@@ -25,7 +25,8 @@ namespace NKikimr::NDDisk {
 
         size_t dataChunkCount = 0;
         size_t uncoveredDataChunkCount = 0;
-        for (const auto& [tabletId, chunks] : ChunkRefs) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& chunks = tablet.ChunkRefs;
             for (const auto& [vChunkIndex, chunkRef] : chunks) {
                 if (!chunkRef.ChunkIdx) {
                     continue;
@@ -124,7 +125,10 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(chunkMap.HasSnapshot());
             const auto& snapshot = chunkMap.GetSnapshot();
             for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
-                auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
+                if (tabletRecord.GetChunkRefs().empty()) {
+                    continue;
+                }
+                auto& tabletChunkMap = Tablets[tabletRecord.GetTabletId()].ChunkRefs;
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
                     SetDataChunkMapping(tabletRecord.GetTabletId(), &tabletChunkMap[chunkRef.GetVChunkIndex()], chunkRef.GetChunkIdx());
                     ++*Counters.Chunks.ChunksOwned;
@@ -195,7 +199,7 @@ namespace NKikimr::NDDisk {
                                     ++*Counters.Chunks.ChunksOwned;
                                 }
                                 const auto& data = increment.GetDataChunk();
-                                SetDataChunkMapping(data.GetTabletId(), &ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()],
+                                SetDataChunkMapping(data.GetTabletId(), &Tablets[data.GetTabletId()].ChunkRefs[data.GetVChunkIndex()],
                                     data.GetChunkIdx());
                                 ++*Counters.Chunks.ChunksOwned;
                                 if (data.HasExtentRef()) {
@@ -240,7 +244,8 @@ namespace NKikimr::NDDisk {
         // changes it. Failed recovery cannot establish which owned chunks are orphans.
         if (!IsBroken()) {
             absl::flat_hash_set<TChunkIdx> live(PersistentBufferChunks.begin(), PersistentBufferChunks.end());
-            for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [tabletId, tablet] : Tablets) {
+                const auto& chunks = tablet.ChunkRefs;
                 Y_UNUSED(tabletId);
                 for (const auto& [vChunkIndex, ref] : chunks) {
                     Y_UNUSED(vChunkIndex);

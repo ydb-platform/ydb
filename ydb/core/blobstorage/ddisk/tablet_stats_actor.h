@@ -45,7 +45,7 @@ struct TEvTabletStatsChanged : NActors::TEventLocal<TEvTabletStatsChanged, TEv::
 struct TEvGetTabletStats : NActors::TEventLocal<TEvGetTabletStats, TEv::EvGetTabletStats> {
     std::optional<ui64> TabletId;
     std::optional<ui64> AfterTabletId;
-    ui32 Limit = TTabletStatsTracker::MaxBatch;
+    ui32 Limit = TTabletStatsLimits::MaxBatch;
 };
 
 struct TEvTabletStats : NActors::TEventLocal<TEvTabletStats, TEv::EvTabletStats> {

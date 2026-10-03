@@ -631,7 +631,14 @@ namespace NKikimr::NDDisk {
             std::queue<TPendingEvent> PendingSerializedWrites;
         };
 
-        THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
+        struct TTabletState {
+            THashMap<ui64, TChunkRef> ChunkRefs;
+            TTabletStatsEntry Stats;
+
+            bool CanRetire() const { return ChunkRefs.empty(); }
+        };
+
+        THashMap<ui64, TTabletState> Tablets; // TabletId -> state
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
         std::queue<TChunkIdx> StartupOrphanChunks;
@@ -1350,7 +1357,7 @@ namespace NKikimr::NDDisk {
         // Per-tablet statistics (DDisk mode only)
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TTabletStatsTracker TabletStats;
+        TTabletStatsTracker<TTabletState> TabletStats{&Tablets};
         TActorId TabletStatsActor;
         bool TabletStatsActive = false;
 
@@ -1358,6 +1365,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvCollectTabletStats::TPtr ev);
         void Handle(TEvGetTabletStats::TPtr ev);
         void CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes);
+        void CountTabletIo(ui64 tabletId, TTabletStatsEntry* entry, ETabletOperation operation, ui64 requests, ui64 bytes);
         void CountTabletChunks(ui64 tabletId, i64 delta);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

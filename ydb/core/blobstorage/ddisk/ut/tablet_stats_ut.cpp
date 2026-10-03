@@ -5,9 +5,18 @@
 #include <set>
 
 namespace NKikimr::NDDisk {
+namespace {
+struct TTestTabletState {
+    TTabletStatsEntry Stats;
+    bool HasChunkState = false;
+    bool CanRetire() const { return !HasChunkState; }
+};
+}
+
 Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     Y_UNIT_TEST(BoundedCollectionAndCooldown) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         const auto start = TMonotonic::Seconds(10);
         for (ui64 id = 0; id < 250; ++id) {
             stats.AddIo(id, ETabletOperation::Read, 10, 40960, start);
@@ -20,7 +29,8 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(SleepWakeAndActualInterval) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         const auto start = TMonotonic::Seconds(10);
         stats.AddChunks(42, 3, start);
         stats.AddIo(42, ETabletOperation::Sync, 8, 32768, start);
@@ -42,7 +52,8 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(IndependentSleepAndDeletion) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         const auto start = TMonotonic::Seconds(10);
         stats.AddChunks(1, 2, start);
         stats.AddIo(2, ETabletOperation::Write, 1, 100, start);
@@ -65,7 +76,8 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(IdleAllocatedTabletPublishesZeroWhileAnotherStaysActive) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         const auto start = TMonotonic::Seconds(10);
         stats.AddChunks(1, 2, start);
         stats.AddChunks(2, 3, start);
@@ -89,7 +101,8 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(ConnectedIdleTabletsSleepWithoutRetirement) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         auto now = TMonotonic::Seconds(10);
         stats.AddSessions(42, 1, now);
         stats.AddSessions(42, 1, now);
@@ -125,7 +138,8 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
     }
 
     Y_UNIT_TEST(BacklogIsNotIdleAndChangesDuringCollectionSurvive) {
-        TTabletStatsTracker stats;
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
         const auto start = TMonotonic::Seconds(10);
         for (ui64 id = 0; id < 251; ++id) {
             stats.AddChunks(id, 1, start);
@@ -150,6 +164,29 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
         stats.AddChunks(250, -1, start + TDuration::Seconds(4));
         batch = stats.Collect(start + TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Chunks, 0);
+    }
+
+    Y_UNIT_TEST(ChunkStateSurvivesSleepingStatsAndRetiresAfterDeletion) {
+        THashMap<ui64, TTestTabletState> tablets;
+        TTabletStatsTracker stats(&tablets);
+        const auto start = TMonotonic::Seconds(10);
+        tablets[42].HasChunkState = true;
+        stats.AddIo(42, ETabletOperation::Read, 1, 4096, start);
+        for (int second = 1; second <= 3; ++second) {
+            const auto batch = stats.Collect(start + TDuration::Seconds(second));
+            UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+            UNIT_ASSERT(!batch[0].Retired);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
+        UNIT_ASSERT(!stats.NextDeadline());
+        tablets.at(42).HasChunkState = false;
+        stats.AddChunks(42, 0, start + TDuration::Seconds(4));
+        for (int second = 5; second <= 7; ++second) {
+            const auto batch = stats.Collect(start + TDuration::Seconds(second));
+            UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch[0].Retired, second == 7);
+        }
+        UNIT_ASSERT(tablets.empty());
     }
 
     Y_UNIT_TEST(ActorPaginationCookiesNormalizationAndRetirement) {

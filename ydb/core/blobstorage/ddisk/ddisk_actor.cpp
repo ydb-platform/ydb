@@ -766,7 +766,8 @@ namespace {
 
     void TDDiskActor::RejectPendingDDiskQueries(
             NKikimrBlobStorage::NDDisk::TReplyStatus::E status, const TString& reason) {
-        for (auto& [tabletId, chunks] : ChunkRefs) {
+        for (auto& [tabletId, tablet] : Tablets) {
+            auto& chunks = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             for (auto& [vChunkIndex, chunk] : chunks) {
                 Y_UNUSED(vChunkIndex);

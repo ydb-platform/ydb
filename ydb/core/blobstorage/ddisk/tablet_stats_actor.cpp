@@ -34,7 +34,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
     void Handle(TEvTabletStatsBatch::TPtr ev) {
         Y_ABORT_UNLESS(ev->Sender == Owner && RequestInFlight);
         RequestInFlight = false;
-        Y_ABORT_UNLESS(ev->Get()->Samples.size() <= TTabletStatsTracker::MaxBatch);
+        Y_ABORT_UNLESS(ev->Get()->Samples.size() <= TTabletStatsLimits::MaxBatch);
         for (const auto& sample : ev->Get()->Samples) {
             if (sample.Retired) {
                 Tablets.erase(sample.TabletId);
@@ -68,7 +68,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
                 result->Tablets.push_back(it->second);
             }
         } else {
-            const size_t limit = std::clamp<size_t>(query.Limit, 1, TTabletStatsTracker::MaxBatch);
+            const size_t limit = std::clamp<size_t>(query.Limit, 1, TTabletStatsLimits::MaxBatch);
             auto it = query.AfterTabletId ? Tablets.upper_bound(*query.AfterTabletId) : Tablets.begin();
             for (; it != Tablets.end() && result->Tablets.size() < limit; ++it) {
                 result->Tablets.push_back(it->second);

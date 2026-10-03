@@ -14,6 +14,12 @@ void TDDiskActor::CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 
     NotifyTabletStats();
 }
 
+void TDDiskActor::CountTabletIo(ui64 tabletId, TTabletStatsEntry* entry, ETabletOperation operation,
+        ui64 requests, ui64 bytes) {
+    TabletStats.AddIo(tabletId, entry, operation, requests, bytes, TActivationContext::Monotonic());
+    NotifyTabletStats();
+}
+
 void TDDiskActor::CountTabletChunks(ui64 tabletId, i64 delta) {
     TabletStats.AddChunks(tabletId, delta, TActivationContext::Monotonic());
     NotifyTabletStats();

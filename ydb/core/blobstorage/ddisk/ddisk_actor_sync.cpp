@@ -356,7 +356,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
+        TChunkRef& chunkRef = Tablets[sync.Creds.TabletId].ChunkRefs[sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
             // reserve and OpenDataChunkWritePath only drains already-queued events.

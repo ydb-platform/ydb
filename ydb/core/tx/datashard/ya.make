@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datashard.h
@@ -162,6 +162,7 @@ JOIN_SRCS(
     all_datashard_read.cpp
     datashard__read_columns.cpp
     datashard__read_iterator.cpp
+    read_iterator_sampling.cpp
 )
 
 JOIN_SRCS(
@@ -496,8 +497,6 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/io_formats/json
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     CFLAGS(

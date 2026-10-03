@@ -25,8 +25,14 @@ namespace NTable {
 
         Tail = 1,
         Head = 17,
-        Edge = 29,
+        Edge = 30,
     };
+
+    /* The least evolution required to read savepoint seq nums of deltas.
+        Redo log chunks and parts with them are labeled with it, so older
+        binaries fail on them with an explicit ABI incompatibility.
+     */
+    constexpr ui32 SavepointSeqNumEvolution = 30;
 
     /* Ev | Desc                                                   | Gone
      ---------------------------------------------------------------------
@@ -93,6 +99,11 @@ namespace NTable {
        28   Parts with uncommitted delta rows
      ---------------------------------------------------------------------
        29   Parts with persistent row locks
+     ---------------------------------------------------------------------
+       30   Uncommitted deltas with savepoint seq nums in redo log
+            (ERedo::UpdateTxSavepointSeqNum) and in parts (EPage::DataPage
+            version 2). Only written when used, such redo chunks and parts
+            require at least this evolution to read.
      */
 
 }

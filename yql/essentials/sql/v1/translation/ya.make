@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/charset/lite
@@ -64,8 +64,6 @@ SRCS(
     query.cpp
     object_processing.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)
 

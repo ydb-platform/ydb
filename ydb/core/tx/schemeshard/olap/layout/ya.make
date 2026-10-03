@@ -9,6 +9,4 @@ PEERDIR(
     ydb/core/tablet_flat
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

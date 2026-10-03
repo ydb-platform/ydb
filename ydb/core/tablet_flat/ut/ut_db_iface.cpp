@@ -1090,6 +1090,16 @@ Y_UNIT_TEST_SUITE(DBase) {
         return count;
     }
 
+    // The least ABI evolution required to read the redo chunk, as written in its EvBegin
+    ui32 GetRedoRequiredEvolution(const TString& redo) {
+        NRedo::TReader reader(redo);
+        auto chunk = reader.Next();
+        UNIT_ASSERT(chunk);
+        UNIT_ASSERT(reinterpret_cast<const NRedo::TChunk*>(chunk.data())->Event == NRedo::ERedo::Begin);
+        UNIT_ASSERT(chunk.size() >= sizeof(NRedo::TEvBegin_v1));
+        return reinterpret_cast<const NRedo::TEvBegin_v1*>(chunk.data())->Tail;
+    }
+
     // Savepoint seq nums of every update in the chain of each key, newest first
     THashMap<ui64, TVector<ui32>> CollectSavepointSeqNums(TDbExec& me, ui32 table) {
         me.Snap(table);
@@ -1122,6 +1132,13 @@ Y_UNIT_TEST_SUITE(DBase) {
                 .AddColumnToKey(table1, 1));
         me.To(12).Commit();
 
+        // Without savepoint seq nums redo chunks stay readable by older versions
+        me.To(13).Begin();
+        me.To(14).WriteTx(345).PutN(table1, 3_u64, 14_u64, ECellOp::Empty);
+        me.To(15).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTxSavepointSeqNum), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), ui32(ECompatibility::Head));
+
         me.To(20).Begin();
         me.To(21).WriteTx(123).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
         me.To(22).WriteTx(123, 5).PutN(table1, 1_u64, ECellOp::Empty, 22_u64);
@@ -1132,11 +1149,16 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTx), 1u);
         UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTxSavepointSeqNum), 2u);
 
+        // A redo chunk with savepoint seq nums requires a newer evolution, so older versions
+        // fail on it with an explicit ABI incompatibility
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
+
         const auto check = [&]() {
             auto seqNums = CollectSavepointSeqNums(me, table1);
-            UNIT_ASSERT_VALUES_EQUAL(seqNums.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(seqNums.size(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(seqNums[1], (TVector<ui32>{ 5, 0 }));
             UNIT_ASSERT_VALUES_EQUAL(seqNums[2], (TVector<ui32>{ 7 }));
+            UNIT_ASSERT_VALUES_EQUAL(seqNums[3], (TVector<ui32>{ 0 }));
         };
 
         check();

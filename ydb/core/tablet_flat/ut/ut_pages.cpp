@@ -9,6 +9,7 @@
 #include <library/cpp/resource/resource.h>
 #include <util/generic/xrange.h>
 #include <util/stream/file.h>
+#include <util/stream/mem.h>
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
@@ -121,6 +122,18 @@ Y_UNIT_TEST_SUITE(NPage) {
         return deltas;
     }
 
+    // The least ABI evolution required to read the part, as written in its root metadata
+    ui32 GetPartRequiredEvolution(const NTest::TPartEggs& eggs) {
+        auto& part = dynamic_cast<const NTest::TPartStore&>(*eggs.Lone());
+        auto* raw = part.Store->GetMeta();
+        UNIT_ASSERT(raw);
+        NProto::TRoot root;
+        TMemoryInput stream(raw->data(), raw->size());
+        UNIT_ASSERT(root.ParseFromArcadiaStream(&stream));
+        UNIT_ASSERT(root.HasEvol());
+        return root.GetEvol().GetTail();
+    }
+
     Y_UNIT_TEST(DeltaSavepointSeqNum)
     {
         using namespace NTable::NTest;
@@ -146,6 +159,7 @@ Y_UNIT_TEST_SUITE(NPage) {
             TSet<ui16> versions;
             auto deltas = CollectDeltas(eggs, versions);
             UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), 28u /* Uncommitted deltas present */);
             UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
                 { 123, 0, ELockMode::None },
                 { 234, 0, ELockMode::None },
@@ -165,6 +179,8 @@ Y_UNIT_TEST_SUITE(NPage) {
             TSet<ui16> versions;
             auto deltas = CollectDeltas(eggs, versions);
             UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "2");
+            // Older versions reject such a part on load with an explicit ABI incompatibility
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
             UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
                 { 123, 5, ELockMode::None },
                 { 123, 0, ELockMode::None },

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/containers/absl
@@ -38,8 +38,6 @@ SRCS(
     iterators.cpp
     signals.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 CFLAGS(
     -Wno-assume

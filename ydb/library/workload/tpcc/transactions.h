@@ -8,6 +8,7 @@
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
 #include <memory>
+#include <utility>
 
 class TLog;
 
@@ -40,7 +41,20 @@ struct TTransactionContext {
     const TString Path;
     std::shared_ptr<TLog> Log;
     NQuery::TTxSettings TxMode;
+
+    // User input for the current business transaction. Generated once and reused
+    // across SDK RetryQuery attempts so a retry does not become a different txn.
+    std::shared_ptr<void> FixedInputs;
 };
+
+// Lazily generate and pin transaction inputs for the duration of RetryQuery.
+template <typename TInputs, typename TGen>
+const TInputs& FixedTransactionInputs(TTransactionContext& context, TGen&& gen) {
+    if (!context.FixedInputs) {
+        context.FixedInputs = std::make_shared<TInputs>(std::forward<TGen>(gen)());
+    }
+    return *std::static_pointer_cast<TInputs>(context.FixedInputs);
+}
 
 struct TUserAbortedException : public yexception {
 };

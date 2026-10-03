@@ -121,14 +121,35 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
 
     auto& Log = context.Log;
 
-    const int warehouseID = context.WarehouseID;
-    const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+    struct TInputs {
+        int WarehouseID;
+        int DistrictID;
+        bool LookupByName;
+        TString LastName;
+        int CustomerID;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        TInputs generated;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
+        generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+        // Determine lookup method (60% by name, 40% by id)
+        generated.LookupByName = RandomNumber(1, 100) <= 60;
+        if (generated.LookupByName) {
+            generated.LastName = GetNonUniformRandomLastNameForRun();
+            generated.CustomerID = 0;
+        } else {
+            generated.CustomerID = GetRandomCustomerID();
+        }
+        return generated;
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int districtID = in.DistrictID;
+    const bool lookupByName = in.LookupByName;
 
     LOG_T("Terminal " << context.TerminalID << " started OrderStatus transaction in "
         << warehouseID << ", " << districtID << ", session: " << session.GetId());
-
-    // Determine lookup method (60% by name, 40% by id)
-    bool lookupByName = RandomNumber(1, 100) <= 60;
 
     TCustomer customer;
     std::optional<TTransaction> tx;
@@ -137,7 +158,7 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
 
     if (lookupByName) {
         // by last name
-        TString lastName = GetNonUniformRandomLastNameForRun();
+        const TString& lastName = in.LastName;
 
         auto customersFuture = GetCustomersByLastName(session, std::nullopt, context, warehouseID, districtID, lastName);
         auto customersResult = co_await TSuspendWithFuture(customersFuture, context.TaskQueue, context.TerminalID);
@@ -165,7 +186,7 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         customer = std::move(*selectedCustomer);
     } else {
         // by ID
-        int customerID = GetRandomCustomerID();
+        const int customerID = in.CustomerID;
 
         auto customerFuture = GetCustomerById(session, std::nullopt, context, warehouseID, districtID, customerID);
         auto customerResult = co_await TSuspendWithFuture(customerFuture, context.TaskQueue, context.TerminalID);

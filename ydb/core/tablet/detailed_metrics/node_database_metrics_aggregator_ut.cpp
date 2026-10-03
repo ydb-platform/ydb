@@ -96,10 +96,6 @@ enum EAppCumulativeCounter : ui32 {
     ENGINE_HOST_ROW_UPDATE_BYTES = 1,
 };
 
-// The position of HIST(ConsumedCPU), the only percentile of the fixture, in the histograms
-// of the packed executor counters
-constexpr ui32 CONSUMED_CPU_HISTOGRAM = 0;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -419,11 +415,19 @@ TPackedTables PackOnce(const TNodeDatabaseMetricsAggregatorPtr& aggregator) {
     return out;
 }
 
+/**
+ * @return The packed table entry of the given level (or nullptr if there is none),
+ *         tagged with the tablet type, whose public metrics define the slots of its values
+ */
 const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
-    const TPackedTables& tables, EDetailedMetricsLevel level)
+    const TPackedTables& tables, EDetailedMetricsLevel level, const TString& tablePath = TABLE_PATH)
 {
     for (const auto& table : tables) {
-        if (table.GetTablePath() == TABLE_PATH && table.GetLevel() == level) {
+        if (table.GetTablePath() == tablePath && table.GetLevel() == level) {
+            UNIT_ASSERT_VALUES_EQUAL(table.GetTabletType(), TABLET_TYPE);
+            for (const auto& leaf : table.GetLeaves()) {
+                UNIT_ASSERT(leaf.HasMetrics());
+            }
             return &table;
         }
     }
@@ -441,7 +445,11 @@ const NKikimrSysView::TDetailedTableCounters::TLeaf* FindPackedLeaf(
     return nullptr;
 }
 
-const NKikimrSysView::TDbTabletCounters& GetSinglePackedCounters(
+/**
+ * @return The packed public metric values of the only bucket of the given level:
+ *         the TABLE bucket or the leaf of the leader 1000
+ */
+const NKikimrSysView::TDbCounters& GetSinglePackedCounters(
     const TPackedTables& tables, EDetailedMetricsLevel level)
 {
     size_t matchingTables = 0;
@@ -451,15 +459,15 @@ const NKikimrSysView::TDbTabletCounters& GetSinglePackedCounters(
     UNIT_ASSERT_VALUES_EQUAL(matchingTables, 1);
     const auto* table = FindPackedTable(tables, level);
     if (level == TDetailedMetricsSettings::MetricsLevelTable) {
-        UNIT_ASSERT(table->HasTableCounters());
+        UNIT_ASSERT(table->HasTableMetrics());
         UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 0);
-        return table->GetTableCounters();
+        return table->GetTableMetrics();
     }
-    UNIT_ASSERT(!table->HasTableCounters());
+    UNIT_ASSERT(!table->HasTableMetrics());
     UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 1);
     const auto* leaf = FindPackedLeaf(*table, 1000, 0);
     UNIT_ASSERT(leaf);
-    return leaf->GetCounters();
+    return leaf->GetMetrics();
 }
 
 ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 index) {
@@ -2619,10 +2627,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         auto first = PackOnce(trees.Leaders);
         const auto* table = FindPackedTable(first, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(table);
-        UNIT_ASSERT(table->HasTableCounters());
+        UNIT_ASSERT(table->HasTableMetrics());
         UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 10);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU), 100);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().GetSimple(ROW_COUNT), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableMetrics(), CONSUMED_CPU_MICROSECONDS), 100);
 
         // Several reports and recalculations must not advance the Pack baseline.
         for (ui64 delta : {15, 25}) {
@@ -2634,16 +2642,16 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         auto second = PackOnce(trees.Leaders);
         table = FindPackedTable(second, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(table);
-        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 20);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU), 40);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().GetSimple(ROW_COUNT), 20);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableMetrics(), CONSUMED_CPU_MICROSECONDS), 40);
 
         leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 0);
         leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now + TDuration::Seconds(5));
         auto third = PackOnce(trees.Leaders);
         table = FindPackedTable(third, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(table);
-        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
-        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().CumulativeSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().GetSimple(ROW_COUNT), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().CumulativeSize(), 0);
         TFakeTablet follower(1000, 1);
         follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
         UNIT_ASSERT(PackOnce(trees.Followers).empty());
@@ -2667,7 +2675,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto* leaderTable = FindPackedTable(leaders, TDetailedMetricsSettings::MetricsLevelPartition);
         const auto* followerTable = FindPackedTable(followers, TDetailedMetricsSettings::MetricsLevelPartition);
         UNIT_ASSERT(leaderTable && followerTable);
-        UNIT_ASSERT(!leaderTable->HasTableCounters() && !followerTable->HasTableCounters());
+        UNIT_ASSERT(!leaderTable->HasTableMetrics() && !followerTable->HasTableMetrics());
         UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(followerTable->LeavesSize(), 2);
         for (const auto& [table, tablet, value] : {
@@ -2677,8 +2685,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         {
             const auto* leaf = FindPackedLeaf(*table, tablet->TabletId, tablet->FollowerId);
             UNIT_ASSERT(leaf);
-            UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), value);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), value * 10);
+            // row_count is LeaderOnly: a follower leaf leaves it zero
+            UNIT_ASSERT_VALUES_EQUAL(leaf->GetMetrics().GetSimple(ROW_COUNT), tablet->FollowerId == 0 ? value : 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetMetrics(), CONSUMED_CPU_MICROSECONDS), value * 10);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(leaf->GetMetrics(), USED_CORE_PERCENTS), 1);
         }
 
         follower1.AddCumulative(CONSUMED_CPU, 7);
@@ -2689,9 +2699,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto* changed = FindPackedLeaf(*followerTable, 1000, 1);
         const auto* unchanged = FindPackedLeaf(*followerTable, 2000, 1);
         UNIT_ASSERT(changed && unchanged);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(changed->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 7);
-        UNIT_ASSERT_VALUES_EQUAL(unchanged->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 5);
-        UNIT_ASSERT_VALUES_EQUAL(unchanged->GetCounters().GetExecutorCounters().CumulativeSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(changed->GetMetrics(), CONSUMED_CPU_MICROSECONDS), 7);
+        // The unchanged leaf still reports its whole level histogram, but no deltas
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(unchanged->GetMetrics(), USED_CORE_PERCENTS)[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(unchanged->GetMetrics(), USED_CORE_PERCENTS), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged->GetMetrics().CumulativeSize(), 0);
     }
 
     Y_UNIT_TEST(PackHistogramShrinksWhenATabletLeaves) {
@@ -2707,20 +2719,20 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto* firstTable = FindPackedTable(first, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(firstTable);
         UNIT_ASSERT_VALUES_EQUAL(
-            GetPackedNonDerivativeHistogram(firstTable->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM)[0], 2);
+            GetPackedNonDerivativeHistogram(firstTable->GetTableMetrics(), USED_CORE_PERCENTS)[0], 2);
 
         trees.Leaders->ForgetTablet(leader2.TabletId, leader2.FollowerId);
         auto packed = PackOnce(trees.Leaders);
         const auto* table = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(table);
-        const auto& counters = table->GetTableCounters().GetExecutorCounters();
+        const auto& counters = table->GetTableMetrics();
         UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
         // The occupied bucket shrinks from 2 to 1: the report carries the new count itself,
         // not the decrease, so it does not depend on the receiver having seen the earlier one.
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).BucketsSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).GetBuckets(0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).GetBuckets(1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(USED_CORE_PERCENTS).BucketsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(USED_CORE_PERCENTS).GetBuckets(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(USED_CORE_PERCENTS).GetBuckets(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, USED_CORE_PERCENTS)[0], 1);
     }
 
     Y_UNIT_TEST(PackEmitsBothShapesWhileTheLevelConverges) {
@@ -2741,19 +2753,19 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto* table = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable);
         const auto* partition = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelPartition);
         UNIT_ASSERT(table && partition);
-        UNIT_ASSERT(table->HasTableCounters());
+        UNIT_ASSERT(table->HasTableMetrics());
         UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 3);
-        UNIT_ASSERT(!partition->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableMetrics().GetSimple(ROW_COUNT), 3);
+        UNIT_ASSERT(!partition->HasTableMetrics());
         UNIT_ASSERT_VALUES_EQUAL(partition->LeavesSize(), 2);
         const auto* retired = FindPackedLeaf(*partition, leader1.TabletId, leader1.FollowerId);
         UNIT_ASSERT(retired);
-        UNIT_ASSERT_VALUES_EQUAL(retired->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(retired->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 100);
+        UNIT_ASSERT_VALUES_EQUAL(retired->GetMetrics().GetSimple(ROW_COUNT), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(retired->GetMetrics(), CONSUMED_CPU_MICROSECONDS), 100);
         const auto* leaf = FindPackedLeaf(*partition, leader2.TabletId, leader2.FollowerId);
         UNIT_ASSERT(leaf);
-        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 2);
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 200);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetMetrics().GetSimple(ROW_COUNT), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetMetrics(), CONSUMED_CPU_MICROSECONDS), 200);
     }
 
     Y_UNIT_TEST(PackPreservesFinalDeltaWhenTheLastTabletChangesLevel) {
@@ -2767,7 +2779,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             leader.Report(trees.Leaders, oldLevel, now);
             auto first = PackOnce(trees.Leaders);
             NKikimrSysView::TDbCounters oldState;
-            NSysView::TAggregateCumulative<false>::Apply(&oldState, GetSinglePackedCounters(first, oldLevel).GetExecutorCounters());
+            NSysView::TAggregateCumulative<false>::Apply(&oldState, GetSinglePackedCounters(first, oldLevel));
 
             leader.AddCumulative(CONSUMED_CPU, 25);
             leader.Report(trees.Leaders, oldLevel, now += TDuration::Seconds(5));
@@ -2777,17 +2789,17 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(changed.size(), 2);
             const auto& retired = GetSinglePackedCounters(changed, oldLevel);
             const auto& active = GetSinglePackedCounters(changed, newLevel);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(retired.GetExecutorCounters(), CONSUMED_CPU), 25);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(active.GetExecutorCounters(), CONSUMED_CPU), 5);
-            UNIT_ASSERT_VALUES_EQUAL(retired.GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
-            UNIT_ASSERT_VALUES_EQUAL(active.GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 20);
-            NSysView::TAggregateCumulative<false>::Apply(&oldState, retired.GetExecutorCounters());
-            UNIT_ASSERT_VALUES_EQUAL(oldState.GetCumulative(CONSUMED_CPU), 125);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(retired, CONSUMED_CPU_MICROSECONDS), 25);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(active, CONSUMED_CPU_MICROSECONDS), 5);
+            UNIT_ASSERT_VALUES_EQUAL(retired.GetSimple(ROW_COUNT), 0);
+            UNIT_ASSERT_VALUES_EQUAL(active.GetSimple(ROW_COUNT), 20);
+            NSysView::TAggregateCumulative<false>::Apply(&oldState, retired);
+            UNIT_ASSERT_VALUES_EQUAL(oldState.GetCumulative(CONSUMED_CPU_MICROSECONDS), 125);
 
             auto next = PackOnce(trees.Leaders);
             UNIT_ASSERT_VALUES_EQUAL(next.size(), 1);
             UNIT_ASSERT(!FindPackedTable(next, oldLevel));
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(GetSinglePackedCounters(next, newLevel).GetExecutorCounters(), CONSUMED_CPU), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(GetSinglePackedCounters(next, newLevel), CONSUMED_CPU_MICROSECONDS), 0);
         }
     }
 
@@ -2800,9 +2812,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             leader.Report(trees.Leaders, level, now);
             auto first = PackOnce(trees.Leaders);
             NKikimrSysView::TDbCounters restored;
-            NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level).GetExecutorCounters());
+            NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level));
             UNIT_ASSERT_VALUES_EQUAL(
-                GetPackedNonDerivativeHistogram(GetSinglePackedCounters(first, level).GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM)[0], 1);
+                GetPackedNonDerivativeHistogram(GetSinglePackedCounters(first, level), USED_CORE_PERCENTS)[0], 1);
 
             trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
             UNIT_ASSERT(!FindTableGroup(trees.Root));
@@ -2810,14 +2822,14 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             for (int report = 0; report < 2; ++report) {
                 auto packed = PackOnce(trees.Leaders);
                 UNIT_ASSERT_VALUES_EQUAL(packed.size(), 1);
-                const auto& counters = GetSinglePackedCounters(packed, level).GetExecutorCounters();
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 0);
+                const auto& counters = GetSinglePackedCounters(packed, level);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), 0);
                 NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
-                UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU), 100);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU_MICROSECONDS), 100);
                 // The cumulative history is not repeated, but the non-derivative histogram is reported
                 // in full every time: the tablet is still there, and the retirement report is superseded
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, CONSUMED_CPU_HISTOGRAM), 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, USED_CORE_PERCENTS)[0], 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, USED_CORE_PERCENTS), 1);
             }
         }
     }
@@ -2830,10 +2842,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             leader.AddCumulative(CONSUMED_CPU, 100).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 1000);
             leader.Report(trees.Leaders, level, now);
             auto first = PackOnce(trees.Leaders);
-            const auto& initial = GetSinglePackedCounters(first, level);
-            NKikimrSysView::TDbCounters executor, app;
-            NSysView::TAggregateCumulative<false>::Apply(&executor, initial.GetExecutorCounters());
-            NSysView::TAggregateCumulative<false>::Apply(&app, initial.GetAppCounters());
+            NKikimrSysView::TDbCounters restored;
+            NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level));
 
             for (ui64 delta : {5, 7, 11}) {
                 leader.AddCumulative(CONSUMED_CPU, delta).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, delta * 10);
@@ -2848,20 +2858,17 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 auto packed = PackOnce(trees.Leaders);
                 UNIT_ASSERT_VALUES_EQUAL(packed.size(), 1);
                 const auto& counters = GetSinglePackedCounters(packed, level);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetExecutorCounters(), CONSUMED_CPU), report == 0 ? 36 : 0);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetAppCounters(), ENGINE_HOST_ROW_UPDATES), report == 0 ? 360 : 0);
-                UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 17);
-                UNIT_ASSERT_VALUES_EQUAL(counters.GetMaxExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 17);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetMaxExecutorCounters(), CONSUMED_CPU), 2);
-                NSysView::TAggregateCumulative<false>::Apply(&executor, counters.GetExecutorCounters());
-                NSysView::TAggregateCumulative<false>::Apply(&app, counters.GetAppCounters());
-                UNIT_ASSERT_VALUES_EQUAL(executor.GetCumulative(CONSUMED_CPU), 136);
-                UNIT_ASSERT_VALUES_EQUAL(app.GetCumulative(ENGINE_HOST_ROW_UPDATES), 1360);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), report == 0 ? 36 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, WRITE_ROWS), report == 0 ? 360 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(ROW_COUNT), 17);
+                NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU_MICROSECONDS), 136);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(WRITE_ROWS), 1360);
                 // Only the state of the last incarnation of the bucket is reported
-                const auto histogram = GetPackedNonDerivativeHistogram(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM);
+                const auto histogram = GetPackedNonDerivativeHistogram(counters, USED_CORE_PERCENTS);
                 UNIT_ASSERT_VALUES_EQUAL(histogram[0], 0);
                 UNIT_ASSERT_VALUES_EQUAL(histogram[1], 1);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, USED_CORE_PERCENTS), 1);
             }
         }
     }
@@ -2875,7 +2882,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             leader.Report(trees.Leaders, level, now);
             auto first = PackOnce(trees.Leaders);
             NKikimrSysView::TDbCounters restored;
-            NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level).GetExecutorCounters());
+            NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level));
             leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 25);
             leader.Report(trees.Leaders, level, now += TDuration::Seconds(5));
             trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
@@ -2885,14 +2892,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             auto final = PackOnce(trees.Leaders);
             UNIT_ASSERT_VALUES_EQUAL(final.size(), 1);
             const auto& counters = GetSinglePackedCounters(final, level);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetExecutorCounters(), CONSUMED_CPU), 25);
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetMaxExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetMaxExecutorCounters(), CONSUMED_CPU), 0);
-            NSysView::TAggregateCumulative<false>::Apply(&restored, counters.GetExecutorCounters());
-            UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU), 125);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), 25);
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(ROW_COUNT), 0);
+            NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU_MICROSECONDS), 125);
             // The retired bucket reports its non-derivative histogram empty
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, USED_CORE_PERCENTS), 0);
             UNIT_ASSERT(PackOnce(trees.Leaders).empty());
             UNIT_ASSERT(!trees.Root->FindSubgroup("database", DATABASE_PATH));
         }
@@ -2917,9 +2922,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(packed.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(packed.Get(0).SerializeAsString(), previous);
         UNIT_ASSERT_VALUES_EQUAL(packed.Get(1).GetTablePath(), TABLE_PATH);
-        const auto& counters = packed.Get(1).GetTableCounters().GetExecutorCounters();
-        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 25);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(DB_UNIQUE_ROWS_TOTAL), 17);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Get(1).GetTabletType(), TABLET_TYPE);
+        const auto& counters = packed.Get(1).GetTableMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), 25);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(ROW_COUNT), 17);
     }
 
     Y_UNIT_TEST(PackMarksNonDerivativeHistogramsAndReemitsThemWhenUnchanged) {
@@ -2931,22 +2937,21 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             auto first = PackOnce(trees.Leaders);
             const auto& firstCounters = GetSinglePackedCounters(first, level);
-            UNIT_ASSERT_VALUES_EQUAL(firstCounters.GetExecutorCounters().HistogramSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(firstCounters.GetExecutorCounters(), CONSUMED_CPU), 100);
-            const auto snapshot = GetPackedNonDerivativeHistogram(firstCounters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM);
+            UNIT_ASSERT_VALUES_EQUAL(firstCounters.HistogramSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(firstCounters, CONSUMED_CPU_MICROSECONDS), 100);
+            const auto snapshot = GetPackedNonDerivativeHistogram(firstCounters, USED_CORE_PERCENTS);
             UNIT_ASSERT_VALUES_EQUAL(snapshot[0], 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(firstCounters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 1);
-            UNIT_ASSERT_VALUES_EQUAL(firstCounters.GetAppCounters().HistogramSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(firstCounters, USED_CORE_PERCENTS), 1);
 
             // Nothing changed, yet the whole non-derivative histogram is reported again, so that a receiver,
             // which lost its copy in the meantime, is up to date after this very report
             for (int report = 0; report < 2; ++report) {
                 auto next = PackOnce(trees.Leaders);
                 const auto& counters = GetSinglePackedCounters(next, level);
-                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetExecutorCounters(), CONSUMED_CPU), 0);
-                UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().CumulativeSize(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().HistogramSize(), 1);
-                UNIT_ASSERT(GetPackedNonDerivativeHistogram(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM) == snapshot);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters.CumulativeSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
+                UNIT_ASSERT(GetPackedNonDerivativeHistogram(counters, USED_CORE_PERCENTS) == snapshot);
             }
         }
     }
@@ -2958,19 +2963,19 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             leader.AddCumulative(CONSUMED_CPU, 100);
             leader.Report(trees.Leaders, level, TInstant::Seconds(100));
             UNIT_ASSERT_VALUES_EQUAL(
-                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(PackOnce(trees.Leaders), level).GetExecutorCounters(),
-                                                CONSUMED_CPU_HISTOGRAM), 1);
+                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(PackOnce(trees.Leaders), level),
+                                                USED_CORE_PERCENTS), 1);
 
             trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
             auto final = PackOnce(trees.Leaders);
             UNIT_ASSERT_VALUES_EQUAL(final.size(), 1);
-            const auto& histogram = GetSinglePackedCounters(final, level).GetExecutorCounters().GetHistogram(CONSUMED_CPU_HISTOGRAM);
+            const auto& histogram = GetSinglePackedCounters(final, level).GetHistogram(USED_CORE_PERCENTS);
             // The entry is there although it is empty: it is what tells the receiver to forget the tablet
             UNIT_ASSERT(histogram.GetNonDerivative());
             UNIT_ASSERT_VALUES_UNEQUAL(histogram.GetBucketsCount(), 0);
             UNIT_ASSERT_VALUES_EQUAL(histogram.BucketsSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(
-                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(final, level).GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 0);
+                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(final, level), USED_CORE_PERCENTS), 0);
         }
     }
 
@@ -2989,13 +2994,46 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             auto packed = PackOnce(trees.Leaders);
             UNIT_ASSERT_VALUES_EQUAL(packed.size(), 1);
-            const auto& counters = GetSinglePackedCounters(packed, level).GetExecutorCounters();
+            const auto& counters = GetSinglePackedCounters(packed, level);
             UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
             // Neither 0 (the retirement) nor 2 (both added up)
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, CONSUMED_CPU_HISTOGRAM), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 100);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, USED_CORE_PERCENTS)[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, USED_CORE_PERCENTS), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU_MICROSECONDS), 100);
         }
+    }
+
+    /**
+     * Verify that a tablet type is bound to the counter layout of its first report:
+     * a report of another layout is skipped without an abort and registers nothing.
+     */
+    Y_UNIT_TEST(ReportOfAnotherCounterLayoutIsSkipped) {
+        TRoleTrees trees;
+        const TInstant now = TInstant::Seconds(100);
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10);
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        constexpr const char* names[] = {"DbUniqueRowsTotal"};
+        TTabletCountersBase executorCounters(Y_ARRAY_SIZE(names), 0, 0, names, nullptr, nullptr);
+        TTabletCountersBase appCounters;
+        executorCounters.Simple()[0].Set(30);
+        for (const auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            trees.Leaders->AddCounters(OTHER_TABLE_PATH, level, 2000, 0, TABLET_TYPE, executorCounters, appCounters, now);
+        }
+        trees.Leaders->AddCounters(TABLE_PATH, TDetailedMetricsSettings::MetricsLevelTable, 3000, 0, TABLET_TYPE,
+            executorCounters, appCounters, now);
+
+        trees.RecalculateAllCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"), 10);
+        auto packed = PackOnce(trees.Leaders);
+        UNIT_ASSERT_VALUES_EQUAL(GetSinglePackedCounters(packed, TDetailedMetricsSettings::MetricsLevelTable).GetSimple(ROW_COUNT), 10);
+        UNIT_ASSERT(!FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable, OTHER_TABLE_PATH));
+        UNIT_ASSERT(!FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelPartition, OTHER_TABLE_PATH));
+
+        trees.Leaders->ForgetTablet(1000, 0);
+        UNIT_ASSERT(!FindTableGroup(trees.Root));
+        UNIT_ASSERT(!FindTableGroup(trees.Root, OTHER_RELATIVE_TABLE_PATH));
     }
 
     Y_UNIT_TEST(NonDerivativeHistogramsOfDataShardAreConsumedCpuOnly) {

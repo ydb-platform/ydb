@@ -254,10 +254,42 @@ struct TSameChannelIdTest : public TSessionTest {
     }
 };
 
+// A node session subscribes to the interconnect session with its 1st send, and unsubscribes when it dies:
+// otherwise its dead id stays a subscriber of the interconnect session until its hourly liveness check. The
+// debug sessions make the discovery their 1st send, so the subscription is under their own activity.
+struct TUnsubscribeTest : public TSessionTest {
+
+    void Prepare() override {
+        UseDebugSessions = true;
+        TSessionTest::Prepare();
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        const TStringBuf activity = "DebugNodeSessionActor";
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInterconnectSubscribers(NodeIndex0, activity) == 1; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the node session did not subscribe, subscribers=" << GetInterconnectSubscribers(NodeIndex0, activity));
+
+        Debug0->Terminating.store(true);
+        Service0->FreeNodeSession(Runtime->GetNodeId(1), Debug0->NodeActorId);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInterconnectSubscribers(NodeIndex0, activity) == 0; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the dead node session is still subscribed, subscribers=" << GetInterconnectSubscribers(NodeIndex0, activity));
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20Session) {
 
     Y_UNIT_TEST(IdleSessionDestroyed2n) {
         TIdleDestroyTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreedSessionUnsubscribes2n) {
+        TUnsubscribeTest test;
         test.Local = false;
         test.Run();
     }

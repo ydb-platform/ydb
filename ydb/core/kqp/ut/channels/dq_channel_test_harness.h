@@ -1234,6 +1234,24 @@ struct TSessionTest : public TLoadTest {
         return state->GetReconciliationLog();
     }
 
+    // the subscriptions to its interconnect sessions which the node holds for actors of an activity whose name has
+    // the given part: the activity of the actor which made the subscribing send, over the real interconnect only
+    // (the mock keeps none)
+    i64 GetInterconnectSubscribers(ui32 nodeIndex, TStringBuf activity) {
+        std::function<i64(const NMonitoring::TDynamicCounters&, bool)> sum = [&](const NMonitoring::TDynamicCounters& group, bool bySubscriber) {
+            i64 result = 0;
+            for (const auto& [id, child] : group.ReadSnapshot()) {
+                if (auto subgroup = dynamic_cast<const NMonitoring::TDynamicCounters*>(child.Get())) {
+                    result += sum(*subgroup, id.LabelName == "sensor" && id.LabelValue == "InterconnectSessionSubscribersByActivity");
+                } else if (bySubscriber && id.LabelName == "activity" && id.LabelValue.Contains(activity)) {
+                    result += static_cast<const NMonitoring::TCounterForPtr*>(child.Get())->Val();
+                }
+            }
+            return result;
+        };
+        return sum(*Runtime->GetDynamicCounters(nodeIndex), false);
+    }
+
     using TLoadTest::WaitFor;
 
     // waits for the sender session to have nothing in flight and no reconciliation in progress

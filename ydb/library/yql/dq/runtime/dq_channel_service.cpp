@@ -2825,6 +2825,12 @@ void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr
 void TNodeState::HandlePoison() {
     std::lock_guard lock(Mutex);
     FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
+    // the interconnect session would keep this dead id as a subscriber until its hourly liveness check. Subscribed
+    // stays set, so that a late send from a buffer still bound does not subscribe it again
+    if (Subscribed.exchange(true)) {
+        ActorSystem->Send(new NActors::IEventHandle(ActorSystem->InterconnectProxy(NodeId), NodeActorId,
+            new NActors::TEvents::TEvUnsubscribe()));
+    }
 }
 
 // unbinded stubs

@@ -533,6 +533,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots_legacy_api
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_status_inactive
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk

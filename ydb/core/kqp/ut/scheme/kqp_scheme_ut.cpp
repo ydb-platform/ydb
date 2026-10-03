@@ -14,6 +14,7 @@
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -7387,30 +7388,62 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_FAIL("The database " << path << " is not running: " << status.DebugString());
     }
 
-    // The detailed metrics a node publishes for a table: "none" (DATABASE level), "table"
-    // (one bucket for the whole table) or "partition" (a leaf per partition).
-    TString GetPublishedDetailedMetrics(TTestActorRuntime& runtime, const TString& database,
-        const TString& table, ui64 tabletId)
-    {
-        auto findExecutorGroup = [](::NMonitoring::TDynamicCounterPtr group) -> ::NMonitoring::TDynamicCounterPtr {
-            auto typeGroup = group ? group->FindSubgroup("type", "DataShard") : nullptr;
-            return typeGroup ? typeGroup->FindSubgroup("category", "executor") : nullptr;
-        };
+    // The detailed metrics aggregators of the leaders, which the nodes register with their
+    // SysView Service, keyed by the node and the database.
+    using TDetailedCountersRegistrations = THashMap<std::pair<ui32, TString>, TIntrusivePtr<NSysView::IDbDetailedCounters>>;
 
+    // Capture the registrations of the detailed metrics of the leaders: the aggregator actor
+    // registers on creation and every 60 seconds afterwards, so the observer must be in place
+    // before the database is created. The SysView Service never gets them: Pack() drains the
+    // deltas and the final values of the retired buckets, so the test must be its only caller.
+    auto ObserveDetailedCountersRegistrations(TTestActorRuntime& runtime, TDetailedCountersRegistrations& registrations) {
+        return runtime.AddObserver<NSysView::TEvSysView::TEvRegisterDbDetailedCounters>(
+            [&registrations](NSysView::TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+                const auto* msg = ev->Get();
+                if (msg->Service == NKikimrSysView::TABLETS) {
+                    registrations[std::make_pair(ev->Recipient.NodeId(), msg->Database)] = msg->Counters;
+                    ev.Reset();
+                }
+            });
+    }
+
+    // Whether the report of the detailed metrics of the leaders of the node has the TABLE bucket
+    // of the table and the leaf of the leader of the tablet.
+    std::pair<bool, bool> FindPublishedBuckets(NSysView::IDbDetailedCounters& counters, const TString& tablePath, ui64 tabletId) {
+        // The first report also carries the final values of the buckets retired since the
+        // previous one, the second one only the live buckets
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> report;
+        counters.Pack(report);
+        report.Clear();
+        counters.Pack(report);
+
+        bool hasTableBucket = false;
+        bool hasPartitionLeaf = false;
+        for (const auto& entry : report) {
+            if (entry.GetTablePath() != tablePath) {
+                continue;
+            }
+            hasTableBucket = hasTableBucket || entry.GetLevel() == NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            for (const auto& leaf : entry.GetLeaves()) {
+                hasPartitionLeaf = hasPartitionLeaf || (leaf.GetTabletId() == tabletId && leaf.GetFollowerId() == 0);
+            }
+        }
+        return {hasTableBucket, hasPartitionLeaf};
+    }
+
+    // The detailed metrics a node publishes for a table: "none" (DATABASE level), "table"
+    // (one bucket for the whole table) or "partition" (a leaf per partition), as found in
+    // the report of the node (see IDbDetailedCounters::Pack()).
+    TString GetPublishedDetailedMetrics(TTestActorRuntime& runtime, const TDetailedCountersRegistrations& registrations,
+        const TString& database, const TString& table, ui64 tabletId)
+    {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            auto rawGroup = runtime.GetAppData(nodeIndex).Counters->FindSubgroup("counters", "ydb_detailed_raw");
-            auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", database) : nullptr;
-            auto tableGroup = databaseGroup ? databaseGroup->FindSubgroup("table", table) : nullptr;
-            if (!tableGroup) {
+            auto it = registrations.find(std::make_pair(runtime.GetNodeId(nodeIndex), database));
+            if (it == registrations.end()) {
                 continue;
             }
 
-            const bool hasTableBucket = bool(findExecutorGroup(tableGroup));
-
-            auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-            auto tabletGroup = perPartitionGroup ? perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId)) : nullptr;
-            auto leaderGroup = tabletGroup ? tabletGroup->FindSubgroup("follower_id", "0") : nullptr;
-            const bool hasPartitionLeaf = bool(findExecutorGroup(leaderGroup));
+            const auto [hasTableBucket, hasPartitionLeaf] = FindPublishedBuckets(*it->second, database + "/" + table, tabletId);
 
             if (hasTableBucket && !hasPartitionLeaf) {
                 return "table";
@@ -7440,6 +7473,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .SetDynamicNodeCount(1)
             .SetStoragePoolTypes({"hdd1"}));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        // The published buckets are observed through the reports of the nodes, which the test
+        // packs in place of the SysView Service of the node
+        TDetailedCountersRegistrations detailedCounters;
+        auto detailedCountersObserver = ObserveDetailedCountersRegistrations(runtime, detailedCounters);
 
         const TString database = "/Root/Test";
         Tests::TTenants tenants(&kikimr.GetTestServer());
@@ -7499,7 +7537,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     const auto it = reported.find(database + "/" + table.Table);
                     const ui32 level = it != reported.end() ? it->second.MetricsLevel : 0;
                     const ui64 tabletId = it != reported.end() ? it->second.TabletId : 0;
-                    const auto published = GetPublishedDetailedMetrics(runtime, database, table.Table, tabletId);
+                    const auto published = GetPublishedDetailedMetrics(runtime, detailedCounters, database, table.Table, tabletId);
                     state << " " << table.Table << ": level " << level << ", published " << published << ";";
                     matches = matches && level == ui32(table.MetricsLevel) && published == table.Published;
                 }

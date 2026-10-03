@@ -5,6 +5,8 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
 class DescribeTableRPC
@@ -41,7 +43,8 @@ public:
         auto& filter = *req.mutable_filter();
         filter.set_name(BindingName_);
 
-        SRC_LOG_T("listing bindings");
+        YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -57,7 +60,8 @@ public:
 
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
-            SRC_LOG_I("failed: " << errorMsg);
+            YDB_LOG_INFO_CTX(ctx, errorMsg,
+                {"logContext", TLogCtx{.Owner_ = *this}});
             Reply(
                 Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
@@ -74,7 +78,9 @@ public:
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
-        SRC_LOG_T("describing binding: " << bindingId);
+        YDB_LOG_TRACE_CTX(ctx, "Describing binding",
+            {"logContext", TLogCtx{.Owner_ = *this}},
+            {"bindingId", bindingId});
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
@@ -96,7 +102,8 @@ public:
         default:
             TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
                 static_cast<int>(settings.binding_case());
-            SRC_LOG_I("failed: " << errorMsg);
+            YDB_LOG_INFO_CTX(ctx, errorMsg,
+                {"logContext", TLogCtx{.Owner_ = *this}});
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;

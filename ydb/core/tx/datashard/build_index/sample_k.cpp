@@ -17,6 +17,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
@@ -93,7 +95,8 @@ public:
         , ResponseActorId(responseActorId)
         , Clusters(std::move(clusters))
     {
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
 
         NTable::TPos pos = 0;
         for (const auto& col: request.GetColumns()) {
@@ -122,7 +125,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
 
@@ -130,7 +134,9 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         lead = Lead;
 
@@ -138,8 +144,6 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -188,7 +192,8 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        YDB_LOG_TRACE("Scan range exhausted",
+            {"debug", Debug()});
 
         return EScan::Final;
     }
@@ -223,9 +228,13 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"responseRecord", ToShortDebugString(Response->Record)});
         } else {
-            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"responseRecord", ToShortDebugString(Response->Record)});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -256,8 +265,10 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
@@ -310,9 +321,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TSampleKScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting K-means sample scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -328,9 +340,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << ToShortDebugString(response->Record));
+                YDB_LOG_ERROR("Rejecting invalid K-means sample scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

@@ -22,8 +22,8 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
-    CODEC_KAFKA_BATCH = 5;
-    reserved 6 to 9999;
+    reserved 5 to 9999;
+
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
@@ -141,15 +141,17 @@ message StreamWriteMessage {
         SupportedCodecs supported_codecs = 4;
 
         // Indicates that server supports batching.
-        bool is_batching_supported = 5;
+        bool is_kafka_batching_supported = 5;
     }
 
     // Represents portion of client messages.
     message WriteRequest {
+        // May be empty if kafka_messages is used
         repeated MessageData messages = 1;
 
         // Codec that is used for data compression.
         // See enum Codec above for values.
+        // CODEC_UNSPECIFIED for kafka_messages
         int32 codec = 2;
 
         oneof write_context {
@@ -157,8 +159,11 @@ message StreamWriteMessage {
             DeferredPublishIdentity deferred_publish = 9;
         }
 
+        // Messages encoded to kafka batch
+        KafkaMessagesData kafka_messages = 10;
+
         message MessageData {
-            // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
+            // Message sequence number, provided by client for deduplication.
             // Starts at 1
             int64 seq_no = 1;
             // Creation timestamp.
@@ -178,6 +183,20 @@ message StreamWriteMessage {
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
+        }
+
+        message KafkaMessagesData {
+            // Count of messages.
+            int64 batch_size = 1;
+            int64 min_seq_no = 2;
+            int64 max_seq_no = 3;
+
+            bytes data = 4;
+
+            // Total uncompressed size of all messages in the batch.
+            int64 uncompressed_size = 5;
+            // sampled partition key of batch
+            string partition_key = 6;
         }
     }
 
@@ -351,8 +370,8 @@ message StreamReadMessage {
             google.protobuf.Timestamp read_from = 4;
         }
 
-        // Indicates that client supports batching.
-        bool is_batching_supported = 7;
+        // Indicates that client supports kafka batches decoding.
+        bool is_kafka_batching_supported = 7;
     }
 
     // Handshake response.
@@ -407,9 +426,23 @@ message StreamReadMessage {
             repeated MetadataItem metadata_items = 8;
         }
 
+        message KafkaMessagesData {
+            // Count of messages.
+            int64 batch_size = 1;
+            int64 min_offset = 2;
+            int64 max_offset = 3;
+
+            bytes data = 4;
+
+            // Total uncompressed size of all messages in the batch.
+            int64 uncompressed_size = 5;
+            // sampled partition key of batch
+            string partition_key = 6;
+        }
+
         // Representation of sequence of client messages from one write session.
         message Batch {
-            // List of client messages.
+            // List of client messages. May be empty if kafka_messages is used.
             repeated MessageData message_data = 1;
 
             // Producer identifier provided by client for this batch of client messages.
@@ -419,10 +452,14 @@ message StreamReadMessage {
 
             // Codec that is used for data compression.
             // See enum Codec above for values.
+            // CODEC_UNSPECIFIED if kafka_messages is used.
             int32 codec = 4;
 
             // Persist timestamp on server for batch.
             google.protobuf.Timestamp written_at = 5;
+
+            // messages encoded in kafka format
+            KafkaMessagesData kafka_messages = 6;
         }
 
         // Representation of sequence of messages from one partition.

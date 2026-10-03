@@ -5,6 +5,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/public
+    ydb/core/tx/columnshard/common
     ydb/core/tx/tiering/tier
     ydb/core/tx/columnshard/blobs_action/protos
     ydb/core/tx/columnshard/data_sharing/protos

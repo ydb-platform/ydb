@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/engines/storage/optimizer/abstract/interface
     contrib/libs/apache/arrow
     ydb/core/formats/arrow
     ydb/core/protos

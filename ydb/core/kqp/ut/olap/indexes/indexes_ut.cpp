@@ -23,6 +23,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 
+#include <atomic>
 #include <format>
 
 namespace NKikimr::NKqp {
@@ -2333,6 +2334,21 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                                        "count", csController->GetActualizationRefreshSchemeCount().Val());
     }
 
+    class TIndexesCompactionController: public NOlap::TWaitCompactionController {
+    private:
+        std::atomic<bool> CompactionEnabled{false};
+
+    public:
+        void EnableCompaction() {
+            CompactionEnabled.store(true);
+        }
+
+        NYDBTest::EOptimizerCompactionWeightControl GetCompactionControl() const override {
+            return CompactionEnabled.load() ? NYDBTest::EOptimizerCompactionWeightControl::Force
+                                            : NYDBTest::EOptimizerCompactionWeightControl::Disable;
+        }
+    };
+
     class TTestIndexesScenario {
     private:
         TKikimrSettings Settings;
@@ -2366,8 +2382,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             return *this;
         }
 
-        void ExecuteSkipIndexesScenario() {
-            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        void ExecuteSkipIndexesScenario(const TDuration writeDelay = TDuration::Zero()) {
+            // Build the complete fixture before the planner can compact its portions.
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TIndexesCompactionController>();
             csController->SetOverrideMemoryLimitForPortionReading(1e+10);
             csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             TLocalHelper(*Kikimr).CreateTestOlapTable();
@@ -2428,6 +2445,12 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
             {
                 WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+                // Exercise writes slower than the planner's ten-second batching window.
+                if (writeDelay) {
+                    Sleep(writeDelay);
+                    UNIT_ASSERT_VALUES_EQUAL_C(csController->GetCompactionStartedCounter().Val(), 0,
+                        "Compaction must not start before the index test fixture is complete");
+                }
                 WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
                 WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
                 WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
@@ -2459,10 +2482,22 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+            csController->EnableCompaction();
+            csController->WaitCondition(TDuration::Seconds(120), [&]() {
+                return csController->GetCompactionStartedCounter().Val() >= 3 &&
+                    csController->GetCompactionStartedCounter().Val() == csController->GetCompactionFinishedCounter().Val();
+            });
             csController->WaitCompactions(TDuration::Seconds(5));
+            UNIT_ASSERT_VALUES_EQUAL(
+                csController->GetCompactionStartedCounter().Val(), csController->GetCompactionFinishedCounter().Val());
             // The dynamic ngram filter sizing may shift one extra control compaction depending on storage layout
             AFL_VERIFY(3 <= csController->GetCompactionStartedCounter().Val() &&
                 csController->GetCompactionStartedCounter().Val() <= 5)("count", csController->GetCompactionStartedCounter().Val());
+            // Delayed-write cases check fixture synchronization; the original cases check all queries below.
+            if (writeDelay) {
+                return;
+            }
 
             {
                 ExecuteSQL(R"(
@@ -2848,6 +2883,14 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             }
         }
     };
+
+    Y_UNIT_TEST(IndexesInBSWithDelayedWrites, EUseQueryService) {
+        TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteSkipIndexesScenario(TDuration::Seconds(12));
+    }
+
+    Y_UNIT_TEST(IndexesInLocalMetadataWithDelayedWrites, EUseQueryService) {
+        TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteSkipIndexesScenario(TDuration::Seconds(12));
+    }
 
     Y_UNIT_TEST(IndexesInBS, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

@@ -30,10 +30,10 @@ SRCS(
     write_actor.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
+    ydb/core/tx/columnshard/public
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/cms/console

@@ -4,7 +4,6 @@ SRCS(
     constructor.cpp
     collection.cpp
     header.cpp
-    fetcher.cpp
     abstract.cpp
     meta.cpp
     checker.cpp

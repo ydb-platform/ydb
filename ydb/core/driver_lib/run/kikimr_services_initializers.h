@@ -33,6 +33,9 @@
 namespace NKikimr {
 
 struct TLocalConfig;
+namespace NConveyorComposite::NConfig {
+class TConfig;
+}
 
 namespace NKikimrServicesInitializers {
 
@@ -465,6 +468,8 @@ public:
 class TCompositeConveyorInitializer : public IKikimrServicesInitializer {
 public:
     TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig);
+
+    NConveyorComposite::NConfig::TConfig BuildServiceConfig() const;
 	void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

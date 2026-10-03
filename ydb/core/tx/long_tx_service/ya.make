@@ -14,7 +14,8 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base
-    ydb/core/tx/columnshard
+    ydb/core/tx/columnshard/public
+    ydb/core/tx/datashard
     ydb/core/tx/long_tx_service/public
     ydb/library/services
 )

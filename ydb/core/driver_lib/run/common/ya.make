@@ -1,5 +1,16 @@
 LIBRARY(run_common)
 
+# Shared protocols and interfaces are allowed; tablet implementation and
+# its private services must never enter the lightweight dependency graph.
+CHECK_DEPENDENT_DIRS(DENY PEERDIRS
+    GLOB ydb/core/tx/columnshard
+    ydb/core/tx/columnshard/column_fetching
+    ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/engines/reader
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/priorities/service
+)
+
 SRCDIR(ydb/core/driver_lib/run)
 
 ADDINCL(
@@ -114,7 +125,6 @@ PEERDIR(
     ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/conveyor/service
-    ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache
     ydb/core/tx/coordinator
@@ -123,7 +133,6 @@ PEERDIR(
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
-    ydb/core/tx/priorities/service
     ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service

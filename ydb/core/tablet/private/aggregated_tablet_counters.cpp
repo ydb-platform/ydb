@@ -127,9 +127,7 @@ void TAggregatedTabletCounters::Apply(
         }
         const ui32 offset = nextCumulativeOffset++;
         const ui64 valueDiff = counters->Cumulative()[i].Get();
-        if (diff) {
-            cumulativeValues[offset] = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
-        }
+        cumulativeValues[offset] = DifferentiateToPerSecondRate(valueDiff, diff);
         Y_ABORT_UNLESS(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
         *CumulativeCounters[offset] += valueDiff;
     }

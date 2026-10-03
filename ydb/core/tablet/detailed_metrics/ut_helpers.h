@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <util/generic/ptr.h>
@@ -9,6 +10,12 @@
 namespace NKikimr {
 
 namespace NDetailedMetricsTests {
+
+constexpr ui32 ROW_COUNT = NDataShard::COUNTER_DATASHARD_ROW_COUNT;
+constexpr ui32 SIZE_BYTES = NDataShard::COUNTER_DATASHARD_SIZE_BYTES;
+constexpr ui32 WRITE_ROWS = NDataShard::COUNTER_DATASHARD_WRITE_ROWS;
+constexpr ui32 CONSUMED_CPU_MICROSECONDS = NDataShard::COUNTER_DATASHARD_CONSUMED_CPU_MICROSECONDS;
+constexpr ui32 USED_CORE_PERCENTS = NDataShard::COUNTER_DATASHARD_USED_CORE_PERCENTS;
 
 /**
  * Normalizes the given JSON to be well formatted with all keys sorted.

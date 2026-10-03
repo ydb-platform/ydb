@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/trace.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Checkpoint creation request/reposnse
+
+enum ECheckpointType
+{
+    NORMAL = 0;       // Usual checkpoint.
+    LIGHT = 1;        // Checkpoint only for collect used blocks.
+    WITHOUT_DATA = 2; // Normal checkpoint without data.
+}
+
+message TCreateCheckpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to create checkpoint on.
+    string DiskId = 2;
+
+    // Checkpoint identifier.
+    string CheckpointId = 3;
+
+    // Light checkpoint.
+    // Checkpoint only for collect used blocks.
+    // Deprecated, use CheckpointType = ECheckpointType::LIGHT.
+    bool IsLight = 4 [deprecated = true];
+
+    // Checkpoint type to create (IsLight will be deprecated).
+    ECheckpointType CheckpointType = 5;
+}
+
+message TCreateCheckpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 2;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Checkpoint deletion request/response
+
+message TDeleteCheckpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to delete checkpoint from.
+    string DiskId = 2;
+
+    // Checkpoint identifier.
+    string CheckpointId = 3;
+}
+
+message TDeleteCheckpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 2;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get changed blocks between two checkpoints
+
+message TGetChangedBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to check.
+    uint32 BlocksCount = 4;
+
+    // Checkpoint identifier.
+    string LowCheckpointId = 5;
+
+    // Checkpoint identifier.
+    string HighCheckpointId = 6;
+
+    // Only affects case when LowCheckpointId is not set.
+    bool IgnoreBaseDisk = 7;
+}
+
+message TGetChangedBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Bit mask where bit is set if block has changed between checkpoints.
+    bytes Mask = 2;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 3;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Checkpoint status request/response
+
+enum ECheckpointStatus
+{
+    NOT_READY = 0;  // The checkpoint is in the process of being created.
+                    // Can't read it yet.
+
+    READY = 1;      // The checkpoint is ready and you can read it.
+
+    ERROR = 2;      // An error occurred during the creation of the checkpoint.
+                    // Or the checkpoint data is destroyed.
+                    // It is impossible to read from the checkpoint now and in
+                    // the future.
+}
+
+message TGetCheckpointStatusRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to get checkpoint status from.
+    string DiskId = 2;
+
+    // Checkpoint identifier.
+    string CheckpointId = 3;
+}
+
+message TGetCheckpointStatusResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Checkpoint status
+    ECheckpointStatus CheckpointStatus = 2;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 3;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}

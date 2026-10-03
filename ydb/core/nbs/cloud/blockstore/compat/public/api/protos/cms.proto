@@ -1,0 +1,63 @@
+syntax = "proto2";
+
+package NCloud.NBlockStore.NProto;
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// The NBS service definition.
+
+message TAction {
+    enum EType {
+        UNKNOWN = 0;
+        REMOVE_DEVICE = 1;
+        REMOVE_HOST = 2;
+        GET_DEPENDENT_DISKS = 3;
+        ADD_DEVICE = 4;
+        ADD_HOST = 5;
+        PURGE_HOST = 6;
+    }
+
+    // Action type.
+    optional EType Type = 1;
+
+    // Host name.
+    optional string Host = 2;
+
+    // Device path.
+    optional string Device = 3;
+
+    // Flag to not apply changes.
+    optional bool DryRun = 4;
+}
+
+message TActionResult
+{
+    // Result.
+    optional NYdb.NBS.NProto.TError Result = 1;
+
+    // Timeout to retry if E_TRY_AGAIN returned (in seconds).
+    optional uint32 Timeout = 2;
+
+    // Disks that depend on the supplied host.
+    repeated string DependentDisks = 3;
+}
+
+message TCmsActionRequest {
+    // Optional request headers.
+    optional THeaders Headers = 1;
+
+    // List of actions to perform.
+    repeated TAction Actions = 2;
+}
+
+message TCmsActionResponse {
+    // Optional error, set only if error happened.
+    optional NYdb.NBS.NProto.TError Error = 1;
+
+    // Action result.
+    repeated TActionResult ActionResults = 2;
+}

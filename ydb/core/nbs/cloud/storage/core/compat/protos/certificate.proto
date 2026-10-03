@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TCertificate
+{
+    optional string CertFile = 1;
+    optional string CertPrivateKeyFile = 2;
+}

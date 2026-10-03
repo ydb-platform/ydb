@@ -1246,10 +1246,10 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        # path = f"{kikimr.get_database_name()}/{query_name}" # TODO YQ-5684
+        path = f"{kikimr.get_database_name()}/{query_name}"
         try:
             kikimr.ydb_client.query(f"""
-                CREATE STREAMING QUERY {query_name} AS DO BEGIN
+                CREATE STREAMING QUERY {query_name} WITH (STATS_COLLECTION_MODE="PROFILE") AS DO BEGIN
                 {sql}
                 END DO;
             """)
@@ -1278,14 +1278,13 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 componentSensors = sensors.find_sensors(
                     labels={
                         "subsystem": "DqLookup",
-                        # "tx_id": path, # TODO: YQ-5684
+                        "tx_id": path,
                         "component": component,
                     },
                     key_label="sensor",
                 )
                 for k in componentSensors:
-                    # .tx_id[{path}] # TODO: YQ-5684
-                    logging.debug(f'node[{node_index}].component[{component}].{k} = {componentSensors[k]}')
+                    logging.debug(f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}')
                 if component == "Lookup":
                     hits += componentSensors.get("Hits", 0)
                     miss += componentSensors.get("Miss", 0)

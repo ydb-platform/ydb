@@ -309,6 +309,14 @@ public:
         return TStatus::Success();
     }
 
+    static TStatus ValidateStatsCollectionMode(const TString& name, const TString& value) {
+        Ydb::Table::QueryStatsCollection::Mode mode;
+        if (!Ydb::Table::QueryStatsCollection::Mode_Parse(value, &mode)) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property got illegal value: " << value);
+        }
+        return TStatus::Success();
+    }
+
 private:
     static TValueStatus<TString> Validate(const TString& name, const TString& value, TValidator validator) {
         if (validator) {
@@ -2589,7 +2597,7 @@ private:
         request.SetDatabase(Context.GetDatabase());
         request.SetDatabaseId(Context.GetDatabaseId());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request.SetCollectStats(Settings.Info.StatsCollectionMode.value_or(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL));
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
         request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
         request.SetKeepSession(false);
@@ -3314,6 +3322,7 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, GetDefaultStreamingDisposition(!SchemeInfo || !AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute() || force)));
         CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, "", &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
         CHECK_STATUS(validator.Save(EName::InflightOperation, TStreamingQueryConfig::TOperations::Create));
+        CHECK_STATUS(validator.SaveDefault(EName::StatsCollectionMode, "", &TPropertyValidator::ValidateStatsCollectionMode));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
             ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
@@ -3360,6 +3369,7 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::Run, previousSettings.Run ? "true" : "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
         CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, previousSettings.CheckpointIntervalString, &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
+        CHECK_STATUS(validator.SaveDefault(EName::StatsCollectionMode, previousSettings.StatsCollectionModeString, &TPropertyValidator::ValidateStatsCollectionMode));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));

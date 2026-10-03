@@ -14,8 +14,11 @@ TDummyTopic& TDummyTopic::SetPartitionsCount(size_t count) {
     return *this;
 }
 
-TString SkipDatabasePrefix(const TString& path, const TString& database) {
+TString SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster) {
     TStringBuf pathCanonized(path);
+    if (isCluster) {
+        pathCanonized.SkipPrefix("cluster:default_");
+    }
     pathCanonized.SkipPrefix(database);
     pathCanonized.SkipPrefix("/");
     return TString(pathCanonized);

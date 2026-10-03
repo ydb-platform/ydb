@@ -25,10 +25,7 @@
 namespace NKikimr {
 namespace NStat {
 
-NActors::TActorId MakeStatServiceID(ui32 node) {
-    const char x[12] = "StatService";
-    return NActors::TActorId(node, TStringBuf(x, 12));
-}
+
 
 } // NStat
 } // NKikimr

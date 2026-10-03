@@ -32,6 +32,8 @@
 
 namespace NKikimr {
 
+struct TLocalConfig;
+
 namespace NKikimrServicesInitializers {
 
 class IKikimrServicesInitializer : public IServiceInitializer {
@@ -88,6 +90,8 @@ public:
 class TLocalServiceInitializer : public IKikimrServicesInitializer {
 public:
     TLocalServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    TIntrusivePtr<TLocalConfig> BuildLocalConfig(const NKikimr::TAppData* appData) const;
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

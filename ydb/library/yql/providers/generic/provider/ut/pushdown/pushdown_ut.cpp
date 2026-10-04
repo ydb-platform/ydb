@@ -848,4 +848,29 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             )proto"
         );
     }
+
+    Y_UNIT_TEST(EqualUuid) {
+        // Literal "0123456789abcdef" is 16 bytes = low_128 LE + high_128 LE.
+        AssertFilter(
+            R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_uuid"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                type_id: UUID
+                            }
+                            value {
+                                low_128: 3978425819141910832
+                                high_128: 7378413942531504440
+                            }
+                        }
+                    }
+                }
+            )proto");
+    }
 }

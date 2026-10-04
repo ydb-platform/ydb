@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 class TTxReassignGroupsOnDecommit : public TTransactionBase<THive> {
@@ -32,8 +34,11 @@ public:
             for (ui32 channel = 0; channel < tablet.GetChannelCount(); ++channel) {
                 auto *entry = channel < channels.size() ? channels[channel].LatestEntry() : nullptr;
                 if (!entry) {
-                    BLOG_W("TTxReassignGroupsOnDecommit entry not found TabletId# " << tabletId_
-                        << " channel# " << channel << " GroupId# " << GroupId);
+                    YDB_LOG_WARN("THive::TTxReassignGroupsOnDecommit::Execute channel history entry not found",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId_},
+                        {"channelId", channel},
+                        {"groupId", GroupId});
                     continue;
                 } else if (entry->GroupID != GroupId) {
                     continue;
@@ -46,7 +51,9 @@ public:
                 ++numChannels;
 
                 if (changed || !tablet.IsReadyToReassignTablet()) {
-                    BLOG_D("TTxReassignGroupsOnDecommit tablet is not ready for reassignment TabletId# " << tabletId_);
+                    YDB_LOG_DEBUG("THive::TTxReassignGroupsOnDecommit::Execute tablet not ready for reassignment",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId_});
                     continue;
                 }
 
@@ -63,7 +70,10 @@ public:
             }
 
             if (changed) {
-                BLOG_D("TTxReassignGroupsOnDecommit tablet reassigned TabletId# " << tabletId_ << " numChannels# " << numChannels);
+                YDB_LOG_DEBUG("THive::TTxReassignGroupsOnDecommit::Execute tablet marked for reassignment",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", tabletId_},
+                    {"numChannels", numChannels});
                 tablet.InitiateAssignTabletGroups();
             }
 		}

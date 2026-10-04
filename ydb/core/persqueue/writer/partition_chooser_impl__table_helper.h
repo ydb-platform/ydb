@@ -15,18 +15,6 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
-#endif
-
-
-#define LOG_PREFIX "TTableHelper "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-
-
 class TTableHelper {
 public:
     TTableHelper(const TString& topicName, const TString& topicHashName)
@@ -59,9 +47,12 @@ public:
         UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
         UpdateAccessTimeQuery = GetUpdateAccessTimeQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
 
-        DEBUG("SelectQuery: " << SelectQuery);
-        DEBUG("UpdateQuery: " << UpdateQuery);
-        DEBUG("UpdateAccessTimeQuery: " << UpdateAccessTimeQuery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"selectQuery", SelectQuery});
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateQuery", UpdateQuery});
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateAccessTimeQuery", UpdateAccessTimeQuery});
 
         return true;
     }
@@ -275,9 +266,5 @@ private:
 };
 
 #undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

@@ -1269,6 +1269,117 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    void CheckFixedQuotaDonorAccountingAfterResize(bool dropDonor) {
+        TEnvironmentSetup env(2, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); },
+            [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+                TFinalizer finalizer(env);
+                env.Prepare(dispatchName, setup, outActiveZone);
+                env.Runtime->EnableScheduleForActor(ResolveTablet(*env.Runtime, env.TabletId));
+
+                NKikimrBlobStorage::TConfigRequest request;
+                env.DefineBox(1, "box", {
+                    {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                }, env.GetNodes(), request);
+                auto* config = request.MutableCommand(0)->MutableDefineHostConfig()
+                    ->MutableDrive(0)->MutablePDiskConfig();
+                config->SetExpectedSlotSize(100ull << 30);
+                config->SetMaxSlots(4);
+                auto response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                // Fixed-quota disks become available for placement once NodeWarden reports slot geometry.
+                const auto disksBeforeMetrics = FetchBaseConfig(&env);
+                for (const auto& disk : disksBeforeMetrics.GetPDisk()) {
+                    const ui32 nodeIndex = disk.GetNodeId() - env.Runtime->GetNodeId(0);
+                    const auto sender = env.Runtime->AllocateEdgeActor(nodeIndex);
+                    const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, nodeIndex,
+                        GetPipeConfigWithRetries());
+                    env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerRegisterNode(
+                        disk.GetNodeId(), TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}), nodeIndex);
+                    env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+                    auto metrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+                    auto* pdisk = metrics->Record.AddPDisksMetrics();
+                    pdisk->SetPDiskId(disk.GetPDiskId());
+                    pdisk->SetExpectedSlotSize(100ull << 30);
+                    pdisk->SetEnforcedDynamicSlotSize(100ull << 30);
+                    pdisk->SetExpectedSlotCount(4);
+                    pdisk->SetSlotSizeInUnits(1);
+                    pdisk->SetTotalSize(400ull << 30);
+                    pdisk->SetUserChunkPoolSize(400ull << 30);
+                    env.Runtime->SendToPipe(pipe, sender, metrics.Release(), nodeIndex);
+                }
+                const auto disksWithMetrics = FetchBaseConfig(&env);
+                for (const auto& disk : disksWithMetrics.GetPDisk()) {
+                    UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskMetrics().GetExpectedSlotCount(), 4);
+                }
+                request.Clear();
+                env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "none");
+                request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()
+                    ->SetDefaultGroupSizeInUnits(1);
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                EnableDonorMode(&env);
+
+                const auto before = FetchBaseConfig(&env);
+                const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
+                request = MakePopulateRequest(source, FindSparePDisk(before, source.GetGroupId()));
+                request.SetIgnoreGroupFailModelChecks(true); // This environment does not run VDisks.
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                const auto acceptor = FindActiveVSlot(FetchBaseConfig(&env), source);
+                UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+                const auto donor = acceptor.GetDonors(0);
+                UNIT_ASSERT(SameVSlotId(donor.GetVSlotId(), source.GetVSlotId()));
+
+                auto getSourceSlots = [&]() -> ui32 {
+                    env.Runtime->SimulateSleep(TDuration::Seconds(6));
+                    const auto sender = env.Runtime->AllocateEdgeActor();
+                    env.Runtime->SendToPipe(env.TabletId, sender,
+                        new NSysView::TEvSysView::TEvGetPDisksRequest(), 0, GetPipeConfigWithRetries());
+                    const auto result = env.Runtime->GrabEdgeEventRethrow<NSysView::TEvSysView::TEvGetPDisksResponse>(sender);
+                    for (const auto& disk : result->Get()->Record.GetEntries()) {
+                        if (disk.GetKey().GetNodeId() == source.GetVSlotId().GetNodeId()
+                                && disk.GetKey().GetPDiskId() == source.GetVSlotId().GetPDiskId()) {
+                            return disk.GetInfo().GetNumActiveSlots();
+                        }
+                    }
+                    UNIT_FAIL("Source PDisk missing from system view");
+                    return 0;
+                };
+                UNIT_ASSERT_VALUES_EQUAL(getSourceSlots(), 1);
+
+                request.Clear();
+                auto* resize = request.AddCommand()->MutableChangeGroupSizeInUnits();
+                resize->SetBoxId(1);
+                resize->SetStoragePoolId(1);
+                resize->SetItemConfigGeneration(1);
+                resize->AddGroupId(source.GetGroupId());
+                resize->SetSizeInUnits(2);
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+                if (dropDonor) {
+                    request.Clear();
+                    auto* drop = request.AddCommand()->MutableDropDonorDisk();
+                    drop->MutableVSlotId()->CopyFrom(donor.GetVSlotId());
+                    drop->MutableVDiskId()->CopyFrom(donor.GetVDiskId());
+                    response = env.Invoke(request);
+                    UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(getSourceSlots(), dropDonor ? 0u : 2u,
+                    (dropDonor ? "Deleting the resized donor must leave zero occupied slots"
+                               : "The live donor must acquire the new group weight"));
+            });
+    }
+
+    Y_UNIT_TEST(FixedQuotaDonorWeightTracksGroupResize) {
+        CheckFixedQuotaDonorAccountingAfterResize(false);
+    }
+
+    Y_UNIT_TEST(FixedQuotaDonorDeletionAfterResizeDoesNotUnderflow) {
+        CheckFixedQuotaDonorAccountingAfterResize(true);
+    }
+
     Y_UNIT_TEST(PopulatePDiskSuppressesDonorMode) {
         TEnvironmentSetup env(12, 1);
 

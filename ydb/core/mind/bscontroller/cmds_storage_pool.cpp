@@ -565,13 +565,19 @@ namespace NKikimr::NBsController {
 
             auto oldSizeInUnits = group->GroupSizeInUnits;
             auto newSizeInUnits = cmd.GetSizeInUnits();
-            for (auto& vdisk: group->VDisksInGroup) {
-                TVSlotId vslotId = vdisk->VSlotId;
+            auto updateSlotWeight = [&](TVSlotId vslotId) {
                 TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
                 Y_ABORT_UNLESS(pdisk);
 
                 pdisk->NumActiveDynamicSlots -= pdisk->GetOwnerWeight(oldSizeInUnits);
                 pdisk->NumActiveDynamicSlots += pdisk->GetOwnerWeight(newSizeInUnits);
+            };
+            for (const auto& vdisk : group->VDisksInGroup) {
+                updateSlotWeight(vdisk->VSlotId);
+                // Donors remain live and are accounted with the current group weight.
+                for (const TVSlotId& donorId : vdisk->Donors) {
+                    updateSlotWeight(donorId);
+                }
             }
 
             // update the group size

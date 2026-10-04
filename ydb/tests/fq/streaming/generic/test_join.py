@@ -1248,7 +1248,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         # path = f"{kikimr.get_database_name()}/{query_name}" # TODO YQ-5684
         try:
-            self.create_streaming_query(kikimr, query_name, f"""
+            kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
                 {sql}
                 END DO;
@@ -1399,7 +1399,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 R'{"uid":"ydb30", "hopTime":20, "tsList":[16]}',
             ),
         ]
-        self.create_streaming_query(kikimr, query_name, f"""
+        kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY {query_name} AS DO BEGIN
             {sql}
             END DO;

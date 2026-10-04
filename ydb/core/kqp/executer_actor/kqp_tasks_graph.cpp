@@ -2283,16 +2283,6 @@ void PatchQueryPhysicalGraphForRescaling(
     // Seeded from newTaskCounts computed above.
     THashMap<TStageKey, ui32> rescaleMap;
 
-    struct TConnectionInfo {
-        TStageKey SrcStage;
-        TStageKey DstStage;
-        NKqpProto::TKqpPhyConnection::TypeCase ConnType;
-        ui32 OutputIndex;
-        ui32 InputIndex;
-    };
-    TVector<TConnectionInfo> connectionsToRebuild;
-    THashSet<TString> seenConnections; // encoded as "src->dst:inputIdx"
-
     TQueue<TStageKey> bfsQueue;
     for (const auto& sk : pqSourceStages) {
         auto newCountIt = newTaskCounts.find(sk);
@@ -2319,16 +2309,6 @@ void PatchQueryPhysicalGraphForRescaling(
                 if (conn.GetStageIndex() != srcKey.StageId) continue;
 
                 TStageKey dstKey{srcKey.TxId, (ui32)dstStageIdx};
-                TString ck = connKey(srcKey, dstKey, (ui32)inputIdx);
-                if (!seenConnections.insert(ck).second) continue;
-
-                TConnectionInfo ci;
-                ci.SrcStage = srcKey;
-                ci.DstStage = dstKey;
-                ci.ConnType = conn.GetTypeCase();
-                ci.OutputIndex = conn.GetOutputIndex();
-                ci.InputIndex = conn.GetInputIndex();
-                connectionsToRebuild.push_back(ci);
 
                 // Cascade rescaling through 1-to-1 connections.
                 if (conn.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap ||
@@ -2343,7 +2323,7 @@ void PatchQueryPhysicalGraphForRescaling(
     }
 
     YDB_LOG_INFO("Completed PQ source rescaling traversal",
-        {"stageCount", rescaleMap.size()}, {"connectionCount", connectionsToRebuild.size()});
+        {"stageCount", rescaleMap.size()});
     if (rescaleMap.empty()) {
         YDB_LOG_INFO("Skipping PQ source rescaling: no stages after traversal");
         return;
@@ -2352,8 +2332,15 @@ void PatchQueryPhysicalGraphForRescaling(
     // Rebuild every connection incident to a rescaled stage. In particular, this
     // includes inputs coming from branches that were not visited by the downstream
     // BFS. Connections unrelated to rescaled stages must remain untouched.
-    connectionsToRebuild.clear();
-    seenConnections.clear();
+    struct TConnectionInfo {
+        TStageKey SrcStage;
+        TStageKey DstStage;
+        NKqpProto::TKqpPhyConnection::TypeCase ConnType;
+        ui32 OutputIndex;
+        ui32 InputIndex;
+    };
+    TVector<TConnectionInfo> connectionsToRebuild;
+    THashSet<TString> seenConnections; // encoded as "src->dst:inputIdx"
     const auto getFinalTaskCount = [&](const TStageKey& stageKey) -> ui32 {
         if (const auto it = rescaleMap.find(stageKey); it != rescaleMap.end()) {
             return it->second;

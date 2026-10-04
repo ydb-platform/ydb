@@ -87,7 +87,7 @@ class TestIamAuth(StreamingTestBase):
                 );
             END DO;'''
 
-        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
         # 4. Write a message to the input topic and read the result from the output topic.

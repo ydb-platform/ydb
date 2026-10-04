@@ -668,13 +668,6 @@ class Kikimr:
 
 
 class StreamingTestBase(TestYdsBase):
-    def create_streaming_query(self, kikimr: Kikimr, name: str, text: str, stop_start: bool = False) -> None:
-        """Create the query; restart only when explicitly requested by the test."""
-        kikimr.ydb_client.query(text)
-        if stop_start:
-            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
-            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
-
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
         return kikimr.endpoint if local_topics else kikimr.external_endpoint
 

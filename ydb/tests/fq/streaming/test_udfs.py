@@ -154,10 +154,7 @@ def get_all_cgi_params(url):
                     INSERT INTO {out} SELECT Data || "{i}" FROM {inp}
                 END DO
             """
-            if i == 0:
-                self.create_streaming_query(kikimr_udfs, path, sql, stop_start=False)
-            else:
-                kikimr_udfs.ydb_client.query(sql)
+            kikimr_udfs.ydb_client.query(sql)
 
             validate_query(sql, i, suffix=str(i))
 

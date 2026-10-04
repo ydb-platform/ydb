@@ -94,12 +94,12 @@ class TestRescaling(StreamingTestBase):
         inp, out, _ = self.get_io_names(
             kikimr, query_name, True, entity_name, partitions_count=100,
         )
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";
                 INSERT INTO {out} SELECT Data FROM {inp};
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             self.wait_completed_checkpoints(kikimr, query_name)
             assert wait_for(
@@ -139,12 +139,12 @@ class TestRescaling(StreamingTestBase):
             self.wait_completed_checkpoints(kikimr, query_name)
 
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 INSERT INTO {out} WITH (DELIVERY_GUARANTEE = "exactly_once")
                 SELECT Data FROM {inp};
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             check_reading("before")
             readers_before = self._wait_started(kikimr, query_name)
@@ -186,11 +186,11 @@ class TestRescaling(StreamingTestBase):
             self.wait_completed_checkpoints(kikimr, query_name)
 
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 INSERT INTO {out} SELECT Data FROM {inp};
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             readers_before = self._wait_started(kikimr, query_name)
             # Enough partitions for genuine scale-up despite default grouping.
@@ -209,7 +209,7 @@ class TestRescaling(StreamingTestBase):
         entity_name: Callable[[str], str],
         scale_up: bool,
     ) -> None:
-        """Close and checkpoint windows before rescaling; no aggregate state is needed."""
+        """Resume after checkpointing a closed target window and process a new window when readers scale up."""
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_hopping_closed_window")
         inp, out, _ = self.get_io_names(
@@ -227,7 +227,7 @@ class TestRescaling(StreamingTestBase):
             return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
 
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 $input = SELECT CAST(ts AS Timestamp) AS event_time, key, value
                 FROM {inp} WITH (
@@ -243,7 +243,7 @@ class TestRescaling(StreamingTestBase):
                 SELECT Unwrap(CAST(total AS String)) FROM $windows
                 WHERE window_end IN (Timestamp('{timestamp(20)}'), Timestamp('{timestamp(80)}'));
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             readers_before = self._wait_started(kikimr, query_name)
             assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
@@ -257,7 +257,7 @@ class TestRescaling(StreamingTestBase):
             batches[0].extend([event(2, 10, "target"), event(3, 20, "target")])
             self._write_and_checkpoint(kikimr, query_name, batches)
             # Advance all partitions beyond both overlapping windows and save
-            # their offsets before stopping. No partial aggregate must survive.
+            # their offsets before stopping. The target window is already closed.
             self._write_and_checkpoint(kikimr, query_name, {partition_id: [event(40)] for partition_id in range(partitions_count)})
             assert client.topic_read(self.output_topic, self.consumer_name, 1) == ["30"]
             self.wait_completed_checkpoints(kikimr, query_name)
@@ -274,6 +274,8 @@ class TestRescaling(StreamingTestBase):
             self._write_and_checkpoint(kikimr, query_name, {partition_id: [event(100)] for partition_id in range(partitions_count)})
             actual = client.topic_read(self.output_topic, self.consumer_name, 1)
             assert actual == [str(3 * partitions_count)], actual
+            self.wait_completed_checkpoints(kikimr, query_name)
+            self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
@@ -288,11 +290,11 @@ class TestRescaling(StreamingTestBase):
             kikimr, query_name, True, entity_name, partitions_count=1,
         )
         client = kikimr.ydb_client
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 INSERT INTO {out} SELECT Data FROM {inp};
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             for phase, (partitions_count, expected_readers) in enumerate([(1, 1), (10, 2), (20, 4)]):
                 if phase:
@@ -344,7 +346,7 @@ class TestRescaling(StreamingTestBase):
         )
         client = self.get_ydb_client(kikimr, local_topics)
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 $input = SELECT value FROM {inp} WITH (
                     FORMAT = json_each_row,
@@ -353,7 +355,7 @@ class TestRescaling(StreamingTestBase):
                 WHERE value LIKE "%data%";
                 INSERT INTO {out} SELECT value FROM $input;
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             readers_before = self._wait_started(kikimr, query_name)
             assert readers_before == 1, readers_before
@@ -408,7 +410,7 @@ class TestRescaling(StreamingTestBase):
             self.wait_completed_checkpoints(kikimr, query_name)
 
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 $input = SELECT value FROM {inp} WITH (
                     FORMAT = json_each_row,
@@ -417,7 +419,7 @@ class TestRescaling(StreamingTestBase):
                 WHERE __ydb_partition_id IN ({", ".join(map(str, selected))});
                 INSERT INTO {out} SELECT value FROM $input;
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             readers_before = self._wait_started(kikimr, query_name)
             assert 0 < readers_before < (len(selected) + 4) // 5, readers_before
@@ -455,7 +457,7 @@ class TestRescaling(StreamingTestBase):
             return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
 
         added_slots = []
-        self.create_streaming_query(kikimr, query_name, f'''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 $input = SELECT CAST(ts AS Timestamp) AS event_time, key, value
                 FROM {inp} WITH (
@@ -474,7 +476,7 @@ class TestRescaling(StreamingTestBase):
                 SELECT Unwrap(CAST(total AS String)) FROM $windows
                 WHERE window_end = Timestamp('{timestamp(20)}');
             END DO;
-        ''', stop_start=False)
+        ''')
         try:
             readers_before = self._wait_started(kikimr, query_name)
             self.wait_streaming_query_metric(
@@ -494,7 +496,6 @@ class TestRescaling(StreamingTestBase):
             )
 
             self._restart_query(kikimr, query_name, readers_before, scale_up, added_slots)
-            # This plan has the reader stage followed by a keyed hopping stage.
             # Only the reader count should change, not downstream parallelism.
             self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
 
@@ -505,5 +506,7 @@ class TestRescaling(StreamingTestBase):
                 f"Expected checkpointed sum 30 plus new value 5, got {actual}; "
                 "a sum of 5 means the hopping state was lost while PQ offsets were restored"
             )
+            self.wait_completed_checkpoints(kikimr, query_name)
+            self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)

@@ -101,6 +101,10 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
+            const auto pendingDstPathId = TPathId(
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
+            );
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -123,6 +127,7 @@ class TController::TTxInit: public TTxBase {
 
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
+            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
             if (workerSetComplete) {
                 Self->CompleteWorkerSets.insert({rid, tid});

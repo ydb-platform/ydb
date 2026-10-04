@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PROVIDES(YqlServicePolicy)
 
@@ -9,7 +9,5 @@ SRCS(
 PEERDIR(
     yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

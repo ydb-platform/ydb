@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_gc_service_impl.cpp
@@ -7,8 +7,6 @@ SRCS(
 PEERDIR(
     yt/yql/providers/yt/fmr/gc_service/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

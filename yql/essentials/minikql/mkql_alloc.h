@@ -4,7 +4,7 @@
 #include "mkql_mem_info.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>

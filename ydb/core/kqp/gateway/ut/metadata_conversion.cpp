@@ -153,14 +153,27 @@ TEST(MetadataConversion, ExternalTableEnrichmentIsOneWay) {
     EXPECT_EQ(table.GetDataSourcePath(), "updated-source");
 }
 
-TEST(MetadataConversion, YdbTopicTypeCanOnlyBeSetForYdbSource) {
+TEST(MetadataConversion, ObjectKindCanOnlyBeInitializedOnceForYdbSource) {
+    using EKind = NYql::TExternalDataSource::EKind;
+
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
     auto source = MakeDataSource("Ydb", auth, "source-path", "grpc://example.com");
-    source.SetYdbTopicType();
-    EXPECT_EQ(source.GetType(), "YdbTopics");
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
+    source.InitObjectKind(EKind::Topic);
+    EXPECT_EQ(source.GetType(), "Ydb");
+    EXPECT_TRUE(source.IsYdbTopics());
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
-    EXPECT_ANY_THROW(source.SetYdbTopicType());
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Topic));
+
+    auto tableSource = MakeDataSource("Ydb", auth, "table-path", "grpc://example.com");
+    tableSource.InitObjectKind(EKind::Table);
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Table));
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Topic));
+
+    auto objectStorageSource = MakeDataSource("ObjectStorage", auth);
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Table));
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Topic));
 }
 
 TEST(MetadataConversion, SecretsCanOnlyBeSetOnce) {

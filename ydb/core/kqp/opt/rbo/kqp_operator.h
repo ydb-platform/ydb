@@ -668,7 +668,7 @@ using TMapIUs = TMappedIUs<TMapElement, TMapDependencies>;
 // Source-AST visibility is an import concern; dead columns are pruned by liveness.
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements, bool needToPush = false);
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props,
         TMapIUs elements);
 
@@ -692,6 +692,8 @@ public:
     void RemoveMapElement(TInfoUnitId output);
     void SetMapElementExpression(TInfoUnitId output, TExpression expression);
     const TMapElement* FindOutputElement(TInfoUnitId output) const Y_LIFETIME_BOUND { return MapElements.Find(output); }
+
+    bool NeedToPush = false;
 
 protected:
     void ComputeOutputIUs() override;

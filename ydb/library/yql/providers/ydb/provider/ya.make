@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_ydb_datasink.cpp
@@ -49,7 +49,5 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -158,7 +158,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
-    REGISTER_SETTING(*this, EnableStreamingAggregation);
+    REGISTER_SETTING(*this, UseInMemoryStreamingAggregation);
     REGISTER_SETTING(*this, StreamingAggregationStateTablePath);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(

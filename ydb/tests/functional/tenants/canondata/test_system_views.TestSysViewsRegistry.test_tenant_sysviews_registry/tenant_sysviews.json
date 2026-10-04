@@ -798,6 +798,10 @@
       {
         "name": "TotalMemoryLimitPercentPerNode",
         "type": "Double?"
+      },
+      {
+        "name": "TotalCpuGuaranteePercentPerNode",
+        "type": "Double?"
       }
     ],
     "primary_key": [

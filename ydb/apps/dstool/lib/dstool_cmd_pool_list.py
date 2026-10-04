@@ -106,6 +106,7 @@ def do(args):
         'MeanVDiskEstimatedUsage',
         'StdDevVDiskEstimatedUsage',
         'ItemConfigGeneration',
+        'VDiskHeapAllocatorNumLeadingDisks',
     ]
     visible_columns = [
         'BoxId:PoolId',
@@ -206,6 +207,10 @@ def do(args):
         row['DefaultGroupSizeInUnits'] = sp.DefaultGroupSizeInUnits
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
+        # a string, so that sorting by this column does not mix types
+        settings = sp.Settings
+        row['VDiskHeapAllocatorNumLeadingDisks'] = (str(settings.VDiskHeapAllocatorNumLeadingDisks)
+                                                    if settings.HasField('VDiskHeapAllocatorNumLeadingDisks') else 'inherit')
 
         pool = box_pool_map[sp.BoxId, sp.StoragePoolId]
 

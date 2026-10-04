@@ -143,7 +143,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18 [default = true];
-    optional bool UseUnitedPool = 22;
+    optional bool UseUnitedPool = 22 [default = true];
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
@@ -385,6 +385,10 @@ message TBlobStorageConfig {
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+
+    // How many leading VDisks (order number 0 .. N-1) may use the stripe heap. Unset means 0. A storage-pool value
+    // (TStoragePoolSettings) overrides this. Applied when a VDisk starts; running VDisks are not restarted.
+    optional uint32 VDiskHeapAllocatorNumLeadingDisks = 15;
 }
 
 message TSelfManagementConfig {
@@ -828,12 +832,19 @@ message TCompositeConveyorConfig {
     }
 
     message TWorkersPool {
+        enum ESchedulingMode {
+            NonSchedulable = 0;
+            Schedulable = 1;
+            All = 2;
+        }
+
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
         repeated THeavyLimit HeavyLimits = 6;
+        optional ESchedulingMode SchedulingMode = 7 [default = NonSchedulable];
     }
 
     optional bool Enabled = 1 [default = true];
@@ -857,6 +868,8 @@ message TGroupedMemoryLimiterConfig {
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
     optional uint64 CountBuckets = 4;
+    optional double UnrestrictedSoftLimitCoefficient = 5;
+    optional uint32 MaxUnrestrictedGroupsPerScope = 6 [default = 1];
 }
 
 message TExternalIndexConfig {

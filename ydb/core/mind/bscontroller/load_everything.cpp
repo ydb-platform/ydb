@@ -206,7 +206,6 @@ public:
         // Group
         Self->GroupMap.clear();
         Self->GroupLookup.clear();
-        Self->OwnerIdIdxToGroup.clear();
         Self->IndexGroupSpeciesToGroup.clear();
         {
             using T = Schema::Group;
@@ -274,7 +273,6 @@ public:
 
 #undef OPTIONAL
 
-                Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());
                 Self->IndexGroupSpeciesToGroup[group.GetGroupSpecies()].push_back(group.ID);
                 if (!groups.Next())
                     return false;

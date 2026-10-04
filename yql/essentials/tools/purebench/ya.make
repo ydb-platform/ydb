@@ -30,7 +30,7 @@ PEERDIR(
     yql/essentials/providers/common/schema/mkql
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()
 
 END()
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     retry_queue.cpp
@@ -10,8 +10,6 @@ PEERDIR(
     ydb/library/yverify_stream
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

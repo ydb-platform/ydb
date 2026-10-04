@@ -386,7 +386,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             }
 
             THashSet<NIndexes::NRequest::TOriginalDataAddress> dummyAddr;
-            dummyAddr.emplace(NIndexes::NRequest::TOriginalDataAddress(i.GetEntityId(), ""));
+            dummyAddr.emplace(NIndexes::NRequest::TOriginalDataAddress(i.GetEntityId(), {}));
             composite->Add(std::make_shared<NIndexes::TIndexFetcherLogic>(
                 dummyAddr, indexMeta.GetObjectPtr(), GetContext()->GetCommonContext()->GetStoragesManager()));
         }

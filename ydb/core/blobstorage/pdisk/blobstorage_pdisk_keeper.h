@@ -106,10 +106,6 @@ public:
         return ChunkTracker.GetOwnerWeight(owner);
     }
 
-    ui32 GetOwnerGroupSizeInUnits(TOwner owner) const {
-        return ChunkTracker.GetOwnerGroupSizeInUnits(owner);
-    }
-
     i64 GetLogChunkCount() const {
         return ChunkTracker.GetLogChunkCount();
     }

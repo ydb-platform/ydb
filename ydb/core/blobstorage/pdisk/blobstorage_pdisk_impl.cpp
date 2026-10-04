@@ -1844,6 +1844,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         const ui64 totalSize = Format.DiskSize;
         const ui64 availableSize = (ui64)Format.ChunkSize * Keeper.GetFreeChunkCount();
         const ui32 numActiveSlots = GetNumActiveSlots();
+        const i64 expectedOwnerSize = GetExpectedOwnerSizeInChunks();
+        // A sub-chunk size selects fair share in the keeper; report the same quota mode.
+        const ui64 effectiveExpectedSlotSize = expectedOwnerSize ? ExpectedSlotSize : 0;
 
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             *Mon.FreeSpaceBytes = availableSize;
@@ -1875,13 +1878,13 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         // set unconditionally: whiteboard merges updates field by field, so a field skipped
         // when its value returns to 0 would keep the stale nonzero value until node restart
         pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
-        pdiskState.SetExpectedSlotSize(ExpectedSlotSize);
+        pdiskState.SetExpectedSlotSize(effectiveExpectedSlotSize);
 
         *Mon.NumActiveSlots = numActiveSlots;
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
-        if (ExpectedSlotSize) {
-            *Mon.SlotSizeBytes = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
+        if (effectiveExpectedSlotSize) {
+            *Mon.SlotSizeBytes = ui64(expectedOwnerSize) * Format.ChunkSize;
         } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
@@ -1944,8 +1947,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
         i64 minSlotSize = Max<i64>();
-        if (ExpectedSlotSize) {
-            minSlotSize = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
+        if (effectiveExpectedSlotSize) {
+            minSlotSize = ui64(expectedOwnerSize) * Format.ChunkSize;
         } else {
             for (const auto& [_, owner] : VDiskOwners) {
                 minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
@@ -1961,7 +1964,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pDiskMetrics.SetExpectedSlotCount(ExpectedSlotCount);
         }
         if (ExpectedSlotSize) {
-            pDiskMetrics.SetExpectedSlotSize(ExpectedSlotSize);
+            // Explicit zero overrides a configured fixed size when rounding selects fair share.
+            pDiskMetrics.SetExpectedSlotSize(effectiveExpectedSlotSize);
         }
 
         double pdiskUsage = Keeper.GetPDiskUsage();

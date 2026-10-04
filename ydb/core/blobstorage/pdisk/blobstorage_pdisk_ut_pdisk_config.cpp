@@ -60,11 +60,14 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         pdiskConfigFixedSize.SlotSizeInUnits = 3;
         pdiskConfigFixedSize.ExpectedSlotSize = 100ull << 30;
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfigFixedSize.GetOwnerWeight(10), 4);
-
-
-        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 100), 4);
-        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 0), 2);
-        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(0, 2, 100), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 4, 2, 100), 384);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 4, 2, 0), 192);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 0, 2, 100), 96);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 4, 2, 100, 300), 300);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 4, 2, 100, 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(96, 4, 2, 0, 0), 192);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(Max<ui64>(), 2, 1, 100), Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuota(Max<ui64>(), 2, 1, 100, 300), 300);
 
         // TODO(ydynnikov): test the case of groupSizeInUnits > UI8_MAX (255)
     }

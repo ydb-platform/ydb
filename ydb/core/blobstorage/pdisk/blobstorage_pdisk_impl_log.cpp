@@ -1784,8 +1784,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
 
                 TString errorReason;
-                if (!Keeper.Reset(params, TColorLimits::MakeLogLimits(), errorReason) &&
-                    !Keeper.Reset(params, TColorLimits::MakeExtendedLogLimits(), errorReason)) {
+                if (
+                    !Keeper.Reset(params, TColorLimits::MakeLogLimits(), errorReason) &&
+                    !Keeper.Reset(params, TColorLimits::MakeExtendedLogLimits(), errorReason)
+                ) {
                     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::ChunkQuotaError;
                     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCalculatingChunkQuotas;

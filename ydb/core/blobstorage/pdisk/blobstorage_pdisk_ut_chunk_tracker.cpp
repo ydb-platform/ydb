@@ -209,29 +209,26 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         chunkTracker.SetOwnerWeight(102, 7);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 60);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 7);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerGroupSizeInUnits(102), 2);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 8);
 
         chunkTracker.SetOwnerWeight(102, 9);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 9);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 60);
-        chunkTracker.SetOwnerGroupSizeInUnits(102, 3);
+        chunkTracker.SetOwnerSettings(102, 9, 3);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 9);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 90);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 10);
 
-        chunkTracker.SetOwnerGroupSizeInUnits(102, 0);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerGroupSizeInUnits(102), 0);
+        chunkTracker.SetOwnerSettings(102, 9, 0);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 30);
-        chunkTracker.SetOwnerGroupSizeInUnits(102, 3);
+        chunkTracker.SetOwnerSettings(102, 9, 3);
 
         chunkTracker.SetExpectedOwnerSize(0);
         chunkTracker.SetOwnerWeight(102, 2);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 50);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 2);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerGroupSizeInUnits(102), 3);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 3);
     }
 
@@ -256,9 +253,9 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 200);
         tracker.SetExpectedOwnerSize(60);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 200);
-        tracker.SetOwnerGroupSizeInUnits(101, 2);
+        tracker.SetOwnerSettings(101, 1, 2);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 120);
-        tracker.SetOwnerGroupSizeInUnits(101, 0);
+        tracker.SetOwnerSettings(101, 1, 0);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 60);
 
         tracker.SetTotal(0);
@@ -279,11 +276,11 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         tracker.SetExpectedOwnerSize(Max<i64>());
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetFree(101), 80);
-        tracker.SetOwnerGroupSizeInUnits(101, 0);
+        tracker.SetOwnerSettings(101, 1, 0);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
         tracker.SetExpectedOwnerSize(30);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 30);
-        tracker.SetOwnerGroupSizeInUnits(101, Max<ui32>());
+        tracker.SetOwnerSettings(101, 1, Max<ui32>());
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
         tracker.SetTotal(0);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 0);
@@ -356,7 +353,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         };
 
         // Resizing must leave the neighbour's quota and color unchanged.
-        tracker.SetOwnerGroupSizeInUnits(102, 1000);
+        tracker.SetOwnerSettings(102, 1, 1000);
         checkNeighbour();
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(102), 1000);
 

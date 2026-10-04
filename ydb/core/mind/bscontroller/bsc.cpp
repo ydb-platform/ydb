@@ -192,18 +192,9 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
             baseSlotSize = metrics.GetTotalSize() / shareFactor;
         }
 
-        // Apply the physical quota limit only when the user chunk pool size is known.
-        ui64 quotaLimit = Max<ui64>();
-        if (expectedSlotSize && metrics.HasUserChunkPoolSize()) {
-            quotaLimit = metrics.GetUserChunkPoolSize();
-        }
-
-        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
-            GroupSizeInUnits, pdisk->SlotSizeInUnits, expectedSlotSize);
-        // Cap before multiplying to avoid overflowing even for very large configured quotas.
-        const ui64 vdiskSlotSize = baseSlotSize > quotaLimit / quotaMultiplier
-            ? quotaLimit
-            : baseSlotSize * quotaMultiplier;
+        const ui64 vdiskSlotSize = TPDiskConfig::GetOwnerQuota(
+            baseSlotSize, GroupSizeInUnits, pdisk->SlotSizeInUnits, expectedSlotSize,
+            metrics.HasUserChunkPoolSize() ? std::make_optional(metrics.GetUserChunkPoolSize()) : std::nullopt);
         if (vdiskSlotSize || (expectedSlotSize && metrics.HasUserChunkPoolSize())) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }

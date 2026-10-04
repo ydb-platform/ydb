@@ -511,8 +511,11 @@ struct TPDiskConfig : public TThrRefBase {
         return int(vu / pu) + !!(vu % pu);
     }
 
-    static ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
-        return expectedSlotSize ? Max(1u, groupSizeInUnits) : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+    static ui64 GetOwnerQuota(ui64 slotSize, ui32 groupSizeInUnits, ui32 slotSizeInUnits,
+            ui64 expectedSlotSize, std::optional<ui64> userChunkPoolSize = {}) {
+        const ui32 multiplier = expectedSlotSize ? Max(1u, groupSizeInUnits) : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+        const ui64 limit = expectedSlotSize ? userChunkPoolSize.value_or(Max<ui64>()) : Max<ui64>();
+        return slotSize > limit / multiplier ? limit : slotSize * multiplier;
     }
 };
 

@@ -34,14 +34,9 @@ struct TDatabaseStorageStats {
             slotSize = pdisk.GetTotalSize() / slotCount;
         }
 
-        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
-            groupSizeInUnits,
-            pdisk.GetSlotSizeInUnits(),
-            pdisk.GetExpectedSlotSize());
-        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
-        if (pdisk.GetExpectedSlotSize() && pdisk.HasUserChunkPoolSize()) {
-            slotSize = Min(slotSize, pdisk.GetUserChunkPoolSize());
-        }
+        slotSize = TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdisk.GetSlotSizeInUnits(), pdisk.GetExpectedSlotSize(),
+            pdisk.HasUserChunkPoolSize() ? std::make_optional(pdisk.GetUserChunkPoolSize()) : std::nullopt);
         Total += Min(slotSize, Max<ui64>() - Total);
     }
 };

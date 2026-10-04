@@ -250,8 +250,9 @@ public:
             }
         }
 
-        ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits) const {
-            return TPDiskConfig::GetOwnerQuotaMultiplier(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+        ui64 GetOwnerQuota(ui32 groupSizeInUnits) const {
+            return TPDiskConfig::GetOwnerQuota(GetSlotTotalSize(), groupSizeInUnits, SlotSizeInUnits,
+                ExpectedSlotSize, UserChunkPoolSize);
         }
 
         float GetDiskSpaceUsage() const {
@@ -509,12 +510,7 @@ public:
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
-                    ui64 slotSize = itPDisk->second.GetSlotTotalSize();
-                    const ui32 quotaMultiplier = itPDisk->second.GetOwnerQuotaMultiplier(GroupSizeInUnits);
-                    slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
-                    if (itPDisk->second.ExpectedSlotSize && itPDisk->second.UserChunkPoolSize) {
-                        slotSize = Min(slotSize, *itPDisk->second.UserChunkPoolSize);
-                    }
+                    const ui64 slotSize = itPDisk->second.GetOwnerQuota(GroupSizeInUnits);
                     // Nominal slot-weight-based quotas may be exceeded; fixed quotas remain hard limits.
                     if (itPDisk->second.ExpectedSlotSize || slotSize > vdisk.AllocatedSize) {
                         ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;

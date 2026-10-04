@@ -114,7 +114,6 @@ def _convert_legacy_storage_state(data):
         pdisk.expected_slot_size = source.ExpectedSlotSize
         if source.PDiskMetrics.HasField('UserChunkPoolSize'):
             pdisk.user_chunk_pool_size = source.PDiskMetrics.UserChunkPoolSize
-        pdisk.total_size = source.PDiskMetrics.TotalSize
 
     return result
 

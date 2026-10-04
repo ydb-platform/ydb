@@ -124,10 +124,6 @@ public:
         SetOwnerSettings(id, weight, QuotaForOwner[id].GetGroupSizeInUnits());
     }
 
-    void SetOwnerGroupSizeInUnits(TOwner id, ui32 groupSizeInUnits) {
-        SetOwnerSettings(id, QuotaForOwner[id].GetWeight(), groupSizeInUnits);
-    }
-
     void SetOwnerSettings(TOwner id, ui32 weight, ui32 groupSizeInUnits) {
         auto it = std::find(ActiveOwnerIds.begin(), ActiveOwnerIds.end(), id);
         Y_VERIFY(it != ActiveOwnerIds.end());
@@ -140,10 +136,6 @@ public:
 
     ui32 GetOwnerWeight(TOwner id) {
         return QuotaForOwner[id].GetWeight();
-    }
-
-    ui32 GetOwnerGroupSizeInUnits(TOwner id) const {
-        return QuotaForOwner[id].GetGroupSizeInUnits();
     }
 
     void RemoveOwner(TOwner id) {
@@ -481,12 +473,6 @@ public:
         RecomputeStaticReserve();
     }
 
-    void SetOwnerGroupSizeInUnits(TOwner owner, ui32 groupSizeInUnits) {
-        Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->SetOwnerGroupSizeInUnits(owner, groupSizeInUnits);
-        RecomputeStaticReserve();
-    }
-
     void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->SetOwnerSettings(owner, weight, groupSizeInUnits);
@@ -514,11 +500,6 @@ public:
     ui32 GetOwnerWeight(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
         return OwnerQuota->GetOwnerWeight(owner);
-    }
-
-    ui32 GetOwnerGroupSizeInUnits(TOwner owner) const {
-        Y_VERIFY(IsOwnerUser(owner));
-        return OwnerQuota->GetOwnerGroupSizeInUnits(owner);
     }
 
     ui32 GetNumActiveSlots() const {

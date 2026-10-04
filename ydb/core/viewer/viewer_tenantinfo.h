@@ -700,13 +700,9 @@ public:
             const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
             slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
-        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
-            groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize());
-        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
-        if (pdiskInfo.GetExpectedSlotSize() && pdiskInfo.HasUserChunkPoolSize()) {
-            slotSize = Min(slotSize, pdiskInfo.GetUserChunkPoolSize());
-        }
-        return slotSize;
+        return TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.HasUserChunkPoolSize() ? std::make_optional(pdiskInfo.GetUserChunkPoolSize()) : std::nullopt);
     }
 
     struct TStoragePoolStats {

@@ -11,7 +11,6 @@
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
-#include "common/blob.h"
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"

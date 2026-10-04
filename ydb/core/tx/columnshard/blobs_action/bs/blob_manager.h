@@ -16,7 +16,6 @@
 #include <util/generic/string.h>
 
 #include <map>
-#include <set>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;

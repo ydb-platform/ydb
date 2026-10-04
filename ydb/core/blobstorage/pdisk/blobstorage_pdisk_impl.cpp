@@ -195,7 +195,7 @@ i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
 }
 
 ui32 TPDisk::GetOwnerWeight(ui32 groupSizeInUnits) const {
-    return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, Cfg->SlotSizeInUnits, ExpectedSlotSize);
+    return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, Cfg->SlotSizeInUnits);
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -1881,7 +1881,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (ExpectedSlotSize) {
-            *Mon.SlotSizeBytes = ExpectedSlotSize;
+            *Mon.SlotSizeBytes = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
         } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
@@ -1935,6 +1935,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetPDiskId(PCtx->PDiskId);
         pDiskMetrics.SetTotalSize(Format.DiskSize);
         pDiskMetrics.SetAvailableSize(availableSize);
+        pDiskMetrics.SetUserChunkPoolSize(ui64(Keeper.GetUserChunkPoolSize()) * Format.ChunkSize);
+        pdiskState.SetUserChunkPoolSize(pDiskMetrics.GetUserChunkPoolSize());
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
         //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
@@ -1942,8 +1944,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
         i64 minSlotSize = Max<i64>();
-        for (const auto& [_, owner] : VDiskOwners) {
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+        if (ExpectedSlotSize) {
+            minSlotSize = ui64(GetExpectedOwnerSizeInChunks()) * Format.ChunkSize;
+        } else {
+            for (const auto& [_, owner] : VDiskOwners) {
+                minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+            }
         }
         if (minSlotSize != Max<i64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
@@ -1951,7 +1957,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         }
         pDiskMetrics.SetState(state);
         pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
-        if (ExpectedSlotCount) {
+        if (ExpectedSlotCount || ExpectedSlotSize) {
             pDiskMetrics.SetExpectedSlotCount(ExpectedSlotCount);
         }
         if (ExpectedSlotSize) {
@@ -2560,7 +2566,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
     ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
 
-    Keeper.SetOwnerWeight(owner, ownerWeight);
+    Keeper.SetOwnerSettings(owner, ownerWeight, evYardInit.GroupSizeInUnits);
     AddCbsSet(owner);
 
     YDB_LOG_P_LOG(PRI_NOTICE, "Registered known VDisk",
@@ -2699,7 +2705,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         // A new owner on a read-only PDisk was already rejected by YardInitStart.
 
         // Allocate quota for the owner
-        Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits));
+        Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits), evYardInit.GroupSizeInUnits);
 
         TOwnerData& ownerData = OwnerData[owner];
         ownerData.Reset(false);
@@ -2773,7 +2779,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     {
         TGuard<TMutex> guard(StateMutex);
         OwnerData[ev.Owner].GroupSizeInUnits = ev.GroupSizeInUnits;
-        Keeper.SetOwnerWeight(ev.Owner, GetOwnerWeight(ev.GroupSizeInUnits));
+        Keeper.SetOwnerSettings(ev.Owner, GetOwnerWeight(ev.GroupSizeInUnits), ev.GroupSizeInUnits);
     }
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());

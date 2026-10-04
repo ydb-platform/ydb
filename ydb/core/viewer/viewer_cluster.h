@@ -949,17 +949,21 @@ private:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
-        if (pdiskInfo.GetExpectedSlotSize()) {
-            return pdiskInfo.GetExpectedSlotSize();
-        }
         ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        if (!slotSize) {
+            slotSize = pdiskInfo.GetExpectedSlotSize();
+        }
         if (!slotSize) {
             const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
             slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
             groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize());
-        return slotSize * ownerWeight;
+        slotSize = slotSize > Max<ui64>() / quotaMultiplier ? Max<ui64>() : slotSize * quotaMultiplier;
+        if (pdiskInfo.GetExpectedSlotSize() && pdiskInfo.HasUserChunkPoolSize()) {
+            slotSize = Min(slotSize, pdiskInfo.GetUserChunkPoolSize());
+        }
+        return slotSize;
     }
 
     static NKikimrWhiteboard::EFlag GetClusterStateFromSelfCheck(const Ydb::Monitoring::SelfCheckResult& result) {
@@ -1091,7 +1095,8 @@ private:
                     auto itStats = storageStatsByType.find(type);
                     if (itStats != storageStatsByType.end()) {
                         itStats->second.SetCurrentAllocatedSize(itStats->second.GetCurrentAllocatedSize() + allocated);
-                        itStats->second.SetCurrentAvailableSize(itStats->second.GetCurrentAvailableSize() + available);
+                        const ui64 currentAvailable = itStats->second.GetCurrentAvailableSize();
+                        itStats->second.SetCurrentAvailableSize(currentAvailable + Min(available, Max<ui64>() - currentAvailable));
                     }
                 }
             }

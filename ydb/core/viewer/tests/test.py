@@ -665,6 +665,7 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'UserChunkPoolSize',
                                     'PDiskUsage',
                                     })
 

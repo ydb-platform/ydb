@@ -502,17 +502,17 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
-    }
-
-    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
-        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
         ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
         ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
+    }
+
+    static ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+        return expectedSlotSize ? Max(1u, groupSizeInUnits) : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
     }
 };
 

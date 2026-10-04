@@ -1778,15 +1778,14 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             .ChunksOwned = usedForOwner[ownerId],
                             .VDiskId = OwnerData[ownerId].VDiskId,
                             .Weight = GetOwnerWeight(OwnerData[ownerId].GroupSizeInUnits),
+                            .GroupSizeInUnits = OwnerData[ownerId].GroupSizeInUnits,
                         };
                     }
                 }
 
                 TString errorReason;
-                if (
-                    !Keeper.Reset(params, TColorLimits::MakeLogLimits(), errorReason) &&
-                    !Keeper.Reset(params, TColorLimits::MakeExtendedLogLimits(), errorReason)
-                ) {
+                if (!Keeper.Reset(params, TColorLimits::MakeLogLimits(), errorReason) &&
+                    !Keeper.Reset(params, TColorLimits::MakeExtendedLogLimits(), errorReason)) {
                     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::ChunkQuotaError;
                     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCalculatingChunkQuotas;

@@ -682,6 +682,15 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         DumpCounters("Table level counters", trees.Root);
 
         // The single bucket holds the 3 leader partitions and nothing else
+        const auto& packed = trees.Settle();
+        const auto table = TPackedBucketId::Table(TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(table, ROW_COUNT), 1 + 2 + 4);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(table, SIZE_BYTES), 10 + 20 + 40);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200 + 400);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, WRITE_ROWS), 1000 + 2000 + 4000);
+        UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(table, USED_CORE_PERCENTS), 3);
+
         auto leaderCounters = FindTableBucketCounters(trees.Root);
         UNIT_ASSERT(leaderCounters);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "SUM(DbUniqueRowsTotal)"), 1 + 2 + 4);
@@ -800,6 +809,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         TFakeTablet leader1(1000, 0);
         TFakeTablet leader2(2000, 0);
+        TPackedReceiver packed;
+        const auto table = TPackedBucketId::Table(TABLE_PATH);
 
         // TICK 1: both partitions report a non-zero delta
         TInstant now = TInstant::Seconds(100);
@@ -815,6 +826,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         auto leaderCounters = FindTableBucketCounters(rootGroup);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200);
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200);
 
         // TICK 2: 10 seconds later only the first partition does any work
         now += TDuration::Seconds(10);
@@ -831,10 +844,18 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         // The accumulated value keeps growing and never goes backwards
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200 + 300);
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200 + 300);
 
         // MAX() of a cumulative counter is the maximum per second rate over the bucket:
         // 300 over the 10 seconds since the previous report of that very tablet
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "MAX(ConsumedCPU)"), 300 / 10);
+
+        // The CPU observation of a tablet is its own per second rate since its previous report:
+        // 300 over 10 seconds (the <=100 bucket of the ranges {0, 10, 100}) and 0 of the idle one
+        const auto histogram = packed.Hist(table, USED_CORE_PERCENTS);
+        UNIT_ASSERT_VALUES_EQUAL(histogram[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(histogram[2], 1);
 
         // TICK 3: nobody does any work at all
         now += TDuration::Seconds(10);
@@ -847,6 +868,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200 + 300);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "MAX(ConsumedCPU)"), 0);
+
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200 + 300);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Hist(table, USED_CORE_PERCENTS)[0], 2);
     }
 
     /**
@@ -886,6 +911,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // the "ConsumedCPU" cumulative counter. The tablets do NOT fill it themselves,
         // so an empty histogram here would mean the aggregate is never fed.
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 2);
+
+        TPackedReceiver packed;
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(TPackedBucketId::Table(TABLE_PATH), USED_CORE_PERCENTS), 2);
     }
 
     /**
@@ -929,6 +958,13 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 2);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200);
 
+        TPackedReceiver packed;
+        packed.Settle(*aggregator);
+        const auto table = TPackedBucketId::Table(TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Hist(table, USED_CORE_PERCENTS)[0], 2);
+        UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(table, USED_CORE_PERCENTS), 2);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200);
+
         // The second partition is gone
         aggregator->ForgetTablet(leader2.TabletId, leader2.FollowerId);
         aggregator->RecalculateAllCounters();
@@ -938,10 +974,14 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // The histogram aggregate is rebuilt from the surviving partitions only
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "1,0,0,0");
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 1);
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Hist(table, USED_CORE_PERCENTS)[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(table, USED_CORE_PERCENTS), 1);
 
         // The accumulated cumulative counter is NOT reduced: the CPU the forgotten
         // partition had burnt has still been burnt, and the series must not go backwards
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 100 + 200);
 
         // The last partition is gone too, so the bucket takes its own type= subtree with
         // it and the emptied table= and database= nodes above it follow
@@ -950,6 +990,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!FindTableBucketCounters(rootGroup));
         UNIT_ASSERT(!FindTableGroup(rootGroup));
         UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+
+        packed.Settle(*aggregator);
+        UNIT_ASSERT(!packed.Exists(table));
+        UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
     }
 
     /**
@@ -986,6 +1030,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             1 + 2
         );
+        const auto table = TPackedBucketId::Table(TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(trees.Settle().LiveCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.Gauge(table, ROW_COUNT), 1 + 2);
 
         // TEST 1: The table bucket is recomputed from the surviving partitions
         trees.Leaders->ForgetTablet(leader2.TabletId, leader2.FollowerId);
@@ -1001,6 +1048,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "MAX(DbUniqueRowsTotal)"),
             1
         );
+        UNIT_ASSERT_VALUES_EQUAL(trees.Settle().Gauge(table, ROW_COUNT), 1);
 
         // TEST 2: The bucket takes its own type= subtree with it once its last tablet is
         //         gone, and the table= and database= nodes it emptied go with it. Nothing
@@ -1014,6 +1062,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!FindTableBucketCounters(trees.Root));
         UNIT_ASSERT(!FindTableGroup(trees.Root));
         UNIT_ASSERT(!trees.Root->FindSubgroup("database", DATABASE_PATH));
+        UNIT_ASSERT(!trees.Settle().Exists(table));
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.LiveCount(), 0);
 
         // TEST 3: Forgetting the follower, which never contributed, is not an error
         trees.Followers->ForgetTablet(follower.TabletId, follower.FollowerId);
@@ -1033,6 +1083,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             3
         );
+        UNIT_ASSERT_VALUES_EQUAL(trees.Settle().Gauge(table, ROW_COUNT), 3);
     }
 
     /**
@@ -1200,6 +1251,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         // Not a single counter group is created for such tables
         UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+        UNIT_ASSERT(PackOnce(aggregator).empty());
     }
 
     /**
@@ -1253,10 +1305,16 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         auto tableCounters = FindTableBucketCounters(trees.Root);
         UNIT_ASSERT(tableCounters);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "SUM(DbUniqueRowsTotal)"), 100);
+        const auto& packed = trees.Settle();
+        const auto table = TPackedBucketId::Table(TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(table, ROW_COUNT), 100);
 
         // The follower contributed nothing at all, not even its cumulative counters:
         // at the table level its work is simply not collected on the node
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(tableCounters, "ConsumedCPU"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Rate(table, CONSUMED_CPU_MICROSECONDS), 7);
+        UNIT_ASSERT_VALUES_EQUAL(packed.HistTotal(table, USED_CORE_PERCENTS), 1);
 
         // Recalculating the follower side leaves every value exactly as it was. This is
         // the assertion that fails the day a follower side table bucket is reintroduced
@@ -1489,6 +1547,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             );
 
             TFakeTablet leader(1000, 0);
+            TPackedReceiver packed;
 
             leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
             leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
@@ -1498,6 +1557,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
                 5
             );
+            packed.Settle(*aggregator);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 5);
 
             // The very same tablet now reports another table of the same database
             leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
@@ -1523,11 +1584,21 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 7
             );
 
+            packed.Settle(*aggregator);
+            UNIT_ASSERT(!packed.Exists(TPackedBucketId::Table(TABLE_PATH)));
+
+            const auto movedBucket = TPackedBucketId::Table(OTHER_TABLE_PATH);
+            UNIT_ASSERT(packed.Exists(movedBucket));
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(movedBucket, ROW_COUNT), 7);
+
             // The reverse map points at the new table, so forgetting the tablet drops
             // the counters of the NEW table rather than of the one it no longer belongs to
             aggregator->ForgetTablet(leader.TabletId, leader.FollowerId);
 
             UNIT_ASSERT(!FindTableBucketCounters(rootGroup, OTHER_RELATIVE_TABLE_PATH));
+            packed.Settle(*aggregator);
+            UNIT_ASSERT(!packed.Exists(movedBucket));
+            UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
         }
 
         // TEST 2: The partition level, where the tablet owns a leaf of its own
@@ -1624,6 +1695,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 5 + 7
             );
 
+            TPackedReceiver packed;
+            packed.Settle(*aggregator);
+            const auto table = TPackedBucketId::Table(TABLE_PATH);
+            UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(table, ROW_COUNT), 5 + 7);
+
             // One tablet is forgotten: the group must stay reachable, held up by the survivor
             aggregator->ForgetTablet(tabletA.TabletId, tabletA.FollowerId);
             aggregator->RecalculateAllCounters();
@@ -1635,6 +1712,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
                 7
             );
+
+            packed.Settle(*aggregator);
+            UNIT_ASSERT(packed.Exists(table));
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(table, ROW_COUNT), 7);
         }
 
         // TEST 2: The partition level, where both tablets own a leaf of their own
@@ -1740,6 +1821,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             1 + 2
         );
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 1 + 2);
     }
 
     /**
@@ -1777,6 +1859,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
             1 + 2
         );
+        TPackedReceiver packed;
+        packed.Settle(*aggregator);
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 1 + 2);
 
         // The level is raised to the partition one
         for (auto* tablet : {&leader1, &leader2}) {
@@ -1790,7 +1875,6 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // The bucket took its type= subtree with it, and every partition has a leaf now
         UNIT_ASSERT(!FindTableBucketCounters(rootGroup));
 
-        TPackedReceiver packed;
         packed.Settle(*aggregator);
         UNIT_ASSERT(!packed.Exists(TPackedBucketId::Table(TABLE_PATH)));
         UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(Leaf(leader1.TabletId, leader1.FollowerId), ROW_COUNT), 1);
@@ -1821,6 +1905,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             aggregator->RecalculateAllCounters();
 
             UNIT_ASSERT(FindTableBucketCounters(rootGroup));
+            TPackedReceiver packed;
+            packed.Settle(*aggregator);
+            UNIT_ASSERT(packed.Exists(TPackedBucketId::Table(TABLE_PATH)));
 
             leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelDisabled, now);
 
@@ -1828,12 +1915,16 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             UNIT_ASSERT(!FindTableGroup(rootGroup));
             UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            packed.Settle(*aggregator);
+            UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
 
             // The reports of a disabled table keep creating nothing at all
             leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelDisabled, now);
             aggregator->RecalculateAllCounters();
 
             UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            packed.Settle(*aggregator);
+            UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
         }
 
         // TEST 2: From the partition level, where the leaves have to go. The level is
@@ -2045,6 +2136,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             42
         );
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 42);
 
         // TEST 2: The follower instance converges one report later, and the last leaf
         //         goes, while the collapse bucket of the other instance stays
@@ -2059,6 +2151,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             42
         );
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.LiveCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(trees.Packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 42);
     }
 
     Y_UNIT_TEST(PartialLevelConvergenceKeepsBothShapes) {
@@ -2103,6 +2197,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
             3
         );
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 3);
 
         // The lagging partition keeps its own leaf, and — the whole point of this test
         // — its rate is exactly what it was, not reset to 0 by a table-wide teardown
@@ -2126,6 +2221,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
             3 + 4
         );
+        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 3 + 4);
     }
 
     Y_UNIT_TEST(StaleLevelReportDoesNotResetTheCumulativeCounters) {
@@ -2219,6 +2315,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
                 1 + 2
             );
+            TPackedReceiver packed;
+            packed.Settle(*aggregator);
+            const auto oldTable = TPackedBucketId::Table(TABLE_PATH);
+            const auto renamedTable = TPackedBucketId::Table(RENAMED_TABLE_PATH);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(oldTable, ROW_COUNT), 1 + 2);
 
             // The first partition reports the new path: the old table keeps the second
             // one for as long as it has not moved over
@@ -2243,6 +2344,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 ),
                 1
             );
+            packed.Settle(*aggregator);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(oldTable, ROW_COUNT), 2);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(renamedTable, ROW_COUNT), 1);
 
             // The second one follows, and nothing of the old path is left
             leader2.Report(
@@ -2263,6 +2367,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 ),
                 1 + 2
             );
+            packed.Settle(*aggregator);
+            UNIT_ASSERT(!packed.Exists(oldTable));
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(renamedTable, ROW_COUNT), 1 + 2);
 
             // The reverse map points at the new path, so forgetting the tablets drops
             // the group of the renamed table and the database= node above it
@@ -2272,6 +2379,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             UNIT_ASSERT(!FindTableGroup(rootGroup, RENAMED_RELATIVE_TABLE_PATH));
             UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            packed.Settle(*aggregator);
+            UNIT_ASSERT_VALUES_EQUAL(packed.LiveCount(), 0);
         }
 
         // TEST 2: The partition level, where every tablet owns a leaf of its own
@@ -2404,21 +2513,25 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!HasCounter(tableCounters, "SUM(NotInTheAllowList)"));
         UNIT_ASSERT(!HasCounter(tableCounters, "MAX(NotInTheAllowList)"));
 
-        // Partition level: the leaf reports the public metrics of DataShard and nothing else,
-        // one slot per public metric, and the unlisted counter is in none of them
+        // Both levels: the TABLE bucket and the leaf report the public metrics of DataShard and
+        // nothing else, one slot per public metric, and the unlisted counter is in none of them
         TPackedReceiver packed;
         packed.Settle(*aggregator);
-        const auto leaf = Leaf(partitionTablet.TabletId, partitionTablet.FollowerId, OTHER_TABLE_PATH);
-        UNIT_ASSERT(packed.Exists(leaf));
 
         const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
         UNIT_ASSERT(descriptor);
-        const auto& values = packed.Get(leaf);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.SimpleSize()), descriptor->Gauges.size());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.CumulativeSize()), descriptor->Rates.size());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.HistogramSize()), descriptor->Histograms.size());
-        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(leaf, ROW_COUNT), 7);
-        UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(leaf, SIZE_BYTES), 0);
+        for (const auto& [bucket, rowCount] : {
+                std::pair{TPackedBucketId::Table(TABLE_PATH), 5u},
+                std::pair{Leaf(partitionTablet.TabletId, partitionTablet.FollowerId, OTHER_TABLE_PATH), 7u}}) {
+            UNIT_ASSERT_C(packed.Exists(bucket), bucket.ToString());
+
+            const auto& values = packed.Get(bucket);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.SimpleSize()), descriptor->Gauges.size());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.CumulativeSize()), descriptor->Rates.size());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(values.HistogramSize()), descriptor->Histograms.size());
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(bucket, ROW_COUNT), rowCount);
+            UNIT_ASSERT_VALUES_EQUAL(packed.Gauge(bucket, SIZE_BYTES), 0);
+        }
     }
 
     /**
@@ -3118,6 +3231,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         trees.Leaders->ForgetTablet(1000, 0);
         UNIT_ASSERT(!FindTableGroup(trees.Root));
         UNIT_ASSERT(!FindTableGroup(trees.Root, OTHER_RELATIVE_TABLE_PATH));
+
+        // The final values of the retired TABLE bucket alone: the skipped reports registered nothing
+        UNIT_ASSERT_VALUES_EQUAL(PackOnce(trees.Leaders).size(), 1);
+        UNIT_ASSERT(PackOnce(trees.Leaders).empty());
     }
 
     /**

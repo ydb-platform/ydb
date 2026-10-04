@@ -1071,10 +1071,8 @@ Y_UNIT_TEST_SUITE(TEvTabletAddCountersDetailedMetricsFields) {
 }
 
 /**
- * Tests for the detailed metrics, which the two aggregator actors of a node build
- * within the private "ydb_detailed_raw" counter group and report to the SysView Service
- * (the public metric values of every bucket, which is where the values of the PARTITION
- * leaves are checked).
+ * Tests for the detailed metrics, which the two aggregator actors of a node report to the
+ * SysView Service (the public metric values of every bucket).
  */
 Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
@@ -1083,12 +1081,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     using NDetailedMetricsTests::ROW_COUNT;
     using NDetailedMetricsTests::SIZE_BYTES;
 
-    const TString DETAILED_RAW_GROUP = "ydb_detailed_raw";
-
     const TString DATABASE_PATH = "/Root/db";
 
     const TString TABLE_PATH = "/Root/db/dir/table";
-    const TString RELATIVE_TABLE_PATH = "dir/table";
 
     const TPathId TENANT_PATH_ID(1113, 1001);
     const TPathId TABLE_ID(1113, 42);
@@ -1104,15 +1099,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     constexpr ui32 LEVEL_PARTITION = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
     constexpr ui32 LEVEL_DISABLED = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
 
-    // The only tablet type with a detailed metrics counter set is DataShard, and
-    // GetDetailedMetricsCounterNames() allow-lists this Executor counter name (it is
-    // the source of the public table.datashard.row_count metric, see
-    // counters_detailed_datashard.proto)
-    const TString ALLOWED_EXECUTOR_COUNTER = "DbUniqueRowsTotal";
-
     constexpr const char* EXECUTOR_SIMPLE_COUNTER_NAMES[] = {
         "DbUniqueRowsTotal",
-        // An Executor simple counter, which is NOT in that allow-list, the source of no public
+        // An Executor simple counter, the source of no public
         // metric (see flat_executor_counters.h / counters_detailed_datashard.proto)
         "LogRedoItems",
     };
@@ -1255,12 +1244,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
             return followerId == 0 ? LeaderAggregatorId : FollowerAggregatorId;
         }
 
-        ::NMonitoring::TDynamicCounterPtr GetCountersRoot() {
-            ::NMonitoring::TDynamicCounterPtr counters = Runtime.GetAppData(0).Counters;
-            UNIT_ASSERT(counters);
-            return counters;
-        }
-
         TTestBasicRuntime Runtime;
         TActorId Edge;
         TActorId LeaderAggregatorId;
@@ -1398,60 +1381,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
     ////////////////////////////////////////////
 
-    ::NMonitoring::TDynamicCounterPtr FindRawGroup(TEnv& env) {
-        return env.GetCountersRoot()->FindSubgroup("counters", DETAILED_RAW_GROUP);
-    }
-
-    /**
-     * @note There is no role= node: both actors of the node are handed ONE shared tree,
-     *       which only the TABLE buckets fill, and the TABLE bucket belongs to the actor
-     *       of the leaders alone. A PARTITION leaf, of either role, owns no group at all:
-     *       a partition level table has no table= group ever.
-     */
-    ::NMonitoring::TDynamicCounterPtr FindTableGroup(TEnv& env) {
-        auto rawGroup = FindRawGroup(env);
-        if (!rawGroup) {
-            return nullptr;
-        }
-
-        auto databaseGroup = rawGroup->FindSubgroup("database", DATABASE_PATH);
-        if (!databaseGroup) {
-            return nullptr;
-        }
-
-        return databaseGroup->FindSubgroup("table", RELATIVE_TABLE_PATH);
-    }
-
-    ::NMonitoring::TDynamicCounterPtr FindExecutorCounters(::NMonitoring::TDynamicCounterPtr bucketGroup) {
-        if (!bucketGroup) {
-            return nullptr;
-        }
-
-        auto typeGroup = bucketGroup->FindSubgroup("type", TString(TTabletTypes::TypeToStr(TABLET_TYPE)));
-        if (!typeGroup) {
-            return nullptr;
-        }
-
-        return typeGroup->FindSubgroup("category", "executor");
-    }
-
-    /**
-     * @return The bucket, which collapses ALL the partitions of a TABLE level table
-     *         (this bucket lives directly on the table= node)
-     */
-    ::NMonitoring::TDynamicCounterPtr FindTableBucketCounters(TEnv& env) {
-        return FindExecutorCounters(FindTableGroup(env));
-    }
-
-    ui64 GetCounterValue(::NMonitoring::TDynamicCounterPtr countersGroup, const TString& aggregate, const TString& name) {
-        UNIT_ASSERT_C(countersGroup, "no counter group for " << aggregate << "(" << name << ")");
-
-        auto counter = countersGroup->FindNamedCounter("sensor", aggregate + "(" + name + ")");
-        UNIT_ASSERT_C(counter, "no counter " << aggregate << "(" << name << ")");
-
-        return counter->Val();
-    }
-
     NKikimrSysView::EDbCountersService GetDetailedCountersService(bool follower) {
         return follower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS;
     }
@@ -1509,13 +1438,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         follower.SendUpdate(env);
         ReportCounters(env, {&leader, &follower});
 
-        UNIT_ASSERT(!FindRawGroup(env));
+        UNIT_ASSERT(env.DetailedCounters.empty());
     }
 
     /**
      * Verify that at the partition level both aggregator actors of the node report their
-     * own leaves, told apart by follower_id alone, and that neither of them creates
-     * a group in the private counter tree.
+     * own leaves, told apart by follower_id alone.
      */
     Y_UNIT_TEST(PartitionLevelLeavesOfBothRoles) {
         TEnv env(true /* detailedMetricsEnabled */);
@@ -1538,18 +1466,11 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         const auto& followers = PackRole(env, true /* follower */);
         UNIT_ASSERT_VALUES_EQUAL(followers.LiveCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(followers.Gauge(Leaf(1000, 1), ROW_COUNT), 0u);
-
-        // The leaves own no group of the private tree, of either role: no table group ever,
-        // and no invented label anywhere
-        UNIT_ASSERT(!FindTableGroup(env));
-        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("database", DATABASE_PATH));
-        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "leader"));
-        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "follower"));
     }
 
     /**
      * Verify that at the table level the leader partitions of the table are collapsed
-     * into a single bucket and no per-partition group is created.
+     * into a single bucket and no leaf is reported.
      */
     Y_UNIT_TEST(TableLevelCollapsesPartitions) {
         TEnv env(true /* detailedMetricsEnabled */);
@@ -1564,14 +1485,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         leader2.SendUpdate(env);
         ReportCounters(env, {&leader1, &leader2});
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 1u + 2u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetCounterValue(FindTableBucketCounters(env), "MAX", ALLOWED_EXECUTOR_COUNTER), 2u);
-
-        auto tableGroup = FindTableGroup(env);
-        UNIT_ASSERT(tableGroup);
-        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+        const auto& leaders = PackRole(env, false /* follower */);
+        UNIT_ASSERT_VALUES_EQUAL(leaders.LiveCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(leaders.Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 1u + 2u);
     }
 
     /**
@@ -1586,7 +1502,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
         // Counters arrive first: nothing is published yet
         ReportCounters(env, {&leader});
-        UNIT_ASSERT(!FindTableGroup(env));
         UNIT_ASSERT_VALUES_EQUAL(PackRole(env, false /* follower */).LiveCount(), 0);
 
         // The identity arrives, followed by another round of counters
@@ -1629,9 +1544,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         // The leader's own leaf is gone ...
         UNIT_ASSERT(!PackRole(env, false /* follower */).Exists(Leaf(1000, 0)));
 
-        // ... no table group ever, a partition level table has none ...
-        UNIT_ASSERT(!FindTableGroup(env));
-
         // ... and the follower's leaf is still reported
         UNIT_ASSERT(PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
 
@@ -1643,13 +1555,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(!PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
         UNIT_ASSERT_VALUES_EQUAL(PackRole(env, false /* follower */).LiveCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(PackRole(env, true /* follower */).LiveCount(), 0);
-        UNIT_ASSERT(!FindTableGroup(env));
-
-        // The private root of the node itself stays: it is created once at boot, not
-        // per database
-        auto rawGroup = FindRawGroup(env);
-        UNIT_ASSERT(rawGroup);
-        UNIT_ASSERT(!rawGroup->FindSubgroup("database", DATABASE_PATH));
     }
 
     /**
@@ -1685,7 +1590,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(PackRole(env, true /* follower */).LiveCount(), 0);
-        UNIT_ASSERT(!FindTableGroup(env));
     }
 
     /**
@@ -1738,7 +1642,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         leader2.SendUpdate(env);
         ReportCounters(env, {&leader1, &leader2});
 
-        UNIT_ASSERT(FindTableBucketCounters(env));
+        UNIT_ASSERT(PackRole(env, false /* follower */).Exists(TPackedBucketId::Table(TABLE_PATH)));
 
         leader1.SetMetricsLevel(LEVEL_DISABLED);
         leader1.SendTableInfo(env);
@@ -1746,8 +1650,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         leader2.SendTableInfo(env);
         ReportCounters(env, {&leader1, &leader2});
 
-        UNIT_ASSERT(!FindTableBucketCounters(env));
-        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("database", DATABASE_PATH));
+        UNIT_ASSERT(!PackRole(env, false /* follower */).Exists(TPackedBucketId::Table(TABLE_PATH)));
+        UNIT_ASSERT_VALUES_EQUAL(env.LeaderReports.LiveCount(), 0);
     }
 
     /**
@@ -1854,10 +1758,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(!IsRegistered(env, true /* follower */));
         UNIT_ASSERT(!PackRole(env, false /* follower */).Exists(Leaf(1000, 0)));
         UNIT_ASSERT(!PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
-
-        auto rawGroup = FindRawGroup(env);
-        UNIT_ASSERT(rawGroup);
-        UNIT_ASSERT(!rawGroup->FindSubgroup("database", DATABASE_PATH));
     }
 
     /**
@@ -1953,7 +1853,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         oldTablet.SendForget(env);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT(!FindTableGroup(env));
         UNIT_ASSERT_VALUES_EQUAL(PackRole(env, false /* follower */).LiveCount(), 0);
 
         TFakeTablet newTablet(2000, 0, LEVEL_PARTITION, TABLE_ID, 1 /* schemaVersion, OLDER than the forgotten tablet's */);
@@ -2003,12 +1902,11 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
         ReportCounters(env, {&oldTablet});
 
-        // Nothing came back: no leaf for either tablet, no table= group at all
+        // Nothing came back: no leaf for either tablet
         const auto& leaders = PackRole(env, false /* follower */);
         UNIT_ASSERT(!leaders.Exists(Leaf(1000, 0)));
         UNIT_ASSERT(!leaders.Exists(Leaf(2000, 0)));
         UNIT_ASSERT_VALUES_EQUAL(leaders.LiveCount(), 0);
-        UNIT_ASSERT(!FindTableGroup(env));
     }
 
     /**
@@ -2039,8 +1937,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
         UNIT_ASSERT(!PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
         UNIT_ASSERT_VALUES_EQUAL(env.FollowerReports.LiveCount(), 0);
-        UNIT_ASSERT(!FindTableBucketCounters(env));
-        UNIT_ASSERT(!FindTableGroup(env));
 
         // The OLD follower tablet is still alive and reports again, still carrying its
         // own (by now stale) PARTITION identity — the straggler
@@ -2049,8 +1945,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
         UNIT_ASSERT(!PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
         UNIT_ASSERT_VALUES_EQUAL(env.FollowerReports.LiveCount(), 0);
-        UNIT_ASSERT(!FindTableBucketCounters(env));
-        UNIT_ASSERT(!FindTableGroup(env));
     }
 
     /**
@@ -2069,8 +1963,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         ReportCounters(env, {&oldTablet});
 
         UNIT_ASSERT_VALUES_EQUAL(
-            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(
             PackRole(env, false /* follower */).Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 5u);
 
         // The table is dropped and recreated at the SAME path and the SAME level: its
@@ -2082,8 +1974,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         ReportCounters(env, {&newTablet});
 
         // The bucket holds the NEW generation alone
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
         UNIT_ASSERT_VALUES_EQUAL(
             PackRole(env, false /* follower */).Gauge(TPackedBucketId::Table(TABLE_PATH), ROW_COUNT), 7u);
     }
@@ -2098,15 +1988,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         TEnv env(true /* detailedMetricsEnabled */);
 
         const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
-        const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
 
         TFakeTablet tablet(1000, 0, LEVEL_PARTITION);
         tablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
         tablet.SendUpdate(env);
         ReportCounters(env, {&tablet});
 
-        // A partition level table has no table group ever: the leaf is only reported
-        UNIT_ASSERT(!FindTableGroup(env));
         UNIT_ASSERT(PackRole(env, false /* follower */).Exists(Leaf(1000, 0)));
 
         // The tablet reports a new identity at another path — an ESchemeOpMoveTable
@@ -2117,13 +2004,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
                 tablet.TabletId, TENANT_PATH_ID, tablet.FollowerId, tablet.TableId,
                 RENAMED_TABLE_PATH, tablet.SchemaVersion, tablet.MetricsLevel)));
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-
-        // Still no table group, of either path: a partition level table creates none
-        UNIT_ASSERT(!FindTableGroup(env));
-
-        auto rawGroup = FindRawGroup(env);
-        auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", DATABASE_PATH) : nullptr;
-        UNIT_ASSERT(!databaseGroup || !databaseGroup->FindSubgroup("table", RENAMED_RELATIVE_TABLE_PATH));
 
         // The leaf of the old path is retired right away: the identity event alone drives
         // the cleanup, no further counters tick is needed. The new path has no leaf yet:

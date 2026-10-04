@@ -177,24 +177,34 @@ namespace NKikimr::NBlobDepot {
     }
 
     template<typename T, typename TEvent>
-    ui64 TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context) {
+    ui64 TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId) {
         auto ev = std::make_unique<TEvent>();
         msg.Swap(&ev->Record);
-        return Issue(std::move(ev), sender, std::move(context));
+        return Issue(std::move(ev), sender, std::move(context), std::move(traceId));
     }
 
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvPrepareWriteS3 msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvPrepareWriteS3 msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
 
-    ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
+    ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context,
+            NWilson::TTraceId traceId) {
         const ui64 id = NextTabletRequestId++;
+<<<<<<< HEAD
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA10, "Issue", (AgentId, LogId), (RequestId, id), (Msg, ev->ToString()));
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id);
+=======
+        YDB_LOG_DEBUG("Issue",
+            {"marker", "BDA10"},
+            {"agentId", LogId},
+            {"requestId", id},
+            {"msg", ev->ToString()});
+        NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id, std::move(traceId));
+>>>>>>> a68dcd72450 (Added Wilson traces for BlobDepot (#51886))
         RegisterRequest(id, sender, std::move(context), {}, true);
         return id;
     }

@@ -23,6 +23,10 @@ namespace NKikimr::NBlobDepot {
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
 
+            NWilson::TSpan PrepareWriteS3Span;
+            NWilson::TSpan WriteS3Span;
+            NWilson::TSpan CommitBlobSeqSpan;
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -170,8 +174,21 @@ namespace NKikimr::NBlobDepot {
                     auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
+<<<<<<< HEAD
                     BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+=======
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
+                        {"marker", "BDEV10"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"blobSeqId", BlobSeqId},
+                        {"groupId", groupId},
+                        {"blobId", id});
+                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr, Span.GetTraceId());
+>>>>>>> a68dcd72450 (Added Wilson traces for BlobDepot (#51886))
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
@@ -209,7 +226,10 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
 
-                Agent.Issue(CommitBlobSeq, this, nullptr);
+                CommitBlobSeqSpan = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
+
+                Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
@@ -305,8 +325,16 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
                 if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndError(item.GetErrorReason());
+                    }
+
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndOk();
+                    }
+
                     // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
                     CheckIfFinished();
                 }
@@ -360,7 +388,14 @@ namespace NKikimr::NBlobDepot {
                     p->SetGeneration(generation);
                 }
                 item->SetLen(Request.Id.BlobSize());
-                Agent.Issue(query, this, nullptr);
+
+                PrepareWriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.PrepareWriteS3", NWilson::EFlags::AUTO_END);
+                if (PrepareWriteS3Span && S3SlowDownRetries) {
+                    PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
+                }
+
+                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
@@ -368,7 +403,14 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
                 if (item.GetStatus() != NKikimrProto::OK) {
+                    if (PrepareWriteS3Span) {
+                        PrepareWriteS3Span.EndError(item.GetErrorReason());
+                    }
+
                     return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+                if (PrepareWriteS3Span) {
+                    PrepareWriteS3Span.EndOk();
                 }
 
                 auto *commitItem = CommitBlobSeq.MutableItems(0);
@@ -382,6 +424,12 @@ namespace NKikimr::NBlobDepot {
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Key, key));
+
+                WriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.WriteS3", NWilson::EFlags::AUTO_END);
+                if (WriteS3Span) {
+                    WriteS3Span.Attribute("size", static_cast<i64>(Request.Buffer.size()));
+                }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
                 WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
@@ -398,6 +446,18 @@ namespace NKikimr::NBlobDepot {
                     (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error), (SlowDown, slowDown));
 
                 WriterActorId = {};
+
+                if (WriteS3Span) {
+                    if (error) {
+                        if (slowDown) {
+                            WriteS3Span.Attribute("slow_down", true);
+                        }
+
+                        WriteS3Span.EndError(*error);
+                    } else {
+                        WriteS3Span.EndOk();
+                    }
+                }
 
                 if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
                     error = "BlobDepot tablet disconnected";

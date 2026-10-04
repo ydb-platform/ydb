@@ -76,8 +76,6 @@ private:
         bool foundResult = false;
         if (!SortHeap.Current().IsDeleted()) {
             foundResult = true;
-            //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            //              {"keyAdd", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->AddRecord(SortHeap.Current());
             }
@@ -86,8 +84,6 @@ private:
                 *resultPosition = SortHeap.Current().GetKeyColumns().GetPosition();
             }
         } else {
-            //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            //              {"keySkip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->SkipRecord(SortHeap.Current());
             }

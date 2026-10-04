@@ -7,8 +7,6 @@
 
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NArrow::NMerger {
 
 void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const  {

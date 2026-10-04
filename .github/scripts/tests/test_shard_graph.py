@@ -336,6 +336,17 @@ class HostCountTest(unittest.TestCase):
         )
         self.assertEqual(chosen, 1)
 
+    def test_next_link_and_busy_pages_are_both_counted(self) -> None:
+        header = '<https://example.test/runs?page=2>; rel="next", <https://example.test/runs?page=1>; rel="prev"'
+        self.assertEqual(shard_graph.next_link(header), "https://example.test/runs?page=2")
+        self.assertEqual(shard_graph.next_link(""), "")
+        page_one = {"jobs": [{"status": "in_progress", "labels": ["self-hosted", "build-preset-relwithdebinfo"]}]}
+        page_two = {"jobs": [{"status": "queued", "labels": ["build-preset-release-asan"]}]}
+        demand = shard_graph.busy_labels_in_jobs(page_one)
+        demand.update(shard_graph.busy_labels_in_jobs(page_two))
+        self.assertEqual(demand["build-preset-relwithdebinfo"], 1)
+        self.assertEqual(demand["build-preset-release-asan"], 1)
+
 
 class ShardProgressTest(unittest.TestCase):
     def test_eta_is_unknown_until_the_first_result_and_done_at_the_end(self) -> None:
@@ -453,6 +464,71 @@ class ShardProgressTest(unittest.TestCase):
         self.assertIn("shard 0", body)
         self.assertEqual(len(store.rows), 1)
 
+    def test_merge_uses_the_fresh_comment_not_the_stale_list(self) -> None:
+        header = shard_progress.marker("99", "relwithdebinfo")
+        listed = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=0,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+        )
+        fresh = shard_progress.apply_shard(
+            listed,
+            shard_id=2,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/2",
+            log_prefix="shard_2",
+            failed_tests=["ydb/raced"],
+            run_url="https://example.test/run/99",
+        )
+        store = _FreshBodyStore(
+            listed_body=shard_progress.render_comment(listed, "2026-10-04T12:05:00Z"),
+            fresh_body=shard_progress.render_comment(fresh, "2026-10-04T12:06:00Z"),
+        )
+        incoming = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:07:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+        )
+        body = shard_progress.sync_comment(store, header, incoming, "2026-10-04T12:07:00Z")
+        self.assertIn("shard 2", body)
+        self.assertIn("`ydb/raced`", body)
+        self.assertIn("**Progress:** 3/4", body)
+
+    def test_narrow_retry_keeps_only_the_failed_suite(self) -> None:
+        graph = _graph(
+            [
+                _node("test-a", deps=["lib"], size="small", path="ydb/a"),
+                _node("test-b", deps=["lib"], size="small", path="ydb/b"),
+                _node("lib", deps=[], node_type=None),
+            ],
+            result=["test-a", "test-b"],
+        )
+        report = {"results": [{"status": "FAILED", "path": "ydb/b", "name": "T"}]}
+        narrowed = shard_graph.narrow_graph_to_report(graph, report)
+        self.assertEqual(narrowed["result"], ["test-b"])
+        unchanged = shard_graph.narrow_graph_to_report(graph, {"results": []})
+        self.assertEqual(unchanged["result"], ["test-a", "test-b"])
+
+    def test_comment_list_follows_the_next_link(self) -> None:
+        self.assertEqual(
+            shard_progress.next_link('<https://example.test/comments?page=2>; rel="next"'),
+            "https://example.test/comments?page=2",
+        )
+
 
 class _MemComment:
     def __init__(self, comment_id: int, body: str, etag: str) -> None:
@@ -495,6 +571,35 @@ class _ConflictStore:
 
     def delete(self, comment_id: int) -> None:
         self.rows.pop(comment_id, None)
+
+
+class _FreshBodyStore:
+    """list_marker returns a stale body; get() returns the comment as it is now."""
+
+    def __init__(self, listed_body: str, fresh_body: str) -> None:
+        self.listed_body = listed_body
+        self.fresh_body = fresh_body
+        self.written = ""
+
+    def list_marker(self, header: str) -> list[_MemComment]:
+        if self.written:
+            return [_MemComment(1, self.written, "etag-2")]
+        return [_MemComment(1, self.listed_body, "")]
+
+    def get(self, comment_id: int) -> _MemComment:
+        body = self.written or self.fresh_body
+        return _MemComment(comment_id, body, "etag-fresh")
+
+    def create(self, body: str) -> _MemComment:
+        raise AssertionError("create should not run when a comment already exists")
+
+    def update(self, comment_id: int, body: str, etag: str) -> None:
+        if etag != "etag-fresh":
+            raise shard_progress.Conflict(str(comment_id))
+        self.written = body
+
+    def delete(self, comment_id: int) -> None:
+        return None
 
 
 if __name__ == "__main__":

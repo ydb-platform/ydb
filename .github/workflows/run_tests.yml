@@ -459,6 +459,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     outputs:
       shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      checkout_sha: ${{ steps.pin.outputs.sha }}
     steps:
       - name: Set variables based on build_preset
         id: set-vars
@@ -485,6 +486,10 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
+
+      - name: Pin the graph commit
+        id: pin
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -621,7 +626,7 @@ jobs:
       - name: Upload graph and plan
         uses: actions/upload-artifact@v4
         with:
-          name: test-graph-${{ github.run_id }}
+          name: test-graph-${{ inputs.build_preset }}-${{ github.run_id }}
           retention-days: 7
           path: |
             graph.json
@@ -667,7 +672,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.prepare.outputs.checkout_ref }}
+          ref: ${{ needs.prepare_graph.outputs.checkout_sha }}
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -720,7 +725,7 @@ jobs:
       - name: Download graph and plan
         uses: actions/download-artifact@v4
         with:
-          name: test-graph-${{ github.run_id }}
+          name: test-graph-${{ inputs.build_preset }}-${{ github.run_id }}
           path: test-graph
 
       - name: Filter graph for shard ${{ matrix.shard_id }}
@@ -787,13 +792,14 @@ jobs:
             job_url="$run_url"
           fi
           report="${LAST_BUILD_RESULTS_REPORT:-}"
+          count=$(python3 -c 'import json; print(json.load(open("test-graph/shard_plan.json"))["shard_count"])')
           python3 .github/scripts/tests/shard_progress.py publish \
             --pr "$PR_NUMBER" \
             --run-id "$GITHUB_RUN_ID" \
             --preset "${{ inputs.build_preset }}" \
             --target "${{ inputs.test_targets }}" \
             --shard-id "$SHARD_ID" \
-            --shard-count "${{ needs.prepare.outputs.shard_count }}" \
+            --shard-count "$count" \
             --result "${SHARD_RESULT:-failure}" \
             --started-at "$SHARD_STARTED_AT" \
             --finished-at "$finished_at" \

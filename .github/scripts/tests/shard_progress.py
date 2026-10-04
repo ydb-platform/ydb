@@ -319,6 +319,18 @@ class RestComment:
         self.etag = etag
 
 
+def next_link(link_header: str) -> str:
+    """Return the URL marked rel=next in a GitHub Link header, or ''."""
+    for part in (link_header or "").split(","):
+        bits = [bit.strip() for bit in part.split(";")]
+        if not bits or not bits[0].startswith("<") or not bits[0].endswith(">"):
+            continue
+        rels = {bit for bit in bits[1:]}
+        if 'rel="next"' in rels or "rel=next" in rels:
+            return bits[0][1:-1]
+    return ""
+
+
 class GithubCommentStore:
     def __init__(self, token: str, repository: str, pr_number: int) -> None:
         self._token = token
@@ -336,7 +348,7 @@ class GithubCommentStore:
                 body = str(item.get("body") or "")
                 if body.startswith(header):
                     found.append(RestComment(int(item["id"]), body, ""))
-            url = _next_link(headers.get("Link", ""))
+            url = next_link(headers.get("Link", ""))
         return found
 
     def get(self, comment_id: int) -> RestComment:
@@ -424,7 +436,15 @@ def sync_comment(store: CommentStore, header: str, state: dict[str, Any], now: s
                 return body
         canonical = min(matches, key=lambda item: item.id)
         fresh = store.get(canonical.id)
-        parsed = [parse_state(item.body) for item in matches]
+        # list_marker can be stale by the time get() returns. Merge the fresh
+        # body, not the listed copy of the same comment, or a shard that landed
+        # in between is overwritten without an ETag conflict.
+        parsed: list[dict[str, Any] | None] = []
+        for item in matches:
+            if item.id == fresh.id:
+                parsed.append(parse_state(fresh.body))
+            else:
+                parsed.append(parse_state(item.body))
         parsed.append(state)
         merged = merge_states([item for item in parsed if item])
         body = render_comment(merged, now)

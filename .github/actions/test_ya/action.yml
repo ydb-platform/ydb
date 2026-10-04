@@ -109,7 +109,7 @@ runs:
   using: "composite"
   steps:
     - name: comment-build-start
-      if: inputs.publish_github_status && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.publish_github_status == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
@@ -532,6 +532,8 @@ runs:
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
+        ORIG_GRAPH_PATH="${GRAPH_PATH:-}"
+        ORIG_CONTEXT_PATH="${CONTEXT_PATH:-}"
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
@@ -560,7 +562,24 @@ runs:
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            if [ -z "$GRAPH_PATH" ]; then
+            if [ "${{ inputs.skip_graph_compare }}" = "true" ] && [ -n "$ORIG_GRAPH_PATH" ] && [ -f "$PREV_REPORT" ]; then
+              # Custom JSON ignores --test-blacklist-path, so the retry graph
+              # itself is reduced to failed suites. The original shard graph stays put.
+              RERUN_FAILED_OPT=""
+              narrow_args=(
+                --graph "$ORIG_GRAPH_PATH"
+                --report "$PREV_REPORT"
+                -o "$CURRENT_PUBLIC_DIR/retry_graph.json"
+              )
+              if [ -n "$ORIG_CONTEXT_PATH" ]; then
+                narrow_args+=(--context "$ORIG_CONTEXT_PATH" --context-output "$CURRENT_PUBLIC_DIR/retry_context.json")
+              fi
+              python3 .github/scripts/tests/shard_graph.py narrow-retry "${narrow_args[@]}"
+              GRAPH_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_graph.json")
+              if [ -n "$ORIG_CONTEXT_PATH" ]; then
+                CONTEXT_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_context.json")
+              fi
+            elif [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
               python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
@@ -862,6 +881,11 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+        elif [ "${{ inputs.publish_github_status }}" != "true" ]; then
+          # Shard jobs do not post build_* themselves. Fail the step so the
+          # shard conclusion is failure instead of a green job with no report.
+          echo "status=failed" >> $GITHUB_OUTPUT
+          exit 1
         fi
         fi
 
@@ -875,7 +899,7 @@ runs:
         echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
-      if: inputs.publish_github_status && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.publish_github_status == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -893,7 +917,7 @@ runs:
         fi
 
     - name: analyze tests results
-      if: inputs.publish_github_status
+      if: inputs.publish_github_status == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -919,6 +943,10 @@ runs:
       if: inputs.run_tests
       shell: bash
       run: |
+        if [ "${{ steps.build.outputs.status }}" = "failed" ]; then
+          echo "Build failed and no successful test report was produced."
+          exit 1
+        fi
         if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
           .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi

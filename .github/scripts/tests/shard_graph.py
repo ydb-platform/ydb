@@ -427,30 +427,53 @@ def lookup_free_runners(preset_label: str) -> int | None:
     return free
 
 
+def busy_labels_in_jobs(payload: dict[str, Any], known: set[str] | None = None) -> Counter[str]:
+    """Count queued or in-progress jobs that occupy a build-preset runner."""
+    labels = known if known is not None else set(RUNNER_CAPACITY["footprints"])
+    demand: Counter[str] = Counter()
+    for job in payload.get("jobs") or []:
+        if not isinstance(job, dict) or job.get("status") not in ("queued", "in_progress"):
+            continue
+        for label in job.get("labels") or []:
+            if label in labels or str(label).startswith("build-preset-"):
+                demand[str(label)] += 1
+                break
+    return demand
+
+
 def _count_busy_runner_jobs(repo: str, token: str) -> Counter[str]:
     demand: Counter[str] = Counter()
     known = set(RUNNER_CAPACITY["footprints"])
     for status in ("queued", "in_progress"):
-        payload = _github_get(
+        run_pages = _github_pages(
             f"https://api.github.com/repos/{repo}/actions/runs?status={status}&per_page=100",
             token,
         )
-        for run in payload.get("workflow_runs") or []:
-            jobs = _github_get(
-                f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100",
-                token,
-            )
-            for job in jobs.get("jobs") or []:
-                if job.get("status") not in ("queued", "in_progress"):
+        for payload in run_pages:
+            for run in payload.get("workflow_runs") or []:
+                if not isinstance(run, dict) or "id" not in run:
                     continue
-                for label in job.get("labels") or []:
-                    if label in known or str(label).startswith("build-preset-"):
-                        demand[str(label)] += 1
-                        break
+                for jobs in _github_pages(
+                    f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100",
+                    token,
+                ):
+                    demand.update(busy_labels_in_jobs(jobs, known))
     return demand
 
 
-def _github_get(url: str, token: str) -> dict[str, Any]:
+def next_link(link_header: str) -> str:
+    """Return the URL marked rel=next in a GitHub Link header, or ''."""
+    for part in (link_header or "").split(","):
+        bits = [bit.strip() for bit in part.split(";")]
+        if not bits or not bits[0].startswith("<") or not bits[0].endswith(">"):
+            continue
+        rels = {bit for bit in bits[1:]}
+        if 'rel="next"' in rels or "rel=next" in rels:
+            return bits[0][1:-1]
+    return ""
+
+
+def _github_get(url: str, token: str) -> tuple[dict[str, Any], str]:
     request = urllib.request.Request(
         url,
         headers={
@@ -462,9 +485,21 @@ def _github_get(url: str, token: str) -> dict[str, Any]:
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = json.load(response)
+        link = response.headers.get("Link", "")
     if not isinstance(payload, dict):
         raise ValueError(f"unexpected response from {url}")
-    return payload
+    return payload, str(link)
+
+
+def _github_pages(url: str, token: str) -> list[dict[str, Any]]:
+    pages: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    while url and url not in seen:
+        seen.add(url)
+        payload, link = _github_get(url, token)
+        pages.append(payload)
+        url = next_link(link)
+    return pages
 
 
 def bin_pack(weights: dict[str, float], shard_count: int) -> tuple[list[list[str]], list[float]]:
@@ -599,6 +634,47 @@ def filter_graph_result(graph: dict[str, Any], allowed_uids: set[str]) -> dict[s
     return filtered
 
 
+def failed_suite_paths(report: dict[str, Any]) -> list[str]:
+    """Suite paths of FAILED/ERROR rows in a ya build-results report."""
+    paths: list[str] = []
+    for result in report.get("results") or []:
+        if not isinstance(result, dict) or result.get("status") not in ("FAILED", "ERROR"):
+            continue
+        path = str(result.get("path") or "").strip().strip("/")
+        if path:
+            paths.append(path)
+    return paths
+
+
+def result_uids_matching_paths(graph: dict[str, Any], paths: list[str]) -> set[str]:
+    """Result UIDs whose suite path is a failed suite, or contains one."""
+    if not paths:
+        return set()
+    nodes = graph_nodes_by_uid(graph)
+    matched: set[str] = set()
+    for uid in result_uids(graph):
+        node_path = (extract_node_path(nodes.get(uid) or {}) or "").strip("/")
+        if not node_path:
+            continue
+        for path in paths:
+            if node_path == path or node_path.startswith(path + "/") or path.startswith(node_path + "/"):
+                matched.add(uid)
+                break
+    return matched
+
+
+def narrow_graph_to_report(graph: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    """Keep only failed result nodes. An empty match returns the graph unchanged.
+
+    ``--build-custom-json`` ignores the test blacklist, so a shard retry has to
+    shrink ``graph.result`` itself. Missing the failed suite must not drop the shard.
+    """
+    allowed = result_uids_matching_paths(graph, failed_suite_paths(report))
+    if not allowed or allowed == set(result_uids(graph)):
+        return graph
+    return filter_graph_result(graph, allowed)
+
+
 def filter_context_tests(context: dict[str, Any], allowed_test_uids: set[str]) -> dict[str, Any]:
     filtered = copy.deepcopy(context)
     tests = filtered.get("tests")
@@ -700,12 +776,42 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         "free_runners": free_runners,
         "chosen": chosen,
     }
+    # The caller records the matrix row that produced this plan. Shard jobs
+    # read it back instead of keeping a second copy of the preset list.
+    if args.build_preset or args.build_target or args.test_size:
+        plan["run"] = {
+            "build_preset": args.build_preset,
+            "build_target": args.build_target,
+            "test_size": args.test_size,
+            "threads": args.threads,
+        }
     _write_json(args.output, plan)
     summary = render_summary(plan)
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
         args.summary.write_text(summary, encoding="utf-8")
     sys.stdout.write(summary)
+    return 0
+
+
+def _cmd_narrow_retry(args: argparse.Namespace) -> int:
+    graph = load_graph(args.graph)
+    report = json.loads(args.report.read_text(encoding="utf-8"))
+    if not isinstance(report, dict):
+        raise ValueError("report must be a JSON object")
+    narrowed = narrow_graph_to_report(graph, report)
+    _write_json(args.output, narrowed)
+    if args.context or args.context_output:
+        if not args.context or not args.context_output:
+            print("narrow-retry: --context and --context-output are both required", file=sys.stderr)
+            return 2
+        context = json.loads(args.context.read_text(encoding="utf-8"))
+        allowed = {uid for uid in result_uids(narrowed) if uid.startswith("test-")}
+        _write_json(args.context_output, filter_context_tests(context, allowed))
+    print(
+        f"Retry graph: {len(result_uids(narrowed))}/{len(result_uids(graph))} result nodes",
+        file=sys.stderr,
+    )
     return 0
 
 
@@ -743,6 +849,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Runner label for the pool cap, e.g. build-preset-relwithdebinfo. Used when shard-count=auto.",
     )
     plan.add_argument("--threads", type=int, default=DEFAULT_THREADS)
+    plan.add_argument("--build-preset", default="")
+    plan.add_argument("--build-target", default="")
+    plan.add_argument("--test-size", default="")
     plan.add_argument("-o", "--output", type=Path, required=True)
     plan.add_argument("--summary", type=Path)
     plan.set_defaults(func=_cmd_plan)
@@ -755,6 +864,14 @@ def main(argv: list[str] | None = None) -> int:
     filt.add_argument("-o", "--output", type=Path, required=True)
     filt.add_argument("--context-output", type=Path)
     filt.set_defaults(func=_cmd_filter)
+
+    narrow = sub.add_parser("narrow-retry", help="Shrink a shard graph to failed suites")
+    narrow.add_argument("--graph", type=Path, required=True)
+    narrow.add_argument("--report", type=Path, required=True)
+    narrow.add_argument("--context", type=Path)
+    narrow.add_argument("-o", "--output", type=Path, required=True)
+    narrow.add_argument("--context-output", type=Path)
+    narrow.set_defaults(func=_cmd_narrow_retry)
 
     args = parser.parse_args(argv)
     try:

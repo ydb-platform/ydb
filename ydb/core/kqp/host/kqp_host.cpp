@@ -1520,7 +1520,9 @@ private:
             return result;
         }
 
-        if (SessionCtx->Config().GetEnableNewRBO() && HasSamplingRead(queryExpr)) {
+        if (HasSamplingRead(queryExpr)) {
+            // Sampling requires the read ranges source even for scan queries.
+            SessionCtx->ConfigPtr()->SetEnableKqpScanQuerySourceRead(true);
             // RBO read operators do not preserve sampling settings. Select the
             // legacy pipeline before optimization, independently of error fallback.
             SessionCtx->ConfigPtr()->SetEnableNewRBO(false);

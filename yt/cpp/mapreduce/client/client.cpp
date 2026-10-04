@@ -369,6 +369,18 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+TFilePartitions TClientBase::GetFilePartitions(
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    return RequestWithRetry<TFilePartitions>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &ranges, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetFilePartitions(TransactionId_, path, ranges, options);
+        });
+}
+
 void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
 {
     CheckShutdown();
@@ -432,6 +444,13 @@ IFileReaderPtr TClientBase::CreateFileReader(
         Context_,
         TransactionId_,
         options);
+}
+
+IFileReaderPtr TClientBase::CreateFilePartitionReader(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_->CreatePolicyForReaderRequest(), cookie, options);
 }
 
 IFileWriterPtr TClientBase::CreateFileWriter(
@@ -1742,10 +1761,9 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
         TNode clusterConfigNode;
 
         TYPath clusterConfigPath = Context_.Config->ConfigRemotePatchPath + "/" + configProfile;
-        YT_LOG_DEBUG(
-            "Fetching cluster config (ConfigPath: %v, ConfigProfile: %v)",
-            Context_.Config->ConfigRemotePatchPath,
-            configProfile);
+        YT_TLOG_DEBUG("Fetching cluster config")
+            .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+            .With("ConfigProfile", configProfile);
 
         try {
             TExpectedErrorGuard guard(IsResolveError);
@@ -1756,25 +1774,22 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
             }
 
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Could not resolve, saved empty cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Could not resolve; saved empty cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
 
         if (clusterConfigNode.IsMap()) {
             ClusterConfig_ = clusterConfigNode.UncheckedAsMap();
-            YT_LOG_DEBUG(
-                "Saved cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_DEBUG("Saved cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         } else if (!ClusterConfig_.has_value()) {
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Config node has incorrect type, saved empty cluster config (NodeType: %v, ConfigPath: %v, ConfigProfile: %v)",
-                clusterConfigNode.GetType(),
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Config node has incorrect type; saved empty cluster config")
+                .With("NodeType", clusterConfigNode.GetType())
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
     }
 

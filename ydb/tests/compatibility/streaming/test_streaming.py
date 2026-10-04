@@ -10,6 +10,7 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -439,12 +440,24 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
     def setup(self):
         yield from self.setup_cluster()
 
+    def wait_first_checkpoint(self):
+        # CREATE STREAMING QUERY returns as soon as the execution state is saved; the first checkpoint
+        # additionally needs the whole DQ graph to be deployed on all nodes, so under sanitizers on a
+        # loaded CI host it takes noticeably longer than the steady-state checkpoint waits (YDBBUGS-783).
+        wait_completed_checkpoints(
+            self.cluster,
+            f"/Root/{self.query_name}",
+            timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            checkpoints_count=1,
+            wait_delta=False,
+        )
+
     @link_test_case("#27924")
     @pytest.mark.parametrize("external", [True, False])
     def test_restart_to_another_version(self, external):
         self.create_objects(external)
         self.create_streaming_query()
-        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        self.wait_first_checkpoint()
         acceptor = self.do_test_part1()
         self.change_cluster_version()
         acceptor.reset()
@@ -456,7 +469,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.create_objects(external, with_precompute=False)
         self.create_join_objects()
         self.create_streaming_query_with_join()
-        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        self.wait_first_checkpoint()
         acceptor = self.do_test_part1(extra_suffix='-row-col')
         self.change_cluster_version()
         acceptor.reset()
@@ -467,7 +480,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
     def test_restart_to_another_version_multi_output(self, external):
         self.create_multi_output_objects(external)
         self.create_streaming_query_with_multi_output()
-        wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        self.wait_first_checkpoint()
         acceptor = self.do_test_part1()
         self.check_multi_output_table(2)
         self.change_cluster_version()

@@ -8,6 +8,7 @@ TEST_SRCS(
     test_iam.py
     test_scalar_topic_write.py
     test_streaming.py
+    test_streaming_aggregation.py
     test_watermarks.py
 )
 
@@ -30,7 +31,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
-    REQUIREMENTS(ram:12)
+    REQUIREMENTS(ram:16)
     SPLIT_FACTOR(20)
 ENDIF()
 

@@ -1470,9 +1470,11 @@ private:
 };
 
 class TS3ReadCoroActor : public TActorCoro {
+    static constexpr char ActorName[] = "S3_READ";
+
 public:
     explicit TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
-        : TActorCoro(std::move(impl))
+        : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
 private:
@@ -1627,7 +1629,7 @@ public:
                 AllowLocalFiles,
                 WorkFactory));
         }
-        FileQueueEvents.Init(TxId, SelfId(), SelfId());
+        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
             FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
@@ -1846,7 +1848,7 @@ private:
             TryRegisterCoro();
         } while (!Blocks.empty() && free > 0LL && GetBlockSize(Blocks.front()) <= size_t(free));
 
-        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.RemoveConfirmedEvents();
+        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !IsWaitingFileQueueResponse;
         if (finished) {
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -1874,7 +1876,7 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
-            LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
+            LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
 
             ClearMkqlData();
@@ -1897,6 +1899,7 @@ private:
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
@@ -2036,6 +2039,12 @@ private:
         FileQueueEvents.OnEventReceived(ev);
     }
 
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
+        if (FileQueueEvents.Heartbeat()) {
+            FileQueueEvents.Send(new TEvS3Provider::TEvAck());
+        }
+    }
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -2052,7 +2061,11 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
-        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            return;
+        }
+        FileQueueEvents.Unsubscribe();
+        if (!(IsFileQueueEmpty && IsConfirmedFileQueueFinish && !IsWaitingFileQueueResponse)) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
         }

@@ -42,7 +42,7 @@ BELONGS ya.make
 
 KEEP     MIT                  6bb6514a1d779748b76a73215a89ae66
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at line 35, lib/ascii.h at line 30, lib/asciitab.h at line 29, lib/fallthrough.h at line 26, lib/iasciitab.h at line 29, lib/internal.h at line 52, lib/latin1tab.h at line 29, lib/memory_sanitizer.h at line 26, lib/nametab.h at line 27, lib/random_arc4random.c at line 27, lib/random_arc4random.h at line 26, lib/random_arc4random_buf.c at line 27, lib/random_arc4random_buf.h at line 26, lib/random_dev_urandom.c at line 27, lib/random_dev_urandom.h at line 26, lib/random_getentropy.c at line 27, lib/random_getentropy.h at line 26, lib/random_getrandom.c at line 29, lib/random_getrandom.h at line 26, lib/random_rand_s.c at line 30, lib/random_rand_s.h at line 27, lib/utf8tab.h at line 29, lib/winconfig.h at line 30, lib/xcsinc.c at line 26, lib/xmlparse.c at line 70, lib/xmlrole.c at line 36, lib/xmlrole.h at line 30, lib/xmltok.c at line 46, lib/xmltok.h at line 31, lib/xmltok_impl.c at line 37, lib/xmltok_impl.h at line 28, lib/xmltok_ns.c at line 32
+FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at line 35, lib/ascii.h at line 30, lib/asciitab.h at line 29, lib/fallthrough.h at line 26, lib/iasciitab.h at line 29, lib/internal.h at line 53, lib/latin1tab.h at line 29, lib/memory_sanitizer.h at line 26, lib/nametab.h at line 27, lib/random_arc4random.c at line 27, lib/random_arc4random.h at line 26, lib/random_arc4random_buf.c at line 27, lib/random_arc4random_buf.h at line 26, lib/random_dev_urandom.c at line 27, lib/random_dev_urandom.h at line 26, lib/random_getentropy.c at line 27, lib/random_getentropy.h at line 26, lib/random_getrandom.c at line 29, lib/random_getrandom.h at line 26, lib/random_rand_s.c at line 30, lib/random_rand_s.h at line 27, lib/utf8tab.h at line 29, lib/winconfig.h at line 30, lib/xcsinc.c at line 26, lib/xmlparse.c at line 73, lib/xmlrole.c at line 36, lib/xmlrole.h at line 30, lib/xmltok.c at line 46, lib/xmltok.h at line 31, lib/xmltok_impl.c at line 37, lib/xmltok_impl.h at line 28, lib/xmltok_ns.c at line 32
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -56,7 +56,7 @@ FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at lin
         lib/asciitab.h [15:32]
         lib/fallthrough.h [12:29]
         lib/iasciitab.h [15:32]
-        lib/internal.h [38:55]
+        lib/internal.h [39:56]
         lib/latin1tab.h [15:32]
         lib/memory_sanitizer.h [12:29]
         lib/nametab.h [13:30]
@@ -75,7 +75,7 @@ FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at lin
         lib/utf8tab.h [15:32]
         lib/winconfig.h [16:33]
         lib/xcsinc.c [12:29]
-        lib/xmlparse.c [56:73]
+        lib/xmlparse.c [59:76]
         lib/xmlrole.c [22:39]
         lib/xmlrole.h [16:33]
         lib/xmltok.c [32:49]
@@ -100,7 +100,7 @@ BELONGS ya.make
         lib/asciitab.h [34:34]
         lib/fallthrough.h [31:31]
         lib/iasciitab.h [34:34]
-        lib/internal.h [57:57]
+        lib/internal.h [58:58]
         lib/latin1tab.h [34:34]
         lib/memory_sanitizer.h [31:31]
         lib/nametab.h [32:32]
@@ -119,7 +119,7 @@ BELONGS ya.make
         lib/utf8tab.h [34:34]
         lib/winconfig.h [35:35]
         lib/xcsinc.c [31:31]
-        lib/xmlparse.c [75:75]
+        lib/xmlparse.c [78:78]
         lib/xmlrole.c [41:41]
         lib/xmlrole.h [35:35]
         lib/xmltok.c [51:51]
@@ -168,7 +168,7 @@ BELONGS ya.make
         lib/asciitab.h [13:13]
         lib/fallthrough.h [10:10]
         lib/iasciitab.h [13:13]
-        lib/internal.h [36:36]
+        lib/internal.h [37:37]
         lib/latin1tab.h [13:13]
         lib/memory_sanitizer.h [10:10]
         lib/nametab.h [11:11]
@@ -187,7 +187,7 @@ BELONGS ya.make
         lib/utf8tab.h [13:13]
         lib/winconfig.h [14:14]
         lib/xcsinc.c [10:10]
-        lib/xmlparse.c [54:54]
+        lib/xmlparse.c [57:57]
         lib/xmlrole.c [20:20]
         lib/xmlrole.h [14:14]
         lib/xmltok.c [30:30]

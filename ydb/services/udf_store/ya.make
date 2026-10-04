@@ -46,4 +46,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_orchestration
+    ut_storage
 )

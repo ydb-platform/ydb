@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
@@ -22,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -100,6 +102,19 @@ bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     }
 
     return true;
+}
+
+bool HasSamplingRead(const TExprNode::TPtr& root) {
+    return FindNode(root, [](const TExprNode::TPtr& node) {
+        if (!TCoRead::Match(node.Get()) || node->ChildrenSize() <= TKiReadTable::idx_Settings ||
+            !TMaybeNode<TKiDataSource>(node->ChildPtr(TCoRead::idx_DataSource)))
+        {
+            return false;
+        }
+        const auto& settings = *node->Child(TKiReadTable::idx_Settings);
+        return HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+            HasSetting(settings, "samplingmemtablestride");
+    }) != nullptr;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -1232,6 +1247,12 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
+        if (HasAppData(ActorSystem)) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
+                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+            }
+        }
+
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
@@ -1425,6 +1446,32 @@ private:
                 result.CommandTagName,
                 &effectiveSettings
             );
+            if (!astRes.IsOk() && isSql && SessionCtx->Config().GetEnableNewRBO()) {
+                // Forced YqlSelect translation rejects table hints before we can
+                // inspect their Read! nodes. Accept legacy translation only for
+                // sampling; other queries retain the original parser diagnostics.
+                TExprContext samplingCtx;
+                auto samplingSqlVersion = sqlVersion;
+                bool samplingDeprecatedSQL = TypesCtx->DeprecatedSQL;
+                bool samplingKeepInCache = false;
+                TMaybe<TString> samplingCommandTag;
+                NSQLTranslation::TTranslationSettings samplingSettings;
+                settingsBuilder.SetYqlSelect(NSQLTranslation::EYqlSelect::Disable);
+                auto samplingAst = ParseQuery(query.Text, isSql, samplingSqlVersion, samplingDeprecatedSQL,
+                    samplingCtx, settingsBuilder, samplingKeepInCache, samplingCommandTag, &samplingSettings);
+                TExprNode::TPtr samplingExpr;
+                if (samplingAst.IsOk() &&
+                    CompileExpr(*samplingAst.Root, samplingExpr, samplingCtx, ModuleResolver.get(), nullptr) &&
+                    HasSamplingRead(samplingExpr))
+                {
+                    astRes = std::move(samplingAst);
+                    sqlVersion = samplingSqlVersion;
+                    TypesCtx->DeprecatedSQL = samplingDeprecatedSQL;
+                    result.KeepInCache = samplingKeepInCache;
+                    result.CommandTagName = std::move(samplingCommandTag);
+                    effectiveSettings = std::move(samplingSettings);
+                }
+            }
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
@@ -1471,6 +1518,13 @@ private:
 
         if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
+        }
+
+        if (SessionCtx->Config().GetEnableNewRBO() && HasSamplingRead(queryExpr)) {
+            // RBO read operators do not preserve sampling settings. Select the
+            // legacy pipeline before optimization, independently of error fallback.
+            SessionCtx->ConfigPtr()->SetEnableNewRBO(false);
+            TypesCtx->IgnoreExpandPg = false;
         }
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
@@ -1911,7 +1965,7 @@ private:
             return;
         }
 
-        auto state = MakeIntrusive<NYql::TS3State>();
+        auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
@@ -2010,7 +2064,7 @@ private:
             return;
         }
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
@@ -2032,7 +2086,7 @@ private:
         }
 
         TString sessionId = CreateGuidAsString();
-        auto state = MakeIntrusive<TPqState>(sessionId);
+        auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
         state->EnableSettingsValidation = true;
@@ -2045,6 +2099,7 @@ private:
         state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
         state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
+        state->EnableConsumerRewindForDisposition = Config->FeatureFlags.GetEnableStreamingQueryReadFrom();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;

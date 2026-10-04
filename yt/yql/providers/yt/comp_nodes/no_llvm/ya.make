@@ -8,4 +8,6 @@ INCLUDE(../ya.make.inc)
 
 PEERDIR(yql/essentials/minikql/invoke_builtins/no_llvm)
 
+YQL_LAST_ABI_VERSION()
+
 END()

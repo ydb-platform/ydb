@@ -26,6 +26,7 @@ private:
     using TBase = NCommon::TSpecialReadContext;
     mutable TSpinLock DuplicatesManagerLock;
     NActors::TActorId DuplicatesManager = NActors::TActorId();
+    const std::shared_ptr<TAtomicCounter> DuplicatesAbortionFlag = std::make_shared<TAtomicCounter>(0);
     ui64 DuplicateFilterPortionCount = 0;
 
 private:
@@ -35,8 +36,7 @@ private:
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
-        const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) override;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const NCommon::IDataSource& source, const bool isFinalSyncPoint) override;
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
@@ -78,6 +78,10 @@ public:
 
     void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
+
+    const std::shared_ptr<TAtomicCounter>& GetDuplicatesAbortionFlag() const {
+        return DuplicatesAbortionFlag;
+    }
 
     NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);

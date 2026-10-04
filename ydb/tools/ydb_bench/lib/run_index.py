@@ -27,6 +27,7 @@ FIELDS = (
     'output_directory',
     'benchmarks',
     'profile_names',
+    'deployment',
 )
 
 
@@ -160,7 +161,7 @@ class RunIndex:
                     if 'topology' not in manifest and 'steps' not in manifest:
                         raise BenchmarkError('not a run manifest')
                     value = self.project(run_id, manifest, self.root)
-                    record = {key: value[key] for key in FIELDS}
+                    record = {key: value.get(key) for key in FIELDS}
                 except (OSError, BenchmarkError):
                     db.execute('DELETE FROM runs WHERE id=?', (run_id,))
                     db.execute('DELETE FROM names WHERE id=?', (run_id,))

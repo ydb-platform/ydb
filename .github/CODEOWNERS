@@ -102,6 +102,8 @@
 /ydb/core/kqp/finalize_script_service/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
+/ydb/core/kqp/opt/peephole/kqp_opt_peephole_streaming.cpp @ydb-platform/fq
+/ydb/core/kqp/provider/yql_kikimr_provider_streaming_ut.cpp @ydb-platform/fq
 /ydb/core/kqp/proxy_service/proto/result_set_meta.proto @ydb-platform/fq
 /ydb/core/kqp/proxy_service/script_executions_utils/ @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions_impl.h @ydb-platform/fq
@@ -109,6 +111,7 @@
 /ydb/core/kqp/proxy_service/kqp_script_executions.cpp @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions.h @ydb-platform/fq
 /ydb/core/kqp/run_script_actor/ @ydb-platform/fq
+/ydb/core/kqp/runtime/streaming/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/service/kqp_qs_scripts_ut.cpp @ydb-platform/fq
 /ydb/core/local_proxy/ @ydb-platform/fq
@@ -139,7 +142,13 @@
 /ydb/library/yql/dq/actors/compute/dq_checkpoints* @ydb-platform/fq
 /ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.* @ydb-platform/fq
 /ydb/library/yql/dq/actors/compute/input_transforms/ @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_async_compute_actor_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_compute_actor_checkpoints_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_sync_compute_actor_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/mock_lookup_factory.* @ydb-platform/fq
 /ydb/library/yql/dq/comp_nodes/dq_watermark_generator.* @ydb-platform/fq
+/ydb/library/yql/dq/comp_nodes/ut/dq_multihopping_saveload_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/comp_nodes/ut/dq_watermark_generator_ut.cpp @ydb-platform/fq
 /ydb/library/yql/dq/opt/dq_opt_hopping.* @ydb-platform/fq
 /ydb/library/yql/dq/proto/dq_state_load_plan.proto @ydb-platform/fq
 /ydb/library/yql/dq/runtime/streaming/ @ydb-platform/fq
@@ -203,6 +212,7 @@
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
+/ydb/core/mind/bscontroller @ydb-platform/blobstorage
 /ydb/library/pdisk_io @ydb-platform/blobstorage
 /ydb/library/workload/tpcc @ydb-platform/blobstorage
 /ydb/tools/stress_tool @ydb-platform/blobstorage

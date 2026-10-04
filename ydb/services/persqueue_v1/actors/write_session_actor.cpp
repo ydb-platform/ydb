@@ -389,6 +389,10 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
+    if constexpr (Protocol == EProtocol::Topic) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
+
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -406,6 +410,12 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     if (topic_path.empty()) {
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
     }
 
     if constexpr (Protocol == EProtocol::PQv1) {

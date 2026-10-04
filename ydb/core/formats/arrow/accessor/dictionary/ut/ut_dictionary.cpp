@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -289,5 +290,74 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
             "actual", PrepareToCompare(visited[0]->ToString()));
+    }
+
+    void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
+        TChunkConstructionData info(
+            source->GetRecordsCount(), nullptr, source->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(source, info).DetachResult());
+
+        std::shared_ptr<arrow::Array> decoded;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> array) {
+            decoded = std::move(array);
+        });
+
+        AFL_VERIFY(!HasNulls(decoded));
+        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abc");
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesBooleanDataSize) {
+        TTrivialArray::TPlainBuilder<arrow::BooleanType> builder;
+        builder.AddValue(0, true);
+        builder.AddValue(1, false);
+        builder.AddValue(2, true);
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(NullDefaultUsesNullPositions) {
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().ConstructDefault(info).DetachResult());
+
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetPositions()->null_count(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetNullsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->null_count(), 1);
+        for (ui32 i = 0; i < 3; ++i) {
+            UNIT_ASSERT(dict->IsNull(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(dict->GetChunkedArray()->ToString()), R"([[null,null,null]])");
+    }
+
+    Y_UNIT_TEST(LegacyNullDefaultUsesReferencedNull) {
+        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::utf8(), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 3);
+
+        const auto checkNulls = [](const std::shared_ptr<TDictionaryArray>& array) {
+            UNIT_ASSERT_VALUES_EQUAL(array->GetPositions()->null_count(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(array->GetDictionary()->null_count(), 1);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT(array->IsNull(i));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(array->GetNullsCount(), 3);
+        };
+
+        auto legacy = std::make_shared<TDictionaryArray>(dictionary, positions);
+        checkNulls(legacy);
+
+        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), serializer);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(legacy, info);
+        TChunkConstructionData infoWithMeta(3, nullptr, arrow::utf8(), serializer, std::nullopt, blobAndMeta.Meta);
+        auto restored = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
+        checkNulls(restored);
     }
 };

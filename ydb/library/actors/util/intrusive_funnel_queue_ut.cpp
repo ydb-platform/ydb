@@ -1,4 +1,5 @@
 #include "intrusive_funnel_queue.h"
+#include <util/generic/intrlist.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -20,6 +21,30 @@ struct TItem
 } // namespace
 
 Y_UNIT_TEST_SUITE(TIntrusiveFunnelQueueTest) {
+
+    Y_UNIT_TEST(IndependentTaggedHooksAndHistoryList) {
+        struct TFirst {};
+        struct TSecond {};
+        struct TNode : TIntrusiveListItem<TNode>,
+            TIntrusiveFunnelQueueItem<TNode, TFirst>,
+            TIntrusiveFunnelQueueItem<TNode, TSecond> {};
+        TNode a, b;
+        TIntrusiveList<TNode> history;
+        TIntrusiveFunnelQueue<TNode, TFirst> first;
+        TIntrusiveFunnelQueue<TNode, TSecond> second;
+        history.PushBack(&a);
+        history.PushBack(&b);
+        first.Push(&a);
+        first.Push(&b);
+        second.Push(&b);
+        second.Push(&a);
+        UNIT_ASSERT_VALUES_EQUAL(first.TryPop().Item, &a);
+        UNIT_ASSERT_VALUES_EQUAL(second.TryPop().Item, &b);
+        UNIT_ASSERT_VALUES_EQUAL(first.TryPop().Item, &b);
+        UNIT_ASSERT_VALUES_EQUAL(second.TryPop().Item, &a);
+        UNIT_ASSERT_VALUES_EQUAL(history.PopFront(), &a);
+        UNIT_ASSERT_VALUES_EQUAL(history.PopFront(), &b);
+    }
 
     Y_UNIT_TEST(FifoAndReuse) {
         TIntrusiveFunnelQueue<TItem> queue;

@@ -200,6 +200,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 
     if (IsRebuild) {
         result->SetIsRebuild(true);
+        if (!RebuildIndexName.empty()) {
+            result->SetRebuildIndexName(RebuildIndexName);
+        }
     }
 }
 
@@ -499,6 +502,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
         case ESubState::FulltextIndexPrefixBorders:
+        case ESubState::RebuildReplacing:
             return true;
     }
     return false;

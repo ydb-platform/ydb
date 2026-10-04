@@ -12,9 +12,9 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class ISourcesCollection {
 private:
     virtual bool DoIsFinished() const = 0;
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() = 0;
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext() = 0;
     virtual bool DoCheckInFlightLimits() const = 0;
-    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) = 0;
+    virtual void DoOnSourceFinished(const NCommon::IDataSource& source) = 0;
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
 
@@ -28,7 +28,7 @@ private:
     // The key the source starts at in scan direction. It reaches KQP as the result's LastKey, which decides
     // which shards a re-resolution may skip, so it must never be past a row still to come. Only a collection
     // whose results leave in key order has one at all.
-    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& /*source*/) const {
+    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const NCommon::IDataSource& /*source*/) const {
         return nullptr;
     }
 
@@ -60,37 +60,33 @@ public:
         return DoHasData();
     }
 
-    std::shared_ptr<IScanCursor> BuildCursor(
-        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const;
+    std::shared_ptr<IScanCursor> BuildCursor(const NCommon::IDataSource& source, const ui32 readyRecords, const ui64 tabletId) const;
 
     TString DebugString() const;
 
     virtual ~ISourcesCollection() = default;
 
-    std::shared_ptr<NCommon::IDataSource> TryExtractNext() {
-        if (auto result = DoTryExtractNext()) {
+    std::unique_ptr<NCommon::TDataSourceLease> TryExtractNext() {
+        auto result = DoTryExtractNext();
+        if (result) {
             SourcesInFlightCount.Inc();
-            return result;
-        } else {
-            return nullptr;
         }
+        return result;
     }
 
     bool IsFinished() const {
         return DoIsFinished();
     }
 
-    void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
-        AFL_VERIFY(source);
+    void OnSourceFinished(const NCommon::IDataSource& source) {
         DoOnSourceFinished(source);
-        if (!source->IsInFlightReleased()) {
+        if (!source.IsInFlightReleased()) {
             SourcesInFlightCount.Dec();
         }
     }
 
-    void ReleaseInFlight(const std::shared_ptr<NCommon::IDataSource>& source) {
-        AFL_VERIFY(source);
-        source->SetInFlightReleased();
+    void ReleaseInFlight(NCommon::IDataSource& source) {
+        source.SetInFlightReleased();
         SourcesInFlightCount.Dec();
     }
 

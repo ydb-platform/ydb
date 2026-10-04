@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_essence.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
@@ -35,6 +36,7 @@ namespace NKikimr::NVDiskSpaceReport {
         ui64 FreeChunkReserveBytes = 0;
         ui64 LockedOrQuarantinedBytes = 0;
         ui64 UnclassifiedBytes = 0;
+        ui64 FreeStripeBytes = 0;
 
         TSpaceBreakdown& operator+=(const TSpaceBreakdown& other);
 
@@ -53,10 +55,15 @@ namespace NKikimr::NVDiskSpaceReport {
     struct TPhysicalSstEstimate {
         ui64 SstCount = 0;
         ui64 ChunkCount = 0;
+        ui64 StripedBytes = 0;
         ui64 StructuralMetadataBytes = 0;
 
         template <class TKey, class TMemRec>
-        void AddIfLastKey(const TKey& key, const TLevelSegment<TKey, TMemRec>* sst) {
+        void AddIfLastKey(
+                const TKey& key,
+                const TLevelSegment<TKey, TMemRec>* sst,
+                ui32 appendBlockSize)
+        {
             if (!sst) {
                 return;
             }
@@ -66,9 +73,13 @@ namespace NKikimr::NVDiskSpaceReport {
             }
 
             ++SstCount;
-            ChunkCount += sst->AllChunks.empty()
-                ? (sst->Info.Chunks ? sst->Info.Chunks : 1)
-                : sst->AllChunks.size();
+            if (sst->HeapStripe.Empty()) {
+                ChunkCount += sst->AllChunks.empty()
+                    ? (sst->Info.Chunks ? sst->Info.Chunks : 1)
+                    : sst->AllChunks.size();
+            } else {
+                StripedBytes += AlignUpAppendBlockSize(sst->HeapStripe.Size, appendBlockSize);
+            }
             StructuralMetadataBytes += sizeof(TIdxDiskPlaceHolder);
             if (sst->Info.IndexParts > 1) {
                 StructuralMetadataBytes += (sst->Info.IndexParts - 1) * sizeof(TIdxDiskLinker);
@@ -131,6 +142,7 @@ namespace NKikimr::NVDiskSpaceReport {
             bool allowKeepFlags,
             bool allowGarbageCollection,
             size_t maxHugeRefsPerKey,
+            ui32 appendBlockSize,
             const THugeBlobCtx* hugeBlobCtx = nullptr,
             ui32 minHugeBlobInBytes = 0);
 
@@ -206,6 +218,7 @@ namespace NKikimr::NVDiskSpaceReport {
         const bool AllowKeepFlags;
         const bool AllowGarbageCollection;
         const size_t MaxHugeRefsPerKey;
+        const ui32 AppendBlockSize;
         const THugeBlobCtx* const HugeBlobCtx;
         const ui32 MinHugeBlobInBytes;
 
@@ -250,10 +263,12 @@ namespace NKikimr::NVDiskSpaceReport {
                 TBlobStorageGroupType gtype,
                 const NGcOpt::TBarriersEssence* barriers,
                 bool allowKeepFlags,
-                bool allowGarbageCollection)
+                bool allowGarbageCollection,
+                ui32 appendBlockSize = 1)
             : Barriers(barriers)
             , AllowKeepFlags(allowKeepFlags)
             , AllowGarbageCollection(allowGarbageCollection)
+            , AppendBlockSize(appendBlockSize)
             , IndexMerger(gtype)
         {
             Clear();
@@ -283,7 +298,7 @@ namespace NKikimr::NVDiskSpaceReport {
             CheckKey(key);
             IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
             ++PhysicalSstRecords;
-            PhysicalSsts.template AddIfLastKey<TKey, TMemRec>(key, sst);
+            PhysicalSsts.template AddIfLastKey<TKey, TMemRec>(key, sst, AppendBlockSize);
         }
 
         static constexpr bool HaveToMergeData() {
@@ -332,6 +347,7 @@ namespace NKikimr::NVDiskSpaceReport {
         const NGcOpt::TBarriersEssence* const Barriers;
         const bool AllowKeepFlags;
         const bool AllowGarbageCollection;
+        const ui32 AppendBlockSize;
         TIndexRecordMerger<TKey, TMemRec> IndexMerger;
         std::optional<TKey> Key;
         ui64 PhysicalSstRecords = 0;

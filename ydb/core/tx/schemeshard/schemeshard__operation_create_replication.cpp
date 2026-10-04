@@ -357,7 +357,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
         const auto& name = desc.GetName();
@@ -471,7 +471,16 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
-        desc.MutableState()->MutableStandBy();
+        if (desc.GetConfig().HasTransferSpecific()) {
+            desc.MutableConfig()->ClearSkipInitialScan();
+        } else {
+            desc.MutableConfig()->SetSkipInitialScan(AppData()->ReplicationConfig.GetSkipInitialScan());
+        }
+        if (desc.GetConfig().GetSkipInitialScan()) {
+            desc.MutableState()->MutablePaused();
+        } else {
+            desc.MutableState()->MutableStandBy();
+        }
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
@@ -536,7 +545,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateReplication");
     }
 

@@ -22,11 +22,11 @@ private:
     /// At most `Limit` distinct keys are tracked; each entry holds one `arrow::Scalar` (typed value).
     std::unordered_set<std::shared_ptr<arrow::Scalar>, arrow::Scalar::Hash, TDistinctScalarPtrEq> Seen;
 
-    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        return source->IsSyncSection() && source->HasStageResult();
+    virtual bool IsSourcePrepared(const NCommon::IDataSource& source) const override {
+        return source.IsSyncSection() && source.HasStageResult();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) override;
+    virtual ESourceAction OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) override;
 
     virtual void DoAbort() override {
         Seen.clear();

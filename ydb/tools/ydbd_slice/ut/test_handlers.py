@@ -134,3 +134,70 @@ static_erasure: none
                 'vla-1.search.yandex.net': False,
             },
         )
+
+    def test_apply_storage_process_profiles_rewrites_kikimr_cfg(self):
+        host = 'ydb-olap-perf-001.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={host: 'storage'},
+            host_dynamic_profiles={},
+        )
+        configurator = SimpleNamespace(enable_process_profiles=True)
+
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'kikimr': ['cfg']},
+                nodes.Nodes([host]),
+                cluster_details,
+                configurator=configurator,
+            )
+
+        with mock.patch.object(slice_obj.nodes, 'execute_async') as execute_async:
+            slice_obj._apply_storage_process_profiles()
+
+        execute_async.assert_called_once()
+        cmd = execute_async.call_args[0][0]
+        self.assertIn('config.p_storage.yaml', cmd)
+        self.assertIn('--yaml-config ${kikimr_config}/config.yaml', cmd)
+        self.assertEqual(execute_async.call_args[1]['nodes'], [host])
+
+    def test_deploy_slot_config_copies_profile_yaml(self):
+        host = 'vla5-2569.search.yandex.net'
+        slot = SimpleNamespace(
+            slot='31003',
+            domain='olap-perf',
+            grpc=31001,
+            ic=31003,
+            mbus=31002,
+            mon=31004,
+            kafka_port=31005,
+        )
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            domains=[SimpleNamespace(domain_name='olap-perf')],
+            dynamic_slots=[slot],
+            host_dynamic_slot_counts={host: 1},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={host: ['dyn-a']},
+        )
+        tenant = SimpleNamespace(name='db')
+
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'dynamic_slots': ['all']},
+                nodes.Nodes([host]),
+                cluster_details,
+            )
+
+        with mock.patch.object(slice_obj.nodes, 'execute_async') as execute_async:
+            slice_obj._deploy_slot_config_for_tenant(slot, tenant, host)
+
+        copy_call = execute_async.call_args_list[-1]
+        self.assertIn('config.p_dyn-a.yaml', copy_call[0][0])
+        self.assertIn('/Berkanavt/kikimr_31003/config.yaml', copy_call[0][0])
+        self.assertEqual(copy_call[1]['nodes'], [host])

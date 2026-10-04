@@ -616,7 +616,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
-        TOperationContext context{Self, txc, ctx, MergeOpSideEffects, memChanges, dbChanges};
+        TProposeContext context{Self, txc, ctx, MergeOpSideEffects, memChanges, dbChanges};
 
         auto response = Self->IgniteOperation(*request, context);
 

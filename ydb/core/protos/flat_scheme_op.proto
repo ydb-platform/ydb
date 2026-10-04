@@ -12,7 +12,6 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
@@ -265,6 +264,7 @@ message TTTLSettings {
 
     message TEvictionToExternalStorageSettings {
         optional string Storage = 1;
+        optional string ObjectKeyPrefix = 2;
     }
 
     message TTier {
@@ -423,6 +423,10 @@ message TTableDescription {
     // Multi-column statistics.
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
+
+    // Actual number of table partitions (shards), always filled in describe
+    // results, so clients don't need to request the TablePartitions list.
+    optional uint64 PartitionCount = 55;
 }
 
 message TCompressionOptions {
@@ -755,6 +759,7 @@ message TColumnTableSchemeOptions {
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TColumnTableSchema {
@@ -802,6 +807,7 @@ message TColumnTableRequestedOptions {
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -1911,6 +1917,7 @@ message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
     optional bool IsRebuild = 3 [ default = false ];
+    optional string RebuildIndexName = 4;
 }
 
 message TIndexBuildControl {
@@ -2595,7 +2602,8 @@ message TExportMetadata {
 
 message TSysViewDescription {
     optional string Name = 1;
-    optional NKikimrSysView.ESysViewType Type = 2;
+    // Numeric ESysViewType
+    optional int32 Type = 2 [default = 1];
     optional NKikimrProto.TPathID SourceObject = 3;
 }
 
@@ -2646,4 +2654,5 @@ message TStreamingQueryProperties {
 message TStreamingQueryDescription {
     optional string Name = 1;
     optional TStreamingQueryProperties Properties = 2;
+    optional NActorsProto.TActorId OperationOwnerActorId = 3;
 }

@@ -387,6 +387,10 @@ struct TPDiskTest : public TPerfTest {
         bool isErasureEncode = false;
         TFormatOptions options;
         options.IsErasureEncodeUserLog = isErasureEncode;
+        if (Cfg.PhysicalChunkSize) {
+            options.PhysicalChunkSizeBytes = Cfg.PhysicalChunkSize;
+            options.EnableSmallDiskOptimization = false;
+        }
         if (Cfg.SectorMaps[deviceIdx]) {
             options.SectorMap = Cfg.SectorMaps[deviceIdx];
             options.EnableSmallDiskOptimization = false;
@@ -408,7 +412,13 @@ struct TPDiskTest : public TPerfTest {
         pDiskConfig->DriveModelSpeedBpsMax = 1 << 30;
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        pDiskConfig->ChunkSize = ChunkSize;
+        if (Cfg.PhysicalChunkSize) {
+            pDiskConfig->ChunkSize = 0;
+            pDiskConfig->PhysicalChunkSize = Cfg.PhysicalChunkSize;
+            pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(false);
+        } else {
+            pDiskConfig->ChunkSize = ChunkSize;
+        }
         pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
         pDiskConfig->UseNoopScheduler = true;
         pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);

@@ -36,10 +36,13 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
 
             auto& percentileCounter = counters->Percentile()[i];
             const char* percentileCounterName = counters->PercentileCounterName(i);
-            AggregatedHistogramCounters.AddCounter(
+            const bool isDerivative = AggregatedHistogramCounters.AddCounter(
                 percentileCounterName,
                 percentileCounter,
                 histogramAggregates);
+            if (!isDerivative) {
+                NonDerivativePercentile.push_back(i);
+            }
         }
 
         // simple counters

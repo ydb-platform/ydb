@@ -596,7 +596,7 @@ class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {
 public:
      TReadSessionActor(IReadSessionHandlerRef handler, const NPersQueue::TTopicsListController& topicsHandler, const ui64 cookie,
                         const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                        const TMaybe<TString> clientDC);
+                        const TMaybe<TString> clientDC, TString authority);
     ~TReadSessionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -905,6 +905,7 @@ private:
     std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
 
     ui64 Cookie;
+    TString Authority;
 
     struct TCommitInfo {
         ui64 StartReadId;

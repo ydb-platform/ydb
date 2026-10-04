@@ -109,7 +109,7 @@ private:
             NYql::TIssues()});
     }
 
-    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+    void Handle(TEvHttpRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
@@ -137,9 +137,12 @@ private:
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+        requestBaseCtx->CountRequestPaths();
+
         LogRequest(event);
 
-        IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);
@@ -191,7 +194,7 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                if (!std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) { // TEvHttpRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
                     if (!AllowYdbRequestsWithoutDatabase &&
                         (DynamicNode || (forbidRequestsToStaticNodesWithoutDatabase
@@ -675,7 +678,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
-        HFunc(TEvRequestAuthAndCheck, PreHandle);
+        HFunc(TEvHttpRequestAuthAndCheck, PreHandle);
 
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());

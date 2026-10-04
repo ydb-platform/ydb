@@ -2,6 +2,8 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -99,6 +101,10 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
+            const auto pendingDstPathId = TPathId(
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
+            );
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -121,6 +127,7 @@ class TController::TTxInit: public TTxBase {
 
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
+            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
             if (workerSetComplete) {
                 Self->CompleteWorkerSets.insert({rid, tid});
@@ -132,6 +139,11 @@ class TController::TTxInit: public TTxBase {
                 Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
                     rowset.GetValue<Schema::Targets::SchemaBarrierChange>()));
                 barrier.DstAlterTxId = rowset.GetValueOrDefault<Schema::Targets::DstAlterTxId>(0);
+                NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
+                Y_ABORT_UNLESS(flushTxIds.ParseFromString(
+                    rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierFlushTxIds>(TString())));
+                Y_ABORT_UNLESS(barrier.Phase != ESchemaBarrierPhase::FlushingTarget || flushTxIds.WriteTxIdsSize());
+                barrier.TargetFlushTxIds.assign(flushTxIds.GetWriteTxIds().begin(), flushTxIds.GetWriteTxIds().end());
             }
 
             if (!rowset.Next()) {

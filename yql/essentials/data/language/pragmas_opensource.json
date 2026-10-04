@@ -444,6 +444,9 @@
     "name": "yt.PartitionByConstantKeysViaMap"
   },
   {
+    "name": "yt.PassOptLLVMToDqCodecs"
+  },
+  {
     "name": "yt.Pool"
   },
   {
@@ -483,9 +486,6 @@
     "name": "yt.QueryCacheChunkLimit"
   },
   {
-    "name": "yt.QueryCacheCombineChunksReplace"
-  },
-  {
     "name": "yt.QueryCacheIgnoreTableRevision"
   },
   {
@@ -508,6 +508,9 @@
   },
   {
     "name": "yt.ReduceLocalityTimeout"
+  },
+  {
+    "name": "yt.ReleaseSnapshotLocks"
   },
   {
     "name": "yt.ReleaseTempData"
@@ -1062,6 +1065,9 @@
     "name": "DisableRotateJoinTree"
   },
   {
+    "name": "DisableRuntimeUserAttrs"
+  },
+  {
     "name": "DisableSeqMode"
   },
   {
@@ -1234,6 +1240,9 @@
   },
   {
     "name": "RuntimeLogLevel"
+  },
+  {
+    "name": "RuntimeUserAttrs"
   },
   {
     "name": "SampleSelect"

@@ -106,7 +106,7 @@ public:
 
     virtual const char* Name() const override final { return "TNewCdcStream"; }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& streamDesc = op.GetStreamDescription();
@@ -275,6 +275,16 @@ public:
                     "SCHEMA_CHANGES incompatible with specified stream format");
                 return result;
             }
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            const auto& families = context.SS->Tables.at(tablePath.Base()->PathId)->PartitionConfig().GetColumnFamilies();
+            for (const auto& family : families) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
         }
 
         TString errStr;
@@ -337,7 +347,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -516,7 +526,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& tableName = op.GetTableName();
@@ -613,7 +623,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -667,6 +677,43 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
 
 } // anonymous
 
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
+    // Autopartitioned replication topics are hash-partitioned. Cap that split
+    // range by the path shard limit so a large table still gets a creatable topic.
+    const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
+    const ui64 minPartitionCountLimit = maxPartitionCountLimit / 4;
+
+    TCdcPqPartParams params;
+    params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
+    params.PartitionPerTablet = 2;
+
+    if (!IsReplicationSupportTopicAutopartitioning(op)) {
+        return params;
+    }
+
+    ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), minPartitionCountLimit);
+    ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), maxPartitionCountLimit);
+
+    ui64 total = params.TotalGroupCount;
+    if (op.HasTopicPartitions()) {
+        // TopicPartitions is min_active_partitions: the initial count and the
+        // strategy minimum. Only the path shard ceiling applies, so a smaller
+        // request is not raised to the formula minimum.
+        if (total > maxParts) {
+            total = maxParts;
+        }
+        minParts = total;
+    } else if (total > maxParts) {
+        total = maxParts;
+    }
+
+    params.ReplicationAutoPartitioning = true;
+    params.TotalGroupCount = static_cast<ui32>(total);
+    params.MinPartitionCount = static_cast<ui32>(minParts);
+    params.MaxPartitionCount = static_cast<ui32>(maxParts);
+    return params;
+}
+
 void DoCreatePqPart(
         TVector<ISubOperation::TPtr>& result,
         const NKikimrSchemeOp::TCreateCdcStream& op,
@@ -680,10 +727,12 @@ void DoCreatePqPart(
     auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
 
+    const ui64 maxShardsInPath = streamPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath);
+
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");
-    desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
-    desc.SetPartitionPerTablet(2);
+    desc.SetPartitionPerTablet(pqParams.PartitionPerTablet);
 
     auto& pqConfig = *desc.MutablePQTabletConfig();
     pqConfig.SetTopicName(streamName);
@@ -696,11 +745,11 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (IsReplicationSupportTopicAutopartitioning(op)) {
+    if (pqParams.ReplicationAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
-        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
+        ps->SetMinPartitionCount(pqParams.MinPartitionCount);
+        ps->SetMaxPartitionCount(pqParams.MaxPartitionCount);
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -738,6 +787,8 @@ void DoCreatePqPart(
             }
         }
     }
+
+    desc.SetTotalGroupCount(pqParams.TotalGroupCount);
 
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
 }

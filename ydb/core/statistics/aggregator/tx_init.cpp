@@ -289,12 +289,14 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
         Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
+        Self->EnableBackgroundAnalyzeChangeRatio = AppData(ctx)->FeatureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        Self->EnableAnalyzeSampling = AppData(ctx)->FeatureFlags.GetEnableAnalyzeSampling();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 
         if (Self->EnableColumnStatistics) {
-            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            Self->StartTraversalScheduler();
             Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             YDB_LOG_WARN("TTxInit::Complete. EnableColumnStatistics=false",

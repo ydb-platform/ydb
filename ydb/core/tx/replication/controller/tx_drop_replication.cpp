@@ -79,6 +79,7 @@ public:
                 db.Table<Schema::SchemaBarrierWorkers>()
                     .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
             }
+            Self->StopSchemaChangeTargetFlush(key);
             if (Self->SchemaChangeDstAlterers.contains(key)) {
                 AlterersToStop.push_back(key);
             }
@@ -86,7 +87,8 @@ public:
                 db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                     NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
                     NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
-                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0));
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
             }
             it = Self->SchemaBarriers.erase(it);
         }
@@ -107,14 +109,18 @@ public:
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
-            target->Shutdown(ctx);
+            const bool attaching = target->GetDstState() == TReplication::EDstState::Attaching;
+            if (!attaching) {
+                target->Shutdown(ctx);
+            }
 
             target->SetStreamState(TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade()) {
+            // Keep the creator until its submitted ALTER has finished; the imported table is detached afterwards.
+            if (!attaching && record.GetCascade()) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())

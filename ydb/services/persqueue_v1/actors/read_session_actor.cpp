@@ -2483,7 +2483,6 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     // Look up by AssignId: Partitions is a flat map shared by all topics of the
     // session, so matching on PartitionId alone could attribute the event to a
@@ -2492,10 +2491,14 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     if (partitionIt == Partitions.end()) {
         // Stale/late event: the partition may have already been released or the
         // session is shutting down. Ignore it instead of tearing down the whole
-        // session, matching the other stale-event paths in this actor.
+        // session, matching the other stale-event paths in this actor. Do not
+        // notify the balancer either: it must not learn about a partition this
+        // session no longer holds.
         return;
     }
     auto* partitionInfo = &partitionIt->second;
+
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;

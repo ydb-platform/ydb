@@ -1081,8 +1081,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
         ctx.Send(ParentId, readResponse.Release());
     }
 
-    if (!WindowExhaustedSent && (IsPartitionExhausted() ||
-            (res.ResultSize() == 0 && ClientMaxOffset.Defined() && res.GetRealReadOffset() >= *ClientMaxOffset))) {
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
         SendReadWindowExhausted(ctx);
     }
 

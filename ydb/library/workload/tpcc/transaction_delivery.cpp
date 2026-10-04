@@ -290,7 +290,7 @@ TAsyncExecuteQueryResult GetCustomerData(
 
 TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
-    int warehouseID, int districtID, const TOrderData& orderData)
+    int warehouseID, int districtID, const TOrderData& orderData, bool commit = false)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -316,7 +316,7 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::Tx(tx),
+        TxControl(tx, commit),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for customer balance and delivery count update result");
@@ -467,6 +467,14 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         currentOrder.DeliveryCount += 1;
     }
 
+    int lastDistrictWithOrder = -1;
+    for (int districtID = DISTRICT_LOW_ID; districtID <= DISTRICT_HIGH_ID; ++districtID) {
+        if (orders[districtID - 1]) {
+            lastDistrictWithOrder = districtID;
+        }
+    }
+
+    TStatus lastResult(EStatus::SUCCESS, NIssue::TIssues());
     for (int districtID = DISTRICT_LOW_ID; districtID <= DISTRICT_HIGH_ID; ++districtID) {
         if (!orders[districtID - 1]) {
             continue;
@@ -521,7 +529,8 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
         }
 
         auto updateCustomerFuture = UpdateCustomerBalanceAndDeliveryCount(
-            session, *tx, context, warehouseID, districtID, currentOrder);
+            session, *tx, context, warehouseID, districtID, currentOrder,
+            /*commit=*/districtID == lastDistrictWithOrder);
         auto updateCustomerResult = co_await TSuspendWithFuture(updateCustomerFuture, context.TaskQueue, context.TerminalID);
         if (!updateCustomerResult.IsSuccess()) {
             if (ShouldExit(updateCustomerResult)) {
@@ -535,20 +544,20 @@ NThreading::TFuture<TStatus> GetDeliveryTask(
             co_return updateCustomerResult;
         }
 
+        lastResult = updateCustomerResult;
+
         // Add this order to the processed orders
         ++processedOrderCount;
     }
 
-    LOG_T("Terminal " << context.TerminalID
-        << " is committing Delivery transaction, processed " << processedOrderCount << " districts, session: " << session.GetId());
-
-    auto commitFuture = tx->Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
-
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    if (processedOrderCount == 0) {
+        co_return TStatus(EStatus::SUCCESS, NIssue::TIssues());
+    }
+
+    co_return lastResult;
 }
 
 } // namespace NYdb::NTPCC

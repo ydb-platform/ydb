@@ -282,23 +282,6 @@ public:
         return Layout.GetSize();
     }
 
-    // Assumes the input row and extracted keys have already been copied into the input nodes, so row isn't even used here
-    void UpdateState(void* rawState, TUnboxedValue* const* /*row*/) override {
-        Layout.UnpackCopyTo(rawState, [&](size_t index) -> TUnboxedValue& {
-            return Nodes.StateNodes[index]->RefValue(Ctx);
-        });
-        Layout.PackMoveReplacingFrom(rawState, [&](size_t index) {
-            return Nodes.UpdateResultNodes[index]->GetValue(Ctx);
-        });
-    }
-
-    // Assumes the input row has already been copied into the input nodes, so row isn't even used here
-    void InitState(void* rawState, TUnboxedValue* const* /*row*/) override {
-        Layout.PackMoveFrom(rawState, [&](size_t index) {
-            return Nodes.InitResultNodes[index]->GetValue(Ctx);
-        });
-    }
-
     // Assumes the key part of the Finish lambda input has been initialized
     void ExtractState(void* rawState, TUnboxedValue* const* output) override {
         Layout.UnpackMoveTo(rawState, [&](size_t index, TUnboxedValue&& value) {
@@ -361,6 +344,7 @@ struct TIndexedStateValidity {
     void SetPresent(bool present) {
         if constexpr (Mixed) {
             if (!Bit->Mask) {
+                MKQL_ENSURE(present, "Empty value for required native aggregation state");
                 return;
             }
         }
@@ -427,6 +411,7 @@ Y_FORCE_INLINE void PackNativeState(TComputationContext& ctx, void* rawState,
             }
             validity.SetPresent(value.HasValue());
         } else {
+            MKQL_ENSURE(value.HasValue(), "Empty value for required native aggregation state");
             std::memcpy(state, value.GetRawPtr(), sizeof(T));
         }
         static_cast<TUnboxedValuePod&>(value) = TUnboxedValuePod{};
@@ -1146,7 +1131,12 @@ protected:
                 const auto& keyLayout = RecordLayout.GetKeyLayout();
                 const ui32 rhHash = GlobalHashToRhItemHash(Hasher(TempKeyBuffer.data()));
                 char* mapIt = Map->InsertWithEqual(reinterpret_cast<char*>(TempKeyBuffer.data()), rhHash,
-                    isNew, [&](char* stored, char*) { return keyLayout.EqualsLogical(stored, TempKeyBuffer); });
+                    isNew, [&](char* stored, [[maybe_unused]] char* probe) {
+#ifndef NDEBUG
+                        MKQL_ENSURE(probe == reinterpret_cast<char*>(TempKeyBuffer.data()), "Unexpected aggregation probe key");
+#endif
+                        return keyLayout.EqualsLogical(stored, TempKeyBuffer);
+                    });
                 char* statePtr = nullptr;
 
                 if (isNew) {
@@ -1311,7 +1301,12 @@ protected:
         bool isNew = false;
         const ui32 rhHash = GlobalHashToRhItemHash(hash);
         auto mapIt = Map->InsertWithEqual(reinterpret_cast<char*>(keyBuf.data()), rhHash,
-            isNew, [&](char* stored, char*) { return keyLayout.EqualsLogical(stored, keyBuf); });
+            isNew, [&](char* stored, [[maybe_unused]] char* probe) {
+#ifndef NDEBUG
+                MKQL_ENSURE(probe == reinterpret_cast<char*>(keyBuf.data()), "Unexpected aggregation probe key");
+#endif
+                return keyLayout.EqualsLogical(stored, keyBuf);
+            });
         char* statePtr = nullptr;
         if (isNew) {
             record = static_cast<char*>(Store->Alloc(bucketId));

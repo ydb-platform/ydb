@@ -127,6 +127,23 @@ void TestNativeSlot(typename NUdf::TDataType<T>::TLayout low, typename NUdf::TDa
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
+    Y_UNIT_TEST(RequiredNativeRejectsEmptyValue) {
+        TLayoutTestEnv env;
+        for (auto* type : {env.Data<ui16>(), env.Data<ui32>(), env.Data<ui64>()}) {
+            std::vector<TType*> types = {type};
+            TDqHashCombineTupleLayout layout(types);
+            TStorage storage(layout.GetSize());
+            const TUnboxedValuePod empty[] = {{}};
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackBorrowed(empty, storage.Data()), yexception,
+                "Empty value for required native column 0");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveFrom(storage.Data(), [](size_t) { return TUnboxedValue{}; }),
+                yexception, "Empty value for required native column 0");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveReplacingFrom(storage.Data(), [](size_t) { return TUnboxedValue{}; }),
+                yexception, "Empty value for required native column 0");
+        }
+    }
+
+
     Y_UNIT_TEST(SectionOffsetsAndAlignment) {
         TLayoutTestEnv env;
         std::vector<TType*> types = {
@@ -419,7 +436,10 @@ Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
             };
             bool isNew = false;
             auto* entry = map.InsertWithEqual(reinterpret_cast<char*>(logicalKey), hash(number), isNew,
-                [&](char* packed, char*) { return layout.EqualsLogical(packed, logicalKey); });
+                [&](char* packed, char* probe) {
+                    UNIT_ASSERT(probe == reinterpret_cast<char*>(logicalKey));
+                    return layout.EqualsLogical(packed, logicalKey);
+                });
             UNIT_ASSERT_VALUES_EQUAL(isNew, expectedNew);
             if (isNew) {
                 stored.emplace_back(layout.GetSize());

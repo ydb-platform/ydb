@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 
 #include <util/system/unaligned_mem.h>
@@ -105,6 +106,7 @@ Y_FORCE_INLINE void TDqHashCombineTupleLayout::PackNativeItem(
         }
         SetPresent(storage, item);
     }
+    MKQL_ENSURE(value.HasValue(), "Empty value for required native column " << item.LogicalIndex);
     std::memcpy(static_cast<char*>(storage) + item.Offset, value.GetRawPtr(), sizeof(T));
 }
 

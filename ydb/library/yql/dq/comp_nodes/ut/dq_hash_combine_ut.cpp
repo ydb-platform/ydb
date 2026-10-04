@@ -1750,6 +1750,59 @@ void RunDqAggregateZeroWidthTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
+
+    Y_UNIT_TEST_QUAD(TestRequiredNativeStateRejectsEmptyValue, UseLLVM, UseFlow) {
+        // These exceptions are only thrown in assertions-enabled builds
+        for (const ui32 bits : {16, 32, 64}) {
+            for (const bool failInit : {false, true}) {
+                for (const bool isAggregator : {false, true}) {
+                    for (const ui32 shape : {0, 1, 2}) {
+                        TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+                        auto& pb = setup.GetDqProgramBuilder();
+                        auto* type = pb.NewDataType(bits == 16 ? NUdf::TDataType<ui16>::Id :
+                            bits == 32 ? NUdf::TDataType<ui32>::Id : NUdf::TDataType<ui64>::Id);
+                        const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+                            pb.NewStreamType(pb.NewMultiType({type}))).Build();
+                        auto results = [&](TRuntimeNode::TList items) {
+                            if (shape == 1) {
+                                items.push_back(pb.template NewDataLiteral<NUdf::EDataSlot::String>("inline"));
+                            } else if (shape == 2) {
+                                items.push_back(pb.NewEmptyOptional(pb.NewOptionalType(type)));
+                            }
+                            return items;
+                        };
+                        TRuntimeNode input(source, false);
+                        if (UseFlow) {
+                            input = pb.ToFlow(input, {});
+                        }
+                        auto root = GetOperatorNode(pb, isAggregator, false, 128_MB, input,
+                            [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                                return {pb.template NewDataLiteral<ui32>(0)};
+                            },
+                            [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return results(items); },
+                            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList) { return results(items); },
+                            [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+                        if (UseFlow) {
+                            root = pb.FromFlow(root);
+                        }
+                        auto graph = setup.BuildGraph(root, {source});
+                        // Deliberately violate the declared input type to exercise required-state validation
+                        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                            new TGeneratedWideStream(failInit ? 1 : 2, [&](size_t row) {
+                                return std::vector<NUdf::TUnboxedValue>{
+                                    row == 0 && !failInit ? NUdf::TUnboxedValuePod(ui64{0}) : NUdf::TUnboxedValuePod{}};
+                            })));
+                        auto stream = graph->GetValue();
+                        std::vector<NUdf::TUnboxedValue> output(shape ? 2 : 1);
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(output.data(), output.size()), yexception,
+                            "Empty value for required native aggregation state");
+                    }
+                }
+            }
+        }
+    }
+
+
     Y_UNIT_TEST_QUAD(TestHomogeneousOptionalState, UseLLVM, UseFlow) {
         for (const ui32 bits : {16, 32, 64}) {
             for (const size_t width : {1, 5, 32, 33}) {

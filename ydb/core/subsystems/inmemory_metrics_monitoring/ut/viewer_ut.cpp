@@ -70,6 +70,7 @@ Y_UNIT_TEST_SUITE(TInMemoryMetricsViewerTest) {
         UNIT_ASSERT_VALUES_EQUAL(Line(json, "integer")["labels"][0]["value"].GetString(), "<unsafe>");
         const auto metadata = Json(snapshot, backend, false);
         UNIT_ASSERT(!Line(metadata, "integer").Has("points"));
+        UNIT_ASSERT_VALUES_EQUAL(Line(metadata, "integer")["chunks"].GetUInteger(), 1);
     }
 
     Y_UNIT_TEST(GroupFieldsAndSelectedSnapshot) {

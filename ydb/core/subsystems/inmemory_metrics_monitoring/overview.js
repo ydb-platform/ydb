@@ -1,3 +1,4 @@
+import {createAllocationBar} from '../metric-chart/allocation.js';
 import {createMetricChart} from '../metric-chart/chart.js';
 import {createInMemoryMetricsClient} from '../metric-chart/client.js';
 
@@ -12,7 +13,8 @@ const panels=[
     {title:'Append failures',metrics:['append_failures_total']},
 ];
 const queries=panels.flatMap(panel=>panel.metrics.map(metric=>({id:metric,metric:'inmemory_metrics.'+metric,filters:[]})));
-let data=null,series=[],fixed=null,controller,timer,version=0;
+let data=null,series=[],fixed=null,selectedLine=null,controller,timer,version=0;
+const allocation=createAllocationBar($('allocation'),{onSelect:segment=>{selectedLine=segment.lineId;$('filter').value=segment.name;drawLines();}});
 function pause(){clearTimeout(timer);$('live').checked=false;}
 const cards=panels.map(panel=>{
     const card=text('section','');card.className='imo-card';card.append(text('h3',panel.title));
@@ -29,11 +31,12 @@ function draw(){
  function entries(id,values){$(id).replaceChildren();for(const [label,value] of values)$(id).append(text('dt',label),text('dd',value===undefined?'Unavailable':String(value)));}
  function drawLines(){
   if(!data)return;const needle=$('filter').value.toLowerCase();$('lines').replaceChildren();
-  for(const line of data.lines){if(!(line.name+' '+line.fields.map(field=>field.name).join(' ')+' '+labels(line.labels)).toLowerCase().includes(needle))continue;const row=document.createElement('tr');row.append(text('td',line.id),text('td',line.name));const metrics=document.createElement('td');for(const field of line.fields){const link=text('a',field.name);link.href='metrics?'+new URLSearchParams({metric:field.name});metrics.append(link);}row.append(metrics,text('td',labels(line.labels)),text('td',line.frontend),text('td',(line.closed?'Closed':'Active')+(line.readable?'':' / Unsupported')));$('lines').append(row);}
+  for(const line of data.lines){if(selectedLine!==null&&String(line.id)!==String(selectedLine))continue;if(!(line.name+' '+line.fields.map(field=>field.name).join(' ')+' '+labels(line.labels)).toLowerCase().includes(needle))continue;const row=document.createElement('tr');row.append(text('td',line.id),text('td',line.name));const metrics=document.createElement('td');for(const field of line.fields){const link=text('a',field.name);link.href='metrics?'+new URLSearchParams({metric:field.name});metrics.append(link);}row.append(metrics,text('td',labels(line.labels)),text('td',line.frontend),text('td',line.chunks??'Unavailable'),text('td',(line.closed?'Closed':'Active')+(line.readable?'':' / Unsupported')));$('lines').append(row);}
  }
 
 function drawRegistry(){
  const c=data.config,s=data.stats;$('summary').replaceChildren();
+ allocation.setData({capacity:Math.floor(c.memory_bytes/c.chunk_size_bytes),free:s.free_chunks,segments:data.lines.map(line=>({key:'line-'+line.id,lineId:line.id,name:line.name,label:line.name+(labels(line.labels)?' · '+labels(line.labels):'')+' (#'+line.id+')',value:line.chunks}))});
    for(const value of ['Memory '+(s.memory_used_bytes/1048576).toFixed(2)+' / '+(c.memory_bytes/1048576).toFixed(2)+' MiB','Lines '+s.lines,'Closed lines '+s.closed_lines,'Append failures '+s.append_failures_total]){const item=text('div',value);item.className='imo-summary-item';$('summary').append(item);}
    entries('config',[['Memory limit',c.memory_bytes+' bytes'],['Chunk size',c.chunk_size_bytes+' bytes'],['Line limit',c.max_lines],['Pending request limit',c.max_pending_requests],['Allowed prefixes',c.allowed_prefixes.join(', ')],['Common labels',labels(data.common_labels)]]);
    entries('storage',[['Committed bytes',s.committed_bytes],['Free chunks',s.free_chunks],['Used chunks',s.used_chunks],['Sealed chunks',s.sealed_chunks],['Writable chunks',s.writable_chunks],['Retiring chunks',s.retiring_chunks]]);drawLines();
@@ -50,10 +53,10 @@ async function refresh(){
     }catch(error){if(error.name==='AbortError')return;$('status').className='imo-error';$('status').textContent=error.message+' · Showing last successful data (stale)';}
     finally{if(current===version&&$('live').checked&&!fixed)timer=setTimeout(refresh,2000);}
 }
-$('refresh').addEventListener('click',refresh);$('filter').addEventListener('input',drawLines);
+$('refresh').addEventListener('click',refresh);$('filter').addEventListener('input',()=>{selectedLine=null;drawLines();});
 $('now').addEventListener('click',()=>{fixed=null;refresh();});
 $('period').addEventListener('change',()=>{fixed=null;refresh();});
 $('live').addEventListener('change',()=>{clearTimeout(timer);if($('live').checked){fixed=null;refresh();}});
-window.addEventListener('pagehide',event=>{++version;clearTimeout(timer);controller?.abort();if(!event.persisted)for(const {chart} of cards)chart.destroy();});
+window.addEventListener('pagehide',event=>{++version;clearTimeout(timer);controller?.abort();if(!event.persisted){allocation.destroy();for(const {chart} of cards)chart.destroy();}});
 window.addEventListener('pageshow',event=>{if(event.persisted)refresh();});
 refresh();

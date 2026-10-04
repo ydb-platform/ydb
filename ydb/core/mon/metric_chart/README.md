@@ -93,3 +93,9 @@ Memory compares allocated chunk capacity and recorded payload as ordinary lines.
 
 Use `onCursorChange(time)` and `chart.setCursor(time)` to synchronize a vertical cursor across embedded charts. The time is a Unix timestamp in milliseconds; `null` clears the cursor. `setCursor` updates only the marker and does not emit the callback or open a tooltip. The marker survives redraws and is hidden outside the chart interval.
 A pinned tooltip keeps its local cursor until unpinned; external cursor updates do not move that marker.
+
+### Allocation bar
+
+Import `createAllocationBar` from `static/metric-chart/allocation.js` and load `chart.css`. It accepts `setData({capacity, free, segments: [{key, label, value, color?}]})`, `destroy()`, and options `unit`, `maxSegments` (24 by default, capped at 64), `onSelect(segment)`. Values share a unit. Largest owners appear separately; remaining owners are summed as Other lines. Unattributed allocation and free capacity stay distinct. Names are plain text. The component has no registry dependency.
+
+Overview uses `lines[].chunks` from the viewer JSON endpoint: retained snapshot chunks per storage line, including shared group fields only once. Counts describe the current snapshot and do not depend on the history interval. Reserved or retiring chunks absent from the line snapshot appear as unattributed allocation. Registry statistics and line capture can differ during concurrent writes; the bar scales to the larger observed total rather than creating negative segments.

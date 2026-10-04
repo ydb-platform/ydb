@@ -107,6 +107,10 @@ namespace NActors {
         TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
         ~TLineSnapshot();
 
+        size_t GetChunkCount() const noexcept {
+            return ChunkCount;
+        }
+
         template<class TValueType>
         TDeque<TGenericRecordView<TValueType>> ReadRecordsAs() const {
             return ReadRecordsAsInRange<TValueType>(TInstant::Zero(), TInstant::Max());

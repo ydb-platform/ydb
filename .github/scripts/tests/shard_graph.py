@@ -9,11 +9,10 @@ exactly one shard. ``ya make --build-custom-json`` runs every UID in
 ``result``, so the filtered graph's result list is that shard and nothing
 else. Dependency nodes stay in the graph so the shard can still build.
 
-Weights prefer the suite's p90 duration from YDB test history (the
-history branch, same build type, last 14 days, skipped rows left out).
-A suite
-with no history row keeps the graph timeout budget. Both are multiplied
-by ya CPU slots
+Weights prefer, for each suite in the graph, the sum of per-test p90
+durations from YDB history (history branch, same build type, last 14
+days, skipped rows left out). A suite with no history row keeps the
+graph timeout budget. Both are multiplied by ya CPU slots
 (``requirements.cpu``; ``all`` means the job's test thread count).
 
 Assignment is deterministic: higher weight first, UID as a tie-break,
@@ -44,15 +43,8 @@ DEFAULT_SIZE_WEIGHTS = {
 }
 DEFAULT_THREADS = 52
 MAX_SHARDS = 16
-# Single-job minutes under this stay on one host (PR 47597 "pr" profile).
-VOLUME_LIGHT_MINUTES = 60.0
-VOLUME_TIERS: tuple[tuple[float, int], ...] = (
-    (120.0, 4),
-    (200.0, 8),
-    (math.inf, 12),
-)
-# Keep the slowest shard's ideal wall time inside the PR-check budget.
-MAX_SHARD_WALL_MIN = 240.0
+# Target wall time per host. Hosts = ceil(estimated minutes / this).
+MAX_SHARD_WALL_MIN = 60.0
 
 # VM size per runner label. Live free capacity comes from Compute quota, not from these numbers.
 _CAPACITY_RESOURCES = ("vcpu", "ram_gb", "nrd_ssd_gb")
@@ -273,17 +265,88 @@ def uid_weight(
     return float(units) * float(timeout) * float(slots), size, units
 
 
-def suite_p90_seconds(node: dict[str, Any], p90_by_suite: dict[str, float] | None) -> float | None:
-    """Observed suite seconds, or None when this graph path has no history row."""
+def _size_seconds(p90_by_suite: dict[str, dict[str, float]] | None, path: str, size: str) -> float | None:
     if not p90_by_suite:
         return None
-    path = extract_node_path(node)
-    if not path:
+    bucket = p90_by_suite.get(path)
+    if not isinstance(bucket, dict):
         return None
-    value = p90_by_suite.get(path.strip("/"))
+    value = bucket.get(size)
     if value is None or float(value) <= 0:
         return None
     return float(value)
+
+
+def suite_history_seconds(
+    path: str | None,
+    p90_by_suite: dict[str, dict[str, float]] | None,
+    result_keys: set[tuple[str, str]],
+    size: str,
+) -> float | None:
+    """Seconds from history for one graph path and test size, before descendant rows.
+
+    Exact ``suite_folder`` of this size wins. Otherwise a path whose parent is a
+    suite of this size in history uses that suite. If the parent is also a result
+    node of this size, the tail contributes nothing.
+    """
+    if not path or not p90_by_suite:
+        return None
+    path = path.strip("/")
+    direct = _size_seconds(p90_by_suite, path, size)
+    if direct is not None:
+        return direct
+    if "/" not in path:
+        return None
+    parent = path.rsplit("/", 1)[0]
+    parent_seconds = _size_seconds(p90_by_suite, parent, size)
+    if parent_seconds is None:
+        return None
+    if (parent, size) in result_keys:
+        return 0.0
+    return parent_seconds
+
+
+def unclaimed_descendant_seconds(
+    path: str,
+    p90_by_suite: dict[str, dict[str, float]],
+    claimed: set[tuple[str, str]],
+    size: str,
+) -> tuple[float, list[str]] | None:
+    """Sum same-size history rows strictly longer than ``path`` that no graph node took yet."""
+    prefix = path.strip("/") + "/"
+    taken = [
+        key
+        for key, bucket in p90_by_suite.items()
+        if key.startswith(prefix) and (key, size) not in claimed and _size_seconds(p90_by_suite, key, size) is not None
+    ]
+    if not taken:
+        return None
+    return sum(float(p90_by_suite[key][size]) for key in taken), taken
+
+
+def suite_p90_seconds(
+    node: dict[str, Any],
+    p90_by_suite: dict[str, dict[str, float]] | None,
+    *,
+    result_keys: set[tuple[str, str]] | None = None,
+    size: str = "small",
+) -> float | None:
+    """Observed suite seconds for this node's test size, or None when history has no row."""
+    path = extract_node_path(node)
+    return suite_history_seconds(path, p90_by_suite, result_keys or set(), size)
+
+
+def is_test_result_node(node: dict[str, Any]) -> bool:
+    """True when this result node is a test ya will run.
+
+    ``graph.result`` also contains build outputs. Those share the suite folder
+    via ``module_dir`` but do not add duration: the test node depends on them,
+    and the shard downloads the binary from the remote cache.
+    """
+    if node.get("node-type") == "test":
+        return True
+    args = _cmd_args(node)
+    return "run_test" in args or "--test-suite-name" in args or "--test-size" in args
 
 
 def strip_test_kind_leaf(path: str) -> str:
@@ -328,25 +391,15 @@ def extract_node_path(node: dict[str, Any]) -> str | None:
 def volume_shard_count(total_weight_sec: float, threads: int) -> int:
     """How many hosts the graph weight wants, before pool and caps.
 
-    Minutes = total slot-seconds / 60 / threads. Under 60 minutes stays one
-    job. Then the PR 47597 tiers: 4, 8, 12. A wall floor raises that so the
-    ideal slowest shard stays within 240 minutes.
+    Minutes = total slot-seconds / 60 / threads. One host while that fits in
+    one hour. After that, the smallest host count that keeps the same budget.
     """
     if threads < 1:
         raise ValueError("threads must be >= 1")
     minutes = float(total_weight_sec) / 60.0 / float(threads)
-    if minutes < VOLUME_LIGHT_MINUTES:
-        count = 1
-    else:
-        count = int(VOLUME_TIERS[-1][1])
-        for upper, tier in VOLUME_TIERS:
-            if minutes < float(upper):
-                count = int(tier)
-                break
     if minutes <= 0:
         return 1
-    wall = max(1, math.ceil(minutes / MAX_SHARD_WALL_MIN))
-    return max(count, wall)
+    return max(1, math.ceil(minutes / MAX_SHARD_WALL_MIN))
 
 
 def choose_host_count(
@@ -577,7 +630,7 @@ def build_plan(
     *,
     threads: int = DEFAULT_THREADS,
     context: dict[str, Any] | None = None,
-    p90_by_suite: dict[str, float] | None = None,
+    p90_by_suite: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Any]:
     """Partition every result UID. Raises if the graph has nothing to run."""
     validate_graph(graph)
@@ -594,17 +647,91 @@ def build_plan(
     active_shards = min(shard_count, len(uids))
     result_set = set(uids)
     size_by_uid = load_test_sizes_from_context(context)
+    duration_uids = {
+        uid for uid in uids if is_test_result_node(nodes_by_uid.get(uid) or {})
+    }
+    result_keys = {
+        (path.strip("/"), resolve_node_test_size(uid, nodes_by_uid.get(uid) or {}, size_by_uid))
+        for uid in duration_uids
+        if (path := extract_node_path(nodes_by_uid.get(uid) or {}))
+    }
     weights: dict[str, float] = {}
     size_counts: Counter[str] = Counter()
     total_units = 0
     history_nodes = 0
     timeout_nodes = 0
+    history_slot_seconds = 0.0
+    observed_by_uid: dict[str, float | None] = {}
+    path_by_uid: dict[str, str | None] = {}
+    size_by_result: dict[str, str] = {}
+    claimed: set[tuple[str, str]] = set()
     for uid in uids:
         node = nodes_by_uid.get(uid) or {}
+        path = extract_node_path(node)
+        path = path.strip("/") if path else None
+        size = resolve_node_test_size(uid, node, size_by_uid)
+        path_by_uid[uid] = path
+        size_by_result[uid] = size
+        if uid not in duration_uids:
+            observed_by_uid[uid] = None
+            continue
+        observed = suite_history_seconds(path, p90_by_suite, result_keys, size)
+        observed_by_uid[uid] = observed
+        if not path or not p90_by_suite or observed is None:
+            continue
+        if _size_seconds(p90_by_suite, path, size) is not None:
+            claimed.add((path, size))
+        elif "/" in path and _size_seconds(p90_by_suite, path.rsplit("/", 1)[0], size) is not None:
+            claimed.add((path.rsplit("/", 1)[0], size))
+    if p90_by_suite:
+        absorbing = [uid for uid in duration_uids if path_by_uid[uid]]
+        absorbing.sort(key=lambda uid: len(path_by_uid[uid] or ""), reverse=True)
+        for uid in absorbing:
+            path = path_by_uid[uid] or ""
+            size = size_by_result[uid]
+            found = unclaimed_descendant_seconds(path, p90_by_suite, claimed, size)
+            has_descendants = any(
+                key.startswith(path + "/") and size in bucket
+                for key, bucket in p90_by_suite.items()
+            )
+            if found is not None:
+                total, taken = found
+                claimed.update((key, size) for key in taken)
+                current = observed_by_uid[uid]
+                observed_by_uid[uid] = total if current is None else current + total
+            elif has_descendants and observed_by_uid[uid] is None:
+                observed_by_uid[uid] = 0.0
+        # Several test nodes can share one suite folder and size. The p90 is the
+        # folder total, so it is attached once.
+        best_for_key: dict[tuple[str, str], str] = {}
+        for uid in duration_uids:
+            path = path_by_uid[uid]
+            observed = observed_by_uid[uid]
+            if not path or observed is None or observed <= 0:
+                continue
+            key = (path, size_by_result[uid])
+            current = best_for_key.get(key)
+            if current is None or observed > (observed_by_uid[current] or 0) or (
+                observed == observed_by_uid[current] and uid < current
+            ):
+                best_for_key[key] = uid
+        for uid in duration_uids:
+            path = path_by_uid[uid]
+            observed = observed_by_uid[uid]
+            if not path or observed is None or observed <= 0:
+                continue
+            if best_for_key.get((path, size_by_result[uid])) != uid:
+                observed_by_uid[uid] = 0.0
+    for uid in uids:
+        node = nodes_by_uid.get(uid) or {}
+        if uid not in duration_uids:
+            weights[uid] = 0.0
+            continue
         weight, size, units = uid_weight(uid, node, nodes_by_uid, result_set, size_by_uid, threads)
-        observed = suite_p90_seconds(node, p90_by_suite)
+        observed = observed_by_uid[uid]
         if observed is not None:
             weight = observed * float(cpu_slots(node, threads))
+            history_slot_seconds += weight
             history_nodes += 1
         else:
             timeout_nodes += 1
@@ -647,6 +774,8 @@ def build_plan(
             "mode": "history_p90_else_timeout" if p90_by_suite is not None else "timeout_budget_x_cpu",
             "history_nodes": history_nodes,
             "timeout_nodes": timeout_nodes,
+            "history_slot_seconds": round(history_slot_seconds, 1),
+            "expected_wall_min": round(history_slot_seconds / 60.0 / float(threads), 1),
             "timeout_budget_units": total_units,
             "size_small": size_counts["small"],
             "size_medium": size_counts["medium"],
@@ -850,7 +979,8 @@ def render_summary(plan: dict[str, Any]) -> str:
     if "history_nodes" in weighting:
         lines.insert(
             5,
-            f"**Suite times:** p90 {weighting['history_nodes']}, "
+            f"**Expected:** {weighting.get('expected_wall_min', 0)} min on one host "
+            f"from {weighting['history_nodes']} suites matched to p90, "
             f"timeout fallback {weighting['timeout_nodes']}",
         )
     policy = plan.get("host_policy") or {}
@@ -936,7 +1066,7 @@ _HISTORY_DAYS = 14
 
 
 def suite_p90_query(table: str, build_type: str, branch: str) -> str:
-    """p90 of per-job suite duration. Lint and chunk-duplicate rows are left out."""
+    """Sum of per-test p90 durations for each suite. Lint and chunk duplicates are left out."""
     if not _BUILD_TYPE_RE.fullmatch(build_type):
         raise ValueError(f"build type is not safe to interpolate: {build_type!r}")
     if not _BRANCH_RE.fullmatch(branch):
@@ -944,32 +1074,43 @@ def suite_p90_query(table: str, build_type: str, branch: str) -> str:
     if not table or "`" in table or any(ch.isspace() for ch in table):
         raise ValueError(f"table path is not safe to interpolate: {table!r}")
     return f"""
-        SELECT suite_folder, PERCENTILE(suite_sec, 0.9) AS p90
+        SELECT suite_folder, test_size, SUM(test_p90) AS p90
         FROM (
             SELECT
                 suite_folder,
-                job_id,
-                SUM(duration) AS suite_sec
-            FROM `{table}`
-            WHERE run_timestamp >= CurrentUtcTimestamp() - Interval("P{_HISTORY_DAYS}D")
-              AND branch = '{branch}'
-              AND build_type = '{build_type}'
-              AND status != 'skipped'
-              AND duration > 0
-              AND job_id IS NOT NULL
-              AND suite_folder IS NOT NULL
-              AND suite_folder != ''
-              AND String::Contains(test_name, '.flake8') = FALSE
-              AND String::Contains(test_name, 'clang-format') = FALSE
-              AND String::Contains(test_name, 'clang_format') = FALSE
-              AND String::Contains(test_name, '.black') = FALSE
-              AND String::Contains(test_name, 'import_test') = FALSE
-              AND String::Contains(test_name, 'sole chunk') = FALSE
-              AND String::Contains(test_name, 'chunk+chunk') = FALSE
-              AND String::Contains(test_name, '[chunk]') = FALSE
-            GROUP BY suite_folder, job_id
+                test_size,
+                test_name,
+                PERCENTILE(duration, 0.9) AS test_p90
+            FROM (
+                SELECT
+                    suite_folder,
+                    test_name,
+                    JSON_VALUE(metadata, "$.size") AS test_size,
+                    duration
+                FROM `{table}`
+                WHERE run_timestamp >= CurrentUtcTimestamp() - Interval("P{_HISTORY_DAYS}D")
+                  AND branch = '{branch}'
+                  AND build_type = '{build_type}'
+                  AND status != 'skipped'
+                  AND duration > 0
+                  AND job_id IS NOT NULL
+                  AND suite_folder IS NOT NULL
+                  AND suite_folder != ''
+                  AND test_name IS NOT NULL
+                  AND test_name != ''
+                  AND JSON_VALUE(metadata, "$.size") IN ("small", "medium", "large")
+                  AND String::Contains(test_name, '.flake8') = FALSE
+                  AND String::Contains(test_name, 'clang-format') = FALSE
+                  AND String::Contains(test_name, 'clang_format') = FALSE
+                  AND String::Contains(test_name, '.black') = FALSE
+                  AND String::Contains(test_name, 'import_test') = FALSE
+                  AND String::Contains(test_name, 'sole chunk') = FALSE
+                  AND String::Contains(test_name, 'chunk+chunk') = FALSE
+                  AND String::Contains(test_name, '[chunk]') = FALSE
+            )
+            GROUP BY suite_folder, test_size, test_name
         )
-        GROUP BY suite_folder
+        GROUP BY suite_folder, test_size
     """
 
 
@@ -979,8 +1120,8 @@ def _row_field(row: Any, name: str) -> Any:
     return getattr(row, name, None)
 
 
-def load_suite_p90(build_type: str, branch: str) -> dict[str, float] | None:
-    """Suite path to p90 seconds. None if YDB QA cannot be read; the caller keeps timeouts."""
+def load_suite_p90(build_type: str, branch: str) -> dict[str, dict[str, float]] | None:
+    """Suite path to per-size sum of test p90 seconds. None if YDB QA cannot be read."""
     try:
         analytics = Path(__file__).resolve().parents[1] / "analytics"
         if str(analytics) not in sys.path:
@@ -996,20 +1137,25 @@ def load_suite_p90(build_type: str, branch: str) -> dict[str, float] | None:
     except Exception as exc:
         print(f"suite p90 unavailable ({exc}); using graph timeouts", file=sys.stderr)
         return None
-    found: dict[str, float] = {}
+    found: dict[str, dict[str, float]] = {}
     for row in rows or []:
         folder = _row_field(row, "suite_folder")
+        size = _row_field(row, "test_size")
         p90 = _row_field(row, "p90")
-        if not isinstance(folder, str) or not folder.strip() or p90 is None:
+        if not isinstance(folder, str) or not folder.strip() or not isinstance(size, str) or p90 is None:
+            continue
+        size = size.strip().lower()
+        if size not in DEFAULT_SIZE_WEIGHTS:
             continue
         try:
             seconds = float(p90)
         except (TypeError, ValueError):
             continue
         if seconds > 0:
-            found[folder.strip("/")] = seconds
+            found.setdefault(folder.strip("/"), {})[size] = seconds
     print(
-        f"suite p90: {len(found)} suites, branch={branch}, build_type={build_type}, "
+        f"suite p90: {sum(len(sizes) for sizes in found.values())} suite-sizes, "
+        f"branch={branch}, build_type={build_type}, "
         f"last {_HISTORY_DAYS} days",
         file=sys.stderr,
     )
@@ -1037,7 +1183,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         p90_by_suite = load_suite_p90(args.build_preset, args.branch)
     else:
         print(
-            "suite p90 skipped (need both --build-preset and --branch); using graph timeouts",
+            "suite p90 skipped (need --build-preset and --branch); using graph timeouts",
             file=sys.stderr,
         )
         p90_by_suite = None

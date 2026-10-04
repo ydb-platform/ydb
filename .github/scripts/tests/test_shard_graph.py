@@ -261,20 +261,18 @@ class HostCountTest(unittest.TestCase):
     def test_more_volume_asks_for_more_shards(self) -> None:
         threads = 52
         nodes = 100
-        light = shard_graph.choose_host_count(
-            result_nodes=nodes, total_weight_sec=self._minutes(30), threads=threads, free_runners=None
+        fits_one_host = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(50), threads=threads, free_runners=None
         )
-        medium = shard_graph.choose_host_count(
-            result_nodes=nodes, total_weight_sec=self._minutes(90), threads=threads, free_runners=None
+        two_hosts = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(61), threads=threads, free_runners=None
         )
-        heavy = shard_graph.choose_host_count(
-            result_nodes=nodes, total_weight_sec=self._minutes(150), threads=threads, free_runners=None
+        four_hosts = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(228), threads=threads, free_runners=None
         )
-        self.assertEqual(light, 1)
-        self.assertEqual(medium, 4)
-        self.assertEqual(heavy, 8)
-        self.assertLess(light, medium)
-        self.assertLess(medium, heavy)
+        self.assertEqual(fits_one_host, 1)
+        self.assertEqual(two_hosts, 2)
+        self.assertEqual(four_hosts, 4)
 
     def test_one_free_runner_forces_a_single_job(self) -> None:
         huge = self._minutes(250)
@@ -321,23 +319,97 @@ class HostCountTest(unittest.TestCase):
         graph = _graph([suite, *chunks], result=["suite"])
         timeout_plan = shard_graph.build_plan(graph, 1, threads=4)
         self.assertEqual(timeout_plan["total_weight"], 1200.0)
-        history = shard_graph.build_plan(graph, 1, threads=4, p90_by_suite={"ydb/core/foo": 12.5})
+        history = shard_graph.build_plan(
+            graph, 1, threads=4, p90_by_suite={"ydb/core/foo": {"small": 12.5}}
+        )
         self.assertEqual(history["total_weight"], 12.5)
         self.assertEqual(history["weighting"]["history_nodes"], 1)
+        self.assertEqual(history["weighting"]["expected_wall_min"], 0.1)
         self.assertEqual(history["weighting"]["timeout_nodes"], 0)
+
+    def test_build_output_with_the_same_path_adds_no_duration(self) -> None:
+        nodes = [
+            _node("test-ut", size="small", path="library/cpp/getopt/ut", timeout="60"),
+            _node("binary", node_type=None, path="library/cpp/getopt/ut"),
+        ]
+        plan = shard_graph.build_plan(
+            _graph(nodes),
+            1,
+            threads=4,
+            p90_by_suite={"library/cpp/getopt/ut": {"small": 12.5}},
+        )
+        self.assertEqual(plan["total_weight"], 12.5)
+        self.assertEqual(plan["weighting"]["history_nodes"], 1)
+        self.assertIn("binary", plan["uid_assignments"])
+
+    def test_same_suite_and_size_is_counted_once(self) -> None:
+        nodes = [
+            _node("test-a", size="medium", path="ydb/tests/fq/common", timeout="600"),
+            _node("test-b", size="medium", path="ydb/tests/fq/common", timeout="600"),
+        ]
+        plan = shard_graph.build_plan(
+            _graph(nodes),
+            1,
+            threads=4,
+            p90_by_suite={"ydb/tests/fq/common": {"medium": 40.0}},
+        )
+        self.assertEqual(plan["total_weight"], 40.0)
+
+    def test_any_leaf_under_a_known_suite_uses_that_history_once(self) -> None:
+        nodes = [
+            _node("suite", path="ydb/sql", timeout="600"),
+            _node("large", path="ydb/sql/large", timeout="600"),
+        ]
+        plan = shard_graph.build_plan(_graph(nodes), 1, threads=4, p90_by_suite={"ydb/sql": {"small": 10.0}})
+        self.assertEqual(plan["weighting"]["history_nodes"], 2)
+        self.assertEqual(plan["weighting"]["timeout_nodes"], 0)
+        self.assertEqual(plan["total_weight"], 10.0)
+
+    def test_exact_suite_also_includes_longer_history(self) -> None:
+        nodes = [_node("t2", path="ydb/t1/t2", timeout="600")]
+        p90 = {"ydb/t1/t2": {"small": 4.0}, "ydb/t1/t2/t3": {"small": 6.0, "large": 50.0}}
+        plan = shard_graph.build_plan(_graph(nodes), 1, threads=4, p90_by_suite=p90)
+        self.assertEqual(plan["total_weight"], 10.0)
+
+    def test_longer_history_is_not_counted_twice_when_the_child_is_in_the_graph(self) -> None:
+        nodes = [
+            _node("t2", path="ydb/t1/t2", timeout="600"),
+            _node("t3", path="ydb/t1/t2/t3", timeout="600"),
+        ]
+        p90 = {
+            "ydb/t1/t2": {"small": 4.0},
+            "ydb/t1/t2/t3": {"small": 6.0},
+            "ydb/t1/t2/t3/t4": {"small": 1.0},
+        }
+        plan = shard_graph.build_plan(_graph(nodes), 1, threads=4, p90_by_suite=p90)
+        self.assertEqual(plan["total_weight"], 11.0)
+
+    def test_short_graph_path_sums_longer_history_not_already_matched(self) -> None:
+        nodes = [
+            _node("tx", path="ydb/core/tx", timeout="600"),
+            _node("restore", path="ydb/core/tx/schemeshard/ut_restore", timeout="600"),
+        ]
+        p90 = {
+            "ydb/core/tx/schemeshard/ut_restore": {"small": 4.0},
+            "ydb/core/tx/datashard/ut_foo": {"small": 6.0},
+        }
+        plan = shard_graph.build_plan(_graph(nodes), 1, threads=4, p90_by_suite=p90)
+        self.assertEqual(plan["total_weight"], 10.0)
+        self.assertEqual(plan["weighting"]["history_nodes"], 2)
+        self.assertEqual(plan["weighting"]["timeout_nodes"], 0)
 
     def test_missing_p90_keeps_the_graph_timeout(self) -> None:
         graph = _graph([_node("suite", size="small", path="ydb/missing")])
-        plan = shard_graph.build_plan(graph, 1, threads=4, p90_by_suite={"ydb/other": 10.0})
+        plan = shard_graph.build_plan(graph, 1, threads=4, p90_by_suite={"ydb/other": {"small": 10.0}})
         self.assertEqual(plan["total_weight"], 60.0)
         self.assertEqual(plan["weighting"]["history_nodes"], 0)
         self.assertEqual(plan["weighting"]["timeout_nodes"], 1)
 
-    def test_reported_graph_weight_asks_for_13_hosts(self) -> None:
-        # 4387 result nodes, weight 9233650, 52 threads: one host would run ~2960 minutes.
-        # Tiers cap that at 12, then ceil(2960/240) raises the floor to 13.
-        weight = 9233650.0
-        self.assertEqual(shard_graph.volume_shard_count(weight, 52), 13)
+    def test_one_hour_budget_sizes_the_full_ydb_run(self) -> None:
+        # Run 37206293582 finished ydb/ on one host in 3h48m.
+        self.assertEqual(shard_graph.volume_shard_count(self._minutes(228), 52), 4)
+        # Sum of suite p90 on main/relwithdebinfo is about 393 minutes at 52 threads.
+        self.assertEqual(shard_graph.volume_shard_count(self._minutes(393), 52), 7)
 
     def test_quota_free_uses_the_tightest_resource(self) -> None:
         gib = float(1024**3)
@@ -373,9 +445,13 @@ class HostCountTest(unittest.TestCase):
         sql = shard_graph.suite_p90_query("test_results/test_runs_column", "relwithdebinfo", "stable-26-1")
         self.assertIn("build_type = 'relwithdebinfo'", sql)
         self.assertIn("branch = 'stable-26-1'", sql)
+        self.assertNotIn("job_name", sql)
         self.assertIn("status != 'skipped'", sql)
         self.assertNotIn("status = 'passed'", sql)
-        self.assertIn("PERCENTILE(suite_sec, 0.9)", sql)
+        self.assertIn("JSON_VALUE(metadata, \"$.size\")", sql)
+        self.assertIn("GROUP BY suite_folder, test_size", sql)
+        self.assertIn("PERCENTILE(duration, 0.9)", sql)
+        self.assertIn("SUM(test_p90)", sql)
         self.assertIn(".flake8", sql)
         with self.assertRaises(ValueError):
             shard_graph.suite_p90_query("test_results/test_runs_column", "relwith;drop", "main")

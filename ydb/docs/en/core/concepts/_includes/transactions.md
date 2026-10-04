@@ -150,4 +150,4 @@ For more information about transactional operations when working with topics, se
 
 ## Transactions involving row-oriented and column-oriented tables {#mixed-transactions}
 
-{% include [limitation](../../yql/reference/_includes/limitation-column-row-in-read-only-tx.md) %}
+{% include [limitation](../../_includes/limitation-column-row-in-read-only-tx.md) %}

@@ -6,6 +6,7 @@
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/async.h>
 
 // ad-hoc test parametrization support: only for single boolean flag

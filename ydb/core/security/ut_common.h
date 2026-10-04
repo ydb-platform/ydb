@@ -4,6 +4,7 @@
 
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_defines.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/simple_server.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 namespace NKikimr {
 

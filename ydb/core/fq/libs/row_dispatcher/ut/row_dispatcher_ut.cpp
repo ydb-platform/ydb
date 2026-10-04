@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>

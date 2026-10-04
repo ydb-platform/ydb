@@ -3,6 +3,7 @@
 #include "settings.h"
 
 #include <library/cpp/logger/backend.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -35,7 +36,7 @@ private:
     void SetFunctionRegistry(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const;
 
 protected:
-    TPortManager PortManager;
+    NTesting::TPortManager PortManager;
 };
 
 }  // namespace NKikimrRun

@@ -6,6 +6,7 @@
 #include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>

@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>

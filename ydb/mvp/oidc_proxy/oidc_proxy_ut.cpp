@@ -16,6 +16,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/map.h>
 
 using namespace NMVP::NOIDC;

@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
+    library/cpp/testing/unittest
     ydb/core/testlib
     ydb/core/protos
     ydb/core/statistics

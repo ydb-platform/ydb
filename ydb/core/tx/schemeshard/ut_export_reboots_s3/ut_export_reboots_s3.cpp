@@ -5,6 +5,7 @@
 #include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>

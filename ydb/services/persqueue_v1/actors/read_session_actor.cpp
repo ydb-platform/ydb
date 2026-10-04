@@ -2471,6 +2471,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
+    if (!ActualPartitionActors.contains(ev->Sender)) {
+        return;
+    }
+
     auto* msg = ev->Get();
 
     auto it = Topics.find(msg->Topic);
@@ -2481,18 +2485,17 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
-    TPartitionActorInfo* partitionInfo = nullptr;
-    for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
-            partitionInfo = &p;
-            break;
-        }
+    // Look up by AssignId: Partitions is a flat map shared by all topics of the
+    // session, so matching on PartitionId alone could attribute the event to a
+    // partition of a different topic that happens to have the same id.
+    auto partitionIt = Partitions.find(msg->AssignId);
+    if (partitionIt == Partitions.end()) {
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor.
+        return;
     }
-
-    if (!partitionInfo) {
-        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-            << "Inconsistent state #04", ctx);
-    }
+    auto* partitionInfo = &partitionIt->second;
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;
@@ -2527,6 +2530,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx) {
+    if (!ActualPartitionActors.contains(ev->Sender)) {
+        return;
+    }
+
     auto* msg = ev->Get();
 
     auto it = Topics.find(msg->Topic);
@@ -2534,21 +2541,22 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
         return;
     }
 
-    TPartitionActorInfo* partitionInfo = nullptr;
-    for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
-            partitionInfo = &p;
-            break;
-        }
+    // Look up by AssignId: Partitions is a flat map shared by all topics of the
+    // session, so matching on PartitionId alone could attribute the event to a
+    // partition of a different topic that happens to have the same id.
+    auto partitionIt = Partitions.find(msg->AssignId);
+    if (partitionIt == Partitions.end()) {
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor.
+        return;
     }
+    auto& partitionInfo = partitionIt->second;
 
-    if (!partitionInfo) {
-        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-            << "Inconsistent state #05", ctx);
-    }
-
-    partitionInfo->EndOffset = msg->EndOffset;
-    partitionInfo->ReadingFinished = true;
+    // Keep EndOffset for diagnostics only. Do NOT mark the partition as
+    // ReadingFinished: window exhaustion is not a split/merge close, and
+    // ReadingFinished feeds IsLastOffsetCommitted()/NotifyChildren().
+    partitionInfo.EndOffset = msg->EndOffset;
 
     // The partition is still alive: the client's read window (max_offset) is
     // exhausted, not the partition itself. The read balancer is deliberately
@@ -2557,13 +2565,17 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
     // the balancer releases it on session disconnect.
 
     if constexpr (Protocol == EProtocol::Topic) {
+        // Unlike TEvReadingFinished (auto-partitioning close), this EOF signal is
+        // sent unconditionally: it reflects the client's own max_offset window and
+        // is independent of auto-partitioning support, so it must reach every
+        // Topic-protocol client that set max_offset.
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
         auto* r = result.mutable_end_partition_session();
-        r->set_partition_session_id(partitionInfo->Partition.AssignId);
+        r->set_partition_session_id(partitionInfo.Partition.AssignId);
 
         LOG_I("Sending to client end partition stream event (max_offset reached)");
-        SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+        SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
     }
 }
 

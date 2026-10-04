@@ -9536,5 +9536,124 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto res = writer->Close();
         UNIT_ASSERT(res);
     }
+
+    // Regression for the partition-id-only lookup: in a session subscribed to
+    // several topics, a max_offset exhaustion on one topic's partition must end
+    // that topic's partition session, not another topic's partition that happens
+    // to have the same partition id (both topics here have a single partition 0).
+    Y_UNIT_TEST(MultiTopicMaxOffsetEndsCorrectPartition) {
+        NPersQueue::TTestServer server;
+        TString topic1 = "rt3.dc1--topic1";
+        TString topic2 = "rt3.dc1--topic2";
+        auto driver = SetupTestAndGetDriver(server, topic1);
+
+        // Create the second topic with the same "debug" consumer.
+        server.AnnoyingClient->CreateTopic(topic2, 1);
+        {
+            auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+            auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+            alterSettings.BeginAddConsumer("debug");
+            auto alterRes = topicClient.AlterTopic(TString("/Root/PQ/") + topic2, alterSettings).GetValueSync();
+            UNIT_ASSERT(alterRes.IsSuccess());
+        }
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        for (const auto& t : {topic1, topic2}) {
+            NYdb::NTopic::TWriteSessionSettings wSettings {t, "srcId", "srcId"};
+            wSettings.DirectWriteToPartition(false);
+            auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+            for (int i = 1; i <= 10; ++i) {
+                UNIT_ASSERT(writer->Write("Message_" + ToString(i), i));
+            }
+            UNIT_ASSERT(writer->Close());
+        }
+
+        NYdb::NTopic::TReadSessionSettings rSettings;
+        rSettings.ConsumerName("debug");
+        rSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings(topic1));
+        rSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings(topic2));
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        // The server reports the modern topic path (e.g. "/Root/topic1"),
+        // not the legacy "rt3.dc1--topic1" name, so match the short name.
+        auto isTopic1 = [&](const std::string& path) { return TString(path).EndsWith("topic1"); };
+
+        // Both partitions have id 0. Collect their start events and confirm;
+        // exhaust the read window on topic1 only.
+        ui64 assignIdTopic1 = 0;
+        ui64 assignIdTopic2 = 0;
+        for (int i = 0; i < 20 && (assignIdTopic1 == 0 || assignIdTopic2 == 0); ++i) {
+            auto ev = GetEventWithTimeout(*readSession);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            if (!spsEv) {
+                continue;
+            }
+            const auto& ps = spsEv->GetPartitionSession();
+            if (isTopic1(ps->GetTopicPath())) {
+                assignIdTopic1 = ps->GetPartitionSessionId();
+                spsEv->Confirm(/*readOffset=*/0, /*commitOffset=*/0, /*maxOffset=*/4);
+            } else {
+                assignIdTopic2 = ps->GetPartitionSessionId();
+                spsEv->Confirm();
+            }
+        }
+        UNIT_ASSERT(assignIdTopic1 != 0);
+        UNIT_ASSERT(assignIdTopic2 != 0);
+        UNIT_ASSERT(assignIdTopic1 != assignIdTopic2);
+
+        // Read until topic1's partition session ends and topic2 delivered all data.
+        bool sawEndTopic1 = false;
+        size_t endCount = 0;
+        size_t messagesTopic2 = 0;
+        for (int i = 0; i < 50 && !(sawEndTopic1 && messagesTopic2 >= 10); ++i) {
+            auto ev = GetEventWithTimeout(*readSession);
+            UNIT_ASSERT(ev.has_value());
+            if (auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                if (!isTopic1(dataEv->GetPartitionSession()->GetTopicPath())) {
+                    messagesTopic2 += dataEv->GetMessages().size();
+                }
+            } else if (auto* endEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*ev)) {
+                ++endCount;
+                const auto& ps = endEv->GetPartitionSession();
+                // The exhausted partition must be topic1's, not topic2's.
+                UNIT_ASSERT_VALUES_EQUAL(ps->GetPartitionSessionId(), assignIdTopic1);
+                UNIT_ASSERT(isTopic1(ps->GetTopicPath()));
+                sawEndTopic1 = true;
+            }
+        }
+
+        UNIT_ASSERT(sawEndTopic1);
+        UNIT_ASSERT_VALUES_EQUAL(endCount, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(messagesTopic2, 10u);
+    }
+
+    // The read window may already be exhausted when the partition session starts
+    // (readOffset == max_offset). The server must still send end_partition_session
+    // instead of silently starting a read that can never deliver data.
+    Y_UNIT_TEST(MaxOffsetExhaustedOnFirstReadSendsEndPartitionSession) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            UNIT_ASSERT(writer->Write("Message_" + ToString(i), i));
+        }
+        UNIT_ASSERT(writer->Close());
+
+        // readOffset == maxOffset + 1: the window is exhausted before any read.
+        auto readSession = CreateReadSessionWithMaxOffset(
+            topicClient, topicFullName,
+            /*readOffset=*/6, /*commitOffset=*/0, /*maxOffset=*/5); //inclusive
+        const auto eof = ReadMessages(*readSession, 0);
+        UNIT_ASSERT(eof.EndOfPartition);
+        UNIT_ASSERT_VALUES_EQUAL(eof.Messages.size(), 0u);
+    }
 }
 }

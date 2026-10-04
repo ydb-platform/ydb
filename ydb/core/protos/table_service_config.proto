@@ -444,7 +444,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -490,7 +490,7 @@ message TTableServiceConfig {
 
     optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
-    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 

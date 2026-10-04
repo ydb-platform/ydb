@@ -51,5 +51,5 @@ AbortController and discard stale results when switching requests. Authenticatio
 uses the existing same-origin monitoring session. Cross-origin access requires
 configuration of the destination server; the module does not change access rules.
 
-The in-memory dashboard at `/actors/metrics-dashboard` is a second consumer.
+The in-memory dashboard at `/actors/metrics?page=dashboard` is a second consumer.
 It uses the same chart and JSON client without the viewer's query editor.

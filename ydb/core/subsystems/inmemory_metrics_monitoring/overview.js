@@ -18,7 +18,7 @@ const cards=panels.map(panel=>{
     const card=text('section','');card.className='imo-card';card.append(text('h3',panel.title));
     const links=text('nav','');for(const metric of panel.metrics){const link=text('a',metric);link.href='metrics?'+new URLSearchParams({metric:'inmemory_metrics.'+metric});links.append(link);}card.append(links);
     const host=text('div','');card.append(host);$('cards').append(card);
-    const chart=createMetricChart(host,{legend:true,settings:{type:panel.type||'line',height:240,unit:panel.unit||'number',format:'{metric}'},onPin:pause,onRangeChange:({from,to})=>{pause();fixed=[from,to];draw();}});
+    const chart=createMetricChart(host,{legend:true,settings:{type:panel.type||'line',height:240,unit:panel.unit||'number',format:'{metric}'},onPin:pause,onCursorChange:time=>{for(const {chart} of cards)chart.setCursor(time);},onRangeChange:({from,to})=>{pause();fixed=[from,to];draw();}});
     return {panel,chart};
 });
 function draw(){

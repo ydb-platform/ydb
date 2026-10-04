@@ -66,11 +66,11 @@ export function createMetricChart(chart,options={}){
  const clipId='ymc-clip-'+(++nextChartId),hidden=new Set();
  let settings={...defaultChartSettings,...options.settings};
  const format=value=>formatMetricValue(value,settings);
- let data={series:[],begin:0,end:1,title:'Metrics'},destroyed=false,lastWidth=chart.clientWidth,tooltipLayer=null;
+ let data={series:[],begin:0,end:1,title:'Metrics'},destroyed=false,lastWidth=chart.clientWidth,tooltipLayer=null,cursorTime=null,drawCursor=()=>{},cursorPinned=false;
  chart.classList.add('ymc');
  chart.style.setProperty('--ymc-height',settings.height+'px');
  function render(){
-  tooltipLayer?.remove();tooltipLayer=null;
+  tooltipLayer?.remove();tooltipLayer=null;drawCursor=()=>{};cursorPinned=false;
   chart.replaceChildren();
   const {begin,end,title,emptyText}=data;
   const active=data.series.filter(s=>!hidden.has(s.key)).map(s=>({...s,type:s.type||settings.type,display:formatSeriesName(s,s.format??settings.format)}));
@@ -109,18 +109,19 @@ export function createMetricChart(chart,options={}){
    for(const p of s.points){if(p.value!==null&&p.time>=begin&&p.time<=end&&s.points.length===1)graph.append(node('circle',{cx:x(p.time),cy:y(p.value),r:3,fill:s.color}));}
   }svg.append(graph);
   const cursor=node('line',{x1:L,x2:L,y1:T,y2:B,stroke:'#8b97a7','stroke-dasharray':'4 3',visibility:'hidden'}),selection=node('rect',{x:L,y:T,width:0,height:B-T,fill:'#2678bc',opacity:.12});svg.append(selection,cursor);
+  drawCursor=()=>{const visible=cursorTime!==null&&cursorTime>=begin&&cursorTime<=end;cursor.setAttribute('visibility',visible?'visible':'hidden');if(visible){const px=x(cursorTime);cursor.setAttribute('x1',px);cursor.setAttribute('x2',px);}};drawCursor();
   const tip=text('div','','ymc-tooltip');tip.hidden=true;chart.append(svg);tooltipLayer=text('div','','ymc ymc-tooltip-layer');tooltipLayer.append(tip);document.body.append(tooltipLayer);let start=null,pinned=false,tooltipSort='value',tooltipDirection=-1,tooltipData=null;
   const pos=e=>{const r=svg.getBoundingClientRect(),px=Math.max(L,Math.min(R,(e.clientX-r.left)*W/r.width));return {px,time:begin+(px-L)*(end-begin)/(R-L)};};
   function at(s,t){let a=0,b=s.points.length;while(a<b){const m=(a+b)>>1;if(s.points[m].time<=t)a=m+1;else b=m;}if(s.step)return a?s.points[a-1]:null;const p=s.points[a-1],q=s.points[a];return !p?q:!q?p:t-p.time<=q.time-t?p:q;}
-  const setPinned=value=>{pinned=value;tip.classList.toggle('ymc-tooltip-pinned',value);if(value)options.onPin?.();const hint=tip.querySelector('footer');if(hint)hint.textContent=value?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.';};
+  const setPinned=value=>{pinned=value;cursorPinned=value;tip.classList.toggle('ymc-tooltip-pinned',value);if(value)options.onPin?.();const hint=tip.querySelector('footer');if(hint)hint.textContent=value?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.';};
   function renderTooltip(){
-   const {time,rows,nearest}=tooltipData;tip.replaceChildren();const header=text('header',''),close=text('button','Close');close.type='button';close.setAttribute('aria-label','Close tooltip');close.addEventListener('click',()=>{setPinned(false);tip.hidden=true;cursor.setAttribute('visibility','hidden');});header.append(text('strong',new Date(time).toLocaleString()),close);tip.append(header);
+   const {time,rows,nearest}=tooltipData;tip.replaceChildren();const header=text('header',''),close=text('button','Close');close.type='button';close.setAttribute('aria-label','Close tooltip');close.addEventListener('click',()=>{setPinned(false);tip.hidden=true;cursorTime=null;drawCursor();options.onCursorChange?.(null);});header.append(text('strong',new Date(time).toLocaleString()),close);tip.append(header);
    const table=document.createElement('table'),head=document.createElement('thead'),headRow=document.createElement('tr');for(const [key,title] of [['name','Series'],['value','Value']]){const cell=document.createElement('th'),button=text('button',title+(tooltipSort===key?(tooltipDirection<0?' \u2193':' \u2191'):''),'ymc-sort');button.type='button';button.addEventListener('click',()=>{tooltipDirection=tooltipSort===key?-tooltipDirection:key==='value'?-1:1;tooltipSort=key;renderTooltip();});cell.append(button);headRow.append(cell);}head.append(headRow);table.append(head);const body=document.createElement('tbody');
    const ordered=[...rows].sort((a,b)=>{if(tooltipSort==='name')return tooltipDirection*(a.series.display).localeCompare(b.series.display);const av=a.point&&a.point.value,bv=b.point&&b.point.value;return av===null?bv===null?0:1:bv===null?-1:tooltipDirection*(av-bv);});
    for(const row of ordered){const tr=document.createElement('tr');if(row.series.key===nearest)tr.className='ymc-tooltip-nearest';const label=text('td',row.series.display),dot=text('span','','ymc-dot');dot.style.background=row.series.color;label.prepend(dot);tr.append(label,text('td',row.point&&row.point.value!==null?format(row.point.raw):'\u2014'));body.append(tr);}table.append(body);
    const sumRows=rows.filter(row=>row.point&&row.point.value!==null),sum=sumRows.reduce((total,row)=>total+row.point.value,0),foot=document.createElement('tfoot'),sumRow=document.createElement('tr');sumRow.append(text('th','Sum'),text('th',sumRows.length&&Number.isFinite(sum)?format(sum):'\u2014'));foot.append(sumRow);table.append(foot);tip.append(table,text('footer',pinned?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.'));
   }
-  const hover=e=>{if(pinned&&start===null)return;const p=pos(e);cursor.setAttribute('x1',p.px);cursor.setAttribute('x2',p.px);cursor.setAttribute('visibility','visible');if(start!==null){selection.setAttribute('x',Math.min(start.px,p.px));selection.setAttribute('width',Math.abs(start.px-p.px));return;}
+  const hover=e=>{if(pinned&&start===null)return;const p=pos(e);cursorTime=p.time;drawCursor();options.onCursorChange?.(p.time);if(start!==null){selection.setAttribute('x',Math.min(start.px,p.px));selection.setAttribute('width',Math.abs(start.px-p.px));return;}
    const rows=active.map(series=>({series,point:at(series,p.time)})),rect=svg.getBoundingClientRect(),py=(e.clientY-rect.top)*H/rect.height;let nearest=null,distance=Infinity;for(const row of rows)if(row.point&&row.point.value!==null){let delta=Math.abs(y(row.point.value)-py);if(row.series.type==='area'){const value=sampleAt(row.series,p.time);if(value===null)continue;const base=stackBase(areas,areas.findIndex(s=>s.key===row.series.key),p.time,value),a=y(base),b=y(base+value);delta=Math.max(Math.min(a,b)-py,py-Math.max(a,b),0);}if(delta<distance){distance=delta;nearest=row.series.key;}}tooltipData={time:p.time,rows,nearest};renderTooltip();tip.hidden=false;
    const margin=8,gap=16,leftSpace=e.clientX-margin,rightSpace=innerWidth-e.clientX-margin;
    tip.style.width=Math.min(480,Math.max(120,Math.max(leftSpace,rightSpace)-gap))+'px';tip.style.maxHeight=Math.max(80,Math.min(430,innerHeight-2*margin))+'px';
@@ -128,10 +129,10 @@ export function createMetricChart(chart,options={}){
    const left=e.clientX+gap+width<=innerWidth-margin?e.clientX+gap:e.clientX-gap-width;
    tip.style.left=Math.max(margin,Math.min(left,innerWidth-width-margin))+'px';
    tip.style.top=Math.max(margin,Math.min(e.clientY+12,innerHeight-height-margin))+'px';};svg.addEventListener('pointermove',hover);
-  svg.addEventListener('pointerleave',()=>{if(start===null&&!pinned){tip.hidden=true;cursor.setAttribute('visibility','hidden');}});
+  svg.addEventListener('pointerleave',()=>{if(start===null&&!pinned){tip.hidden=true;cursorTime=null;drawCursor();options.onCursorChange?.(null);}});
   svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;start=pos(e);svg.setPointerCapture(e.pointerId);if(!pinned)tip.hidden=true;});
   svg.addEventListener('pointerup',e=>{if(!start)return;const p=pos(e);if(Math.abs(start.px-p.px)>8){const range={from:Math.min(start.time,p.time),to:Math.max(start.time,p.time)};start=null;options.onRangeChange?.(range);}else{start=null;const wasPinned=pinned;setPinned(false);hover(e);setPinned(!wasPinned);}});
-  svg.addEventListener('pointercancel',()=>{start=null;render();});
+  svg.addEventListener('pointercancel',()=>{start=null;cursorTime=null;options.onCursorChange?.(null);render();});
   renderLegend();
  }
  function renderLegend(){
@@ -142,6 +143,7 @@ export function createMetricChart(chart,options={}){
  }
  const observer=new ResizeObserver(()=>{const width=chart.clientWidth;if(!destroyed&&width!==lastWidth){lastWidth=width;render();}});observer.observe(chart);
  return {
+  setCursor(time){if(destroyed||cursorPinned)return;cursorTime=Number.isFinite(time)?time:null;drawCursor();},
   setSettings(next){settings={...settings,...next};chart.style.setProperty('--ymc-height',settings.height+'px');render();},
   setData(next){if(destroyed)return;data=next;for(const key of hidden)if(!data.series.some(s=>s.key===key))hidden.delete(key);render();},
   destroy(){destroyed=true;observer.disconnect();tooltipLayer?.remove();tooltipLayer=null;chart.replaceChildren();chart.classList.remove('ymc');},

@@ -90,3 +90,6 @@ Chart geometry uses CSS pixel coordinates without a scaled SVG viewBox, so
 axis text keeps its 12 px font at every chart width and configured height.
 Overview chunks stack used and free counts; together they cover the chunk pool.
 Memory compares allocated chunk capacity and recorded payload as ordinary lines.
+
+Use `onCursorChange(time)` and `chart.setCursor(time)` to synchronize a vertical cursor across embedded charts. The time is a Unix timestamp in milliseconds; `null` clears the cursor. `setCursor` updates only the marker and does not emit the callback or open a tooltip. The marker survives redraws and is hidden outside the chart interval.
+A pinned tooltip keeps its local cursor until unpinned; external cursor updates do not move that marker.

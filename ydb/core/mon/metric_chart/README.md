@@ -61,11 +61,18 @@ number, automatic precision and automatic Y limits including zero. Units:
 number, bytes (IEC), percent, seconds, milliseconds, cores. Unit selection
 formats values without converting percent or time scales. Y limits use raw
 metric units; null restores automatic bounds. Supply finite bounds with
-min < max, height 160..800 and precision null or 0..6. Area fill preserves
-on-change steps and null gaps; overlapping areas are not stacked.
+min < max, height 160..800 and precision null or 0..6. Stacked areas preserve on-change steps and null gaps.
 `formatMetricValue(value, settings)` formats axes, tooltip and legend values.
 With default settings, exact textual values remain intact.
 
-A series may override `type` (line or area) and `width` (stroke pixels); `color`
+A series may override `type` (line or area) and `width` (line stroke pixels); `color`
 is already per-series. Empty type inherits chart settings. Viewer split mode
 allows chart settings per query and appearance overrides per retained line.
+
+`area` renders stacked layers: each layer thickness is its raw value, with
+positive and negative values stacked separately. Tooltip values remain raw.
+`fill: true` shades the region under ordinary lines without stacking them;
+per-series `fill` overrides the chart setting. Stack baselines use a shared
+grid capped at 1000 timestamps plus each series' own samples, preserving its
+changes and gaps. Automatic numeric formatting uses three significant digits;
+axis labels reserve space according to their length.

@@ -182,7 +182,8 @@ TString RenderPage() {
 <button id='imm-now' type='button'>Now</button><button id='imm-refresh' type='button'>Refresh</button>
 <label><input type='checkbox' id='imm-auto'> Live via JSON</label><button id='imm-toggle-legend' type='button' aria-pressed='true' aria-controls='imm-legend-panel'>Legend</button>
 <details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'><label><input id='imm-separate' type='checkbox'> One chart per query</label><label id='imm-columns-label' hidden>Charts per row <select id='imm-columns' aria-label='Charts per row'><option>1</option><option selected>2</option><option>3</option></select></label><label id='imm-settings-target-label' hidden>Chart <select id='imm-settings-target' aria-label='Chart settings target'><option value='all'>All charts</option></select></label>
-<label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Area</option></select></label>
+<label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Stacked area</option></select></label>
+<label>Fill under lines <input id='imm-fill' type='checkbox'></label>
 <label>Height, px <input id='imm-height' aria-label='Chart height' type='number' min='160' max='800' step='1' value='360'></label>
 <label>Units <select id='imm-unit' aria-label='Value units'><option value='number'>Number</option><option value='bytes'>Bytes (IEC)</option><option value='percent'>Percent</option><option value='seconds'>Seconds</option><option value='milliseconds'>Milliseconds</option><option value='cores'>CPU cores</option></select></label>
 <label>Decimals <select id='imm-precision' aria-label='Decimal places'><option value='auto'>Auto</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
@@ -192,7 +193,8 @@ TString RenderPage() {
 <span class='imm-muted'>Y limits use raw metric units.</span><span id='imm-settings-error' role='alert'></span><button id='imm-settings-reset' type='button'>Reset settings</button>
 <fieldset id='imm-line-settings' hidden><legend>Line appearance</legend>
 <label>Line <select id='imm-line-target' aria-label='Line settings target'></select></label>
-<label>Display <select id='imm-line-display' aria-label='Line display type'><option value=''>Use chart setting</option><option value='line'>Lines</option><option value='area'>Area</option></select></label>
+<label>Display <select id='imm-line-display' aria-label='Line display type'><option value=''>Use chart setting</option><option value='line'>Lines</option><option value='area'>Stacked area</option></select></label>
+<label>Fill <select id='imm-line-fill' aria-label='Line fill'><option value=''>Use chart setting</option><option value='true'>On</option><option value='false'>Off</option></select></label>
 <label>Color <input id='imm-line-color' aria-label='Line color' type='color'></label>
 <label>Width, px <input id='imm-line-width' aria-label='Line width' type='number' min='1' max='6' step='1' value='2'></label>
 <button id='imm-line-reset' type='button'>Reset line appearance</button>
@@ -340,7 +342,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  }
  function loadSettings(){
   const id=settingsTarget(),settings=id===null?chartSettings:settingsFor(id);
-  $('display').value=settings.type;$('height').value=settings.height;$('unit').value=settings.unit;$('precision').value=settings.precision===null?'auto':settings.precision;$('y-min').value=settings.min??'';$('y-max').value=settings.max??'';$('settings-legend').checked=settings.legend;$('settings-error').textContent='';
+  $('display').value=settings.type;$('fill').checked=settings.fill;$('height').value=settings.height;$('unit').value=settings.unit;$('precision').value=settings.precision===null?'auto':settings.precision;$('y-min').value=settings.min??'';$('y-max').value=settings.max??'';$('settings-legend').checked=settings.legend;$('settings-error').textContent='';$('fill').disabled=settings.type==='area';
   const previous=$('line-target').value;$('line-target').replaceChildren();
   if(id!==null)for(const line of series.filter(s=>s.queryId===id)){const option=text('option',line.name+(line.labels?' - '+line.labels:''));option.value=line.key;$('line-target').append(option);}
   if([...$('line-target').options].some(o=>o.value===previous))$('line-target').value=previous;
@@ -348,22 +350,22 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  }
  function loadLineSettings(){
   const line=series.find(s=>s.key===$('line-target').value);if(!line)return;
-  const override=lineSettings.get(line.key)||{};$('line-display').value=override.type||'';$('line-color').value=override.color||line.color;$('line-width').value=override.width||2;
+  const override=lineSettings.get(line.key)||{};$('line-display').value=override.type||'';$('line-fill').value=override.fill===undefined?'':String(override.fill);$('line-color').value=override.color||line.color;$('line-width').value=override.width||2;const area=(override.type||settingsFor(line.queryId).type)==='area';$('line-fill').disabled=area;$('line-width').disabled=area;
  }
  function storeSettings(patch){const id=settingsTarget();if(id===null)chartSettings={...chartSettings,...patch};else querySettings.set(id,{...querySettings.get(id),...patch});draw();}
  function applySettings(){
   const minimum=$('y-min').value===''?null:Number($('y-min').value),maximum=$('y-max').value===''?null:Number($('y-max').value),height=Number($('height').value);
   if(!$('height').checkValidity()||height<160||height>800||!$('y-min').checkValidity()||!$('y-max').checkValidity()||(minimum!==null&&!Number.isFinite(minimum))||(maximum!==null&&!Number.isFinite(maximum))||(minimum!==null&&maximum!==null&&minimum>=maximum)){$('settings-error').textContent='Use height 160-800 and Y minimum below maximum.';return;}
-  const next={type:$('display').value,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum},id=settingsTarget(),current=id===null?chartSettings:settingsFor(id);
+  const next={type:$('display').value,fill:$('fill').checked,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum},id=settingsTarget(),current=id===null?chartSettings:settingsFor(id);
   storeSettings(Object.fromEntries(Object.entries(next).filter(([key,value])=>value!==current[key])));
  }
- for(const name of ['display','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
+ for(const name of ['display','fill','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
  $('settings-target').addEventListener('change',loadSettings);
  $('settings-legend').addEventListener('input',()=>storeSettings({legend:$('settings-legend').checked}));
  $('settings-reset').addEventListener('click',()=>{const id=settingsTarget();if(id===null){chartSettings={...defaultChartSettings,legend:true};querySettings.clear();lineSettings.clear();}else querySettings.delete(id);draw();});
  $('toggle-legend').addEventListener('click',()=>{const show=$('legend-panel').hidden;chartSettings.legend=show;for(const settings of querySettings.values())delete settings.legend;draw();});
  $('line-target').addEventListener('change',loadLineSettings);
- for(const name of ['line-display','line-color','line-width'])$(name).addEventListener('input',()=>{if(!$('line-width').checkValidity())return;const key=$('line-target').value;if(!key)return;lineSettings.set(key,{type:$('line-display').value,color:$('line-color').value,width:Number($('line-width').value)});draw();});
+ for(const name of ['line-display','line-fill','line-color','line-width'])$(name).addEventListener('input',()=>{if(!$('line-width').checkValidity())return;const key=$('line-target').value;if(!key)return;lineSettings.set(key,{type:$('line-display').value,fill:$('line-fill').value===''?undefined:$('line-fill').value==='true',color:$('line-color').value,width:Number($('line-width').value)});draw();});
  $('line-reset').addEventListener('click',()=>{lineSettings.delete($('line-target').value);draw();});
  $('root').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.defaultPrevented){e.preventDefault();applyQueries();}});
  $('apply').addEventListener('click',applyQueries);$('add-query').addEventListener('click',()=>{addEditor({metric:editors.at(-1).card.querySelector('[data-control=field]').value,filters:[]});});

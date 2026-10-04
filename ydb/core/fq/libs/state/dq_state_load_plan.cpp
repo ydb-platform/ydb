@@ -363,7 +363,8 @@ public:
                 YQL_ENSURE(stage != graph.GetStageProgram().end(), "Missing program for stage " << task.GetStageId());
                 program = &stage->second;
             }
-            info.Info = stages.try_emplace(task.GetStageId(), task.GetProgram().GetRuntimeVersion(), *program, context).first->second;
+            info.Info = stages.try_emplace(task.GetStageId(), task.GetProgram().GetRuntimeVersion(), *program, context,
+                TStageStateRecoveryInfo::EMode::HistoryReplay).first->second;
 
             for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
                 if (const auto& input = task.GetInputs(inputIndex); input.HasSource()) {

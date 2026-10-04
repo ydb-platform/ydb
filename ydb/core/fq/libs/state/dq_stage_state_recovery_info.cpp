@@ -69,8 +69,9 @@ TString THoppingRecoveryState::MakeRecoveryState(const ui64 minWindowStartIndex)
     return result;
 }
 
-TStageStateRecoveryInfo::TStageStateRecoveryInfo(const ui32 runtimeVersion, const TString& program, TStageStateRecoveryContext& context) {
-    YQL_ENSURE(runtimeVersion == NYql::NDqProto::RUNTIME_VERSION_YQL_1_0, "Unsupported program runtime for history replay");
+TStageStateRecoveryInfo::TStageStateRecoveryInfo(const ui32 runtimeVersion, const TString& program, TStageStateRecoveryContext& context, EMode mode) {
+    YQL_ENSURE(runtimeVersion == NYql::NDqProto::RUNTIME_VERSION_YQL_1_0, "Unsupported program runtime for stage analysis");
+    YQL_ENSURE(!program.empty(), "Missing program for stage analysis");
 
     const auto root = DeserializeRuntimeNode(program, context.Env);
     TExploringNodeVisitor explorer;
@@ -83,6 +84,21 @@ TStageStateRecoveryInfo::TStageStateRecoveryInfo(const ui32 runtimeVersion, cons
 
         const auto& callable = static_cast<const TCallable&>(*node);
         const TStringBuf name = callable.GetType()->GetName();
+        // Exact runtime callable names from mkql_factory.cpp, dq_tasks_runner.cpp
+        // and kqp_compute.cpp. Universal accumulators are conservative positives:
+        // their lambdas may implement aggregation even without a combiner.
+        HasAggregation |= IsIn({
+            "CombineCore", "GroupingCore", "Condense", "Condense1",
+            "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
+            "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
+            "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
+            "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map",
+            "Chopper", "WideChopper"
+        }, name);
+        HasWatermarkGenerator |= name == "DqWatermarkGenerator";
+        if (mode != EMode::HistoryReplay) {
+            continue;
+        }
         if (name == "MultiHoppingCore") {
             YQL_ENSURE(!Hopping, "History replay supports at most one hopping operator per stage");
             Y_VALIDATE(callable.GetInputsCount() > 20, "Expected at least 21 hopping operator inputs");

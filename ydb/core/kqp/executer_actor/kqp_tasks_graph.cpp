@@ -7,6 +7,7 @@
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -2062,6 +2063,40 @@ void PatchQueryPhysicalGraphForRescaling(
     }
 
     const auto& physQuery = graph.GetPreparedQuery().GetPhysicalQuery();
+
+    // Inspect the whole query before mutating any task or channel. Programs are
+    // shared via prepared stages, but saved tasks can also carry inline programs.
+    try {
+        const auto hasAggregation = [](const auto& program) {
+            NFq::TStageStateRecoveryContext context;
+            return NFq::TStageStateRecoveryInfo(program.GetRuntimeVersion(), program.GetRaw(), context).HasAggregation;
+        };
+        for (const auto& tx : physQuery.GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                if (hasAggregation(stage.GetProgram())) {
+                    YDB_LOG_INFO("Skipping PQ source rescaling: query contains aggregation");
+                    return;
+                }
+            }
+        }
+        for (const auto& task : graph.GetTasks()) {
+            const auto& dqTask = task.GetDqTask();
+            if (!dqTask.GetProgram().GetRaw().empty()) {
+                if (hasAggregation(dqTask.GetProgram())) {
+                    YDB_LOG_INFO("Skipping PQ source rescaling: inline program contains aggregation");
+                    return;
+                }
+            } else {
+                YQL_ENSURE(task.GetTxId() < static_cast<ui64>(physQuery.TransactionsSize()), "Missing task transaction");
+                const auto& tx = physQuery.GetTransactions(task.GetTxId());
+                YQL_ENSURE(dqTask.GetStageId() < static_cast<ui64>(tx.StagesSize()), "Missing task stage");
+                // The shared program was checked above.
+            }
+        }
+    } catch (const std::exception& e) {
+        YDB_LOG_INFO("Skipping PQ source rescaling: program analysis failed", {"error", e.what()});
+        return;
+    }
 
     // Helper to encode a pair of stage keys as a string for use as hash-map keys
     // where THashMap<TStageKey, THashMap<TStageKey,...>> would be needed.

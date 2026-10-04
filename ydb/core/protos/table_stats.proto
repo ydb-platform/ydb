@@ -85,4 +85,7 @@ message TTableStats {
     optional uint64 SmallBlobsVolumeBytes = 41;
     // normalized index-record count (x BlobSubgroupSize / storage coef, see TSmallBlobsQuotaConfig)
     optional uint64 SmallBlobsCount = 42;
+
+    optional uint64 CPUWithKeys = 43;
+    optional uint64 CPUWithoutKeys = 44;
 }

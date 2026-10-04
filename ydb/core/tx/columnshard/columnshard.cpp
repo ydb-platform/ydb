@@ -35,6 +35,8 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
+    // The driver holds a raw pointer to this tablet, so it must not outlive it.
+    StopMoveDataDriver(ctx);
     if (BackgroundSessionsManager) {
         BackgroundSessionsManager->Stop();
     }

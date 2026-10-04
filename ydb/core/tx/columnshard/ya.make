@@ -6,6 +6,7 @@ SRCS(
     blob_cache.cpp
     columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
+    columnshard_move_data.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp

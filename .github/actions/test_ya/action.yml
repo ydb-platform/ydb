@@ -394,37 +394,6 @@ runs:
 
         python3 .github/scripts/send_build_stats.py
 
-    - name: show_build_size_diff
-      shell: bash
-      continue-on-error: true
-      if: always() && inputs.publish_github_status == 'true'
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        set -x
-        export build_preset="${{ inputs.build_preset }}"
-        export branch_to_compare="$BRANCH_NAME"
-        export yellow_treshold=102400
-        export commit_git_sha="$ORIGINAL_HEAD"
-
-        get_sizes_comment_script=.github/scripts/get_build_diff.py
-        comment_raw=`$get_sizes_comment_script`
-
-        IFS=';;;'
-        read -ra comment_arr <<< "$comment_raw"
-
-        printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]]; then
-          color=${comment_arr[0]}
-          replace=$color";;;"
-          comment=${comment_raw/$replace/""}
-
-          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
-
-        else
-          echo "Skipped build size difference, comment_raw = ${comment_raw}"
-        fi
-
     - name: comment-if-cancel
       shell: bash
       if: cancelled() && inputs.publish_github_status == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')

@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
@@ -24,6 +25,8 @@ class TJsonQuery : public TViewerPipeClient {
     TString Syntax;
     TString QueryId;
     TString ResourcePool;
+    bool WmQueueReported = false;
+    bool WmExecutionReported = false;
     TString TransactionMode;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
@@ -483,6 +486,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NWorkloadManager::TEvWmStateChanged, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
@@ -583,6 +587,7 @@ public:
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
         request.SetSessionId(SessionId);
+        request.SetReportWmStateChanges(Streaming != EStreamingType::None);
         if (Database) {
             request.SetDatabase(Database);
         }
@@ -936,7 +941,54 @@ private:
         }
     }
 
+    void StreamWmState(const TString& state, const TString& poolId, const TString& classifiedBy) {
+        if (Streaming == EStreamingType::None) {
+            return;
+        }
+        if (state == "QUEUED") {
+            if (WmQueueReported) {
+                return;
+            }
+            WmQueueReported = true;
+        } else if (state == "EXECUTING") {
+            if (!WmQueueReported || WmExecutionReported) {
+                return;
+            }
+            WmExecutionReported = true;
+        } else {
+            return;
+        }
+
+        NJson::TJsonValue json;
+        json["wm_state"] = state;
+        if (classifiedBy) {
+            json["wm_classified_by"] = classifiedBy;
+        }
+        if (poolId) {
+            json["resource_pool"] = poolId;
+        }
+        StreamJsonResponse("QueryStarted", std::move(json));
+    }
+
+    void HandleReply(NWorkloadManager::TEvWmStateChanged::TPtr& ev) {
+        StreamWmState(NWorkloadManager::WmStateToStatus(ev->Get()->State),
+            ev->Get()->PoolId, ev->Get()->ClassifiedBy);
+    }
+
+    static void AddWmInfo(NJson::TJsonValue& json, const NKikimrKqp::TQueryResponse& response) {
+        if (response.HasWmState() && response.GetWmState() != NKikimrKqp::WM_STATE_NONE) {
+            json["wm_state"] = NWorkloadManager::WmStateToStatus(response.GetWmState());
+        }
+        if (response.HasWmClassifiedBy()) {
+            json["wm_classified_by"] = response.GetWmClassifiedBy();
+        }
+        if (response.HasEffectivePoolId()) {
+            json["resource_pool"] = response.GetEffectivePoolId();
+        }
+    }
+
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        const auto& wmResponse = ev->Get()->Record.GetResponse();
         NJson::TJsonValue jsonResponse;
         if (Streaming == EStreamingType::None) {
             jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
@@ -951,6 +1003,7 @@ private:
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record);
+            AddWmInfo(jsonResponse, QueryResponse->Record.GetResponse());
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
@@ -959,6 +1012,10 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
+            AddWmInfo(jsonResponse, ev->Get()->Record.GetResponse());
+        }
+        if (wmResponse.HasWmState() && wmResponse.GetWmState() == NKikimrKqp::WM_STATE_EXECUTING) {
+            StreamWmState("EXECUTING", wmResponse.GetEffectivePoolId(), wmResponse.GetWmClassifiedBy());
         }
         ReplyWithJsonAndPassAway("QueryResponse", std::move(jsonResponse));
     }

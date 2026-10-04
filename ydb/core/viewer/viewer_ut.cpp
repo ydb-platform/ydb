@@ -1,5 +1,7 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
+#include <thread>
+#include <future>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -660,6 +662,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString TransactionMode;
         TString Schema;
         TString Base64;
+        TString ResourcePool;
     };
 
     NJson::TJsonValue PostQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
@@ -682,6 +685,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         if (args.Base64) {
             jsonRequest["base64"] = args.Base64;
         }
+        if (args.ResourcePool) {
+            jsonRequest["resource_pool"] = args.ResourcePool;
+        }
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -689,6 +695,43 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
+    }
+
+    TString PostStreamingQuery(TKeepAliveHttpClient& httpClient, const TString& query, const TString& resourcePool = {}) {
+        NJson::TJsonValue request;
+        request["database"] = "/Root";
+        request["query"] = query;
+        request["action"] = "execute-query";
+        request["schema"] = "multipart";
+        if (resourcePool) {
+            request["resource_pool"] = resourcePool;
+        }
+
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Accept"] = "multipart/form-data";
+        headers["Authorization"] = VALID_TOKEN;
+        const auto statusCode = httpClient.DoPost("/viewer/query?timeout=30000&schema=multipart",
+            NJson::WriteJson(request, false), &responseStream, headers);
+        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+        return responseStream.Str();
+    }
+
+    TVector<NJson::TJsonValue> ParseStreamingChunks(const TString& response) {
+        TVector<NJson::TJsonValue> chunks;
+        size_t position = 0;
+        while ((position = response.find("\r\n\r\n{", position)) != TString::npos) {
+            const size_t begin = position + 4;
+            const size_t end = response.find("\r\n--boundary", begin);
+            if (end == TString::npos) {
+                break;
+            }
+            TStringStream stream(response.substr(begin, end - begin));
+            chunks.push_back(NJson::ReadJsonTree(&stream, /* throwOnError = */ true));
+            position = end;
+        }
+        return chunks;
     }
 
     void CreateUser(TClient& client) {
@@ -4478,6 +4521,361 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_GET), "test-user");
         UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_POST, removeAccessBody), "HTTP/1.1 200 ");
         UNIT_ASSERT_VALUES_EQUAL(sendAclRequest(HTTP_METHOD_GET), getAclResponse);
+    }
+
+    Y_UNIT_TEST(WmStateExplicitPoolInQueryResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        auto poolDdl = PostQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL explicit_pool WITH (concurrent_query_limit = 10);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
+
+        // Wait until the pool is picked up by the workload manager: a query with an
+        // explicitly specified pool must report wm_state = EXECUTING and
+        // wm_classified_by = USER in the viewer response.
+        NJson::TJsonValue json;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline) {
+            json = PostQuery(httpClient, {
+                .Query = "SELECT 1;",
+                .Action = "execute",
+                .Schema = "modern",
+                .ResourcePool = "explicit_pool"
+            });
+            if (json.Has("wm_state") && json.Has("wm_classified_by")) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(json.Has("wm_state"), "wm_state is missing in response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_state"].GetString(), "EXECUTING", "response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_C(json.Has("wm_classified_by"), "wm_classified_by is missing in response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_classified_by"].GetString(), "USER", "response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["resource_pool"].GetString(), "explicit_pool", "response: " << NJson::WriteJson(json, false));
+    }
+
+    Y_UNIT_TEST(WmStateIsNotFabricatedForInvalidQuery) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        const auto response = PostStreamingQuery(httpClient, "SELECT FROM;");
+        UNIT_ASSERT_C(response.find("\"status\":\"GENERIC_ERROR\"") != TString::npos, response);
+        UNIT_ASSERT_C(response.find("\"wm_state\":\"QUEUED\"") == TString::npos, response);
+    }
+
+    Y_UNIT_TEST(WmPoolInfoIsPreservedOnQueryError) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        const auto response = PostQuery(httpClient, {
+            .Query = "SELECT FROM;",
+            .Action = "execute-query",
+            .Schema = "modern",
+            .ResourcePool = "default"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(response["status"].GetString(), "GENERIC_ERROR", NJson::WriteJson(response, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(response["resource_pool"].GetString(), "default", NJson::WriteJson(response, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(response["wm_classified_by"].GetString(), "USER", NJson::WriteJson(response, false));
+    }
+
+    Y_UNIT_TEST(WmStateClassifiedByClassifierInQueryResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        auto poolDdl = PostQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL classified_pool WITH (concurrent_query_limit = 10);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
+        // A classifier without any match predicates routes all requests to the pool.
+        auto classifierDdl = PostQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL CLASSIFIER catch_all_classifier WITH (resource_pool = 'classified_pool', rank = 20);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(classifierDdl["status"].GetString(), "SUCCESS", "Classifier DDL failed: " << NJson::WriteJson(classifierDdl, false));
+
+        // Wait for the classifier to propagate to the workload manager: a query
+        // without an explicit pool must be classified by the classifier and report
+        // wm_classified_by = "CLASSIFIER: catch_all_classifier" in the viewer response.
+        NJson::TJsonValue json;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline) {
+            json = PostQuery(httpClient, {
+                .Query = "SELECT 1;",
+                .Action = "execute",
+                .Schema = "modern"
+            });
+            if (json.Has("wm_classified_by") && json["wm_classified_by"].GetString() == "CLASSIFIER: catch_all_classifier") {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(json.Has("wm_classified_by"), "wm_classified_by is missing in response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_classified_by"].GetString(), "CLASSIFIER: catch_all_classifier", "response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["resource_pool"].GetString(), "classified_pool", "response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_C(json.Has("wm_state"), "wm_state is missing in response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_state"].GetString(), "EXECUTING", "response: " << NJson::WriteJson(json, false));
+    }
+
+    Y_UNIT_TEST(WmStatePoolConcurrencyLimit) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        // Create a pool with concurrent_query_limit = 1 so that a second
+        // concurrent query will be queued.
+        auto poolDdl = PostQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL limited_pool WITH (concurrent_query_limit = 1, queue_size = 10);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
+
+        // Wait until the pool is picked up by the workload manager.
+        NJson::TJsonValue json;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline) {
+            json = PostQuery(httpClient, {
+                .Query = "SELECT 1;",
+                .Action = "execute",
+                .Schema = "modern",
+                .ResourcePool = "limited_pool"
+            });
+            if (json.Has("wm_state") && json.Has("wm_classified_by")) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(json.Has("wm_state"), "wm_state is missing in response: " << NJson::WriteJson(json, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_state"].GetString(), "EXECUTING", "response: " << NJson::WriteJson(json, false));
+
+        // Keep the only execution slot busy while other queries enter the queue.
+        // Each request uses its own HTTP client because the client is not shared across threads.
+        const TString heavyQuery = "SELECT ListSum(ListMap(ListFromRange(1u, 30000000u), ($x) -> { RETURN $x * $x; }));";
+        std::future<TString> responses[3];
+        for (auto& response : responses) {
+            response = std::async(std::launch::async, [monPort, heavyQuery] {
+                TKeepAliveHttpClient queryClient("localhost", monPort);
+                return PostStreamingQuery(queryClient, heavyQuery, "limited_pool");
+            });
+        }
+
+        bool sawQueuedSession = false;
+        const auto queueDeadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < queueDeadline) {
+            const auto sessions = PostQuery(httpClient, {
+                .Query = "SELECT State FROM `.sys/query_sessions` WHERE WmPoolId = \"limited_pool\";",
+                .Action = "execute",
+                .Schema = "modern",
+                .ResourcePool = "default"
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(sessions["status"].GetString(), "SUCCESS", NJson::WriteJson(sessions, false));
+            if (NJson::WriteJson(sessions, false).find("\"QUEUED\"") != TString::npos) {
+                sawQueuedSession = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        bool sawQueuedChunk = false;
+        bool sawQueueExit = false;
+        for (auto& response : responses) {
+            const auto body = response.get();
+            UNIT_ASSERT_C(body.find("\"status\":\"SUCCESS\"") != TString::npos, body);
+            bool queued = false;
+            for (const auto& chunk : ParseStreamingChunks(body)) {
+                if (!chunk.Has("meta") || chunk["meta"]["event"].GetString() != "QueryStarted") {
+                    continue;
+                }
+                if (chunk["wm_state"].GetString() == "QUEUED") {
+                    queued = true;
+                    sawQueuedChunk = true;
+                } else if (queued && chunk["wm_state"].GetString() == "EXECUTING") {
+                    sawQueueExit = true;
+                }
+            }
+        }
+        UNIT_ASSERT_C(sawQueuedSession, "No limited_pool session entered QUEUED state");
+        UNIT_ASSERT_C(sawQueuedChunk, "WM queued a query but viewer did not stream the QUEUED state");
+        UNIT_ASSERT_C(sawQueueExit, "Viewer did not report EXECUTING after a queued query left the WM queue");
+    }
+
+    Y_UNIT_TEST(WmRejectedQueryIsNotExecuting) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        const auto poolDdl = PostQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL reject_pool WITH (concurrent_query_limit = 1, queue_size = 0);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", NJson::WriteJson(poolDdl, false));
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        NJson::TJsonValue ready;
+        while (TInstant::Now() < deadline) {
+            ready = PostQuery(httpClient, {
+                .Query = "SELECT 1;",
+                .Action = "execute",
+                .Schema = "modern",
+                .ResourcePool = "reject_pool"
+            });
+            if (ready.Has("wm_state")) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(ready["wm_state"].GetString(), "EXECUTING", NJson::WriteJson(ready, false));
+
+        const TString heavyQuery = "SELECT ListSum(ListMap(ListFromRange(1u, 30000000u), ($x) -> { RETURN $x * $x; }));";
+        std::future<TString> responses[4];
+        for (auto& response : responses) {
+            response = std::async(std::launch::async, [monPort, heavyQuery] {
+                TKeepAliveHttpClient queryClient("localhost", monPort);
+                return PostStreamingQuery(queryClient, heavyQuery, "reject_pool");
+            });
+        }
+
+        bool sawRejection = false;
+        for (auto& response : responses) {
+            const auto body = response.get();
+            for (const auto& chunk : ParseStreamingChunks(body)) {
+                if (!chunk.Has("meta") || chunk["meta"]["event"].GetString() != "QueryResponse" ||
+                    chunk["status"].GetString() != "OVERLOADED") {
+                    continue;
+                }
+                sawRejection = true;
+                UNIT_ASSERT_C(!chunk.Has("wm_state") || chunk["wm_state"].GetString() != "EXECUTING",
+                    "Rejected query was reported as executing: " << body);
+            }
+        }
+        UNIT_ASSERT_C(sawRejection, "No request was rejected by reject_pool");
     }
 
 }

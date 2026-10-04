@@ -1,8 +1,9 @@
+#pragma once
+
 #include "common_functions.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
-#include <aws/core/http/URI.h>
 #include <aws/sqs/SQSClient.h>
 #include <aws/sqs/model/ChangeMessageVisibilityBatchRequest.h>
 #include <aws/sqs/model/ChangeMessageVisibilityRequest.h>
@@ -20,7 +21,6 @@
 #include <aws/sqs/model/SetQueueAttributesRequest.h>
 
 #include <util/generic/guid.h>
-#include <util/generic/scope.h>
 #include <util/string/cast.h>
 #include <util/system/env.h>
 
@@ -28,18 +28,18 @@
 #include <set>
 #include <vector>
 
-namespace {
+namespace NFederationSqsTests {
 
 using namespace NFederationTests;
 using Aws::SQS::SQSClient;
+using TClientFactory = std::function<std::unique_ptr<SQSClient>(const Aws::Client::ClientConfiguration&)>;
 using namespace Aws::SQS::Model;
 
-const TString CMDatabase = "/logbroker-federation/prod";
-const TString Database = "/Root/logbroker-federation/prod";
-const TString SqsConsumer = "sqs-consumer";
-const TString SqsConsumerPath = "prod/" + SqsConsumer;
+inline const TString CMDatabase = "/logbroker-federation/prod";
+inline const TString Database = "/Root/logbroker-federation/prod";
+inline const TString SqsConsumer = "sqs-consumer";
+inline const TString SqsConsumerPath = "prod/" + SqsConsumer;
 
-// Keep the AWS runtime alive until all clients have been destroyed.
 struct TAwsRuntime {
     Aws::SDKOptions Options;
 
@@ -52,16 +52,16 @@ struct TAwsRuntime {
     }
 };
 
-Aws::String ToAws(const TString& value) {
+inline Aws::String ToAws(const TString& value) {
     return Aws::String(value.data(), value.size());
 }
 
 template <class TOutcome>
-void AssertSuccess(const TOutcome& outcome) {
+inline void AssertSuccess(const TOutcome& outcome) {
     UNIT_ASSERT_C(outcome.IsSuccess(), outcome.GetError().GetMessage());
 }
 
-Aws::Client::ClientConfiguration MakeSqsConfig(const TString& cluster) {
+inline Aws::Client::ClientConfiguration MakeSqsConfig(const TString& cluster) {
     const TString port = GetEnv(cluster + "_http_proxy_port");
     UNIT_ASSERT_C(!port.empty(), cluster + "_http_proxy_port is not set");
     Aws::Client::ClientConfiguration config;
@@ -71,66 +71,6 @@ Aws::Client::ClientConfiguration MakeSqsConfig(const TString& cluster) {
     config.requestTimeoutMs = 10000;
     return config;
 }
-
-// This SDK sends queue-scoped operations directly to QueueUrl. The YDB HTTP
-// proxy expects the database path in the request URI and the original QueueUrl
-// in the payload. Keep the SDK serialization, signing and XML response parsing.
-class TFederationSqsClient : public SQSClient {
-public:
-    TFederationSqsClient(const Aws::Auth::AWSCredentials& credentials,
-                         const Aws::Client::ClientConfiguration& config)
-        : SQSClient(credentials, config)
-        , Endpoint(config.endpointOverride)
-    {
-    }
-
-    ChangeMessageVisibilityOutcome ChangeMessageVisibility(const ChangeMessageVisibilityRequest& request) const override {
-        return ChangeMessageVisibilityOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    ChangeMessageVisibilityBatchOutcome ChangeMessageVisibilityBatch(const ChangeMessageVisibilityBatchRequest& request) const override {
-        return ChangeMessageVisibilityBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    DeleteMessageOutcome DeleteMessage(const DeleteMessageRequest& request) const override {
-        return DeleteMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    DeleteMessageBatchOutcome DeleteMessageBatch(const DeleteMessageBatchRequest& request) const override {
-        return DeleteMessageBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    DeleteQueueOutcome DeleteQueue(const DeleteQueueRequest& request) const override {
-        return DeleteQueueOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    GetQueueAttributesOutcome GetQueueAttributes(const GetQueueAttributesRequest& request) const override {
-        return GetQueueAttributesOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    PurgeQueueOutcome PurgeQueue(const PurgeQueueRequest& request) const override {
-        return PurgeQueueOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    ReceiveMessageOutcome ReceiveMessage(const ReceiveMessageRequest& request) const override {
-        return ReceiveMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    SendMessageOutcome SendMessage(const SendMessageRequest& request) const override {
-        return SendMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    SendMessageBatchOutcome SendMessageBatch(const SendMessageBatchRequest& request) const override {
-        return SendMessageBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-    SetQueueAttributesOutcome SetQueueAttributes(const SetQueueAttributesRequest& request) const override {
-        return SetQueueAttributesOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
-    }
-
-private:
-    const Aws::Http::URI Endpoint;
-};
 
 class TFederationTopic {
 public:
@@ -209,7 +149,7 @@ private:
     }
 };
 
-void SendMessages(const SQSClient& client, const Aws::String& queueUrl,
+inline void SendMessages(const SQSClient& client, const Aws::String& queueUrl,
                   const std::vector<TString>& bodies) {
     Aws::SQS::Model::SendMessageBatchRequest request;
     request.SetQueueUrl(queueUrl);
@@ -234,7 +174,7 @@ void SendMessages(const SQSClient& client, const Aws::String& queueUrl,
     }
 }
 
-void ReceiveMessages(const SQSClient& client, const Aws::String& queueUrl,
+inline void ReceiveMessages(const SQSClient& client, const Aws::String& queueUrl,
                      const std::vector<TString>& expected) {
     std::multiset<TString> received;
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
@@ -269,20 +209,18 @@ void ReceiveMessages(const SQSClient& client, const Aws::String& queueUrl,
     UNIT_ASSERT(received == std::multiset<TString>(expected.begin(), expected.end()));
 }
 
-// Every message scenario writes and reads through SQS on both federation clusters.
 template <class TCheck>
-void CheckSqsToSqs(TCheck check) {
+inline void CheckSqsMethod(const TClientFactory& makeClient, TCheck check) {
     TAwsRuntime runtime;
     TFederationTopic topic;
     for (const auto& cluster : {TString("cluster_a"), TString("cluster_b")}) {
-        TFederationSqsClient sqs(Aws::Auth::AWSCredentials("unused", "unused", "root@builtin"),
-                      MakeSqsConfig(cluster));
-        const auto queueUrl = topic.GetQueueUrl(sqs);
-        check(sqs, queueUrl, cluster, topic);
+        const auto sqs = makeClient(MakeSqsConfig(cluster));
+        const auto queueUrl = topic.GetQueueUrl(*sqs);
+        check(*sqs, queueUrl, cluster, topic);
     }
 }
 
-Aws::Vector<Message> Receive(const SQSClient& client, const Aws::String& queueUrl, size_t count, int visibilityTimeout = 60) {
+inline Aws::Vector<Message> Receive(const SQSClient& client, const Aws::String& queueUrl, size_t count, int visibilityTimeout = 60) {
     Aws::Vector<Message> messages;
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
     while (messages.size() < count && TInstant::Now() < deadline) {
@@ -303,7 +241,7 @@ Aws::Vector<Message> Receive(const SQSClient& client, const Aws::String& queueUr
     return messages;
 }
 
-void AssertEmpty(const SQSClient& client, const Aws::String& queueUrl) {
+inline void AssertEmpty(const SQSClient& client, const Aws::String& queueUrl) {
     ReceiveMessageRequest request;
     request.SetQueueUrl(queueUrl);
     request.SetWaitTimeSeconds(1);
@@ -312,15 +250,15 @@ void AssertEmpty(const SQSClient& client, const Aws::String& queueUrl) {
     UNIT_ASSERT(outcome.GetResult().GetMessages().empty());
 }
 
-void Delete(const SQSClient& client, const Aws::String& queueUrl, const Message& message) {
+inline void Delete(const SQSClient& client, const Aws::String& queueUrl, const Message& message) {
     DeleteMessageRequest request;
     request.SetQueueUrl(queueUrl);
     request.SetReceiptHandle(message.GetReceiptHandle());
     AssertSuccess(client.DeleteMessage(request));
 }
 
-void CheckVisibility(bool batch) {
-    CheckSqsToSqs([=](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+inline void CheckVisibility(const TClientFactory& makeClient, bool batch) {
+    CheckSqsMethod(makeClient, [=](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
         const std::vector<TString> bodies = batch
             ? std::vector<TString>{cluster + "-first", cluster + "-second"}
             : std::vector<TString>{cluster + "-single"};
@@ -373,79 +311,77 @@ void CheckVisibility(bool batch) {
     });
 }
 
-} // namespace
 
-Y_UNIT_TEST_SUITE(SqsFederationCompatibilityTests) {
-    Y_UNIT_TEST(SqsBatchWriteAndReadOnFederation) {
-        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
-            const std::vector<TString> bodies = {cluster + "-0", cluster + "-1", cluster + "-2"};
-            SendMessages(client, url, bodies);
-            ReceiveMessages(client, url, bodies);
-            AssertEmpty(client, url);
-        });
-    }
-
-    Y_UNIT_TEST(SqsSingleWriteReadAndDeleteOnFederation) {
-        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
-            SendMessageRequest request;
-            request.SetQueueUrl(url);
-            request.SetMessageBody(ToAws(cluster + "-single"));
-            const auto sent = client.SendMessage(request);
-            AssertSuccess(sent);
-            UNIT_ASSERT(!sent.GetResult().GetMessageId().empty());
-            const auto messages = Receive(client, url, 1, 1);
-            UNIT_ASSERT_VALUES_EQUAL(messages.front().GetBody(), request.GetMessageBody());
-            UNIT_ASSERT_VALUES_EQUAL(messages.front().GetMessageId(), sent.GetResult().GetMessageId());
-            Delete(client, url, messages.front());
-            Sleep(TDuration::Seconds(2));
-            AssertEmpty(client, url);
-        });
-    }
-
-    Y_UNIT_TEST(SqsChangeMessageVisibilityOnFederation) {
-        CheckVisibility(false);
-    }
-
-    Y_UNIT_TEST(SqsChangeMessageVisibilityBatchOnFederation) {
-        CheckVisibility(true);
-    }
-
-    Y_UNIT_TEST(SqsGetQueueAttributesOnFederation) {
-        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic&) {
-            GetQueueAttributesRequest request;
-            request.SetQueueUrl(url);
-            request.AddAttributeNames(QueueAttributeName::VisibilityTimeout);
-            const auto outcome = client.GetQueueAttributes(request);
-            AssertSuccess(outcome);
-            const auto& attributes = outcome.GetResult().GetAttributes();
-            UNIT_ASSERT(attributes.contains(QueueAttributeName::VisibilityTimeout));
-            UNIT_ASSERT_VALUES_EQUAL(attributes.at(QueueAttributeName::VisibilityTimeout), "30");
-        });
-    }
-
-    Y_UNIT_TEST(SqsListQueuesOnFederation) {
-        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic& topic) {
-            ListQueuesRequest request;
-            request.SetQueueNamePrefix(ToAws(topic.Name));
-            const auto outcome = client.ListQueues(request);
-            AssertSuccess(outcome);
-            const auto& urls = outcome.GetResult().GetQueueUrls();
-            UNIT_ASSERT(std::find(urls.begin(), urls.end(), url) != urls.end());
-        });
-    }
-
-    Y_UNIT_TEST(SqsPurgeQueueOnFederation) {
-        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
-            SendMessages(client, url, {cluster + "-purged-0", cluster + "-purged-1"});
-            // Purge must remove both available and in-flight messages.
-            Receive(client, url, 1, 1);
-            PurgeQueueRequest request;
-            request.SetQueueUrl(url);
-            AssertSuccess(client.PurgeQueue(request));
-            Sleep(TDuration::Seconds(2));
-            AssertEmpty(client, url);
-            SendMessages(client, url, {cluster + "-after-purge"});
-            ReceiveMessages(client, url, {cluster + "-after-purge"});
-        });
-    }
+inline void SqsBatchWriteAndReadOnFederation(const TClientFactory& makeClient) {
+    CheckSqsMethod(makeClient, [](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+        const std::vector<TString> bodies = {cluster + "-0", cluster + "-1", cluster + "-2"};
+        SendMessages(client, url, bodies);
+        ReceiveMessages(client, url, bodies);
+        AssertEmpty(client, url);
+    });
 }
+
+inline void SqsSingleWriteReadAndDeleteOnFederation(const TClientFactory& makeClient) {
+    CheckSqsMethod(makeClient, [](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+        SendMessageRequest request;
+        request.SetQueueUrl(url);
+        request.SetMessageBody(ToAws(cluster + "-single"));
+        const auto sent = client.SendMessage(request);
+        AssertSuccess(sent);
+        UNIT_ASSERT(!sent.GetResult().GetMessageId().empty());
+        const auto messages = Receive(client, url, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages.front().GetBody(), request.GetMessageBody());
+        UNIT_ASSERT_VALUES_EQUAL(messages.front().GetMessageId(), sent.GetResult().GetMessageId());
+        Delete(client, url, messages.front());
+        Sleep(TDuration::Seconds(2));
+        AssertEmpty(client, url);
+    });
+}
+
+inline void SqsChangeMessageVisibilityOnFederation(const TClientFactory& makeClient) {
+    CheckVisibility(makeClient, false);
+}
+
+inline void SqsChangeMessageVisibilityBatchOnFederation(const TClientFactory& makeClient) {
+    CheckVisibility(makeClient, true);
+}
+
+inline void SqsGetQueueAttributesOnFederation(const TClientFactory& makeClient) {
+    CheckSqsMethod(makeClient, [](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic&) {
+        GetQueueAttributesRequest request;
+        request.SetQueueUrl(url);
+        request.AddAttributeNames(QueueAttributeName::VisibilityTimeout);
+        const auto outcome = client.GetQueueAttributes(request);
+        AssertSuccess(outcome);
+        const auto& attributes = outcome.GetResult().GetAttributes();
+        UNIT_ASSERT(attributes.contains(QueueAttributeName::VisibilityTimeout));
+        UNIT_ASSERT_VALUES_EQUAL(attributes.at(QueueAttributeName::VisibilityTimeout), "30");
+    });
+}
+
+inline void SqsListQueuesOnFederation(const TClientFactory& makeClient) {
+    CheckSqsMethod(makeClient, [](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic& topic) {
+        ListQueuesRequest request;
+        request.SetQueueNamePrefix(ToAws(topic.Name));
+        const auto outcome = client.ListQueues(request);
+        AssertSuccess(outcome);
+        const auto& urls = outcome.GetResult().GetQueueUrls();
+        UNIT_ASSERT(std::find(urls.begin(), urls.end(), url) != urls.end());
+    });
+}
+
+inline void SqsPurgeQueueOnFederation(const TClientFactory& makeClient) {
+    CheckSqsMethod(makeClient, [](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+        SendMessages(client, url, {cluster + "-purged-0", cluster + "-purged-1"});
+        // Purge must remove both available and in-flight messages.
+        Receive(client, url, 1, 1);
+        PurgeQueueRequest request;
+        request.SetQueueUrl(url);
+        AssertSuccess(client.PurgeQueue(request));
+        Sleep(TDuration::Seconds(2));
+        AssertEmpty(client, url);
+        SendMessages(client, url, {cluster + "-after-purge"});
+        ReceiveMessages(client, url, {cluster + "-after-purge"});
+    });
+}
+} // namespace NFederationSqsTests

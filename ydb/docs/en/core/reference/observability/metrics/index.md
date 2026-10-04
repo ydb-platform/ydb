@@ -104,6 +104,7 @@ You can analyze a transaction's execution time using a histogram counter. The in
 
 ## Topic metrics {#topics}
 
+<<<<<<< HEAD
 | Metric name<br/>Type<br/>units of measurement | Description<br/>Labels |
 | ----- | ----- |
 |`topic.producers_count`<br/>`GAUGE`, pieces | The number of unique topic [producers](../../../concepts/topic#producer-id).<br/>Labels:<br/>- _topic_ – the name of the topic. |
@@ -119,6 +120,50 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.write.uncommitted_messages`<br/>`RATE`, pieces | The number of messages written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
+=======
+| Metric name<br/>Type, units of measurement | Description<br/>Labels |
+| --- | --- |
+| `topic.producers_count`<br/>`GAUGE`, count | Number of unique topic [sources](../../../concepts/datamodel/topic#producer-id).<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.storage_bytes`<br/>`GAUGE`, bytes | Topic size in bytes.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.read.bytes`<br/>`RATE`, bytes | Number of bytes read from the topic.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
+| `topic.read.messages`<br/>`RATE`, count | Number of messages read from the topic.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
+| `topic.read.lag_messages`<br/>`GAUGE`, count | Total number of messages not yet read by the given reader across the topic. The metric serves as an indicator of reader lag. An increase in the value means the reader is falling behind the message flow — for example, due to a reader stop, partition rebalancing, or a write load spike.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
+| `topic.read.lag_milliseconds`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in milliseconds. Shows the number of messages for which the difference between the read time and the message creation time falls within a given interval.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
+| `topic.write.bytes`<br/>`RATE`, bytes | Size of written data.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.uncommited_bytes`<br/>`RATE`, bytes | Size of data written as part of not yet completed transactions.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.uncompressed_bytes`<br/>`RATE`, bytes | Size of decompressed written data.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.messages`<br/>`RATE`, count | Number of written messages.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.uncommitted_messages`<br/>`RATE`, count | Number of messages written as part of not yet completed transactions.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.message_size_bytes`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in bytes. Shows the number of messages whose size matches the interval boundaries.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.write.lag_milliseconds`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in milliseconds. Shows the number of messages for which the difference between the write time and the message creation time falls within a given interval.<br/>Labels:<br/>- _topic_ – topic name. |
+
+## Aggregated topic partition metrics {#topics_partitions}
+
+The following table lists aggregated partition metrics for a topic. Maximum and minimum values are calculated across all partitions of the specified topic.
+
+| Metric name<br/>Type, units | Description<br/>Labels |
+| --- | --- |
+| `topic.partition.init_duration_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum partition initialization delay.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.producers_count_max`<br/>`GAUGE`, count | Maximum number of sources in a partition.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.storage_bytes_max`<br/>`GAUGE`, bytes | Maximum partition size in bytes.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, count | Minimum partition uptime after restart.<br/>Normally during a rolling restart `topic.partition.uptime_milliseconds_min` is close to 0, after the rolling restart ends, the value of `topic.partition.uptime_milliseconds_min` should increase to infinity.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.total_count`<br/>`GAUGE`, count | Total number of partitions in the topic.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.alive_count`<br/>`GAUGE`, count | Number of partitions reporting their metrics.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.committed_end_to_end_lag_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum (across all partitions) difference between the current time and the creation time of the last committed message.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.committed_lag_messages_max`<br/>`GAUGE`, units | Maximum (across all partitions) difference between the last partition offset and the committed partition offset.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.committed_read_lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The maximum (across all partitions) difference between the current time and the time of the oldest uncommitted message. A value greater than zero indicates that the topic contains at least one message that has been written and may already have been consumed, but has not yet been committed.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name|
+| `topic.partition.end_to_end_lag_milliseconds_max`<br/>`GAUGE`, milliseconds | Difference between the current time and the minimum creation time among all messages read in the last minute across all partitions.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.lag_messages_max`<br/>`GAUGE`, units | Maximum difference (across all partitions) between the last offset in the partition and the last read offset.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.read.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum idle time (how long the partition has not been read from) across all partitions.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, milliseconds | Difference between the current time and the minimum write time among all messages read in the last minute across all partitions.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name. |
+| `topic.partition.write.lag_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum difference between the write time and the creation time among all messages written in the last minute.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.speed_limit_bytes_per_second`<br/>`GAUGE`, bytes per second | Write quota in bytes per second per partition.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.throttled_nanoseconds_max`<br/>`GAUGE`, nanoseconds | Maximum write throttling time (waiting on quota) across all partitions. In the limit, if `topic.partition.write.throttled_nanoseconds_max` = 10^9, it means that the entire second was spent waiting on quota.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.bytes_per_day_max`<br/>`GAUGE`, bytes | Maximum number of bytes written in the last 24 hours across all partitions.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, bytes | Maximum number of bytes written in the last hour across all partitions.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, bytes | Maximum number of bytes written in the last minute across all partitions.<br/>Labels:<br/>- _topic_ – topic name. |
+| `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum partition write idle time.<br/>Labels:<br/>- _topic_ – topic name. |
+>>>>>>> 8af4af1994b (Expand topic.read.lag_messages metric description (#52520))
 
 ## Resource pool metrics {#resource_pools}
 

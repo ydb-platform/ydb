@@ -376,7 +376,7 @@ jobs:
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
     - name: Upload graph and plan
-      if: steps.plan.outputs.active_shard_count != ''
+      if: steps.plan.outputs.active_shard_count != '' && steps.plan.outputs.active_shard_count != '1'
       uses: actions/upload-artifact@v4
       with:
         name: pr-check-graph-${{ matrix.build_preset }}-${{ github.run_id }}
@@ -661,11 +661,12 @@ jobs:
             --summary-file "$GITHUB_STEP_SUMMARY" || true
         done
     - name: Post preset statuses
-      if: always() && needs.expand_shards.result == 'success'
+      if: always()
       env:
         GITHUB_TOKEN: ${{ github.token }}
         STATUS_SHA: ${{ github.event.pull_request.head.sha }}
         PRESETS: ${{ needs.expand_shards.outputs.presets }}
+        BUILD_RESULT: ${{ needs.build_and_test.result }}
       run: |
         python3 .github/scripts/tests/shard_progress.py list-jobs --run-id "$GITHUB_RUN_ID" > jobs.json || echo '[]' > jobs.json
         post() {
@@ -677,6 +678,9 @@ jobs:
             -d "$1" || echo "warning: status post failed"
         }
         target="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        if [ -z "$PRESETS" ] || [ "$PRESETS" = "[]" ]; then
+          PRESETS='[]'
+        fi
         for preset in $(printf '%s' "$PRESETS" | jq -r '.[]'); do
           states=$(python3 .github/scripts/tests/shard_progress.py aggregate-statuses \
             --preset "$preset" --state-dir shard-events --jobs jobs.json)
@@ -699,6 +703,18 @@ jobs:
             post "{\"state\":\"${test_state}\",\"description\":\"${test_message}\",\"context\":\"test_${preset}\",\"target_url\":\"${target}\"}"
           fi
         done
+        # Same two presets as the build_and_test matrix. A leg that dies in
+        # graph_compare never posts build_*; close that context and leave test_* alone.
+        if [ "$BUILD_RESULT" = "failure" ]; then
+          python3 .github/scripts/tests/shard_progress.py missing-build \
+            --state-dir shard-events \
+            --jobs jobs.json \
+            --presets relwithdebinfo,release-asan \
+            | while IFS= read -r preset; do
+              [ -z "$preset" ] && continue
+              post "{\"state\":\"failure\",\"description\":\"Preset failed before tests\",\"context\":\"build_${preset}\",\"target_url\":\"${target}\"}"
+            done
+        fi
     - name: Fail unless every shard succeeded
       if: always()
       run: |

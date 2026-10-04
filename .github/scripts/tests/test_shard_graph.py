@@ -546,7 +546,26 @@ class ShardProgressTest(unittest.TestCase):
             [{"name": "Test relwithdebinfo shard 3", "conclusion": "failure"}],
             "relwithdebinfo",
         )
-        self.assertEqual(rows, [{"build": "failure", "tests": ""}])
+        self.assertEqual(rows, [])
+        self.assertEqual(
+            shard_progress.job_url_for_shard(
+                [
+                    {"name": "Test relwithdebinfo shard 10", "html_url": "https://example.test/10"},
+                    {"name": "Test relwithdebinfo shard 1", "html_url": "https://example.test/1"},
+                ],
+                "relwithdebinfo",
+                1,
+            ),
+            "https://example.test/1",
+        )
+        self.assertEqual(
+            shard_progress.presets_needing_build_failure(
+                [{"name": "Build and test relwithdebinfo", "conclusion": "failure", "steps": []}],
+                [],
+                ["relwithdebinfo", "release-asan"],
+            ),
+            ["relwithdebinfo"],
+        )
 
     def test_one_bad_plan_does_not_drop_the_other_preset(self) -> None:
         good = {

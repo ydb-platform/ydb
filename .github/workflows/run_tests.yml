@@ -625,6 +625,7 @@ jobs:
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
 
       - name: Upload graph and plan
+        if: steps.plan.outputs.active_shard_count != '' && steps.plan.outputs.active_shard_count != '1'
         uses: actions/upload-artifact@v4
         with:
           name: test-graph-${{ inputs.build_preset }}-${{ github.run_id }}

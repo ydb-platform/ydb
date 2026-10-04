@@ -222,6 +222,8 @@ if [ "$INPUT_INCREMENT" = "true" ]; then
   if [ $RC -ne 0 ]; then
     echo "graph_compare.py returned $RC, build failed"
     echo "status=failed" >> $GITHUB_OUTPUT
+    echo "build_result=failure" >> $GITHUB_OUTPUT
+    echo "test_result=skipped" >> $GITHUB_OUTPUT
     BUILD_FAILED=1
     echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="$GITHUB_TOKEN"  .github/scripts/tests/comment-pr.py --color red
     exit $RC

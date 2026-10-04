@@ -214,10 +214,11 @@ def list_run_jobs(repository: str, token: str, run_id: str) -> list[dict[str, An
 
 
 def job_url_for_shard(jobs: list[dict[str, Any]], preset: str, shard_id: int) -> str:
-    needle = f"shard {shard_id}"
+    """Match the shard id as its own token. ``shard 1`` must not hit ``shard 10``."""
+    suffix = f"shard {shard_id}"
     for job in jobs:
         name = str(job.get("name") or "")
-        if preset in name and needle in name:
+        if preset in name and name.endswith(suffix):
             return str(job.get("html_url") or "")
     return ""
 
@@ -272,11 +273,36 @@ def rows_for_preset(
         shard_id = name[len(prefix):].strip()
         if shard_id in seen:
             continue
+        # A green job with no file still passed its own test step. A red job
+        # with no file is not proof that ya make failed, so leave it unset and
+        # let the workflow gate fail the run.
         if job.get("conclusion") == "success":
             rows.append({"build": "success", "tests": "success"})
-        else:
-            rows.append({"build": "failure", "tests": ""})
     return rows
+
+
+def presets_needing_build_failure(
+    jobs: list[dict[str, Any]],
+    states: list[dict[str, Any]],
+    presets: list[str],
+) -> list[str]:
+    """Matrix presets whose Build and test job died before any shard or single-job status.
+
+    ``Run the single job`` posts build_*/test_* itself. Do not overwrite those.
+    """
+    missing: list[str] = []
+    for preset in presets:
+        if rows_for_preset(states, jobs, preset):
+            continue
+        job = next((item for item in jobs if str(item.get("name") or "") == f"Build and test {preset}"), None)
+        if not job or job.get("conclusion") != "failure":
+            continue
+        steps = job.get("steps") or []
+        single = next((step for step in steps if str(step.get("name") or "") == "Run the single job"), None)
+        if single and single.get("conclusion") not in (None, "skipped"):
+            continue
+        missing.append(preset)
+    return missing
 
 
 def load_state_files(directory: str) -> list[dict[str, Any]]:
@@ -704,6 +730,17 @@ def _cmd_list_jobs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_missing_build(args: argparse.Namespace) -> int:
+    states = load_state_files(args.state_dir)
+    jobs = json.loads(args.jobs.read_text(encoding="utf-8"))
+    if not isinstance(jobs, list):
+        raise ValueError("jobs file must be a JSON list")
+    presets = [item for item in args.presets.split(",") if item]
+    for preset in presets_needing_build_failure(jobs, states, presets):
+        print(preset)
+    return 0
+
+
 def _cmd_aggregate_statuses(args: argparse.Namespace) -> int:
     states = load_state_files(args.state_dir)
     jobs = json.loads(args.jobs.read_text(encoding="utf-8"))
@@ -763,6 +800,12 @@ def main(argv: list[str] | None = None) -> int:
     statuses.add_argument("--state-dir", required=True)
     statuses.add_argument("--jobs", required=True, type=Path)
     statuses.set_defaults(func=_cmd_aggregate_statuses)
+
+    missing = sub.add_parser("missing-build", help="Presets that died before any status was posted.")
+    missing.add_argument("--state-dir", default="")
+    missing.add_argument("--jobs", required=True, type=Path)
+    missing.add_argument("--presets", required=True, help="Comma-separated preset names from the PR-check matrix")
+    missing.set_defaults(func=_cmd_missing_build)
 
     args = parser.parse_args(argv)
     try:

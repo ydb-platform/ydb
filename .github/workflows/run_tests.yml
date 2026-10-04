@@ -773,6 +773,7 @@ jobs:
 
       - name: Publish shard progress
         if: always()
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.determine-branch.outputs.pr_number || inputs.pull_number || '' }}
@@ -836,7 +837,8 @@ jobs:
             --pr "$pr" \
             --run-id "$GITHUB_RUN_ID" \
             --preset "${{ inputs.build_preset }}" \
-            --summary-file "$GITHUB_STEP_SUMMARY"
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            || echo "warning: could not reconcile the shard comment"
 
       - name: Fail unless every shard succeeded
         if: always()

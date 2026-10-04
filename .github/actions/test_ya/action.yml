@@ -574,10 +574,17 @@ runs:
               if [ -n "$ORIG_CONTEXT_PATH" ]; then
                 narrow_args+=(--context "$ORIG_CONTEXT_PATH" --context-output "$CURRENT_PUBLIC_DIR/retry_context.json")
               fi
-              python3 .github/scripts/tests/shard_graph.py narrow-retry "${narrow_args[@]}"
-              GRAPH_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_graph.json")
-              if [ -n "$ORIG_CONTEXT_PATH" ]; then
-                CONTEXT_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_context.json")
+              if python3 .github/scripts/tests/shard_graph.py narrow-retry "${narrow_args[@]}"; then
+                GRAPH_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_graph.json")
+                if [ -n "$ORIG_CONTEXT_PATH" ]; then
+                  CONTEXT_PATH=$(realpath "$CURRENT_PUBLIC_DIR/retry_context.json")
+                fi
+              else
+                echo "narrow-retry failed; replaying the original shard graph"
+                GRAPH_PATH=$(realpath "$ORIG_GRAPH_PATH")
+                if [ -n "$ORIG_CONTEXT_PATH" ]; then
+                  CONTEXT_PATH=$(realpath "$ORIG_CONTEXT_PATH")
+                fi
               fi
             elif [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"

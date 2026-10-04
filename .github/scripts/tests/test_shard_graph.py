@@ -522,6 +522,30 @@ class ShardProgressTest(unittest.TestCase):
         self.assertEqual(narrowed["result"], ["test-b"])
         unchanged = shard_graph.narrow_graph_to_report(graph, {"results": []})
         self.assertEqual(unchanged["result"], ["test-a", "test-b"])
+        # A report we cannot read must not be treated as "drop every test".
+        self.assertEqual(shard_graph.narrow_graph_to_report(graph, {})["result"], ["test-a", "test-b"])
+
+    def test_one_bad_plan_does_not_drop_the_other_preset(self) -> None:
+        good = {
+            "shard_count": 2,
+            "threads": 52,
+            "run": {
+                "build_preset": "relwithdebinfo",
+                "build_target": "ydb/",
+                "test_size": "small,medium",
+                "threads": 52,
+            },
+            "shards": [{"id": 0}, {"id": 1}],
+        }
+        single = {"shard_count": 1, "run": {"build_preset": "release-asan"}, "shards": [{"id": 0}]}
+        broken = {"shard_count": 4, "shards": []}
+        rows, errors = shard_graph.matrix_rows_from_plans(
+            [("good", good), ("single", single), ("broken", broken), ("unreadable", {"_error": "bad json"})]
+        )
+        self.assertEqual([row["shard_id"] for row in rows], [0, 1])
+        self.assertEqual({row["build_preset"] for row in rows}, {"relwithdebinfo"})
+        self.assertEqual(rows[0]["build_target"], "ydb/")
+        self.assertEqual(len(errors), 2)
 
     def test_comment_list_follows_the_next_link(self) -> None:
         self.assertEqual(

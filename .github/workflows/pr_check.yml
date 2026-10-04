@@ -431,12 +431,15 @@ jobs:
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
   expand_shards:
     needs: [check-running-allowed, build_and_test]
-    if: always() && github.event_name == 'pull_request_target' && needs.build_and_test.result == 'success'
+    # A failed preset must not cancel shards of a preset that already saved a plan.
+    if: always() && github.event_name == 'pull_request_target' && (needs.build_and_test.result == 'success' || needs.build_and_test.result == 'failure')
     runs-on: ubuntu-latest
     outputs:
-      has_shards: ${{ steps.matrix.outputs.has_shards }}
-      include: ${{ steps.matrix.outputs.include }}
-      presets: ${{ steps.matrix.outputs.presets }}
+      has_shards: ${{ steps.matrix.outputs.has_shards || steps.gate.outputs.has_shards }}
+      include: ${{ steps.matrix.outputs.include || steps.gate.outputs.include }}
+      presets: ${{ steps.matrix.outputs.presets || steps.gate.outputs.presets }}
+      should_gate: ${{ steps.gate.outputs.should_gate }}
+      degraded: ${{ steps.matrix.outputs.degraded || steps.gate.outputs.degraded }}
     steps:
     - name: Download plans
       id: download
@@ -445,48 +448,74 @@ jobs:
       with:
         pattern: pr-check-graph-*
         path: graphs
+    - name: Decide shard gate
+      id: gate
+      run: |
+        mode="${PR_CHECK_SHARD_COUNT:-1}"
+        if [ "$mode" = "1" ]; then
+          echo "should_gate=false" >> "$GITHUB_OUTPUT"
+          echo "has_shards=false" >> "$GITHUB_OUTPUT"
+          echo "include=[]" >> "$GITHUB_OUTPUT"
+          echo "presets=[]" >> "$GITHUB_OUTPUT"
+          echo "degraded=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "should_gate=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Checkout planner
+      if: steps.gate.outputs.should_gate == 'true'
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        sparse-checkout: .github/scripts/tests
+        allow-unsafe-pr-checkout: true
     - name: Build shard matrix from plans
       id: matrix
+      if: steps.gate.outputs.should_gate == 'true'
       run: |
+        mode="${PR_CHECK_SHARD_COUNT:-1}"
         python3 - << 'PY'
         import json
+        import sys
         from pathlib import Path
-        rows = []
+        sys.path.insert(0, ".github/scripts/tests")
+        import shard_graph
+        plans = []
         for plan_path in sorted(Path("graphs").glob("*/shard_plan.json")):
-            plan = json.loads(plan_path.read_text())
-            if int(plan.get("shard_count") or 0) <= 1:
-                continue
-            run = plan.get("run") or {}
-            preset = str(run.get("build_preset") or "")
-            target = str(run.get("build_target") or "")
-            size = str(run.get("test_size") or "")
-            threads = int(run.get("threads") or plan.get("threads") or 0)
-            if not preset or not target or not size or threads < 1:
-                raise SystemExit(f"plan {plan_path} is missing the matrix row that produced it")
-            for shard in plan.get("shards") or []:
-                rows.append({
-                    "build_preset": preset,
-                    "build_target": target,
-                    "test_size": size,
-                    "threads_count": threads,
-                    "shard_id": int(shard["id"]),
-                })
+            try:
+                parsed = json.loads(plan_path.read_text())
+            except json.JSONDecodeError as exc:
+                parsed = {"_error": str(exc)}
+            plans.append((plan_path.parent.name, parsed))
+        rows, errors = shard_graph.matrix_rows_from_plans(plans)
         presets = sorted({row["build_preset"] for row in rows})
         Path("include.json").write_text(json.dumps(rows))
         Path("presets.json").write_text(json.dumps(presets))
-        print(json.dumps(rows))
+        Path("errors.txt").write_text("\n".join(errors))
+        for error in errors:
+            print(f"plan error: {error}", file=sys.stderr)
         PY
-        mode="${PR_CHECK_SHARD_COUNT:-1}"
         plans=$(find graphs -name shard_plan.json 2>/dev/null | wc -l | tr -d ' ')
         if [ "$mode" != "1" ] && [ "${plans:-0}" = "0" ]; then
+          echo "degraded=true" >> "$GITHUB_OUTPUT"
+          echo "has_shards=false" >> "$GITHUB_OUTPUT"
+          echo "include=[]" >> "$GITHUB_OUTPUT"
+          echo "presets=[]" >> "$GITHUB_OUTPUT"
           echo "shard mode is on but no shard plan was uploaded"
           exit 1
         fi
-        count=$(python3 -c 'import json; print(len(json.load(open("include.json"))))' 2>/dev/null || echo 0)
+        count=$(python3 -c 'import json; print(len(json.load(open("include.json"))))')
+        if [ -s errors.txt ]; then
+          echo "degraded=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "degraded=false" >> "$GITHUB_OUTPUT"
+        fi
         if [ "$count" = "0" ]; then
           echo "has_shards=false" >> "$GITHUB_OUTPUT"
           echo "include=[]" >> "$GITHUB_OUTPUT"
           echo "presets=[]" >> "$GITHUB_OUTPUT"
+          if [ -s errors.txt ]; then
+            exit 1
+          fi
         else
           echo "has_shards=true" >> "$GITHUB_OUTPUT"
           echo "include=$(cat include.json)" >> "$GITHUB_OUTPUT"
@@ -555,6 +584,7 @@ jobs:
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
     - name: Publish shard progress
       if: always()
+      continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -592,7 +622,7 @@ jobs:
 
   shard_result:
     needs: [check-running-allowed, build_and_test, expand_shards, test_shard]
-    if: always() && github.event_name == 'pull_request_target' && (needs.expand_shards.outputs.has_shards == 'true' || needs.expand_shards.result == 'failure')
+    if: always() && github.event_name == 'pull_request_target' && needs.expand_shards.outputs.should_gate == 'true'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout progress script
@@ -632,7 +662,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
-            -d "$1"
+            -d "$1" || echo "warning: status post failed"
         }
         for preset in $(printf '%s' "$PRESETS" | jq -r '.[]'); do
           bad=$(printf '%s' "$jobs" | jq --arg preset "$preset" '[.jobs[] | select(.name | startswith("Test " + $preset + " shard")) | select(.conclusion != "success")] | length')
@@ -654,12 +684,14 @@ jobs:
       run: |
         expand="${{ needs.expand_shards.result }}"
         shards="${{ needs.test_shard.result }}"
-        echo "expand_shards=$expand test_shard=$shards"
-        if [ "$expand" != "success" ]; then
-          echo "Shard matrix was not built."
+        build="${{ needs.build_and_test.result }}"
+        degraded="${{ needs.expand_shards.outputs.degraded }}"
+        echo "build_and_test=$build expand_shards=$expand test_shard=$shards degraded=$degraded"
+        if [ "$expand" != "success" ] || [ "$degraded" = "true" ] || [ "$build" = "failure" ]; then
+          echo "A preset failed or its plan could not be read. Shards that were planned still ran."
           exit 1
         fi
-        if [ "$shards" != "success" ]; then
+        if [ "$shards" != "success" ] && [ "$shards" != "skipped" ]; then
           echo "A shard failed. See the PR comment and jobs named 'Test <preset> shard N'."
           exit 1
         fi
@@ -681,7 +713,7 @@ jobs:
       - name: Gather required checks results
         shell: bash
         run: |
-          if [ "${{ needs.build_and_test.result }}" = "failure" ] || [ "${{ needs.expand_shards.result }}" = "failure" ] || [ "${{ needs.test_shard.result }}" = "failure" ] || [ "${{ needs.shard_result.result }}" = "failure" ]; then
+          if [ "${{ needs.build_and_test.result }}" = "failure" ] || [ "${{ needs.shard_result.result }}" = "failure" ] || { [ "${{ needs.expand_shards.outputs.should_gate }}" = "true" ] && [ "${{ needs.expand_shards.result }}" = "failure" ]; } || [ "${{ needs.test_shard.result }}" = "failure" ]; then
             integrated_status=failure
           else
           integrated_status=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \

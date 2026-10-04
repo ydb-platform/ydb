@@ -663,6 +663,54 @@ def result_uids_matching_paths(graph: dict[str, Any], paths: list[str]) -> set[s
     return matched
 
 
+def matrix_rows_from_plans(plans: list[tuple[str, dict[str, Any]]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Build shard-job rows from saved plans.
+
+    A plan with one shard is not a matrix row: that preset already ran as a
+    single job. A broken plan is reported and skipped so the other presets
+    still get rows.
+    """
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for name, plan in plans:
+        if not isinstance(plan, dict) or plan.get("_error"):
+            errors.append(f"{name}: {plan.get('_error') if isinstance(plan, dict) else 'not an object'}")
+            continue
+        try:
+            count = int(plan.get("shard_count") or 0)
+        except (TypeError, ValueError):
+            errors.append(f"{name}: shard_count is not an integer")
+            continue
+        if count <= 1:
+            continue
+        run = plan.get("run") if isinstance(plan.get("run"), dict) else {}
+        preset = str(run.get("build_preset") or "")
+        target = str(run.get("build_target") or "")
+        size = str(run.get("test_size") or "")
+        try:
+            threads = int(run.get("threads") or plan.get("threads") or 0)
+        except (TypeError, ValueError):
+            threads = 0
+        shards = plan.get("shards")
+        if not preset or not target or not size or threads < 1 or not isinstance(shards, list) or not shards:
+            errors.append(f"{name}: plan is missing the matrix row or its shard list")
+            continue
+        try:
+            for shard in shards:
+                rows.append(
+                    {
+                        "build_preset": preset,
+                        "build_target": target,
+                        "test_size": size,
+                        "threads_count": threads,
+                        "shard_id": int(shard["id"]),
+                    }
+                )
+        except (KeyError, TypeError, ValueError) as exc:
+            errors.append(f"{name}: {exc}")
+    return rows, errors
+
+
 def narrow_graph_to_report(graph: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
     """Keep only failed result nodes. An empty match returns the graph unchanged.
 

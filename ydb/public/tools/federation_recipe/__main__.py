@@ -95,6 +95,12 @@ class FederationRecipe(object):
             enable_pqcd=True,
             port_allocator=self.__port_allocators[name],
             use_legacy_pq=True,
+            http_proxy_config={
+                'enabled': True,
+                'sqs_topic_enabled': True,
+                'ymq_enabled': False,
+                'yandex_cloud_service_region': ['ru-central1'],
+            },
             additional_log_configs={
                 'PQ_MIRRORER': LogLevels.TRACE,
                 'KAFKA_PROXY': LogLevels.TRACE,
@@ -118,14 +124,14 @@ class FederationRecipe(object):
         node = list(cluster.nodes.values())[0]
         grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
-        node = list(cluster.nodes.values())[0]
+        assert node.http_proxy_port is not None, "HTTP proxy is not enabled for {}".format(name)
         _setenv("{}_port".format(name), str(grpc_port))
         _setenv("{}_sqs_port".format(name), str(node.sqs_port))
         _setenv("{}_http_proxy_port".format(name), str(node.http_proxy_port))
         if node.kafka_api_port is not None:
             _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
-        logger.info("YDB cluster {} started on grpc port {}, sqs port {}".format(
-            name, grpc_port, node.sqs_port))
+        logger.info("YDB cluster {} started on grpc port {}, sqs port {}, http proxy port {}".format(
+            name, grpc_port, node.sqs_port, node.http_proxy_port))
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):

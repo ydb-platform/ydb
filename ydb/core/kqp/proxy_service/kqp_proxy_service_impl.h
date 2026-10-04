@@ -103,6 +103,27 @@ public:
         }
 
         State.store(state, std::memory_order_release);
+
+        if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED) {
+            TActorId observer;
+            TString poolId;
+            TString classifiedBy;
+            {
+                TGuard<TAdaptiveLock> guard(PoolIdLock);
+                observer = StateObserver;
+                poolId = PoolId;
+                classifiedBy = ClassifiedBy;
+            }
+            if (observer) {
+                NActors::TActivationContext::Send(new NActors::IEventHandle(observer, {},
+                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy))));
+            }
+        }
+    }
+
+    void SetStateObserver(TActorId observer) {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        StateObserver = observer;
     }
 
     void SetPoolContext(TString poolId, TString classifiedBy) override {
@@ -111,7 +132,7 @@ public:
         ClassifiedBy = std::move(classifiedBy);
     }
 
-    EState GetState() const {
+    EState GetState() const override {
         return State.load(std::memory_order_acquire);
     }
 
@@ -128,7 +149,7 @@ public:
         return PoolId;
     }
 
-    TString GetClassifiedBy() const {
+    TString GetClassifiedBy() const override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         return ClassifiedBy;
     }
@@ -140,6 +161,7 @@ public:
             TGuard<TAdaptiveLock> guard(PoolIdLock);
             PoolId.clear();
             ClassifiedBy.clear();
+            StateObserver = {};
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -152,6 +174,7 @@ private:
     mutable TAdaptiveLock PoolIdLock;
     TString PoolId;
     TString ClassifiedBy;
+    TActorId StateObserver;
 };
 
 template<typename TValue>

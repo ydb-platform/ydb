@@ -313,11 +313,12 @@ public:
     }
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
-        this->Send(request->WorkerActorId, new TEvContinueRequest(request->QueryId, status, PoolId, PoolConfig, issues));
-        
         if (request->WmSessionUpdater) {
-            request->WmSessionUpdater->SetRequestState(ISessionUpdater::EState::EXITED, TActivationContext::Now());
+            request->WmSessionUpdater->SetRequestState(
+                status == Ydb::StatusIds::SUCCESS ? ISessionUpdater::EState::EXITED : ISessionUpdater::EState::NONE,
+                TActivationContext::Now());
         }
+        this->Send(request->WorkerActorId, new TEvContinueRequest(request->QueryId, status, PoolId, PoolConfig, issues));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;

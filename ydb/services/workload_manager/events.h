@@ -25,7 +25,20 @@ struct TWorkloadManagerEvents {
         EvUpdatePoolInfo,
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
+        EvWmStateChanged,
     };
+};
+
+struct TEvWmStateChanged : public NActors::TEventLocal<TEvWmStateChanged, TWorkloadManagerEvents::EvWmStateChanged> {
+    TEvWmStateChanged(ISessionUpdater::EState state, TString poolId, TString classifiedBy)
+        : State(state)
+        , PoolId(std::move(poolId))
+        , ClassifiedBy(std::move(classifiedBy))
+    {}
+
+    const ISessionUpdater::EState State;
+    const TString PoolId;
+    const TString ClassifiedBy;
 };
 
 

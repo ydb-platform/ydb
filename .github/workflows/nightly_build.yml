@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branches: ${{ steps.set-branches.outputs.branches }}
+      aarch64_include: ${{ steps.set-branches.outputs.aarch64_include }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -26,11 +27,33 @@ jobs:
     - name: Read branches from config
       id: set-branches
       run: |
-          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
-            echo "branches=$(jq -c '.' .github/config/stable_nightly_branches.json)" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true" && "${{ github.ref_type }}" != "tag") ]]; then
+            branches=$(jq -c '.' .github/config/stable_nightly_branches.json)
           else
-            echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
+            branches=$(jq -cn --arg branch "${{ github.ref_name }}" '[$branch]')
           fi
+
+          # get aarch64 branches intersection
+          aarch64_include=$(
+            jq -rcn \
+              --argjson branches "$branches" \
+              --argjson aarch64_branches "$(jq -c '.' .github/config/stable_nightly_branches_aarch64.json)" \
+              '
+              [
+                $branches[] as $branch
+                | select($aarch64_branches | index($branch))
+                | ["release", "relwithdebinfo", "release-asan"][] as $build_preset
+                | {
+                    branch: $branch,
+                    build_preset: $build_preset,
+                    target_platform: "DEFAULT-LINUX-AARCH64"
+                  }
+              ]
+              '
+          )
+  
+          echo "branches=$branches" >> "$GITHUB_OUTPUT"
+          echo "aarch64_include=$aarch64_include" >> "$GITHUB_OUTPUT"
 
   build_and_test:
     needs: determine_branches
@@ -39,8 +62,10 @@ jobs:
       matrix:
         build_preset: ["release", "relwithdebinfo", "release-asan"]
         branch: ${{ fromJSON(needs.determine_branches.outputs.branches) }}
+        target_platform: [""]
+        include: ${{ fromJSON(needs.determine_branches.outputs.aarch64_include) }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
-    name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
+    name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}${{ matrix.target_platform != '' && format(' ({0})', matrix.target_platform) || '' }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -57,6 +82,7 @@ jobs:
       with:
         build_preset: ${{ matrix.build_preset }}
         build_target: "ydb/apps/ydbd ydb/tests/library/compatibility/configs/dump"
+        target_platform: ${{ matrix.target_platform }}
         increment: false
         run_tests: false
         put_build_results_to_cache: false
@@ -74,13 +100,16 @@ jobs:
         s3_endpoint: ${{ vars.AWS_ENDPOINT }}
         s3_key_id: ${{ secrets.AWS_KEY_ID }}
         s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+        target_platform: ${{ matrix.target_platform }}
     
     - name: sync results to s3 and publish links
       shell: bash
       run: |
         set -x
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 --force "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d
+        PLATFORM_SUFFIX="${{ matrix.target_platform != '' && format('/{0}', matrix.target_platform) || '' }}"
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 --force "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/ydbd" -d
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json" -d
-          echo 'Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
+          upload_path="ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}${PLATFORM_SUFFIX}/config-meta.json"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://$upload_path" -d
+          echo "Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/${upload_path})." >> $GITHUB_STEP_SUMMARY
         fi

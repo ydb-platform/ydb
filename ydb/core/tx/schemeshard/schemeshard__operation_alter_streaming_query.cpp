@@ -179,11 +179,19 @@ class TAlterStreamingQuery : public TSubOperation {
             properties["__modified_by"] = userSID;
         }
 
-        // Preserve original creation time; always update modification time
+        // Preserve original creation time and keep modification time unchanged during finalization.
         if (const auto it = oldProperties.find("__created_at"); it != oldProperties.end()) {
             properties["__created_at"] = it->second;
         }
-        properties["__modified_at"] = ToString(context.Ctx.Now().MicroSeconds());
+        if (isFinalization) {
+            if (const auto it = oldProperties.find("__modified_at"); it != oldProperties.end()) {
+                properties["__modified_at"] = it->second;
+            } else {
+                properties.erase("__modified_at");
+            }
+        } else {
+            properties["__modified_at"] = ToString(context.Ctx.Now().MicroSeconds());
+        }
 
         // Preserve both sides of the run history even when replacing all user properties.
         for (const char* key : {"__started_by", "__stopped_by"}) {

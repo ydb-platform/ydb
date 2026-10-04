@@ -21,6 +21,7 @@
 #include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 #include <limits>
@@ -362,7 +363,15 @@ private:
         for (const auto& [table, old] : previous) {
             const auto it = next.find(table);
             if (it == next.end()) {
-                StateLossError(TStringBuilder() << "Streaming aggregation output table is missing in the new query: " << table);
+                TVector<TString> availableTables;
+                availableTables.reserve(next.size());
+                for (const auto& [name, _] : next) {
+                    availableTables.push_back(name);
+                }
+
+                std::sort(availableTables.begin(), availableTables.end());
+                StateLossError(TStringBuilder() << "Streaming aggregation output table is missing in the new query: " << table
+                    << ", available output tables: " << (availableTables.empty() ? "none" : JoinSeq(", ", availableTables)));
                 continue;
             }
 

@@ -1062,7 +1062,9 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next, force, plan, issues), force);
-                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), removed ? "output table is missing" : "task count changed");
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), removed
+                    ? "Streaming aggregation output table is missing in the new query: /Root/output, available output tables: none"
+                    : "Streaming aggregation task count changed for output table /Root/output: 1 -> 2 on stage 1");
 
                 if (force) {
                     UNIT_ASSERT(!plan.at(1).GetProgram().HasForeignTaskId());
@@ -1071,6 +1073,27 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                     UNIT_ASSERT(plan.empty());
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(MissingAggregationReportsSortedOutputTables) {
+        TReplayTestGraph old;
+        old.Source();
+        SetAggregationProgram(*old.Builder.Graph.Mutable(/* index */ 0));
+        TReplayTestGraph next;
+        for (const TString table : {"/Root/zeta", "/Root/alpha", "/Root/middle"}) {
+            next.Source(next.Builder.Graph.size() + 1);
+            SetAggregationProgram(*next.Builder.Graph.rbegin(), table);
+        }
+
+        for (bool force : {false, true}) {
+            TStateLoadPlan plan;
+            NYql::TIssues issues;
+            UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next.Params(), force, plan, issues), force);
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), TStringBuilder()
+                << "Streaming aggregation output table is missing in the new query: /Root/output"
+                << ", available output tables: /Root/alpha, /Root/middle, /Root/zeta"
+                << (force ? ", FORCE=true discards this state" : ""));
         }
     }
 

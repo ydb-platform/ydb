@@ -6,9 +6,9 @@ const text=(tag,value)=>{const element=document.createElement(tag);element.textC
 $('root').closest('.container')?.classList.add('imo-page');
 const client=createInMemoryMetricsClient({endpoint:'metrics'});
 const panels=[
-    {title:'Memory',unit:'bytes',metrics:['memory_used_bytes','committed_bytes']},
+    {title:'Memory',unit:'bytes',names:{memory_used_bytes:'Allocated chunk memory',committed_bytes:'Recorded bytes'},metrics:['memory_used_bytes','committed_bytes']},
     {title:'Metric lines',metrics:['lines','closed_lines']},
-    {title:'Chunks',metrics:['used_chunks','free_chunks']},
+    {title:'Chunks',type:'area',names:{used_chunks:'Used',free_chunks:'Free'},metrics:['used_chunks','free_chunks']},
     {title:'Append failures',metrics:['append_failures_total']},
 ];
 const queries=panels.flatMap(panel=>panel.metrics.map(metric=>({id:metric,metric:'inmemory_metrics.'+metric,filters:[]})));
@@ -18,12 +18,12 @@ const cards=panels.map(panel=>{
     const card=text('section','');card.className='imo-card';card.append(text('h3',panel.title));
     const links=text('nav','');for(const metric of panel.metrics){const link=text('a',metric);link.href='metrics?'+new URLSearchParams({metric:'inmemory_metrics.'+metric});links.append(link);}card.append(links);
     const host=text('div','');card.append(host);$('cards').append(card);
-    const chart=createMetricChart(host,{legend:true,settings:{height:240,unit:panel.unit||'number',format:'{metric}'},onPin:pause,onRangeChange:({from,to})=>{pause();fixed=[from,to];draw();}});
+    const chart=createMetricChart(host,{legend:true,settings:{type:panel.type||'line',height:240,unit:panel.unit||'number',format:'{metric}'},onPin:pause,onRangeChange:({from,to})=>{pause();fixed=[from,to];draw();}});
     return {panel,chart};
 });
 function draw(){
     const end=fixed?fixed[1]:series.length?Math.max(...series.map(s=>s.end)):Date.now(),begin=fixed?fixed[0]:end-Number($('period').value)*1000;
-    for(const {panel,chart} of cards)chart.setData({series:series.filter(s=>panel.metrics.includes(s.queryId)),begin,end,title:panel.title,emptyText:'No retained data. Check that inmemory_metrics. is allowed in the registry.'});
+    for(const {panel,chart} of cards)chart.setData({series:series.filter(s=>panel.metrics.includes(s.queryId)).map(s=>({...s,format:panel.names?.[s.queryId]||'{metric}'})),begin,end,title:panel.title,emptyText:'No retained data. Check that inmemory_metrics. is allowed in the registry.'});
 }
  const labels=values=>(values||[]).map(label=>label.name+'='+label.value).join(', ');
  function entries(id,values){$(id).replaceChildren();for(const [label,value] of values)$(id).append(text('dt',label),text('dd',value===undefined?'Unavailable':String(value)));}

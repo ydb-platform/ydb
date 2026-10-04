@@ -184,7 +184,7 @@ TString RenderPage() {
 <details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'><label><input id='imm-separate' type='checkbox'> One chart per query</label><label id='imm-columns-label' hidden>Charts per row <select id='imm-columns' aria-label='Charts per row'><option>1</option><option selected>2</option><option>3</option></select></label><label id='imm-settings-target-label' hidden>Chart <select id='imm-settings-target' aria-label='Chart settings target'><option value='all'>All charts</option></select></label>
 <label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Stacked area</option></select></label>
 <label>Fill under lines <input id='imm-fill' type='checkbox'></label>
-<label>Line name format <input id='imm-format' type='text' maxlength='512' placeholder='{metric} · {pool}'></label>
+<label>Line name format <input id='imm-format' type='text' maxlength='512' placeholder='{metric} / {pool}'></label>
 <label>Height, px <input id='imm-height' aria-label='Chart height' type='number' min='160' max='800' step='1' value='360'></label>
 <label>Units <select id='imm-unit' aria-label='Value units'><option value='number'>Number</option><option value='bytes'>Bytes (IEC)</option><option value='percent'>Percent</option><option value='seconds'>Seconds</option><option value='milliseconds'>Milliseconds</option><option value='cores'>CPU cores</option></select></label>
 <label>Decimals <select id='imm-precision' aria-label='Decimal places'><option value='auto'>Auto</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>

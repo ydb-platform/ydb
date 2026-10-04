@@ -85,3 +85,8 @@ An empty format preserves the default name. Series `format` overrides the chart
 format; series metadata uses `metric`, `queryLabel` and `labelValues` (the label
 name/value array). The shared JSON client supplies these fields. Names are plain
 text and never HTML, and formatting does not change series keys or query matching.
+
+Chart geometry uses CSS pixel coordinates without a scaled SVG viewBox, so
+axis text keeps its 12 px font at every chart width and configured height.
+Overview chunks stack used and free counts; together they cover the chunk pool.
+Memory compares allocated chunk capacity and recorded payload as ordinary lines.

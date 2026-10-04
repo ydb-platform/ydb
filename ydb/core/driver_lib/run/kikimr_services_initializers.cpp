@@ -219,7 +219,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
@@ -2617,7 +2617,8 @@ void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetScanGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableScanGroupedMemoryLimiterConfig()->SetCountBuckets(10);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()),
+        "invalid ScanGroupedMemoryLimiterConfig: %s", Config.GetScanGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2640,7 +2641,8 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetCompGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableCompGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()),
+        "invalid CompGroupedMemoryLimiterConfig: %s", Config.GetCompGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2663,7 +2665,8 @@ void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::
     if (Config.GetDeduplicationGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableDeduplicationGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()),
+        "invalid DeduplicationGroupedMemoryLimiterConfig: %s", Config.GetDeduplicationGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");

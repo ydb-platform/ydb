@@ -16,7 +16,7 @@
 #include <util/system/types.h>
 #include <util/system/yassert.h>
 
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 
 #include <atomic>
 #include <cstddef>

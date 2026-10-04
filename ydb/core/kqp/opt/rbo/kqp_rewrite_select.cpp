@@ -1,5 +1,7 @@
 #include "kqp_rbo_transformer.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1613,7 +1615,10 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 } // anonymous namespace
 
 TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    Y_UNUSED(kqpCtx);
+
+    if (kqpCtx.Config->GetEnableFallbackOnDML()) {
+        Y_ENSURE(false, "Fallback due to DML fallback flag");
+    }
 
     TExprNode::TPtr tableEffectInput = node->ChildPtr(1);
     if (TKqpWriteConstraint::Match(tableEffectInput.Get())){
@@ -1840,6 +1845,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
                 if (TKqlReadTableRanges::Match(childExpr.Get())) {
                     auto readExpr = TKqlReadTableRanges(childExpr);
+                    YQL_ENSURE(!TKqpReadTableSettings::Parse(readExpr).Sampling,
+                        "Sampling is not supported by the relational optimizer");
                     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
 
                     // clang-format off

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_s3_path_generator.cpp
@@ -11,8 +11,6 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_s3_path_generator.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

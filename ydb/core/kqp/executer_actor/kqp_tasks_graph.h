@@ -117,6 +117,9 @@ struct TStageInfoMeta {
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;
 
+    // This stage's share of the query-wide sampled shard concurrency budget.
+    ui32 SamplingMaxInFlightShards = 0;
+
     struct TIndexMeta {
         TTableId TableId;
         TString TablePath;
@@ -467,6 +470,7 @@ public:
 
 private:
     void FillStages();
+    void AllocateSamplingShardBudget();
 
     // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
     // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).

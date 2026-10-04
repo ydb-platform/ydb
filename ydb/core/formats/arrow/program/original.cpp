@@ -10,9 +10,9 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
         auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
-        THashSet<TString> subColumnsToFetch;
+        THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {
-            if (!acc || !acc->HasSubColumnData(sc)) {
+            if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
                 if (!sc && acc) {
                     context.MutableResources().Remove(i.GetColumnId());
                 }
@@ -78,9 +78,9 @@ TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
-        if (!acc || !acc->HasSubColumnData(sc)) {
+        if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
             auto& source = context.GetDataSource();
-            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc.GetValue());
             if (conclusion.IsFail()) {
                 return conclusion;
             }

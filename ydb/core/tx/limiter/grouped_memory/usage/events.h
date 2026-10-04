@@ -62,12 +62,14 @@ struct TEvExternal {
         YDB_READONLY(ui64, ExternalProcessId, 0);
         YDB_READONLY(ui64, ExternalScopeId, 0);
         YDB_READONLY(ui64, AllocationId, 0);
+        YDB_READONLY(ui64, Volume, 0);
 
     public:
-        explicit TEvTaskUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId)
+        explicit TEvTaskUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
-            , AllocationId(allocationId) {
+            , AllocationId(allocationId)
+            , Volume(volume) {
         }
     };
 

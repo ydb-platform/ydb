@@ -43,12 +43,25 @@ namespace NActors {
         TInstant BaseWallClock;
     };
 
+    struct TLineLabelView {
+        TStringBuf Name;
+        TStringBuf Value;
+    };
+
+    // Static field identity within a structured line. Instance labels are on
+    // TLineSnapshot; these labels and names are owned by the frontend descriptor.
+    struct TLineFieldMeta {
+        TStringBuf Name;
+        std::span<const TLineLabelView> Labels;
+    };
+
     struct TLineFrontendOps {
         using TInvokeValue = void (*)(void*, TInstant, const void*);
         using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeValue);
 
         TStringBuf Name;
         TReadRange ReadRange = nullptr;
+        std::span<const TLineFieldMeta> Fields;
     };
 
     struct TLineMeta {

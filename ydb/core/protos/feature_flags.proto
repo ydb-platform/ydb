@@ -385,7 +385,7 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = false];
+    optional bool EnableStreamingAggregation = 328 [default = true];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
     // Judges a VDisk write by the space color the disk will be in once the Fresh
@@ -436,4 +436,9 @@ message TFeatureFlags {
     // cluster root for database names, or the database for schema-object paths.
     optional bool EnableRelativePaths = 354 [default = false];
     optional bool EnableKillSession = 355 [default = false];
+    // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
+    optional bool EnableSavepoints = 356 [default = false];
+    optional bool EnablePqSourceRescaling = 357 [default = false];
+    optional bool EnableStreamingQueryTopicAutopartitioning = 358 [default = true];
+    optional bool EnableQYT = 359 [default = false]; //YT queues (QYT) in federated and streaming queries
 }

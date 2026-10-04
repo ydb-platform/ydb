@@ -24,8 +24,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 

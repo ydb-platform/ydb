@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_fmr_initializer.cpp
@@ -24,7 +24,5 @@ PEERDIR(
 
     yql/essentials/providers/common/proto
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

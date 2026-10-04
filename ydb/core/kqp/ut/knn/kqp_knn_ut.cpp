@@ -363,6 +363,46 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         observer.Remove();
     }
 
+    Y_UNIT_TEST_TWIN(VectorSearchSamplingSkipsPushdown, ScanQuery) {
+        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(settings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, true); });
+
+        ui32 reads = 0;
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            UNIT_ASSERT(ev->Get()->Record.HasSampling());
+            UNIT_ASSERT(!ev->Get()->Record.HasVectorTopK());
+            ++reads;
+        });
+
+        for (const TString rate : {"1", "0.00000000000000000001"}) {
+            const TString query = TStringBuilder()
+                << "SELECT pk FROM `/Root/TestTable` WITH (sampling_rate=\"" << rate
+                << "\", sampling_seed=\"42\", sampling_memtable_stride=\"1\")"
+                << " ORDER BY Knn::CosineDistance(emb, String::HexDecode(\"677102\")) LIMIT 3";
+            reads = 0;
+            const auto result = kikimr.RunCall([&]() -> TString {
+                if constexpr (ScanQuery) {
+                    auto stream = db.StreamExecuteScanQuery(query).GetValueSync();
+                    UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+                    return StreamResultToYson(stream);
+                } else {
+                    auto result = session.ExecuteDataQuery(query,
+                        TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    return FormatResultSetYson(result.GetResultSet(0));
+                }
+            });
+            // Rate 1 preserves global ordering and LIMIT; a tiny rate proves
+            // that sampling is still applied before compute-side ranking.
+            CompareYson(rate == "1" ? "[[[8]];[[5]];[[9]]]" : "[]", result);
+            UNIT_ASSERT(reads > 0);
+        }
+    }
+
     enum class EVectorType {
         Float,
         Float16,

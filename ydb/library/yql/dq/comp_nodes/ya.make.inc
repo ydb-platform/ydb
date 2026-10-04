@@ -26,8 +26,6 @@ SET(ORIG_SOURCES
     type_utils.cpp
 )
 
-YQL_LAST_ABI_VERSION()
-
 ADDINCL(
     ${ORIG_SRC_DIR}
 )

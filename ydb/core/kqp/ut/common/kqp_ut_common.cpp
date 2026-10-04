@@ -171,6 +171,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetUseRealInterconnect(settings.UseRealInterconnect);
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;

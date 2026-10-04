@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/actors/testlib
     ydb/library/testlib/common
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/public/sdk/cpp/src/client/topic
 )
 

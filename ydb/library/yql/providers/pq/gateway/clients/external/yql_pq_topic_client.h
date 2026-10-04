@@ -1,10 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_topic_client.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
+#include <memory>
 
 namespace NYql {
 
-ITopicClient::TPtr CreateExternalTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings);
+std::shared_ptr<NFq::IMessageStreamClient> CreateExternalTopicClient(const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings);
 
 } // namespace NYql

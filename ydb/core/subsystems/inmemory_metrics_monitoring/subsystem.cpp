@@ -45,8 +45,8 @@ class TViewer : public TActorBootstrapped<TViewer> {
         const auto& params = ev->Get()->Request.GetParams();
         if (params.Get("format") != "json") {
             Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                params.Get("page") == "dashboard" ? RenderDashboardPage()
-                    : params.Get("page") == "overview" ? RenderOverviewPage() : RenderPage(),
+                (params.Get("page") == "overview" || params.Get("page") == "dashboard")
+                    ? RenderOverviewPage() : RenderPage(),
                 ev->Get()->SubRequestId), 0, ev->Cookie);
             return;
         }

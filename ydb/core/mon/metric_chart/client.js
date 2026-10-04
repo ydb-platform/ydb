@@ -48,8 +48,8 @@ export function createInMemoryMetricsClient({endpoint}){
    for(const line of matching.slice(0,16)){
     if(result.length>=64){limited=true;break;}
     if(!details.has(line.id))details.set(line.id,await request({line:line.id,seconds,signal}));
-    const detail=details.get(line.id),row=detail.lines[0],index=line.fields.findIndex(f=>f.name===query.metric),k=query.id+'|'+query.metric+'|'+key(line),labels=labelText([...common,...line.labels,...line.fields[index].labels]);
-    result.push({key:k,queryId:query.id,color:queries.length===1?color(k,line):palette[result.length%palette.length],name:line.name,labels,display:String.fromCharCode(65+queryIndex)+' \u00b7 '+query.metric+(labels?' \u00b7 '+labels:''),step:line.frontend==='on_change',readable:line.readable,closed:line.closed,truncated:row&&row.truncated,end:detail.timestamp_ms,points:(row?row.points:[]).map(p=>({time:p.timestamp_ms,raw:p.values[index],value:numeric(p.values[index])}))});
+    const detail=details.get(line.id),row=detail.lines[0],index=line.fields.findIndex(f=>f.name===query.metric),k=query.id+'|'+query.metric+'|'+key(line),labelValues=[...common,...line.labels,...line.fields[index].labels],labels=labelText(labelValues);
+    result.push({key:k,queryId:query.id,color:queries.length===1?color(k,line):palette[result.length%palette.length],name:line.name,metric:query.metric,queryLabel:String.fromCharCode(65+queryIndex),labelValues,labels,display:String.fromCharCode(65+queryIndex)+' \u00b7 '+query.metric+(labels?' \u00b7 '+labels:''),step:line.frontend==='on_change',readable:line.readable,closed:line.closed,truncated:row&&row.truncated,end:detail.timestamp_ms,points:(row?row.points:[]).map(p=>({time:p.timestamp_ms,raw:p.values[index],value:numeric(p.values[index])}))});
    }
   }
   return {catalog,series:result,limited};

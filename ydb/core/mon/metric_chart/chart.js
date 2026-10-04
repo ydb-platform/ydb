@@ -3,7 +3,16 @@ let nextChartId=0;
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
  const node=(tag,attrs,value)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(value!==undefined)n.textContent=value;return n;};
  const fmt=v=>v===null||v===undefined?'\u2014':typeof v==='string'?v:Number(v).toLocaleString(undefined,{maximumSignificantDigits:3});
-export const defaultChartSettings={type:'line',fill:false,height:360,unit:'number',precision:null,min:null,max:null};
+export const defaultChartSettings={type:'line',fill:false,format:'',height:360,unit:'number',precision:null,min:null,max:null};
+export function formatSeriesName(series,format=''){
+ if(!format)return series.display;
+ const labels=new Map((series.labelValues||[]).map(label=>[label.name,label.value]));
+ const fields={metric:series.metric,name:series.name,query:series.queryLabel,labels:series.labels};
+ return format.replace(/\{([^{}]+)\}/g,(token,key)=>{
+  const value=key.startsWith('label:')?labels.get(key.slice(6)):Object.hasOwn(fields,key)?fields[key]:labels.get(key);
+  return value===undefined?token:String(value);
+ });
+}
 export function formatMetricValue(value,{unit='number',precision=null}={}){
  if(value===null||value===undefined)return '\u2014';
  if(unit==='number'&&precision===null)return fmt(value);
@@ -64,7 +73,7 @@ export function createMetricChart(chart,options={}){
   tooltipLayer?.remove();tooltipLayer=null;
   chart.replaceChildren();
   const {begin,end,title,emptyText}=data;
-  const active=data.series.filter(s=>!hidden.has(s.key)).map(s=>({...s,type:s.type||settings.type}));
+  const active=data.series.filter(s=>!hidden.has(s.key)).map(s=>({...s,type:s.type||settings.type,display:formatSeriesName(s,s.format??settings.format)}));
   const stacked=stackAreas(active,begin,end),areas=active.filter(s=>s.type==='area');
   const values=active.flatMap(s=>{
    const values=s.points.filter(p=>p.value!==null&&p.time>=begin&&p.time<=end).map(p=>p.value);
@@ -128,7 +137,7 @@ export function createMetricChart(chart,options={}){
  function renderLegend(){
   if(options.legend){
    const legend=text('div','','ymc-legend');
-   for(const s of data.series){const button=text('button',s.display);button.type='button';button.setAttribute('aria-pressed',String(!hidden.has(s.key)));const dot=text('span','','ymc-dot');dot.style.background=s.color;button.prepend(dot);button.addEventListener('click',()=>{hidden.has(s.key)?hidden.delete(s.key):hidden.add(s.key);render();});legend.append(button);}chart.append(legend);
+   for(const s of data.series){const button=text('button',formatSeriesName(s,s.format??settings.format));button.type='button';button.setAttribute('aria-pressed',String(!hidden.has(s.key)));const dot=text('span','','ymc-dot');dot.style.background=s.color;button.prepend(dot);button.addEventListener('click',()=>{hidden.has(s.key)?hidden.delete(s.key):hidden.add(s.key);render();});legend.append(button);}chart.append(legend);
   }
  }
  const observer=new ResizeObserver(()=>{const width=chart.clientWidth;if(!destroyed&&width!==lastWidth){lastWidth=width;render();}});observer.observe(chart);

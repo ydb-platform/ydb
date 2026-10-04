@@ -51,7 +51,7 @@ AbortController and discard stale results when switching requests. Authenticatio
 uses the existing same-origin monitoring session. Cross-origin access requires
 configuration of the destination server; the module does not change access rules.
 
-The in-memory dashboard at `/actors/metrics?page=dashboard` is a second consumer.
+The in-memory overview at `/actors/metrics?page=overview` is a second consumer.
 It uses the same chart and JSON client without the viewer's query editor.
 
 Pass `settings: {type: 'area', height: 240, unit: 'bytes', precision: 2,
@@ -76,3 +76,12 @@ per-series `fill` overrides the chart setting. Stack baselines use a shared
 grid capped at 1000 timestamps plus each series' own samples, preserving its
 changes and gaps. Automatic numeric formatting uses three significant digits;
 axis labels reserve space according to their length.
+
+Set `settings.format` to a series name template. `{metric}`, `{name}`, `{query}`
+and `{labels}` refer to metric field, registry line name, query letter and all
+labels. `{pool}` substitutes the `pool` label; `{label:metric}` accesses a label
+whose name conflicts with a built-in field. Unknown placeholders remain visible.
+An empty format preserves the default name. Series `format` overrides the chart
+format; series metadata uses `metric`, `queryLabel` and `labelValues` (the label
+name/value array). The shared JSON client supplies these fields. Names are plain
+text and never HTML, and formatting does not change series keys or query matching.

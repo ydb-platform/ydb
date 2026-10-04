@@ -8,7 +8,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/core/subsystems
 )
-RESOURCE(dashboard.js inmemory-metrics/dashboard.js)
+RESOURCE(overview.js inmemory-metrics/overview.js)
 
 END()
 RECURSE_FOR_TESTS(ut)

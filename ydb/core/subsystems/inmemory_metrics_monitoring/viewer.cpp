@@ -162,10 +162,10 @@ TString RenderPage() {
 .imm details.imm-editor{margin:8px 0}.imm-editor>summary{font-size:12px;color:#707985;display:list-item}.imm-editor>summary span{margin-left:12px}.imm-query-actions{margin-bottom:0}.imm-query-actions .imm-query-help{margin-left:auto!important}.imm button[aria-pressed=true]{background:#e4eef9}.imm #imm-stats{font-size:12px;color:#707985}.imm [data-control=builder] .imm-condition input{line-height:18px}.imm-suggestions{position:fixed;z-index:1000;overflow:auto;padding:4px;background:white;border:1px solid #cbd2dc;border-radius:5px;box-shadow:0 4px 16px #0002;box-sizing:border-box}.imm-suggestions button{display:block;width:100%;text-align:left;border:0;border-radius:3px;padding:4px 8px;overflow-wrap:anywhere}.imm-suggestions button[aria-selected=true]{background:#e4eef9}.imm-suggestions>div{padding:4px 8px}
 
 .imm #imm-charts{display:grid;gap:8px}.imm #imm-charts>.imm-chart{min-width:0}.imm-chart-title{font-weight:bold;margin:0 0 4px}.imm #imm-charts.imm-separated{grid-template-columns:repeat(var(--columns,2),minmax(0,1fr))}@media(max-width:800px){.imm #imm-charts.imm-separated{grid-template-columns:1fr}}
-.imm-settings{margin-left:auto;position:relative}.imm-settings>summary{cursor:pointer;border:1px solid #cbd2dc;border-radius:4px;padding:3px 7px;list-style:none}.imm-settings[open]>summary{background:#e4eef9}.imm-settings-panel{position:fixed;right:12px;top:120px;width:280px;max-width:calc(100vw - 24px);max-height:calc(100vh - 136px);overflow:auto;box-sizing:border-box;background:white;border:1px solid #cbd2dc;border-radius:6px;box-shadow:0 4px 20px #0002;padding:10px;z-index:10;display:grid;gap:7px}.imm-settings-panel>label,.imm-settings-panel fieldset>label{display:flex;justify-content:space-between;align-items:center;gap:8px}.imm-settings-panel input[type=number]{width:110px}.imm-settings-panel select{width:110px}.imm-settings-panel [hidden]{display:none!important}.imm-settings-panel [role=alert]{color:#a32828}.imm-settings-panel fieldset{margin:3px 0 0;border:1px solid #e4e8ee;border-radius:4px;padding:7px;display:grid;gap:7px}.imm-settings-panel #imm-line-target{width:100%;min-width:0}.imm-settings-panel #imm-line-settings>label:first-of-type{display:grid}.imm-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.imm-chart-heading button{font-size:12px}
+.imm-settings{margin-left:auto;position:relative}.imm-settings>summary{cursor:pointer;border:1px solid #cbd2dc;border-radius:4px;padding:3px 7px;list-style:none}.imm-settings[open]>summary{background:#e4eef9}.imm-settings-panel{position:fixed;right:12px;top:120px;width:280px;max-width:calc(100vw - 24px);max-height:calc(100vh - 136px);overflow:auto;box-sizing:border-box;background:white;border:1px solid #cbd2dc;border-radius:6px;box-shadow:0 4px 20px #0002;padding:10px;z-index:10;display:grid;gap:7px}.imm-settings-panel>label,.imm-settings-panel fieldset>label{display:flex;justify-content:space-between;align-items:center;gap:8px}.imm-settings-panel input[type=number],.imm-settings-panel input[type=text]{width:110px}.imm-settings-panel select{width:110px}.imm-settings-panel [hidden]{display:none!important}.imm-settings-panel [role=alert]{color:#a32828}.imm-settings-panel fieldset{margin:3px 0 0;border:1px solid #e4e8ee;border-radius:4px;padding:7px;display:grid;gap:7px}.imm-settings-panel #imm-line-target{width:100%;min-width:0}.imm-settings-panel #imm-line-settings>label:first-of-type{display:grid}.imm-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.imm-chart-heading button{font-size:12px}
 </style>
 <div class='imm' id='imm-root'>
-<header><nav><a href='metrics?page=dashboard'>Dashboard</a> &middot; <a href='metrics?page=overview'>Overview</a></nav><span id='imm-status' class='imm-muted' role='status'>Loading metrics...</span></header>
+<header><nav><a href='metrics?page=overview'>Overview</a></nav><span id='imm-status' class='imm-muted' role='status'>Loading metrics...</span></header>
 <details class='imm-editor' open><summary>Query editor <span class='imm-muted'>Ctrl/Cmd + Enter to apply</span></summary><div id='imm-editors'></div><div class='imm-query-actions'><button id='imm-apply' type='button'>Apply queries</button><button id='imm-add-query' type='button'>Add query</button></div></details><template id='imm-editor-template'><section class='imm-query'>
 <div class='imm-query-heading'><strong>Query <span class='imm-query-letter'></span></strong><button type='button' data-control='remove-query'>Remove query</button><button data-control='mode-builder' type='button' aria-pressed='true'>Builder</button><button data-control='mode-text' type='button' aria-pressed='false'>Text query</button></div>
 <div data-control='builder'><label class='imm-metric-chip'><span>metric</span> = <select data-control='field' aria-label='Metric field'></select></label><div data-control='conditions'></div><datalist data-control='label-names'></datalist><button data-control='add' type='button'>Add label filter</button></div>
@@ -184,6 +184,7 @@ TString RenderPage() {
 <details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'><label><input id='imm-separate' type='checkbox'> One chart per query</label><label id='imm-columns-label' hidden>Charts per row <select id='imm-columns' aria-label='Charts per row'><option>1</option><option selected>2</option><option>3</option></select></label><label id='imm-settings-target-label' hidden>Chart <select id='imm-settings-target' aria-label='Chart settings target'><option value='all'>All charts</option></select></label>
 <label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Stacked area</option></select></label>
 <label>Fill under lines <input id='imm-fill' type='checkbox'></label>
+<label>Line name format <input id='imm-format' type='text' maxlength='512' placeholder='{metric} · {pool}'></label>
 <label>Height, px <input id='imm-height' aria-label='Chart height' type='number' min='160' max='800' step='1' value='360'></label>
 <label>Units <select id='imm-unit' aria-label='Value units'><option value='number'>Number</option><option value='bytes'>Bytes (IEC)</option><option value='percent'>Percent</option><option value='seconds'>Seconds</option><option value='milliseconds'>Milliseconds</option><option value='cores'>CPU cores</option></select></label>
 <label>Decimals <select id='imm-precision' aria-label='Decimal places'><option value='auto'>Auto</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
@@ -195,6 +196,7 @@ TString RenderPage() {
 <label>Line <select id='imm-line-target' aria-label='Line settings target'></select></label>
 <label>Display <select id='imm-line-display' aria-label='Line display type'><option value=''>Use chart setting</option><option value='line'>Lines</option><option value='area'>Stacked area</option></select></label>
 <label>Fill <select id='imm-line-fill' aria-label='Line fill'><option value=''>Use chart setting</option><option value='true'>On</option><option value='false'>Off</option></select></label>
+<label>Name format <input id='imm-line-format' aria-label='Line name format override' type='text' maxlength='512' placeholder='Use chart setting'></label>
 <label>Color <input id='imm-line-color' aria-label='Line color' type='color'></label>
 <label>Width, px <input id='imm-line-width' aria-label='Line width' type='number' min='1' max='6' step='1' value='2'></label>
 <button id='imm-line-reset' type='button'>Reset line appearance</button>
@@ -205,7 +207,7 @@ TString RenderPage() {
 
 </div>
 <script type='module'>
-import {createMetricChart,seriesStats,defaultChartSettings,formatMetricValue} from '../static/metric-chart/chart.js';
+import {createMetricChart,seriesStats,defaultChartSettings,formatMetricValue,formatSeriesName} from '../static/metric-chart/chart.js';
 import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metric-chart/client.js';
 (() => {
  const $=id=>document.getElementById('imm-'+id);
@@ -214,7 +216,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  let field=params.get('metric')||'harmonizer.budget', lines=[], series=[], common=[], hidden=new Set(), fixed=null, begin=0,end=0,controller,timer,version=0,sort='name',direction=1,lastToggle=null,limited=false;
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
  const numeric=v=>v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
- const visible=()=>series.map(s=>({...s,...lineSettings.get(s.key)})).filter(s=>(s.display+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
+ const visible=()=>series.map(s=>({...s,...lineSettings.get(s.key)})).map(s=>({...s,display:formatSeriesName(s,s.format??settingsFor(s.queryId).format)})).filter(s=>(s.display+' '+s.metric+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
  const client=createInMemoryMetricsClient({endpoint:location.pathname});
  let charts=[],chartSettings={...defaultChartSettings,legend:true};
  const querySettings=new Map(),lineSettings=new Map();
@@ -342,7 +344,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  }
  function loadSettings(){
   const id=settingsTarget(),settings=id===null?chartSettings:settingsFor(id);
-  $('display').value=settings.type;$('fill').checked=settings.fill;$('height').value=settings.height;$('unit').value=settings.unit;$('precision').value=settings.precision===null?'auto':settings.precision;$('y-min').value=settings.min??'';$('y-max').value=settings.max??'';$('settings-legend').checked=settings.legend;$('settings-error').textContent='';$('fill').disabled=settings.type==='area';
+  $('display').value=settings.type;$('fill').checked=settings.fill;$('format').value=settings.format;$('height').value=settings.height;$('unit').value=settings.unit;$('precision').value=settings.precision===null?'auto':settings.precision;$('y-min').value=settings.min??'';$('y-max').value=settings.max??'';$('settings-legend').checked=settings.legend;$('settings-error').textContent='';$('fill').disabled=settings.type==='area';
   const previous=$('line-target').value;$('line-target').replaceChildren();
   if(id!==null)for(const line of series.filter(s=>s.queryId===id)){const option=text('option',line.name+(line.labels?' - '+line.labels:''));option.value=line.key;$('line-target').append(option);}
   if([...$('line-target').options].some(o=>o.value===previous))$('line-target').value=previous;
@@ -350,22 +352,22 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  }
  function loadLineSettings(){
   const line=series.find(s=>s.key===$('line-target').value);if(!line)return;
-  const override=lineSettings.get(line.key)||{};$('line-display').value=override.type||'';$('line-fill').value=override.fill===undefined?'':String(override.fill);$('line-color').value=override.color||line.color;$('line-width').value=override.width||2;const area=(override.type||settingsFor(line.queryId).type)==='area';$('line-fill').disabled=area;$('line-width').disabled=area;
+  const override=lineSettings.get(line.key)||{};$('line-display').value=override.type||'';$('line-format').value=override.format||'';$('line-fill').value=override.fill===undefined?'':String(override.fill);$('line-color').value=override.color||line.color;$('line-width').value=override.width||2;const area=(override.type||settingsFor(line.queryId).type)==='area';$('line-fill').disabled=area;$('line-width').disabled=area;
  }
  function storeSettings(patch){const id=settingsTarget();if(id===null)chartSettings={...chartSettings,...patch};else querySettings.set(id,{...querySettings.get(id),...patch});draw();}
  function applySettings(){
   const minimum=$('y-min').value===''?null:Number($('y-min').value),maximum=$('y-max').value===''?null:Number($('y-max').value),height=Number($('height').value);
   if(!$('height').checkValidity()||height<160||height>800||!$('y-min').checkValidity()||!$('y-max').checkValidity()||(minimum!==null&&!Number.isFinite(minimum))||(maximum!==null&&!Number.isFinite(maximum))||(minimum!==null&&maximum!==null&&minimum>=maximum)){$('settings-error').textContent='Use height 160-800 and Y minimum below maximum.';return;}
-  const next={type:$('display').value,fill:$('fill').checked,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum},id=settingsTarget(),current=id===null?chartSettings:settingsFor(id);
+  const next={type:$('display').value,fill:$('fill').checked,format:$('format').value,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum},id=settingsTarget(),current=id===null?chartSettings:settingsFor(id);
   storeSettings(Object.fromEntries(Object.entries(next).filter(([key,value])=>value!==current[key])));
  }
- for(const name of ['display','fill','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
+ for(const name of ['display','fill','format','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
  $('settings-target').addEventListener('change',loadSettings);
  $('settings-legend').addEventListener('input',()=>storeSettings({legend:$('settings-legend').checked}));
  $('settings-reset').addEventListener('click',()=>{const id=settingsTarget();if(id===null){chartSettings={...defaultChartSettings,legend:true};querySettings.clear();lineSettings.clear();}else querySettings.delete(id);draw();});
  $('toggle-legend').addEventListener('click',()=>{const show=$('legend-panel').hidden;chartSettings.legend=show;for(const settings of querySettings.values())delete settings.legend;draw();});
  $('line-target').addEventListener('change',loadLineSettings);
- for(const name of ['line-display','line-fill','line-color','line-width'])$(name).addEventListener('input',()=>{if(!$('line-width').checkValidity())return;const key=$('line-target').value;if(!key)return;lineSettings.set(key,{type:$('line-display').value,fill:$('line-fill').value===''?undefined:$('line-fill').value==='true',color:$('line-color').value,width:Number($('line-width').value)});draw();});
+ for(const name of ['line-display','line-fill','line-format','line-color','line-width'])$(name).addEventListener('input',()=>{if(!$('line-width').checkValidity())return;const key=$('line-target').value;if(!key)return;lineSettings.set(key,{type:$('line-display').value,format:$('line-format').value||undefined,fill:$('line-fill').value===''?undefined:$('line-fill').value==='true',color:$('line-color').value,width:Number($('line-width').value)});draw();});
  $('line-reset').addEventListener('click',()=>{lineSettings.delete($('line-target').value);draw();});
  $('root').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.defaultPrevented){e.preventDefault();applyQueries();}});
  $('apply').addEventListener('click',applyQueries);$('add-query').addEventListener('click',()=>{addEditor({metric:editors.at(-1).card.querySelector('[data-control=field]').value,filters:[]});});
@@ -391,55 +393,22 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
 
 
 
-TString RenderDashboardPage() {
+TString RenderOverviewPage() {
     return R"HTML(
 <link rel='stylesheet' href='../static/metric-chart/chart.css'>
 <style>
-.container.imd-page{width:100%;max-width:none;margin:0;padding:0 12px;box-sizing:border-box}.imd{font:13px/1.4 Arial,sans-serif;color:#30343b;margin:8px 0}.imd header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}.imd a{color:#246da2}.imd button,.imd select{font:inherit;padding:3px 7px;border:1px solid #cbd2dc;border-radius:5px;background:white}.imd #imd-status{margin-left:auto;color:#707985}.imd #imd-status.imd-error{color:#a32828}.imd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.imd-card{min-width:0;border:1px solid #e3e7ed;border-radius:8px;padding:8px;background:white}.imd-card h3{font-size:14px;margin:0 0 6px}.imd-card nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.imd-card nav a{font-size:12px}.imd-summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;color:#707985}@media(max-width:800px){.imd-grid{grid-template-columns:1fr}}
-</style>
-<div class='imd' id='imd-root'>
-<header><a href='metrics'>Metric viewer</a><a href='metrics?page=overview'>Overview</a><label>History <select id='imd-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label><button id='imd-now' type='button'>Now</button><button id='imd-refresh' type='button'>Refresh</button><label><input id='imd-live' type='checkbox'> Live via JSON</label><span id='imd-status' role='status'>Loading metrics...</span></header>
-<div class='imd-summary' id='imd-summary'></div><div class='imd-grid' id='imd-cards'></div>
-</div>
-<script type='module' src='../static/inmemory-metrics/dashboard.js'></script>
-)HTML";
-}
-
-TString RenderOverviewPage() {
-    return R"HTML(
-<style>
-.container.imo-page{width:100%;max-width:none;margin:0;padding:0 12px;box-sizing:border-box}.imo{font:13px/1.4 Arial,sans-serif;color:#30343b;margin:8px 0}.imo header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.imo header span{margin-left:auto;color:#707985}.imo a{color:#246da2}.imo button,.imo input{font:inherit;padding:3px 7px;border:1px solid #cbd2dc;border-radius:4px;background:white}.imo h3{font-size:14px;margin:14px 0 6px}.imo table{width:100%;border-collapse:collapse}.imo th,.imo td{text-align:left;padding:5px 8px;border-bottom:1px solid #e4e8ee;vertical-align:top}.imo th{background:#f5f7fa}.imo-scroll{overflow:auto}.imo #imo-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.imo-summary-item{padding:8px 12px;background:#f5f7fa;border:1px solid #e3e7ed;border-radius:5px}.imo dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8px 0}.imo dd{margin:0;overflow-wrap:anywhere}.imo td a{display:block}.imo-error{color:#a32828!important}.imo-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.imo-details section{min-width:0}@media(max-width:700px){.imo-details{grid-template-columns:1fr;gap:0}}
+.container.imo-page{width:100%;max-width:none;margin:0;padding:0 12px;box-sizing:border-box}.imo{font:13px/1.4 Arial,sans-serif;color:#30343b;margin:8px 0}.imo header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.imo header span{margin-left:auto;color:#707985}.imo a{color:#246da2}.imo button,.imo input,.imo select{font:inherit;padding:3px 7px;border:1px solid #cbd2dc;border-radius:4px;background:white}.imo h3{font-size:14px;margin:14px 0 6px}.imo table{width:100%;border-collapse:collapse}.imo th,.imo td{text-align:left;padding:5px 8px;border-bottom:1px solid #e4e8ee;vertical-align:top}.imo th{background:#f5f7fa}.imo-scroll{overflow:auto}.imo #imo-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.imo-summary-item{padding:8px 12px;background:#f5f7fa;border:1px solid #e3e7ed;border-radius:5px}.imo dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8px 0}.imo dd{margin:0;overflow-wrap:anywhere}.imo td a{display:block}.imo-error{color:#a32828!important}.imo-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.imo-details section{min-width:0}.imo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.imo-card{min-width:0;border:1px solid #e3e7ed;border-radius:8px;padding:8px;background:white}.imo-card h3{margin:0 0 6px}.imo-card nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.imo-card nav a{font-size:12px}@media(max-width:800px){.imo-grid{grid-template-columns:1fr}}@media(max-width:700px){.imo-details{grid-template-columns:1fr;gap:0}}
 </style>
 <div class='imo' id='imo-root'>
-<header><a href='metrics'>Metric viewer</a><a href='metrics?page=dashboard'>Dashboard</a><button id='imo-refresh' type='button'>Refresh</button><span id='imo-status' role='status'>Loading registry...</span></header>
+<header><a href='metrics'>Metric viewer</a><label>History <select id='imo-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label><button id='imo-now' type='button'>Now</button><label><input id='imo-live' type='checkbox'> Live via JSON</label><button id='imo-refresh' type='button'>Refresh</button><span id='imo-status' role='status'>Loading registry...</span></header>
 <div id='imo-summary'></div>
+<div class='imo-grid' id='imo-cards'></div>
 <div class='imo-details'><section><h3>Registry configuration</h3><dl id='imo-config'></dl></section>
 <section><h3>Storage state</h3><dl id='imo-storage'></dl></section></div>
 <h3>Metric lines</h3><input id='imo-filter' type='search' aria-label='Filter metric lines' placeholder='Filter by metric or labels'>
 <div class='imo-scroll'><table><thead><tr><th>ID</th><th>Line</th><th>Metrics</th><th>Labels</th><th>Frontend</th><th>State</th></tr></thead><tbody id='imo-lines'></tbody></table></div>
 </div>
-<script>
-(() => {
- const $=id=>document.getElementById('imo-'+id),text=(tag,value)=>{const node=document.createElement(tag);node.textContent=value;return node;};
- $('root').closest('.container')?.classList.add('imo-page');
- let data=null,controller=null,version=0;
- const labels=values=>(values||[]).map(label=>label.name+'='+label.value).join(', ');
- function entries(id,values){$(id).replaceChildren();for(const [label,value] of values)$(id).append(text('dt',label),text('dd',value===undefined?'Unavailable':String(value)));}
- function drawLines(){
-  if(!data)return;const needle=$('filter').value.toLowerCase();$('lines').replaceChildren();
-  for(const line of data.lines){if(!(line.name+' '+line.fields.map(field=>field.name).join(' ')+' '+labels(line.labels)).toLowerCase().includes(needle))continue;const row=document.createElement('tr');row.append(text('td',line.id),text('td',line.name));const metrics=document.createElement('td');for(const field of line.fields){const link=text('a',field.name);link.href='metrics?'+new URLSearchParams({metric:field.name});metrics.append(link);}row.append(metrics,text('td',labels(line.labels)),text('td',line.frontend),text('td',(line.closed?'Closed':'Active')+(line.readable?'':' / Unsupported')));$('lines').append(row);}
- }
- async function refresh(){
-  if(controller)controller.abort();controller=new AbortController();const current=++version;$('status').textContent='Loading registry...';$('status').className='';
-  try{const response=await fetch('metrics?format=json',{signal:controller.signal,cache:'no-store',credentials:'same-origin'}),next=await response.json();if(!response.ok)throw Error(next.error||'HTTP '+response.status);if(current!==version)return;data=next;const c=data.config,s=data.stats;$('summary').replaceChildren();
-   for(const value of ['Memory '+(s.memory_used_bytes/1048576).toFixed(2)+' / '+(c.memory_bytes/1048576).toFixed(2)+' MiB','Lines '+s.lines,'Closed lines '+s.closed_lines,'Append failures '+s.append_failures_total]){const item=text('div',value);item.className='imo-summary-item';$('summary').append(item);}
-   entries('config',[['Memory limit',c.memory_bytes+' bytes'],['Chunk size',c.chunk_size_bytes+' bytes'],['Line limit',c.max_lines],['Pending request limit',c.max_pending_requests],['Allowed prefixes',c.allowed_prefixes.join(', ')],['Common labels',labels(data.common_labels)]]);
-   entries('storage',[['Committed bytes',s.committed_bytes],['Free chunks',s.free_chunks],['Used chunks',s.used_chunks],['Sealed chunks',s.sealed_chunks],['Writable chunks',s.writable_chunks],['Retiring chunks',s.retiring_chunks]]);drawLines();$('status').textContent='Updated '+new Date(data.timestamp_ms).toLocaleString();
-  }catch(error){if(error.name==='AbortError')return;$('status').className='imo-error';$('status').textContent=error.message+(data?' / Showing last successful data':'');}
- }
- $('refresh').addEventListener('click',refresh);$('filter').addEventListener('input',drawLines);window.addEventListener('pagehide',()=>{++version;if(controller)controller.abort();});refresh();
-})();
-</script>
+<script type='module' src='../static/inmemory-metrics/overview.js'></script>
 )HTML";
 }
 

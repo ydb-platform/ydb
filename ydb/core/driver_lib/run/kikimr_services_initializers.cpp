@@ -639,8 +639,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (auto* mon = appData->Mon) {
         NMetricChart::RegisterResources(mon);
-        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/dashboard.js",
-            "inmemory-metrics/dashboard.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
+            "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
         NInMemoryMetricsMonitoring::TConfig metricsViewer;
         metricsViewer.ExecutorPool = appData->BatchPoolId;
         metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {

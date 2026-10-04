@@ -9,7 +9,6 @@ inline constexpr size_t MaxHistoryFields = 64;
 
 TString RenderPage();
 TString RenderOverviewPage();
-TString RenderDashboardPage();
 TString SerializeSnapshot(const NActors::TInMemorySnapshot& snapshot,
                           const NActors::TInMemoryMetricsStats& stats,
                           const NActors::TInMemoryMetricsConfig& config,

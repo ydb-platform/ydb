@@ -582,6 +582,9 @@ jobs:
           else
             plan_args+=(--shard-count "$requested")
           fi
+          if [ -n "${{ steps.create-blacklist.outputs.blacklist_file }}" ]; then
+            plan_args+=(--blacklist "${{ steps.create-blacklist.outputs.blacklist_file }}")
+          fi
           python3 .github/scripts/tests/shard_graph.py plan "${plan_args[@]}"
           cat shard_plan.md >> "$GITHUB_STEP_SUMMARY"
           python3 - << 'PY'

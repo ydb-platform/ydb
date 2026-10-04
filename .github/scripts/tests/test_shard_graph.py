@@ -567,6 +567,18 @@ class ShardProgressTest(unittest.TestCase):
             ["relwithdebinfo"],
         )
 
+    def test_blacklist_drops_a_suite_before_packing(self) -> None:
+        graph = _graph(
+            [
+                _node("test-a", size="small", path="ydb/keep"),
+                _node("test-b", size="small", path="ydb/drop/case"),
+            ],
+            result=["test-a", "test-b"],
+        )
+        filtered = shard_graph.without_blacklisted(graph, ["ydb/drop"])
+        self.assertEqual(filtered["result"], ["test-a"])
+        self.assertTrue(shard_graph._matches_blacklist("ydb/drop/case", "ydb/drop/*"))
+
     def test_one_bad_plan_does_not_drop_the_other_preset(self) -> None:
         good = {
             "shard_count": 2,

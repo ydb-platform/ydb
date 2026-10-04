@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fnmatch
 import json
 import math
 import os
@@ -420,8 +421,14 @@ def lookup_free_runners(preset_label: str) -> int | None:
     try:
         demand = _count_busy_runner_jobs(repo, token)
         free = compute_max_new_runners(demand, preset_label)
+    except urllib.error.HTTPError as exc:
+        print(
+            f"runner API HTTP {exc.code}; fallback to test volume only",
+            file=sys.stderr,
+        )
+        return None
     except (OSError, urllib.error.URLError, json.JSONDecodeError, KeyError, TimeoutError) as exc:
-        print(f"runner availability unknown ({exc}); not capping by pool", file=sys.stderr)
+        print(f"runner API failed ({exc}); fallback to test volume only", file=sys.stderr)
         return None
     print(
         f"free runners for {preset_label}: {free} (busy={dict(demand)}; "
@@ -791,7 +798,8 @@ def render_summary(plan: dict[str, Any]) -> str:
             f"volume={policy.get('volume_shards')}, "
             f"free_runners={policy.get('free_runners')}, "
             f"chosen={policy.get('chosen')}, "
-            f"capacity={policy.get('capacity')}"
+            f"capacity={policy.get('capacity')}, "
+            f"availability={policy.get('availability')}"
         )
         lines.append("")
     lines += [
@@ -815,6 +823,51 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def load_blacklist_patterns(path: Path) -> list[str]:
+    """Paths from a ya ``--test-blacklist-path`` file (``- path: ...`` lines)."""
+    patterns: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "path:" not in line:
+            continue
+        value = line.split("path:", 1)[1].strip().strip("'\"")
+        if value:
+            patterns.append(value.strip("/"))
+    return patterns
+
+
+def _matches_blacklist(node_path: str, pattern: str) -> bool:
+    node = node_path.strip("/")
+    pat = pattern.strip("/")
+    if not node or not pat:
+        return False
+    if node == pat or node.startswith(pat + "/"):
+        return True
+    return fnmatch.fnmatch(node, pat) or fnmatch.fnmatch(node, pat + "/*")
+
+
+def without_blacklisted(graph: dict[str, Any], patterns: list[str]) -> dict[str, Any]:
+    """Drop result nodes covered by the blacklist.
+
+    ``--build-custom-json`` ignores ``--test-blacklist-path`` at replay time,
+    so the saved graph itself must not list those tests.
+    """
+    if not patterns:
+        return graph
+    nodes = graph_nodes_by_uid(graph)
+    drop: set[str] = set()
+    for uid in result_uids(graph):
+        node_path = extract_node_path(nodes.get(uid) or {}) or ""
+        if node_path and any(_matches_blacklist(node_path, pattern) for pattern in patterns):
+            drop.add(uid)
+    if not drop:
+        return graph
+    keep = set(result_uids(graph)) - drop
+    if not keep:
+        raise ValueError("blacklist removed every result node")
+    return filter_graph_result(graph, keep)
+
+
 def _resolve_requested_count(raw: str) -> int | None:
     text = raw.strip().lower()
     if text == "auto":
@@ -826,6 +879,8 @@ def _resolve_requested_count(raw: str) -> int | None:
 
 def _cmd_plan(args: argparse.Namespace) -> int:
     graph = load_graph(args.graph)
+    if args.blacklist:
+        graph = without_blacklisted(graph, load_blacklist_patterns(args.blacklist))
     context = None
     if args.context:
         context = json.loads(args.context.read_text(encoding="utf-8"))
@@ -850,6 +905,13 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         # Not a live org quota. The numbers are the 2026-06-13 folder snapshot,
         # and busy jobs are counted only in this repository.
         "capacity": "snapshot 2026-06-13; busy jobs in this repository only",
+        "availability": (
+            "explicit"
+            if explicit is not None
+            else "api"
+            if free_runners is not None
+            else "volume-only fallback"
+        ),
     }
     # The caller records the matrix row that produced this plan. Shard jobs
     # read it back instead of keeping a second copy of the preset list.
@@ -924,6 +986,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Runner label for the pool cap, e.g. build-preset-relwithdebinfo. Used when shard-count=auto.",
     )
     plan.add_argument("--threads", type=int, default=DEFAULT_THREADS)
+    plan.add_argument("--blacklist", type=Path, default=None, help="ya test blacklist; applied before packing")
     plan.add_argument("--build-preset", default="")
     plan.add_argument("--build-target", default="")
     plan.add_argument("--test-size", default="")

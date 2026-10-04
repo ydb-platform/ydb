@@ -47,4 +47,23 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // Maximum CPU time share for automatic split/merge operations (0.01 to 1.0).
+    // Limits the fraction of SchemeShard main thread time that can be spent
+    // on split/merge decisions during stats processing.
+    // Default 0.7 = split/merge can use up to 70% of CPU time.
+    // Set to 1.0 to disable throttling (allow unlimited CPU usage).
+    // Note: This controls CPU budgeting only. To disable split-by-load, use
+    // SplitByLoadEnabled. Forced split-by-size cannot be disabled (safety mechanism).
+    // Example: with 0.7, if idle for 10 seconds, can burst up to 0.7 seconds of work,
+    // but sustained load is limited to 70% average.
+    optional double SplitMergeMaxCpuUsageShare = 12 [default = 0.7];
+
+    // Time window for split/merge CPU budget accumulation in milliseconds.
+    // Smaller values = more responsive to bursts but less smooth.
+    // Larger values = smoother averaging but slower response.
+    // Default 1000ms = budget accumulates over 1 second window.
+    // With default 0.7 share and 1000ms window: can accumulate up to 700ms of CPU budget.
+    // Advanced tuning only - most users should keep default.
+    optional uint64 SplitMergeCpuBudgetWindowMs = 13 [default = 1000];
 }

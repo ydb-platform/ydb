@@ -327,8 +327,6 @@ jobs:
     - name: Choose host count and plan shards
       id: plan
       if: steps.save-graph.outcome == 'success'
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
       run: |
         requested="${{ steps.shard-mode.outputs.mode }}"
         plan_args=(
@@ -336,6 +334,7 @@ jobs:
           --context context.json
           --threads "${{ matrix.threads_count }}"
           --build-preset "${{ matrix.build_preset }}"
+          --branch "${{ github.base_ref }}"
           --build-target "${{ matrix.build_target }}"
           --test-size "${{ matrix.test_size }}"
           -o shard_plan.json

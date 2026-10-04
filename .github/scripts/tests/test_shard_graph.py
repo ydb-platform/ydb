@@ -312,40 +312,75 @@ class HostCountTest(unittest.TestCase):
         )
         self.assertEqual(chosen, 2)
 
-    def test_quota_math_reports_one_free_slot(self) -> None:
-        config = {
-            "quotas": {"vcpu": 10, "ram_gb": 10, "nrd_ssd_gb": 10, "instances": 2},
-            "reserved": {},
-            "headroom_fraction": 1.0,
-            "footprints": {
-                "build-preset-relwithdebinfo": {"vcpu": 5, "ram_gb": 5, "nrd_ssd_gb": 5},
-            },
-            "default_footprint": {"vcpu": 5, "ram_gb": 5, "nrd_ssd_gb": 5},
+    def test_p90_replaces_the_timeout_when_the_suite_path_matches(self) -> None:
+        suite = _node("suite", deps=["chunk-1", "chunk-2"], timeout="600", path="ydb/core/foo", cpu=1)
+        chunks = [
+            _node("chunk-1", cmd_tokens=["run_test"], node_type=None),
+            _node("chunk-2", cmd_tokens=["run_test"], node_type=None),
+        ]
+        graph = _graph([suite, *chunks], result=["suite"])
+        timeout_plan = shard_graph.build_plan(graph, 1, threads=4)
+        self.assertEqual(timeout_plan["total_weight"], 1200.0)
+        history = shard_graph.build_plan(graph, 1, threads=4, p90_by_suite={"ydb/core/foo": 12.5})
+        self.assertEqual(history["total_weight"], 12.5)
+        self.assertEqual(history["weighting"]["history_nodes"], 1)
+        self.assertEqual(history["weighting"]["timeout_nodes"], 0)
+
+    def test_missing_p90_keeps_the_graph_timeout(self) -> None:
+        graph = _graph([_node("suite", size="small", path="ydb/missing")])
+        plan = shard_graph.build_plan(graph, 1, threads=4, p90_by_suite={"ydb/other": 10.0})
+        self.assertEqual(plan["total_weight"], 60.0)
+        self.assertEqual(plan["weighting"]["history_nodes"], 0)
+        self.assertEqual(plan["weighting"]["timeout_nodes"], 1)
+
+    def test_reported_graph_weight_asks_for_13_hosts(self) -> None:
+        # 4387 result nodes, weight 9233650, 52 threads: one host would run ~2960 minutes.
+        # Tiers cap that at 12, then ceil(2960/240) raises the floor to 13.
+        weight = 9233650.0
+        self.assertEqual(shard_graph.volume_shard_count(weight, 52), 13)
+
+    def test_quota_free_uses_the_tightest_resource(self) -> None:
+        gib = float(1024**3)
+        payload = {
+            "quotaLimits": [
+                {"quotaId": "compute.instances.count", "limit": 10, "usage": 8},
+                {"quotaId": "compute.instanceCores.count", "limit": 200, "usage": 40},
+                {"quotaId": "compute.instanceMemory.size", "limit": 512 * gib, "usage": 0},
+                {"quotaId": "compute.ssdNonReplicatedDisks.size", "limit": 10000 * gib, "usage": 0},
+            ]
         }
-        free = shard_graph.compute_max_new_runners(
-            shard_graph.Counter({"build-preset-relwithdebinfo": 1}),
-            "build-preset-relwithdebinfo",
-            config,
-        )
-        self.assertEqual(free, 1)
+        free = shard_graph.quota_free(payload)
+        self.assertEqual(free["instances"], 2)
+        footprint = {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417}
+        self.assertEqual(shard_graph.runners_that_fit(free, footprint), 2)
         chosen = shard_graph.choose_host_count(
             result_nodes=40,
             total_weight_sec=self._minutes(250),
             threads=52,
-            free_runners=free,
+            free_runners=shard_graph.runners_that_fit(free, footprint),
         )
-        self.assertEqual(chosen, 1)
+        self.assertEqual(chosen, 2)
 
-    def test_next_link_and_busy_pages_are_both_counted(self) -> None:
-        header = '<https://example.test/runs?page=2>; rel="next", <https://example.test/runs?page=1>; rel="prev"'
-        self.assertEqual(shard_graph.next_link(header), "https://example.test/runs?page=2")
-        self.assertEqual(shard_graph.next_link(""), "")
-        page_one = {"jobs": [{"status": "in_progress", "labels": ["self-hosted", "build-preset-relwithdebinfo"]}]}
-        page_two = {"jobs": [{"status": "queued", "labels": ["build-preset-release-asan"]}]}
-        demand = shard_graph.busy_labels_in_jobs(page_one)
-        demand.update(shard_graph.busy_labels_in_jobs(page_two))
-        self.assertEqual(demand["build-preset-relwithdebinfo"], 1)
-        self.assertEqual(demand["build-preset-release-asan"], 1)
+    def test_repo_footprints_file_has_relwithdebinfo_and_cloud(self) -> None:
+        config = shard_graph.load_runner_footprints()
+        footprint = shard_graph.footprint_for(config, "build-preset-relwithdebinfo")
+        self.assertEqual(footprint, {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417})
+        self.assertEqual(config["quota_cloud_id"], "b1ggceeul2pkher8vhb6")
+        unknown = shard_graph.footprint_for(config, "build-preset-not-listed")
+        self.assertEqual(unknown["vcpu"], int(config["default_footprint"]["vcpu"]))
+
+    def test_suite_p90_query_names_the_build_type_and_skips_lint(self) -> None:
+        sql = shard_graph.suite_p90_query("test_results/test_runs_column", "relwithdebinfo", "stable-26-1")
+        self.assertIn("build_type = 'relwithdebinfo'", sql)
+        self.assertIn("branch = 'stable-26-1'", sql)
+        self.assertIn("status != 'skipped'", sql)
+        self.assertNotIn("status = 'passed'", sql)
+        self.assertIn("PERCENTILE(suite_sec, 0.9)", sql)
+        self.assertIn(".flake8", sql)
+        with self.assertRaises(ValueError):
+            shard_graph.suite_p90_query("test_results/test_runs_column", "relwith;drop", "main")
+        with self.assertRaises(ValueError):
+            shard_graph.suite_p90_query("test_results/test_runs_column", "relwithdebinfo", "main;drop")
 
 
 class ShardProgressTest(unittest.TestCase):

@@ -9,10 +9,12 @@ exactly one shard. ``ya make --build-custom-json`` runs every UID in
 ``result``, so the filtered graph's result list is that shard and nothing
 else. Dependency nodes stay in the graph so the shard can still build.
 
-Weights are timeout-budget times ya CPU slots (``requirements.cpu``,
-``all`` means the job's test thread count). History p90 is intentionally
-not used: PR-check history is dominated by lint/import rows and needs a
-live YDB connection. The budget is deterministic from the graph alone.
+Weights prefer the suite's p90 duration from YDB test history (the
+history branch, same build type, last 14 days, skipped rows left out).
+A suite
+with no history row keeps the graph timeout budget. Both are multiplied
+by ya CPU slots
+(``requirements.cpu``; ``all`` means the job's test thread count).
 
 Assignment is deterministic: higher weight first, UID as a tie-break,
 and a tied load goes to the lower shard index.
@@ -26,9 +28,9 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -52,22 +54,15 @@ VOLUME_TIERS: tuple[tuple[float, int], ...] = (
 # Keep the slowest shard's ideal wall time inside the PR-check budget.
 MAX_SHARD_WALL_MIN = 240.0
 
-# Folder quota snapshot from PR 47597 (.github/config/runner_capacity.yml, 2026-06-13).
-# Free hosts = how many more VMs of this preset fit after queued/in-progress jobs.
-# If the Actions API cannot be read, availability is unknown and only volume applies.
-RUNNER_CAPACITY: dict[str, Any] = {
-    "quotas": {"vcpu": 5400, "ram_gb": 23000, "instances": 110, "nrd_ssd_gb": 200000},
-    "reserved": {"vcpu": 200, "ram_gb": 600, "instances": 22, "nrd_ssd_gb": 16000},
-    "headroom_fraction": 0.9,
-    "footprints": {
-        "build-preset-relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
-        "build-preset-release-asan": {"vcpu": 96, "ram_gb": 288, "nrd_ssd_gb": 2417},
-        "build-preset-release-msan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2417},
-        "build-preset-release-tsan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2417},
-    },
-    "default_footprint": {"vcpu": 96, "ram_gb": 320, "nrd_ssd_gb": 2417},
-}
+# VM size per runner label. Live free capacity comes from Compute quota, not from these numbers.
 _CAPACITY_RESOURCES = ("vcpu", "ram_gb", "nrd_ssd_gb")
+_QUOTA_SCALE = {
+    "compute.instances.count": ("instances", 1.0),
+    "compute.instanceCores.count": ("vcpu", 1.0),
+    "compute.instanceMemory.size": ("ram_gb", float(1024**3)),
+    "compute.ssdNonReplicatedDisks.size": ("nrd_ssd_gb", float(1024**3)),
+}
+_SA_KEY_ENV = "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
 
 _TEST_KIND_LEAVES = frozenset(
     {
@@ -278,6 +273,19 @@ def uid_weight(
     return float(units) * float(timeout) * float(slots), size, units
 
 
+def suite_p90_seconds(node: dict[str, Any], p90_by_suite: dict[str, float] | None) -> float | None:
+    """Observed suite seconds, or None when this graph path has no history row."""
+    if not p90_by_suite:
+        return None
+    path = extract_node_path(node)
+    if not path:
+        return None
+    value = p90_by_suite.get(path.strip("/"))
+    if value is None or float(value) <= 0:
+        return None
+    return float(value)
+
+
 def strip_test_kind_leaf(path: str) -> str:
     cleaned = path.strip().rstrip("/")
     if "/" not in cleaned:
@@ -373,144 +381,180 @@ def choose_host_count(
     return max(1, min(desired, max_shards, result_nodes))
 
 
-def compute_max_new_runners(
-    demand: Counter[str],
-    preset_label: str,
-    config: dict[str, Any] | None = None,
-) -> int:
-    """How many more runners of ``preset_label`` fit in the folder quota.
+def footprints_config_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "config" / "runners_footprints.yml"
 
-    Same arithmetic as PR 47597 ``compute_max_new_runners``: subtract busy
-    jobs' footprints and the static reserve from the quota, then see how
-    many VMs of this preset fit in the tightest resource.
-    """
-    cfg = config or RUNNER_CAPACITY
-    quotas = cfg["quotas"]
-    reserved = cfg.get("reserved") or {}
-    headroom = float(cfg.get("headroom_fraction", 1.0))
-    footprints = cfg["footprints"]
-    default_footprint = cfg["default_footprint"]
 
-    def footprint(label: str) -> dict[str, int]:
-        found = footprints.get(label) or default_footprint
-        return {res: int(found[res]) for res in _CAPACITY_RESOURCES}
+def load_simple_yaml(text: str) -> dict[str, Any]:
+    """Indent-based mappings only. runners_footprints.yml has no lists."""
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        line = raw.strip()
+        if line.startswith("- "):
+            raise ValueError(f"lists are not supported in runner config: {line}")
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if " #" in value:
+            value = value.split(" #", 1)[0].strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
+        if value == "":
+            child: dict[str, Any] = {}
+            parent[key] = child
+            stack.append((indent, child))
+        else:
+            parent[key] = _yaml_scalar(value)
+    return root
 
-    used = {res: 0.0 for res in _CAPACITY_RESOURCES}
-    used_instances = 0
-    for label, count in demand.items():
-        fp = footprint(label)
-        for res in _CAPACITY_RESOURCES:
-            used[res] += fp[res] * count
-        used_instances += count
 
-    fits = [((quotas["instances"] - reserved.get("instances", 0)) * headroom) - used_instances]
-    target = footprint(preset_label)
+def _yaml_scalar(value: str) -> Any:
+    if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
+        return value[1:-1]
+    try:
+        if any(ch in value for ch in ".eE"):
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+
+
+def load_runner_footprints(path: Path | None = None) -> dict[str, Any]:
+    config_path = path or footprints_config_path()
+    config = load_simple_yaml(config_path.read_text(encoding="utf-8"))
+    footprints = config.get("footprints")
+    default = config.get("default_footprint")
+    cloud_id = config.get("quota_cloud_id")
+    if not isinstance(footprints, dict) or not isinstance(default, dict) or not cloud_id:
+        raise ValueError(f"{config_path} must set footprints, default_footprint, and quota_cloud_id")
+    return config
+
+
+def footprint_for(config: dict[str, Any], preset_label: str) -> dict[str, int]:
+    found = (config.get("footprints") or {}).get(preset_label) or config["default_footprint"]
+    if not isinstance(found, dict):
+        raise ValueError(f"footprint for {preset_label} is not a mapping")
+    return {res: int(found[res]) for res in _CAPACITY_RESOURCES}
+
+
+def runners_that_fit(free: dict[str, float], footprint: dict[str, int]) -> int:
+    """How many VMs of this footprint fit in quota limit-usage. The tightest resource wins."""
+    fits = [float(free["instances"])]
     for res in _CAPACITY_RESOURCES:
-        free = ((quotas[res] - reserved.get(res, 0)) * headroom) - used[res]
-        fits.append(free / target[res])
+        need = float(footprint[res])
+        if need <= 0:
+            raise ValueError(f"footprint {res} must be positive")
+        fits.append(float(free[res]) / need)
     return max(int(math.floor(min(fits))), 0)
 
 
+def quota_free(payload: dict[str, Any]) -> dict[str, float]:
+    limits = payload.get("quotaLimits") or payload.get("quota_limits") or []
+    found: dict[str, float] = {}
+    for item in limits:
+        if not isinstance(item, dict):
+            continue
+        quota_id = item.get("quotaId") or item.get("quota_id")
+        scale = _QUOTA_SCALE.get(str(quota_id))
+        if scale is None:
+            continue
+        name, divisor = scale
+        found[name] = (float(item["limit"]) - float(item["usage"])) / divisor
+    missing = [name for name, _divisor in _QUOTA_SCALE.values() if name not in found]
+    if missing:
+        raise KeyError(f"compute quota response missing {missing}")
+    return found
+
+
+def yc_compute_quota(cloud_id: str, key_file: str) -> dict[str, float]:
+    """``yc quota-manager quota-limit list`` using the CI service-account key.
+
+    yc reads that key itself. A private config under a temporary HOME keeps the
+    call off the operator's logged-in profile.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        cfg_dir = home / ".config" / "yandex-cloud"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "config.yaml").write_text(
+            "current: sa\n"
+            "profiles:\n"
+            "  sa:\n"
+            f"    service-account-key: {key_file}\n"
+            f"    cloud-id: {cloud_id}\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env.pop("YC_TOKEN", None)
+        env.pop("YC_IAM_TOKEN", None)
+        proc = subprocess.run(
+            [
+                "yc",
+                "quota-manager",
+                "quota-limit",
+                "list",
+                "--service",
+                "compute",
+                "--resource-type",
+                "resource-manager.cloud",
+                "--resource-id",
+                cloud_id,
+                "--format",
+                "json",
+            ],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    payload = json.loads(proc.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("yc quota response is not an object")
+    return quota_free(payload)
+
+
 def lookup_free_runners(preset_label: str) -> int | None:
-    """Busy Actions jobs vs RUNNER_CAPACITY. None if the pool cannot be read."""
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if not token or not repo:
-        print("runner availability unknown (no token); not capping by pool", file=sys.stderr)
-        return None
-    try:
-        demand = _count_busy_runner_jobs(repo, token)
-        free = compute_max_new_runners(demand, preset_label)
-    except urllib.error.HTTPError as exc:
+    """How many more VMs of this preset fit in live Compute quota. None if quota cannot be read."""
+    key_file = os.environ.get(_SA_KEY_ENV)
+    if not key_file:
         print(
-            f"runner API HTTP {exc.code}; fallback to test volume only",
+            f"runner availability unknown ({_SA_KEY_ENV} is unset); not capping by quota",
             file=sys.stderr,
         )
         return None
-    except (OSError, urllib.error.URLError, json.JSONDecodeError, KeyError, TimeoutError) as exc:
-        print(f"runner API failed ({exc}); fallback to test volume only", file=sys.stderr)
+    try:
+        config = load_runner_footprints()
+        free = yc_compute_quota(str(config["quota_cloud_id"]), key_file)
+        footprint = footprint_for(config, preset_label)
+        count = runners_that_fit(free, footprint)
+    except subprocess.CalledProcessError as exc:
+        detail = [
+            line
+            for line in (exc.stderr or "").splitlines()
+            if line.strip() and "PRIVATE" not in line and "BEGIN" not in line
+        ]
+        tail = detail[-1] if detail else f"exit {exc.returncode}"
+        print(f"yc quota failed ({tail}); fallback to test volume only", file=sys.stderr)
         return None
+    except (OSError, json.JSONDecodeError, KeyError, TimeoutError, ValueError, subprocess.TimeoutExpired) as exc:
+        print(f"quota lookup failed ({exc}); fallback to test volume only", file=sys.stderr)
+        return None
+    printable = {name: round(value, 2) for name, value in free.items()}
     print(
-        f"free runners for {preset_label}: {free} (busy={dict(demand)}; "
-        "snapshot 2026-06-13; busy jobs in this repository only)",
+        f"free runners for {preset_label}: {count} "
+        f"(quota free {printable}; footprint {footprint})",
         file=sys.stderr,
     )
-    return free
-
-
-def busy_labels_in_jobs(payload: dict[str, Any], known: set[str] | None = None) -> Counter[str]:
-    """Count queued or in-progress jobs that occupy a build-preset runner."""
-    labels = known if known is not None else set(RUNNER_CAPACITY["footprints"])
-    demand: Counter[str] = Counter()
-    for job in payload.get("jobs") or []:
-        if not isinstance(job, dict) or job.get("status") not in ("queued", "in_progress"):
-            continue
-        for label in job.get("labels") or []:
-            if label in labels or str(label).startswith("build-preset-"):
-                demand[str(label)] += 1
-                break
-    return demand
-
-
-def _count_busy_runner_jobs(repo: str, token: str) -> Counter[str]:
-    demand: Counter[str] = Counter()
-    known = set(RUNNER_CAPACITY["footprints"])
-    for status in ("queued", "in_progress"):
-        run_pages = _github_pages(
-            f"https://api.github.com/repos/{repo}/actions/runs?status={status}&per_page=100",
-            token,
-        )
-        for payload in run_pages:
-            for run in payload.get("workflow_runs") or []:
-                if not isinstance(run, dict) or "id" not in run:
-                    continue
-                for jobs in _github_pages(
-                    f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100",
-                    token,
-                ):
-                    demand.update(busy_labels_in_jobs(jobs, known))
-    return demand
-
-
-def next_link(link_header: str) -> str:
-    """Return the URL marked rel=next in a GitHub Link header, or ''."""
-    for part in (link_header or "").split(","):
-        bits = [bit.strip() for bit in part.split(";")]
-        if not bits or not bits[0].startswith("<") or not bits[0].endswith(">"):
-            continue
-        rels = {bit for bit in bits[1:]}
-        if 'rel="next"' in rels or "rel=next" in rels:
-            return bits[0][1:-1]
-    return ""
-
-
-def _github_get(url: str, token: str) -> tuple[dict[str, Any], str]:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "ydb-shard-hosts",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
-        link = response.headers.get("Link", "")
-    if not isinstance(payload, dict):
-        raise ValueError(f"unexpected response from {url}")
-    return payload, str(link)
-
-
-def _github_pages(url: str, token: str) -> list[dict[str, Any]]:
-    pages: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    while url and url not in seen:
-        seen.add(url)
-        payload, link = _github_get(url, token)
-        pages.append(payload)
-        url = next_link(link)
-    return pages
+    return count
 
 
 def bin_pack(weights: dict[str, float], shard_count: int) -> tuple[list[list[str]], list[float]]:
@@ -533,6 +577,7 @@ def build_plan(
     *,
     threads: int = DEFAULT_THREADS,
     context: dict[str, Any] | None = None,
+    p90_by_suite: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Partition every result UID. Raises if the graph has nothing to run."""
     validate_graph(graph)
@@ -552,9 +597,17 @@ def build_plan(
     weights: dict[str, float] = {}
     size_counts: Counter[str] = Counter()
     total_units = 0
+    history_nodes = 0
+    timeout_nodes = 0
     for uid in uids:
         node = nodes_by_uid.get(uid) or {}
         weight, size, units = uid_weight(uid, node, nodes_by_uid, result_set, size_by_uid, threads)
+        observed = suite_p90_seconds(node, p90_by_suite)
+        if observed is not None:
+            weight = observed * float(cpu_slots(node, threads))
+            history_nodes += 1
+        else:
+            timeout_nodes += 1
         weights[uid] = weight
         size_counts[size] += 1
         total_units += units
@@ -591,7 +644,9 @@ def build_plan(
         "total_result_nodes": len(uids),
         "total_weight": round(total_weight, 1),
         "weighting": {
-            "mode": "timeout_budget_x_cpu",
+            "mode": "history_p90_else_timeout" if p90_by_suite is not None else "timeout_budget_x_cpu",
+            "history_nodes": history_nodes,
+            "timeout_nodes": timeout_nodes,
             "timeout_budget_units": total_units,
             "size_small": size_counts["small"],
             "size_medium": size_counts["medium"],
@@ -791,6 +846,13 @@ def render_summary(plan: dict[str, Any]) -> str:
         f"**Weighting:** {plan['weighting']['mode']}, threads {plan['threads']}",
         "",
     ]
+    weighting = plan.get("weighting") or {}
+    if "history_nodes" in weighting:
+        lines.insert(
+            5,
+            f"**Suite times:** p90 {weighting['history_nodes']}, "
+            f"timeout fallback {weighting['timeout_nodes']}",
+        )
     policy = plan.get("host_policy") or {}
     if policy:
         lines.append(
@@ -868,6 +930,92 @@ def without_blacklisted(graph: dict[str, Any], patterns: list[str]) -> dict[str,
     return filter_graph_result(graph, keep)
 
 
+_BUILD_TYPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
+_HISTORY_DAYS = 14
+
+
+def suite_p90_query(table: str, build_type: str, branch: str) -> str:
+    """p90 of per-job suite duration. Lint and chunk-duplicate rows are left out."""
+    if not _BUILD_TYPE_RE.fullmatch(build_type):
+        raise ValueError(f"build type is not safe to interpolate: {build_type!r}")
+    if not _BRANCH_RE.fullmatch(branch):
+        raise ValueError(f"branch is not safe to interpolate: {branch!r}")
+    if not table or "`" in table or any(ch.isspace() for ch in table):
+        raise ValueError(f"table path is not safe to interpolate: {table!r}")
+    return f"""
+        SELECT suite_folder, PERCENTILE(suite_sec, 0.9) AS p90
+        FROM (
+            SELECT
+                suite_folder,
+                job_id,
+                SUM(duration) AS suite_sec
+            FROM `{table}`
+            WHERE run_timestamp >= CurrentUtcTimestamp() - Interval("P{_HISTORY_DAYS}D")
+              AND branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND status != 'skipped'
+              AND duration > 0
+              AND job_id IS NOT NULL
+              AND suite_folder IS NOT NULL
+              AND suite_folder != ''
+              AND String::Contains(test_name, '.flake8') = FALSE
+              AND String::Contains(test_name, 'clang-format') = FALSE
+              AND String::Contains(test_name, 'clang_format') = FALSE
+              AND String::Contains(test_name, '.black') = FALSE
+              AND String::Contains(test_name, 'import_test') = FALSE
+              AND String::Contains(test_name, 'sole chunk') = FALSE
+              AND String::Contains(test_name, 'chunk+chunk') = FALSE
+              AND String::Contains(test_name, '[chunk]') = FALSE
+            GROUP BY suite_folder, job_id
+        )
+        GROUP BY suite_folder
+    """
+
+
+def _row_field(row: Any, name: str) -> Any:
+    if isinstance(row, dict):
+        return row.get(name)
+    return getattr(row, name, None)
+
+
+def load_suite_p90(build_type: str, branch: str) -> dict[str, float] | None:
+    """Suite path to p90 seconds. None if YDB QA cannot be read; the caller keeps timeouts."""
+    try:
+        analytics = Path(__file__).resolve().parents[1] / "analytics"
+        if str(analytics) not in sys.path:
+            sys.path.insert(0, str(analytics))
+        from ydb_wrapper import YDBWrapper
+
+        with YDBWrapper(silent=True) as wrapper:
+            table = wrapper.get_table_path("test_results")
+            rows = wrapper.execute_scan_query(
+                suite_p90_query(table, build_type, branch),
+                query_name="suite_p90",
+            )
+    except Exception as exc:
+        print(f"suite p90 unavailable ({exc}); using graph timeouts", file=sys.stderr)
+        return None
+    found: dict[str, float] = {}
+    for row in rows or []:
+        folder = _row_field(row, "suite_folder")
+        p90 = _row_field(row, "p90")
+        if not isinstance(folder, str) or not folder.strip() or p90 is None:
+            continue
+        try:
+            seconds = float(p90)
+        except (TypeError, ValueError):
+            continue
+        if seconds > 0:
+            found[folder.strip("/")] = seconds
+    print(
+        f"suite p90: {len(found)} suites, branch={branch}, build_type={build_type}, "
+        f"last {_HISTORY_DAYS} days",
+        file=sys.stderr,
+    )
+    return found
+
+
 def _resolve_requested_count(raw: str) -> int | None:
     text = raw.strip().lower()
     if text == "auto":
@@ -885,7 +1033,21 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     if args.context:
         context = json.loads(args.context.read_text(encoding="utf-8"))
     explicit = _resolve_requested_count(str(args.shard_count))
-    probe = build_plan(graph, 1, threads=args.threads, context=context)
+    if args.build_preset and args.branch:
+        p90_by_suite = load_suite_p90(args.build_preset, args.branch)
+    else:
+        print(
+            "suite p90 skipped (need both --build-preset and --branch); using graph timeouts",
+            file=sys.stderr,
+        )
+        p90_by_suite = None
+    probe = build_plan(
+        graph,
+        1,
+        threads=args.threads,
+        context=context,
+        p90_by_suite=p90_by_suite,
+    )
     free_runners = None
     if explicit is None and args.preset_label:
         free_runners = lookup_free_runners(args.preset_label)
@@ -896,15 +1058,19 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         free_runners=free_runners,
         explicit=explicit,
     )
-    plan = probe if chosen == 1 else build_plan(graph, chosen, threads=args.threads, context=context)
+    plan = probe if chosen == 1 else build_plan(
+        graph,
+        chosen,
+        threads=args.threads,
+        context=context,
+        p90_by_suite=p90_by_suite,
+    )
     plan["host_policy"] = {
         "mode": "auto" if explicit is None else "explicit",
         "volume_shards": volume_shard_count(float(probe["total_weight"]), args.threads),
         "free_runners": free_runners,
         "chosen": chosen,
-        # Not a live org quota. The numbers are the 2026-06-13 folder snapshot,
-        # and busy jobs are counted only in this repository.
-        "capacity": "snapshot 2026-06-13; busy jobs in this repository only",
+        "capacity": "compute quota limit-usage; footprints from runners_footprints.yml",
         "availability": (
             "explicit"
             if explicit is not None
@@ -915,9 +1081,10 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     }
     # The caller records the matrix row that produced this plan. Shard jobs
     # read it back instead of keeping a second copy of the preset list.
-    if args.build_preset or args.build_target or args.test_size:
+    if args.build_preset or args.build_target or args.test_size or args.branch:
         plan["run"] = {
             "build_preset": args.build_preset,
+            "branch": args.branch,
             "build_target": args.build_target,
             "test_size": args.test_size,
             "threads": args.threads,
@@ -988,6 +1155,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     plan.add_argument("--blacklist", type=Path, default=None, help="ya test blacklist; applied before packing")
     plan.add_argument("--build-preset", default="")
+    plan.add_argument("--branch", default="", help="Test-history branch, e.g. main or stable-26-1")
     plan.add_argument("--build-target", default="")
     plan.add_argument("--test-size", default="")
     plan.add_argument("-o", "--output", type=Path, required=True)

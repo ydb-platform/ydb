@@ -566,14 +566,14 @@ jobs:
 
       - name: Plan shards
         id: plan
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           requested='${{ needs.prepare.outputs.shard_count }}'
           plan_args=(
             --graph graph.json
             --context context.json
             --threads "${{ env.threads_count }}"
+            --build-preset "${{ inputs.build_preset }}"
+            --branch "${{ steps.determine-branch.outputs.branch_name }}"
             -o shard_plan.json
             --summary shard_plan.md
           )

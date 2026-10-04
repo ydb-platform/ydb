@@ -3,6 +3,8 @@
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
 
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {
@@ -72,7 +74,7 @@ protected:
             }
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;
-                ALOG_WARN(HttpLog, "Failed to construct server security context");
+                YDB_LOG_WARN("Failed to construct server security context");
             }
             // Enable ALPN for HTTP/2 negotiation on secure endpoints
             if (Endpoint->SecureContext && Endpoint->AllowHttp2) {
@@ -82,30 +84,31 @@ protected:
         if (err == 0) {
             err = Socket->Socket.Bind(bindAddress.get());
             if (err != 0) {
-                ALOG_WARN(
-                    HttpLog,
-                    "Failed to bind " << bindAddress->ToString()
-                    << ", code: " << err);
+                YDB_LOG_WARN("Failed to bind",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"code", err});
             }
         }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
             err = Socket->Socket.Listen(LISTEN_QUEUE);
             if (err == 0) {
-                ALOG_INFO(HttpLog, "Listening on " << schema << bindAddress->ToString());
+                YDB_LOG_INFO("Listening",
+                    {"schema", schema},
+                    {"bindAddress", bindAddress->ToString()});
                 SetNonBlock(Socket->Socket);
                 Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
                 Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
                 return;
             } else {
-                ALOG_WARN(
-                    HttpLog,
-                    "Failed to listen on " << schema << bindAddress->ToString()
-                    << ", code: " << err);
+                YDB_LOG_WARN("Failed to listen",
+                    {"schema", schema},
+                    {"bindAddress", bindAddress->ToString()},
+                    {"code", err});
             }
         }
-        ALOG_WARN(HttpLog, "Failed to init - retrying...");
+        YDB_LOG_WARN("Failed to init - retrying...");
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 
@@ -136,9 +139,10 @@ protected:
                         continue; // we can try it again
                     }
                 } else {
-                    ALOG_WARN(HttpLog,
-                        "Accept failed on " << (Endpoint ? Endpoint->WorkerName : TString(""))
-                        << ": errno=" << acceptErrno << " (" << LastSystemErrorText(acceptErrno) << ")");
+                    YDB_LOG_WARN("Accept failed",
+                        {"workerName", (Endpoint ? Endpoint->WorkerName : TString(""))},
+                        {"errno", acceptErrno},
+                        {"error", LastSystemErrorText(acceptErrno)});
                     if (PollerToken) {
                         PollerToken->Request(true, false);
                     }

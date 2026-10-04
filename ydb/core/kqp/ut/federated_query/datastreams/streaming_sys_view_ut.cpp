@@ -339,6 +339,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableIdmPermissionsManagement(IdmPermissions);
         Setup();
 
+        constexpr char modifier[] = "modifier@builtin";
+        ExecQuery(fmt::format("GRANT ALL ON `/Root` TO `{}`;", modifier));
+        TQueryClient modifierClient(*GetInternalDriver(), TClientSettings().AuthToken(modifier));
+        const auto execAsModifier = [&](const std::string& query) {
+            const auto result = modifierClient.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        };
+
         constexpr char queryName[] = "createdByQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
@@ -348,7 +356,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             "text"_a = GetQueryText(queryName)
         ));
 
-        // Finalization updates modified_by to the metadata service; the creator and run history remain user-owned.
+        // Service finalization must preserve the user who last modified the query.
         // After CREATE: created_by, modified_by, created_at, modified_at must be set; started_by, stopped_by must be null
         {
             const auto& queryResult = ExecQuery(fmt::format(R"(
@@ -358,7 +366,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             )", "name"_a = queryName));
             CheckScriptResult(queryResult[0], 6, 1, [&](TResultSetParser& rs) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_METADATA);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
                 UNIT_ASSERT_C(rs.ColumnParser("CreatedAt").GetOptionalTimestamp().has_value(), "CreatedAt must be set after CREATE");
                 UNIT_ASSERT_C(rs.ColumnParser("ModifiedAt").GetOptionalTimestamp().has_value(), "ModifiedAt must be set after CREATE");
                 UNIT_ASSERT_C(!rs.ColumnParser("StartedBy").GetOptionalUtf8().has_value(), "StartedBy must be null after CREATE with RUN=FALSE");
@@ -366,8 +374,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             });
         }
 
-        // ALTER: turn the query on (RUN = TRUE) — this should set started_by
-        ExecQuery(fmt::format(R"(
+        // A different user starts the query; finalization must preserve that user's attribution.
+        execAsModifier(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
             ))",
@@ -383,8 +391,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             )", "name"_a = queryName));
             CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_METADATA);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
                 UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after starting");
             });
         }
@@ -406,15 +414,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             )", "name"_a = queryName));
             CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_METADATA);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
             });
         }
 
         // Replacing the query must preserve the counterpart of each run transition.
         for (bool run : {true, false}) {
-            ExecQuery(fmt::format(R"(
+            execAsModifier(fmt::format(R"(
                 CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
                     RUN = {run}
                 ) AS DO BEGIN{text}END DO)",
@@ -428,12 +436,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 WHERE Path = '/Root/{name}'
             )", "name"_a = queryName));
             CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_METADATA);
-                for (const char* column : {"CreatedBy", "StartedBy", "StoppedBy"}) {
-                    const auto value = rs.ColumnParser(column).GetOptionalUtf8();
-                    UNIT_ASSERT_C(value.has_value(), column);
-                    UNIT_ASSERT_VALUES_EQUAL(*value, BUILTIN_ACL_ROOT);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), run ? BUILTIN_ACL_ROOT : modifier);
             });
         }
 
@@ -455,7 +461,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             )", "name"_a = runningQueryName));
             CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
-                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_METADATA);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
                 UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after CREATE with RUN=TRUE");
             });

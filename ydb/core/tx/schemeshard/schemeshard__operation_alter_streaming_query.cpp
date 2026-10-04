@@ -167,7 +167,17 @@ class TAlterStreamingQuery : public TSubOperation {
             properties["__created_by"] = it->second;
         }
         const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
-        properties["__modified_by"] = userSID;
+        const bool isFinalization = oldStreamingQueryInfo->OperationOwnerActorId && !info.HasOperationOwnerActorId();
+        if (isFinalization) {
+            // Completing an operation must not replace its user's attribution with the service identity.
+            if (const auto it = oldProperties.find("__modified_by"); it != oldProperties.end()) {
+                properties["__modified_by"] = it->second;
+            } else {
+                properties.erase("__modified_by");
+            }
+        } else {
+            properties["__modified_by"] = userSID;
+        }
 
         // Preserve original creation time; always update modification time
         if (const auto it = oldProperties.find("__created_at"); it != oldProperties.end()) {

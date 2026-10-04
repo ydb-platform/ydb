@@ -1040,8 +1040,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         auto expectedProperties = f.Describe()->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties();
         expectedProperties.erase(TStreamingQueryMeta::TProperties::InflightOperation);
         expectedProperties.erase(TStreamingQueryMeta::TProperties::OperationOwnerUserToken);
-        // Finalization is an ALTER performed by the metadata service.
-        expectedProperties[TStreamingQueryMeta::TProperties::ModifiedBy] = BUILTIN_ACL_METADATA;
+        // Finalization by the metadata service must preserve the original user attribution.
+        UNIT_ASSERT_VALUES_EQUAL(expectedProperties.at(TStreamingQueryMeta::TProperties::ModifiedBy), BUILTIN_ACL_ROOT);
         bool failDescribe = !RepeatDescribe;
         ui64 describeFailures = 0;
         auto descriptions = f.Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {

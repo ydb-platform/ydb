@@ -572,6 +572,7 @@ message TTableServiceConfig {
         // visits the channels which have something for it, and a compute actor checks its output channels for
         // finish only once one of them has. Kill switch: off, the channels are polled as before
         optional bool EnableChannelNotifications = 10 [default = true];
+        optional uint64 UnboundWaitPeriodMs = 11 [default = 600000];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
@@ -619,4 +620,10 @@ message TTableServiceConfig {
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];
+
+    // Fallback to legacy optimizer on data manipulation queries
+    optional bool EnableFallbackOnDML = 150 [default = false];
+
+    // Fallback to legacy optimizer on multiple statements in a query
+    optional bool EnableFallbackOnMultipleStatements = 151 [default = false];
 };

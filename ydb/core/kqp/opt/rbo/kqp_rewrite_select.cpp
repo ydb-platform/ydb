@@ -1613,7 +1613,10 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 } // anonymous namespace
 
 TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    Y_UNUSED(kqpCtx);
+
+    if (kqpCtx.Config->GetEnableFallbackOnDML()) {
+        Y_ENSURE(false, "Fallback due to DML fallback flag");
+    }
 
     TExprNode::TPtr tableEffectInput = node->ChildPtr(1);
     if (TKqpWriteConstraint::Match(tableEffectInput.Get())){

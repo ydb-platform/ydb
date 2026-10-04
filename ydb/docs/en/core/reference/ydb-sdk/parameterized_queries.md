@@ -1,6 +1,12 @@
 ## Parameterized queries
 
+<<<<<<< HEAD
 {{ ydb-short-name }} supports and recommends the use of so-called [parameterized queries](https://en.wikipedia.org/wiki/Prepared_statement). In such queries, the data is transmitted separately from the request body itself, and in the SQL query, special parameters are used to indicate the location of the data.
+=======
+{{ ydb-short-name }} supports and recommends the use of so-called [parameterized queries](../../yql/reference/syntax/lexer.md#query-params). In such queries, data is transmitted separately from the query body itself, and special parameters in the SQL query are used to indicate where the data goes. Parameterized query plans are cached on the server (by default, up to 1000 entries), which lets you reuse plans for similar queries that differ only in parameter values.
+
+In many {{ ydb-short-name }} SDKs, parameterized query caching is enabled by default. You can disable it if needed by setting the `KeepInCache` parameter to `false`.
+>>>>>>> e78cf9d117c ([YDBDOCS-2857] Document query parameterization limitations and link related pages (#52765))
 
 Request with data in the request body:
 

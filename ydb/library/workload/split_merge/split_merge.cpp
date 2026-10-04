@@ -612,7 +612,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TSplitMergeWorkloadGenerator::Ge
     result.emplace_back(static_cast<int>(EType::MergeBySize), "merge-by-size", "ALTER partition size up -> merge cascade; poll until drained");
     result.emplace_back(static_cast<int>(EType::MergeByLoad), "merge-by-load", "Watch the by-load merge drain after hot traffic stops; run split-by-load first to create the load, then start this mode (requires init with --auto-partition 1)");
     result.emplace_back(static_cast<int>(EType::SplitBurst), "split-burst", "All shards of table 0 pushed past the size threshold simultaneously");
-    result.emplace_back(static_cast<int>(EType::MergeBurst), "merge-burst", "Merge cascade with the min-partitions floor dropped to 1, permitting a collapse down to a single partition (unlike merge-by-size, which respects --min-partitions); the actual end count depends on the data size vs the partition-size threshold");
+    result.emplace_back(static_cast<int>(EType::MergeBurst), "merge-burst", "Merge cascade with the min-partitions floor dropped to 1, permitting a collapse down to a single partition (unlike merge-by-size, which respects --min-partitions)");
     result.emplace_back(static_cast<int>(EType::MultiTableSplit), "multi-table-split", "Many tables split in parallel, competing for slots");
     result.emplace_back(static_cast<int>(EType::SmallTableStarvation), "small-table-starvation", "Demanding writes on table 0; pair with an init like --tables 2 --initial-partitions 1,512 --min-partitions 1,512 so the big table's split/merge report flood is driven by its own churn");
     result.emplace_back(static_cast<int>(EType::SplitVsMergeRace), "split-vs-merge-race", "Merge wave racing concurrent split demand");

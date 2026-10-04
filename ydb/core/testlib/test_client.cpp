@@ -1503,9 +1503,8 @@ namespace Tests {
                         });
             }
 
-            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
             for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
-                if (!allExternalSourcesTypes.contains(source)) {
+                if (!NYql::IsValidAvailableExternalDataSourceType(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }

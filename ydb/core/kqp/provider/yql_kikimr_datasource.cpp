@@ -312,12 +312,12 @@ public:
 
         try {
             const auto& dataSource = metadata.GetResolvedExternalDataSource();
-            auto source = ExternalSourceFactory->GetOrCreate(dataSource.GetType());
-            auto it = Types.DataSourceMap.find(source->GetName());
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
+            auto it = Types.DataSourceMap.find(providerName);
             if (it == Types.DataSourceMap.end()) {
                 ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
-                    << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
+                    << " data source " << providerName << " doesn't exist, please contact internal support"));
                 return false;
             }
 
@@ -804,7 +804,8 @@ public:
                 }
                 if (tableDesc.Metadata->IsExternalDataSource()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
+                    const auto& dataSource = tableDesc.Metadata->ExternalDataSource();
+                    const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
@@ -812,7 +813,7 @@ public:
                             .Repeat(TExprStep::RewriteIO);
                     auto readArgs = read->ChildrenList();
                     readArgs[1] = Build<TCoDataSource>(ctx, node->Pos())
-                                    .Category(ctx.NewAtom(node->Pos(), source->GetName()))
+                                    .Category(ctx.NewAtom(node->Pos(), providerName))
                                     .FreeArgs()
                                         .Add(readArgs[1]->ChildrenList()[1])
                                     .Build()

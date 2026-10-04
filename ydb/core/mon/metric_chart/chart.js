@@ -50,11 +50,11 @@ export function createMetricChart(chart,options={}){
   const graph=node('g',{'clip-path':'url(#'+clipId+')'});
   for(const s of active){
    let path='',segment='',lastTime=null;
-   const flush=()=>{if(!segment)return;if(settings.type==='area'){const baseline=y(Math.max(lo,Math.min(hi,0)));graph.append(node('path',{d:segment+' L '+x(lastTime)+' '+baseline+' L '+x(firstTime)+' '+baseline+' Z',fill:s.color,'fill-opacity':.18,stroke:'none'}));}path+=segment;segment='';};
+   const flush=()=>{if(!segment)return;if((s.type||settings.type)==='area'){const baseline=y(Math.max(lo,Math.min(hi,0)));graph.append(node('path',{d:segment+' L '+x(lastTime)+' '+baseline+' L '+x(firstTime)+' '+baseline+' Z',fill:s.color,'fill-opacity':.18,stroke:'none'}));}path+=segment;segment='';};
    let firstTime=null;
    for(const p of s.points){if(p.value===null){flush();continue;}if(!segment){firstTime=p.time;segment=' M '+x(p.time)+' '+y(p.value);}else segment+=s.step?' H '+x(p.time)+' V '+y(p.value):' L '+x(p.time)+' '+y(p.value);lastTime=p.time;}
    if(s.step&&segment){lastTime=Math.min(end,s.closed?s.points.at(-1).time:end);segment+=' H '+x(lastTime);}flush();
-   graph.append(node('path',{d:path,fill:'none',stroke:s.color,'stroke-width':2,'data-series':s.key}));
+   graph.append(node('path',{d:path,fill:'none',stroke:s.color,'stroke-width':s.width||2,'data-series':s.key}));
    for(const p of s.points){if(p.value!==null&&p.time>=begin&&p.time<=end&&s.points.length===1)graph.append(node('circle',{cx:x(p.time),cy:y(p.value),r:3,fill:s.color}));}
   }svg.append(graph);
   const cursor=node('line',{x1:L,x2:L,y1:T,y2:B,stroke:'#8b97a7','stroke-dasharray':'4 3',visibility:'hidden'}),selection=node('rect',{x:L,y:T,width:0,height:B-T,fill:'#2678bc',opacity:.12});svg.append(selection,cursor);

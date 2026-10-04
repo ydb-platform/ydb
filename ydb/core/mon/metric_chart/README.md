@@ -65,3 +65,7 @@ min < max, height 160..800 and precision null or 0..6. Area fill preserves
 on-change steps and null gaps; overlapping areas are not stacked.
 `formatMetricValue(value, settings)` formats axes, tooltip and legend values.
 With default settings, exact textual values remain intact.
+
+A series may override `type` (line or area) and `width` (stroke pixels); `color`
+is already per-series. Empty type inherits chart settings. Viewer split mode
+allows chart settings per query and appearance overrides per retained line.

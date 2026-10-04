@@ -162,11 +162,11 @@ TString RenderPage() {
 .imm details.imm-editor{margin:8px 0}.imm-editor>summary{font-size:12px;color:#707985;display:list-item}.imm-editor>summary span{margin-left:12px}.imm-query-actions{margin-bottom:0}.imm-query-actions .imm-query-help{margin-left:auto!important}.imm button[aria-pressed=true]{background:#e4eef9}.imm #imm-stats{font-size:12px;color:#707985}.imm [data-control=builder] .imm-condition input{line-height:18px}.imm-suggestions{position:fixed;z-index:1000;overflow:auto;padding:4px;background:white;border:1px solid #cbd2dc;border-radius:5px;box-shadow:0 4px 16px #0002;box-sizing:border-box}.imm-suggestions button{display:block;width:100%;text-align:left;border:0;border-radius:3px;padding:4px 8px;overflow-wrap:anywhere}.imm-suggestions button[aria-selected=true]{background:#e4eef9}.imm-suggestions>div{padding:4px 8px}
 
 .imm #imm-charts{display:grid;gap:8px}.imm #imm-charts>.imm-chart{min-width:0}.imm-chart-title{font-weight:bold;margin:0 0 4px}.imm #imm-charts.imm-separated{grid-template-columns:repeat(var(--columns,2),minmax(0,1fr))}@media(max-width:800px){.imm #imm-charts.imm-separated{grid-template-columns:1fr}}
-.imm-settings{margin-left:auto;position:relative}.imm-settings>summary{cursor:pointer;border:1px solid #cbd2dc;border-radius:4px;padding:3px 7px;list-style:none}.imm-settings[open]>summary{background:#e4eef9}.imm-settings-panel{position:fixed;right:12px;top:120px;width:280px;max-width:calc(100vw - 24px);max-height:calc(100vh - 136px);overflow:auto;box-sizing:border-box;background:white;border:1px solid #cbd2dc;border-radius:6px;box-shadow:0 4px 20px #0002;padding:10px;z-index:10;display:grid;gap:7px}.imm-settings-panel>label{display:flex;justify-content:space-between;align-items:center;gap:8px}.imm-settings-panel input[type=number]{width:110px}.imm-settings-panel select{width:110px}.imm-settings-panel [role=alert]{color:#a32828}
+.imm-settings{margin-left:auto;position:relative}.imm-settings>summary{cursor:pointer;border:1px solid #cbd2dc;border-radius:4px;padding:3px 7px;list-style:none}.imm-settings[open]>summary{background:#e4eef9}.imm-settings-panel{position:fixed;right:12px;top:120px;width:280px;max-width:calc(100vw - 24px);max-height:calc(100vh - 136px);overflow:auto;box-sizing:border-box;background:white;border:1px solid #cbd2dc;border-radius:6px;box-shadow:0 4px 20px #0002;padding:10px;z-index:10;display:grid;gap:7px}.imm-settings-panel>label,.imm-settings-panel fieldset>label{display:flex;justify-content:space-between;align-items:center;gap:8px}.imm-settings-panel input[type=number]{width:110px}.imm-settings-panel select{width:110px}.imm-settings-panel [hidden]{display:none!important}.imm-settings-panel [role=alert]{color:#a32828}.imm-settings-panel fieldset{margin:3px 0 0;border:1px solid #e4e8ee;border-radius:4px;padding:7px;display:grid;gap:7px}.imm-settings-panel #imm-line-target{width:100%;min-width:0}.imm-settings-panel #imm-line-settings>label:first-of-type{display:grid}.imm-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.imm-chart-heading button{font-size:12px}
 </style>
 <div class='imm' id='imm-root'>
 <header><nav><a href='metrics?page=dashboard'>Dashboard</a> &middot; <a href='metrics?page=overview'>Overview</a></nav><span id='imm-status' class='imm-muted' role='status'>Loading metrics...</span></header>
-<details class='imm-editor' open><summary>Query editor <span class='imm-muted'>Ctrl/Cmd + Enter to apply</span></summary><div id='imm-editors'></div><div class='imm-query-actions'><button id='imm-apply' type='button'>Apply queries</button><button id='imm-add-query' type='button'>Add query</button><label><input id='imm-separate' type='checkbox'> One chart per query</label><label id='imm-columns-label' hidden>Charts per row <select id='imm-columns' aria-label='Charts per row'><option>1</option><option selected>2</option><option>3</option></select></label></div></details><template id='imm-editor-template'><section class='imm-query'>
+<details class='imm-editor' open><summary>Query editor <span class='imm-muted'>Ctrl/Cmd + Enter to apply</span></summary><div id='imm-editors'></div><div class='imm-query-actions'><button id='imm-apply' type='button'>Apply queries</button><button id='imm-add-query' type='button'>Add query</button></div></details><template id='imm-editor-template'><section class='imm-query'>
 <div class='imm-query-heading'><strong>Query <span class='imm-query-letter'></span></strong><button type='button' data-control='remove-query'>Remove query</button><button data-control='mode-builder' type='button' aria-pressed='true'>Builder</button><button data-control='mode-text' type='button' aria-pressed='false'>Text query</button></div>
 <div data-control='builder'><label class='imm-metric-chip'><span>metric</span> = <select data-control='field' aria-label='Metric field'></select></label><div data-control='conditions'></div><datalist data-control='label-names'></datalist><button data-control='add' type='button'>Add label filter</button></div>
 <div data-control='text-editor' hidden><div class='imm-code-editor'><span class='imm-line-number' aria-hidden='true'>1</span><pre data-control='highlight' aria-hidden='true'></pre><textarea data-control='expression' aria-label='Selector expression' maxlength='2048' rows='1' spellcheck='false'></textarea></div></div>
@@ -181,7 +181,7 @@ TString RenderPage() {
 <label>History <select id='imm-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label>
 <button id='imm-now' type='button'>Now</button><button id='imm-refresh' type='button'>Refresh</button>
 <label><input type='checkbox' id='imm-auto'> Live via JSON</label><button id='imm-toggle-legend' type='button' aria-pressed='true' aria-controls='imm-legend-panel'>Legend</button>
-<details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'>
+<details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'><label><input id='imm-separate' type='checkbox'> One chart per query</label><label id='imm-columns-label' hidden>Charts per row <select id='imm-columns' aria-label='Charts per row'><option>1</option><option selected>2</option><option>3</option></select></label><label id='imm-settings-target-label' hidden>Chart <select id='imm-settings-target' aria-label='Chart settings target'><option value='all'>All charts</option></select></label>
 <label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Area</option></select></label>
 <label>Height, px <input id='imm-height' aria-label='Chart height' type='number' min='160' max='800' step='1' value='360'></label>
 <label>Units <select id='imm-unit' aria-label='Value units'><option value='number'>Number</option><option value='bytes'>Bytes (IEC)</option><option value='percent'>Percent</option><option value='seconds'>Seconds</option><option value='milliseconds'>Milliseconds</option><option value='cores'>CPU cores</option></select></label>
@@ -190,7 +190,13 @@ TString RenderPage() {
 <label>Y maximum <input id='imm-y-max' aria-label='Y maximum' type='number' step='any' placeholder='Auto'></label>
 <label>Show legend <input id='imm-settings-legend' type='checkbox' checked></label>
 <span class='imm-muted'>Y limits use raw metric units.</span><span id='imm-settings-error' role='alert'></span><button id='imm-settings-reset' type='button'>Reset settings</button>
-</div></details></div>
+<fieldset id='imm-line-settings' hidden><legend>Line appearance</legend>
+<label>Line <select id='imm-line-target' aria-label='Line settings target'></select></label>
+<label>Display <select id='imm-line-display' aria-label='Line display type'><option value=''>Use chart setting</option><option value='line'>Lines</option><option value='area'>Area</option></select></label>
+<label>Color <input id='imm-line-color' aria-label='Line color' type='color'></label>
+<label>Width, px <input id='imm-line-width' aria-label='Line width' type='number' min='1' max='6' step='1' value='2'></label>
+<button id='imm-line-reset' type='button'>Reset line appearance</button>
+</fieldset></div></details></div>
 <div id='imm-notes' role='status'></div>
 <p id='imm-count' class='imm-muted'></p>
 <div class='imm-scroll' id='imm-legend-panel'><table><thead><tr><th><input id='imm-all' type='checkbox' checked aria-label='Show all series'></th><th><button class='imm-sort' data-sort='name' type='button'>Series</button></th><th><button class='imm-sort' data-sort='last' type='button'>Last</button></th><th><button class='imm-sort' data-sort='min' type='button'>Min</button></th><th><button class='imm-sort' data-sort='max' type='button'>Max</button></th><th><button class='imm-sort' data-sort='avg' type='button'>Avg</button></th><th>Samples / state</th></tr></thead><tbody id='imm-legend'></tbody></table></div>
@@ -206,9 +212,12 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  let field=params.get('metric')||'harmonizer.budget', lines=[], series=[], common=[], hidden=new Set(), fixed=null, begin=0,end=0,controller,timer,version=0,sort='name',direction=1,lastToggle=null,limited=false;
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
  const numeric=v=>v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
- const visible=()=>series.filter(s=>(s.display+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
+ const visible=()=>series.map(s=>({...s,...lineSettings.get(s.key)})).filter(s=>(s.display+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
  const client=createInMemoryMetricsClient({endpoint:location.pathname});
- let charts=[],chartSettings={...defaultChartSettings};
+ let charts=[],chartSettings={...defaultChartSettings,legend:true};
+ const querySettings=new Map(),lineSettings=new Map();
+ const settingsFor=id=>$('separate').checked?{...chartSettings,...querySettings.get(id)}:chartSettings;
+ const settingsTarget=()=>$('settings-target').value==='all'?null:Number($('settings-target').value);
  let editors=[],appliedQueries=[],nextQueryId=0;
  const pageControl=$;
  function createEditor(initial){
@@ -277,7 +286,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  $('field').addEventListener('change',()=>{refreshSuggestions();updateDraft();});
  $('add').addEventListener('click',()=>addCondition());$('mode-builder').addEventListener('click',()=>changeMode(false));$('mode-text').addEventListener('click',()=>changeMode(true));$('expression').addEventListener('input',updateDraft);
  $('clear-query').addEventListener('click',()=>loadDraft({metric:$('field').value,filters:[]}));
- $('remove-query').addEventListener('click',()=>{if(editors.length===1)return;closeSuggestions();document.removeEventListener('pointerdown',outsidePopup);window.removeEventListener('scroll',scrollPopup,true);window.removeEventListener('resize',closeSuggestions);card.remove();editors=editors.filter(e=>e.id!==id);appliedQueries=appliedQueries.filter(q=>q.id!==id);renumber();remember();refresh();});
+ $('remove-query').addEventListener('click',()=>{if(editors.length===1)return;closeSuggestions();document.removeEventListener('pointerdown',outsidePopup);window.removeEventListener('scroll',scrollPopup,true);window.removeEventListener('resize',closeSuggestions);card.remove();editors=editors.filter(e=>e.id!==id);appliedQueries=appliedQueries.filter(q=>q.id!==id);querySettings.delete(id);renumber();remember();refresh();});
  loadDraft(initial);if(lines.length)metadata();
  const result={id,card,read,metadata};return result;
  }
@@ -288,13 +297,14 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  function showMetadata(data){common=data.common_labels||[];editors.forEach(e=>e.metadata());}
  const stats=s=>seriesStats(s,begin,end);
  function legend(){
-  const list=visible().map(s=>({...s,stat:stats(s)}));
+  const list=visible().filter(s=>settingsFor(s.queryId).legend).map(s=>({...s,stat:stats(s)}));
+  $('legend-panel').hidden=!list.length;$('toggle-legend').setAttribute('aria-pressed',String(list.length>0));
   list.sort((a,b)=>{if(sort==='name')return direction*a.display.localeCompare(b.display);const x=numeric(a.stat[sort]),y=numeric(b.stat[sort]);return x===null?y===null?0:1:y===null?-1:direction*(x-y);});
   $('legend').replaceChildren();$('count').textContent=list.length+' / '+series.length+' series'+(limited?' (matching lines limited)':'');
   list.forEach((s,index)=>{const r=document.createElement('tr');if(hidden.has(s.key))r.className='imm-legend-hidden';const c=document.createElement('td'),check=document.createElement('input');check.type='checkbox';check.checked=!hidden.has(s.key);check.setAttribute('aria-label','Show '+(s.display));
-   check.addEventListener('click',e=>{if(e.shiftKey&&lastToggle!==null){for(let i=Math.min(index,lastToggle);i<=Math.max(index,lastToggle);i++)check.checked?hidden.delete(list[i].key):hidden.add(list[i].key);}else check.checked?hidden.delete(s.key):hidden.add(s.key);lastToggle=index;draw();});c.append(check);r.append(c);
+   check.addEventListener('click',e=>{const anchor=list.findIndex(line=>line.key===lastToggle);if(e.shiftKey&&anchor!==-1){for(let i=Math.min(index,anchor);i<=Math.max(index,anchor);i++)check.checked?hidden.delete(list[i].key):hidden.add(list[i].key);}else check.checked?hidden.delete(s.key):hidden.add(s.key);lastToggle=s.key;draw();});c.append(check);r.append(c);
    const name=text('td',s.display,'imm-legend-name'),dot=text('span','','imm-dot');dot.style.background=s.color;name.prepend(dot);r.append(name);
-   for(const f of ['last','min','max','avg'])r.append(text('td',formatMetricValue(s.stat[f],chartSettings)));
+   for(const f of ['last','min','max','avg'])r.append(text('td',formatMetricValue(s.stat[f],settingsFor(s.queryId))));
    r.append(text('td',s.stat.count+' / '+(!s.readable?'Unsupported':s.closed?'Closed':s.points.length?'Active':'No retained samples')+(s.truncated?' / truncated':'')));$('legend').append(r);
   });$('all').checked=list.length>0&&list.every(s=>!hidden.has(s.key));$('all').indeterminate=list.some(s=>hidden.has(s.key))&&list.some(s=>!hidden.has(s.key));
  }
@@ -304,35 +314,57 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   legend();for(const chart of charts)chart.destroy();charts=[];$('charts').replaceChildren();$('notes').replaceChildren();
   if(series.some(s=>s.truncated))$('notes').append(text('p','History is truncated to the latest 1000 points per line.','imm-note'));
   if(limited)$('notes').append(text('p','Comparison is limited to 16 matching lines per query and 64 series in total.','imm-note'));
-  const separate=$('separate').checked;$('charts').classList.toggle('imm-separated',separate);$('charts').style.setProperty('--columns',$('columns').value);$('columns-label').hidden=!separate;
+  const separate=$('separate').checked;$('charts').classList.toggle('imm-separated',separate);$('charts').style.setProperty('--columns',$('columns').value);$('columns-label').hidden=!separate;updateSettingsTargets();
   const groups=separate&&appliedQueries.length?appliedQueries.map((q,index)=>({id:q.id,title:'Query '+String.fromCharCode(65+index)+' \u00b7 '+q.metric})): [{id:null,title:'All queries'}];
-  for(const group of groups){const chart=text('div','','imm-chart');$('charts').append(chart);if(separate)chart.append(text('div',group.title,'imm-chart-title'));drawChart(chart,group);}
+  for(const group of groups){const chart=text('div','','imm-chart');$('charts').append(chart);if(separate){const heading=text('div','','imm-chart-heading'),button=text('button','Settings');button.type='button';button.setAttribute('aria-label','Settings for '+group.title);button.addEventListener('click',()=>{$('settings-target').value=String(group.id);$('settings').open=true;loadSettings();});heading.append(text('div',group.title,'imm-chart-title'),button);chart.append(heading);}drawChart(chart,group);}
  }
  function drawChart(element,group){
   const active=visible().filter(s=>!hidden.has(s.key)&&(group.id===null||s.queryId===group.id));
   const host=document.createElement('div');element.append(host);
-  const chart=createMetricChart(host,{settings:chartSettings,onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
+  const chart=createMetricChart(host,{settings:settingsFor(group.id),onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
   chart.setData({series:active,begin,end,title:group.title,emptyText:!appliedQueries.length?'No applied queries. Use Apply queries.':!series.length?'No lines match the applied query.':active.length?'No retained numeric samples in this interval':'No visible series. Select rows in the legend.'});
  }
  async function refresh(){
   clearTimeout(timer);if(controller)controller.abort();controller=new AbortController();const current=++version,signal=controller.signal;$('status').textContent='Loading metrics...';$('status').className='imm-muted';
   try{const data=await client.request({seconds:$('period').value,signal});if(current!==version)return;lines=data.lines;showMetadata(data);
    const response=await client.queryMany(appliedQueries,{seconds:$('period').value,signal,catalog:data});if(current!==version)return;limited=response.limited;const result=response.series;
-   series=result;hidden=new Set([...hidden].filter(k=>result.some(s=>s.key===k)));lastToggle=null;draw();$('status').textContent='Updated '+new Date().toLocaleTimeString();
+   series=result;for(const key of lineSettings.keys())if(!result.some(s=>s.key===key))lineSettings.delete(key);hidden=new Set([...hidden].filter(k=>result.some(s=>s.key===k)));lastToggle=null;draw();$('status').textContent='Updated '+new Date().toLocaleTimeString();
   }catch(e){if(e.name==='AbortError')return;$('status').textContent=e.message+' \u00b7 Showing last successful data (stale)';$('status').className='imm-error';}
   finally{if(current===version&&$('auto').checked&&!fixed)timer=setTimeout(refresh,2000);}
  }
- function setLegend(show){$('legend-panel').hidden=!show;$('toggle-legend').setAttribute('aria-pressed',String(show));$('settings-legend').checked=show;}
+ function updateSettingsTargets(){
+  const previous=$('settings-target').value;$('settings-target').replaceChildren(text('option','All charts'));
+  $('settings-target').firstElementChild.value='all';
+  if($('separate').checked)for(const [index,query] of appliedQueries.entries()){const option=text('option','Query '+String.fromCharCode(65+index)+' - '+query.metric);option.value=query.id;$('settings-target').append(option);}
+  $('settings-target').value=[...$('settings-target').options].some(o=>o.value===previous)?previous:'all';$('settings-target-label').hidden=!$('separate').checked;loadSettings();
+ }
+ function loadSettings(){
+  const id=settingsTarget(),settings=id===null?chartSettings:settingsFor(id);
+  $('display').value=settings.type;$('height').value=settings.height;$('unit').value=settings.unit;$('precision').value=settings.precision===null?'auto':settings.precision;$('y-min').value=settings.min??'';$('y-max').value=settings.max??'';$('settings-legend').checked=settings.legend;$('settings-error').textContent='';
+  const previous=$('line-target').value;$('line-target').replaceChildren();
+  if(id!==null)for(const line of series.filter(s=>s.queryId===id)){const option=text('option',line.name+(line.labels?' - '+line.labels:''));option.value=line.key;$('line-target').append(option);}
+  if([...$('line-target').options].some(o=>o.value===previous))$('line-target').value=previous;
+  $('line-settings').hidden=id===null||!$('line-target').options.length;loadLineSettings();
+ }
+ function loadLineSettings(){
+  const line=series.find(s=>s.key===$('line-target').value);if(!line)return;
+  const override=lineSettings.get(line.key)||{};$('line-display').value=override.type||'';$('line-color').value=override.color||line.color;$('line-width').value=override.width||2;
+ }
+ function storeSettings(patch){const id=settingsTarget();if(id===null)chartSettings={...chartSettings,...patch};else querySettings.set(id,{...querySettings.get(id),...patch});draw();}
  function applySettings(){
   const minimum=$('y-min').value===''?null:Number($('y-min').value),maximum=$('y-max').value===''?null:Number($('y-max').value),height=Number($('height').value);
   if(!$('height').checkValidity()||height<160||height>800||!$('y-min').checkValidity()||!$('y-max').checkValidity()||(minimum!==null&&!Number.isFinite(minimum))||(maximum!==null&&!Number.isFinite(maximum))||(minimum!==null&&maximum!==null&&minimum>=maximum)){$('settings-error').textContent='Use height 160-800 and Y minimum below maximum.';return;}
-  chartSettings={type:$('display').value,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum};$('settings-error').textContent='';
-  for(const chart of charts)chart.setSettings(chartSettings);legend();setLegend($('settings-legend').checked);
+  const next={type:$('display').value,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum},id=settingsTarget(),current=id===null?chartSettings:settingsFor(id);
+  storeSettings(Object.fromEntries(Object.entries(next).filter(([key,value])=>value!==current[key])));
  }
  for(const name of ['display','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
- $('settings-legend').addEventListener('input',()=>setLegend($('settings-legend').checked));
- $('settings-reset').addEventListener('click',()=>{$('display').value='line';$('height').value=360;$('unit').value='number';$('precision').value='auto';$('y-min').value='';$('y-max').value='';$('settings-legend').checked=true;applySettings();});
- $('toggle-legend').addEventListener('click',()=>setLegend($('legend-panel').hidden));
+ $('settings-target').addEventListener('change',loadSettings);
+ $('settings-legend').addEventListener('input',()=>storeSettings({legend:$('settings-legend').checked}));
+ $('settings-reset').addEventListener('click',()=>{const id=settingsTarget();if(id===null){chartSettings={...defaultChartSettings,legend:true};querySettings.clear();lineSettings.clear();}else querySettings.delete(id);draw();});
+ $('toggle-legend').addEventListener('click',()=>{const show=$('legend-panel').hidden;chartSettings.legend=show;for(const settings of querySettings.values())delete settings.legend;draw();});
+ $('line-target').addEventListener('change',loadLineSettings);
+ for(const name of ['line-display','line-color','line-width'])$(name).addEventListener('input',()=>{if(!$('line-width').checkValidity())return;const key=$('line-target').value;if(!key)return;lineSettings.set(key,{type:$('line-display').value,color:$('line-color').value,width:Number($('line-width').value)});draw();});
+ $('line-reset').addEventListener('click',()=>{lineSettings.delete($('line-target').value);draw();});
  $('root').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.defaultPrevented){e.preventDefault();applyQueries();}});
  $('apply').addEventListener('click',applyQueries);$('add-query').addEventListener('click',()=>{addEditor({metric:editors.at(-1).card.querySelector('[data-control=field]').value,filters:[]});});
  $('separate').addEventListener('change',()=>{remember();draw();});$('columns').addEventListener('change',()=>{remember();draw();});

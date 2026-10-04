@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
@@ -26,6 +27,7 @@ class ValidationCase:
     columns: str = "value Int64, other Int64"
     prelude: str = ""
     input_filter: str = ""
+    input_limit: int | None = None
     extra_write: str = ""
     error: str = ""
     error_type: type = ydb.issues.GenericError
@@ -97,6 +99,7 @@ VALIDATION_CASES = [
     ValidationCase(
         "limit_after",
         select="SELECT * FROM $agg LIMIT 1",
+        prelude="PRAGMA ydb.DisableCheckpoints = 'true';",
         error="LIMIT operator is not supported over streaming aggregation results",
     ),
     ValidationCase(
@@ -199,11 +202,10 @@ class TestStreamingAggregation(StreamingTestBase):
             )
             kikimr.ydb_client.query(f"UPSERT INTO `{names['lookup']}` (key, subkey, value) VALUES ('a', 'b', 11);")
         body = f"""
-            {"PRAGMA ydb.DisableCheckpoints = 'true';" if case.error else ""}
             {case.prelude}
             $input = SELECT * FROM {source} WITH (
                 FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, subkey String NOT NULL, value Int64 NOT NULL)
-            ) {case.input_filter};
+            ) {case.input_filter} {f'LIMIT {case.input_limit}' if case.input_limit is not None else ''};
             $agg = {case.aggregation};
             UPSERT INTO `{names['first']}` {case.select.format(**names)};
             {case.extra_write.format(**names)}
@@ -229,6 +231,34 @@ class TestStreamingAggregation(StreamingTestBase):
             assert [row["Data"] for result in results if result is not None for row in result.rows] == [b"5"]
             ast = session.last_query_stats.query_ast
             assert ast and "KqpStreamingAggregation" not in ast, (enabled, ast)
+
+    @pytest.mark.parametrize("local_topics", [False, True], ids=["external_topic", "local_topic"])
+    def test_finite_streaming_topic_uses_in_memory_by_default(self, kikimr, entity_name, local_topics):
+        source, endpoint = self.get_input_name(kikimr, "finite_aggregation", local_topics, entity_name)
+        table = entity_name("result")
+        kikimr.ydb_client.query(f"CREATE TABLE `{table}` (key String, value Int64, PRIMARY KEY (key));")
+        kikimr.ydb_client.query(f"UPSERT INTO `{table}` (key, value) VALUES ('a', 100), ('b', 200);")
+        query = f"""
+            $input = SELECT * FROM {source} WITH (
+                STREAMING = 'TRUE', FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, value Int64 NOT NULL)
+            ) LIMIT 4;
+            UPSERT INTO `{table}` SELECT key, SUM(value) AS value FROM $input GROUP BY key;
+        """
+        with kikimr.ydb_client.session_pool.checkout() as session:
+            session.explain(query)
+            ast = session.last_query_stats.query_ast
+            assert ast and "KqpStreamingAggregation" in ast, ast
+            assert "output_state_table" not in ast, ast
+            assert "state_table_path" not in ast, ast
+
+        future = kikimr.ydb_client.query_async(query, timeout=120)
+        time.sleep(1)
+        self.write_stream(
+            [json.dumps(dict(key=key, value=value)) for key, value in [("a", 2), ("b", 10), ("a", 3), ("b", -3), ("a", 1000)]],
+            endpoint=endpoint,
+        )
+        future.result(timeout=120)
+        self.check_rows(kikimr, f"SELECT key, value FROM `{table}` ORDER BY key;", [("a", 5), ("b", 7)])
 
     @pytest.mark.parametrize(
         "kikimr,enabled",
@@ -352,15 +382,20 @@ class TestStreamingAggregation(StreamingTestBase):
 
     @pytest.mark.parametrize("pragma", [None, False, True], ids=["default", "false", "true"])
     @pytest.mark.parametrize("validation", [True, False], ids=["validate", "no_validation"])
-    def test_in_memory_pragma(self, kikimr, entity_name, pragma, validation):
+    @pytest.mark.parametrize("checkpoints", [True, False], ids=["checkpoints", "no_checkpoints"])
+    def test_in_memory_pragma(self, kikimr, entity_name, pragma, validation, checkpoints):
         prelude = "" if pragma is None else f"PRAGMA ydb.UseInMemoryStreamingAggregation = '{str(pragma).lower()}';"
         if not validation:
             prelude += NO_VALIDATION
+        if not checkpoints:
+            prelude += "PRAGMA ydb.DisableCheckpoints = 'true';"
         case = ValidationCase(
             "pragma",
             select="SELECT key, subkey, value + 1 AS value FROM $agg",
             prelude=prelude,
-            error=STATE_ERROR if validation and pragma is not True else "",
+            # Without checkpoints, finish the input to flush the table sink's small writes.
+            input_limit=None if checkpoints else 2,
+            error=STATE_ERROR if checkpoints and validation and pragma is not True else "",
             state_table=None,
         )
         names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
@@ -368,10 +403,13 @@ class TestStreamingAggregation(StreamingTestBase):
             with pytest.raises(ydb.issues.GenericError, match=STATE_ERROR):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{names['query']}` AS DO BEGIN {body} END DO;")
             return
-        with self.running_query(kikimr, names["query"], body) as ast:
+        kikimr.ydb_client.query(f"UPSERT INTO `{names['first']}` (key, subkey, value) VALUES ('a', 'b', 100);")
+        with self.running_query(kikimr, names["query"], body, wait_checkpoint=checkpoints) as ast:
             assert "output_state_table" not in ast
-            for value, expected in [(2, 3), (3, 6)]:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value))], endpoint=endpoint)
+            assert "state_table_path" not in ast
+            batches = [([2], 3), ([3], 6)] if checkpoints else [([2, 3], 6)]
+            for values, expected in batches:
+                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value)) for value in values], endpoint=endpoint)
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(expected,)])
 
     @pytest.mark.parametrize("modify_first", [False, True])

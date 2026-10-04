@@ -2204,6 +2204,8 @@ public:
         : TStreamingAggregationTestFixture(true, false)
         , OriginalWriteSettings(GetWriteActorSettings())
     {
+        // Keep row lookup and caching tests independent of periodic checkpoints.
+        CheckpointPeriod = TDuration::Days(1);
         // Flush each output batch without requiring a checkpoint to flush the table sink.
         auto& config = *AggregationAppConfig.MutableTableServiceConfig();
         config.SetEnableStreamWrite(true);
@@ -2228,17 +2230,18 @@ public:
         ExecQuery(ddl);
     }
 
-    void StartOutputAggregation(const TString& body) {
+    void StartOutputAggregation(const TString& body, bool disableCheckpoints = false) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY aggregation AS DO BEGIN
-                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.MaxTasksPerStage = "1";
-                {}
+                {body}
             END DO;
-        )", body));
+        )", "disable_checkpoints"_a = disableCheckpoints ? "TRUE" : "FALSE", "body"_a = body));
         WaitStreamingQueryStatus("aggregation");
-        ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
-            UNIT_ASSERT_STRING_CONTAINS(ast, "output_state_table");
+        ValidateStreamingQueryAst("aggregation", [disableCheckpoints](const TString& ast) {
+            UNIT_ASSERT_STRING_CONTAINS(ast, "KqpStreamingAggregation");
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("output_state_table"), !disableCheckpoints, ast);
             UNIT_ASSERT_STRING_CONTAINS(ast, "/Root/aggregateResult");
         });
     }
@@ -2264,6 +2267,33 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
+    Y_UNIT_TEST_F(DisabledCheckpointsUseInMemoryState, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, total Int64, PRIMARY KEY (key));
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key, total) VALUES ("a", 100l);)");
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads](const auto&, auto&) {
+            ++*reads;
+            return false;
+        }, "/Root/aggregateResult");
+        StartOutputAggregation(fmt::format(R"(
+            UPSERT INTO aggregateResult SELECT key, SUM(value) AS total
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic), /* disableCheckpoints */ true);
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":5})", {}},
+            {1, R"({"key":"a","value":7})", {}},
+        });
+        WaitOutputRows(R"(SELECT Unwrap(CAST(total AS String)) AS Data FROM aggregateResult;)", {"12"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 0);
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
     Y_UNIT_TEST_F(RestoresRowsAndCachesInterleavedKeys, TOutputTableAggregationTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
         PrepareOutputTable(R"(

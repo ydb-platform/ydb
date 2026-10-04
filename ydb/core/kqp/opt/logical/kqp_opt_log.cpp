@@ -189,7 +189,7 @@ protected:
                 defaultLatePolicy,
                 KqpCtx.Config->FeatureFlags.GetEnableHoppingWindowStartCheck()
             );
-        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && KqpCtx.Config->EnableStreamingAggregation.Get().GetOrElse(false)) {
+        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && aggregate.Ref().GetConstraint<TStreamingConstraintNode>()) {
             output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);
         } else {
             if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {

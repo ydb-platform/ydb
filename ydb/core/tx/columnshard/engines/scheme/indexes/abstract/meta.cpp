@@ -45,7 +45,7 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TString& iChunk, const T
     return result;
 }
 
-std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {
+std::optional<ui64> IIndexMeta::CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     return DoCalcCategory(subColumnName);
 }
 

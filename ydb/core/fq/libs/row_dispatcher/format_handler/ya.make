@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     data_packer.cpp
@@ -19,8 +19,6 @@ PEERDIR(
     ydb/library/yql/dq/common
     ydb/library/yverify_stream
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

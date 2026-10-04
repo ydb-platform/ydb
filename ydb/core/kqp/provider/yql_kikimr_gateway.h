@@ -900,8 +900,16 @@ public:
 };
 
 class TExternalDataSource {
+public:
+    enum class EKind {
+        Unknown,
+        Table,
+        Topic,
+    };
+
 private:
     TString Type;
+    EKind Kind = EKind::Unknown;
     TString Location;
     TString Installation;
     TString DataSourcePath;
@@ -915,7 +923,8 @@ private:
 public:
     static TExternalDataSource CreateFromDescription(
         const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-        const TString& dataSourcePath);
+        const TString& dataSourcePath,
+        EKind kind = EKind::Unknown);
 
     static TExternalDataSource CreateForLocalTopic(const TString& cluster,
         const TString& database, const TString& transientToken);
@@ -925,7 +934,7 @@ public:
     }
 
     void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
-    void SetYdbTopicType();
+    void InitObjectKind(EKind kind);
 
     bool IsYdb() const;
     bool IsYdbTopics() const;
@@ -937,6 +946,9 @@ public:
     TString ComposeStructuredTokenJson() const {
         return Auth.ComposeStructuredTokenJson();
     }
+
+    // Resolve the provider name using the connection type and the resolved object kind.
+    TString GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const;
 
     TString GetDatabaseName() const;
     bool IsTlsEnabled() const;

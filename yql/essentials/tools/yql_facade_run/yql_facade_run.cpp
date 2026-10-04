@@ -262,6 +262,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
     });
+    opts.AddLongOption("static-gateways-cfg", "Static gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        StaticGatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TStaticGatewaysConfig>(file);
+    });
     opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         FsConfig = MakeHolder<TFileStorageConfig>();
         LoadFsConfigFromFile(file, *FsConfig);
@@ -510,7 +513,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    if (!StaticGatewaysConfig) {
+        StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    }
     SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
 
     {

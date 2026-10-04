@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
@@ -72,6 +72,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/json_index
+    ydb/library/mkql_proto
     ydb/library/query_actor
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
@@ -84,8 +85,6 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

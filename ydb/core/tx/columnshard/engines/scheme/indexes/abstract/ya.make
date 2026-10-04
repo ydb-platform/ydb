@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     constructor.cpp
@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/tx/columnshard/engines/protos  # stopgap: proper edge (-> skip_index/portions) cycles
     ydb/library/formats/arrow/protos
     yql/essentials/core/arrow_kernels/request
@@ -19,7 +20,5 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()

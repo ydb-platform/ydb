@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/library/pdisk_io/sector_map.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -107,6 +108,8 @@ class TTestContext {
     TTempDir TempDir;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NDDisk::TDDiskConfig DDiskConfig;
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
+    std::optional<NDDisk::TPersistentBufferFormat> CustomPBFormat;
     bool ProbeReservations = false;
     bool AbandonReservations = false;
     NMonitoring::TDynamicCounters::TCounterPtr UncommittedChunkCount;
@@ -122,8 +125,12 @@ public:
 
     explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR,
             ui32 numDisks = 1, std::optional<ui32> physicalChunkSize = std::nullopt,
-            bool probeReservations = false, bool abandonReservations = false)
-        : PhysicalChunkSize(physicalChunkSize)
+            bool probeReservations = false, bool abandonReservations = false,
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr,
+            std::optional<NDDisk::TPersistentBufferFormat> pbFormat = std::nullopt)
+        : SectorMap(std::move(sectorMap))
+        , CustomPBFormat(std::move(pbFormat))
+        , PhysicalChunkSize(physicalChunkSize)
     {
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -159,14 +166,27 @@ public:
         const ui64 pdiskGuid = 12345 + p;
 
         TString path = TempDir() + "/pdisk_" + ToString(p) + ".dat";
-        {
+        if (!SectorMap) {
             TFile file(path.c_str(), OpenAlways | RdWr);
             file.Resize(DiskSize);
             file.Close();
         }
-        FormatDisk(path, pdiskGuid, PhysicalChunkSize);
+        if (SectorMap) {
+            TFormatOptions options;
+            options.SectorMap = SectorMap;
+            options.EnableSectorEncryption = false;
+            options.PhysicalChunkSizeBytes = PhysicalChunkSize;
+            FormatPDisk(path, SectorMap->GetDeviceSize(), MinBlockSize, ChunkSize, pdiskGuid,
+                1, 2, 3, DefaultPDiskSequence, "pb_benchmark", options);
+        } else {
+            FormatDisk(path, pdiskGuid, PhysicalChunkSize);
+        }
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
+        pdiskConfig->SectorMap = SectorMap;
+        if (SectorMap) {
+            pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(false);
+        }
         pdiskConfig->ChunkSize = ChunkSize;
         pdiskConfig->PhysicalChunkSize = PhysicalChunkSize.value_or(0);
         pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
@@ -248,7 +268,8 @@ public:
             ownerRound,
             "ddisk_pool");
 
-        NDDisk::TPersistentBufferFormat pbFormat{256, 4, ChunkSize, 8};
+        NDDisk::TPersistentBufferFormat pbFormat = CustomPBFormat.value_or(
+            NDDisk::TPersistentBufferFormat{256, 4, ChunkSize, 8});
         NDDisk::TDDiskConfig cfg = DDiskConfig;
         IActor* ddiskActor = NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), std::move(cfg), Counters);

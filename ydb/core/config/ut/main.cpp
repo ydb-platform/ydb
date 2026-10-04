@@ -233,6 +233,8 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Percentage/Percentage",
             "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Name/Name",
             "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Yt/MrJobLabel/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Yt/MrJobLabel/Activation/ByHour/Percentage/Percentage",
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern",
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster",
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path",
@@ -348,6 +350,8 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {73, 15, 102, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Percentage/Percentage
             {73, 15, 102, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Name/Name
             {73, 15, 102, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Value/Value
+            {73, 15, 16, 2, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/MrJobLabel/Activation/ByHour/Hour/Hour
+            {73, 15, 16, 2, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/MrJobLabel/Activation/ByHour/Percentage/Percentage
             {73, 15, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern
             {73, 15, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster
             {73, 15, 100, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path

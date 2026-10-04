@@ -73,6 +73,7 @@ namespace NRedo {
                 case ERedo::Annex:
                     return DoAnnex(chunk);
                 case ERedo::UpdateTx:
+                case ERedo::UpdateTxSavepointSeqNum:
                     return DoUpdateTx(chunk);
                 case ERedo::RemoveTx:
                     return DoRemoveTx(chunk);
@@ -110,6 +111,7 @@ namespace NRedo {
                 case ERedo::RemoveTx:
                 case ERedo::CommitTx:
                 case ERedo::LockRowTx:
+                case ERedo::UpdateTxSavepointSeqNum:
                     // Not used in legacy log format
                     break;
             }
@@ -188,13 +190,24 @@ namespace NRedo {
             if (Base.NeedIn(ev->Table)) {
                 const char *buf = chunk.begin() + sizeof(*ev);
 
-                auto *v = reinterpret_cast<const TEvUpdateTx*>(buf);
-                buf += sizeof(*v);
+                ui64 txId;
+                ui32 savepointSeqNum;
+                if (ev->Label.Event == ERedo::UpdateTxSavepointSeqNum) {
+                    auto *v = reinterpret_cast<const TEvUpdateTxSavepointSeqNum*>(buf);
+                    txId = v->TxId;
+                    savepointSeqNum = v->SavepointSeqNum;
+                    buf += sizeof(*v);
+                } else {
+                    auto *v = reinterpret_cast<const TEvUpdateTx*>(buf);
+                    txId = v->TxId;
+                    savepointSeqNum = 0;
+                    buf += sizeof(*v);
+                }
 
                 buf += ReadKey(buf, chunk.end() - buf, ev->Keys);
                 buf += ReadOps(buf, chunk.end() - buf, ev->Ops);
 
-                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, v->TxId);
+                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, txId, savepointSeqNum);
             }
         }
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/svnversion
@@ -17,8 +17,6 @@ PEERDIR(
     yql/essentials/utils/backtrace
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     file_cache.cpp

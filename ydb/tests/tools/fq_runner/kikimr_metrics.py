@@ -2,7 +2,6 @@ import json
 import requests
 import six
 import library.python.retry as retry
-import operator
 
 
 class Sensors:
@@ -23,7 +22,7 @@ class Sensors:
 
         return found["value"] if found is not None else None
 
-    def find_sensors(self, labels, key_label, combine=operator.add):
+    def find_sensors(self, labels, key_label, combine=lambda _, new_value: new_value):
         result = {}
         for s in self.data:
             lbls = s["labels"]

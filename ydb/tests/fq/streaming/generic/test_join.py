@@ -1,6 +1,7 @@
 import json
 import pytest
 import logging
+import operator
 import time
 from typing import Callable
 
@@ -1282,6 +1283,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                         "component": component,
                     },
                     key_label="sensor",
+                    combine=operator.add,
                 )
                 for k in componentSensors:
                     logging.debug(f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}')
@@ -1429,6 +1431,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 componentSensors = sensors.find_sensors(
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",
+                    combine=operator.add,
                 )
                 for k in componentSensors:
                     print(

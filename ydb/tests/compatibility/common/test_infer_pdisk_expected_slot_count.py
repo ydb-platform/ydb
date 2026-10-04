@@ -239,7 +239,9 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.Path == CONST_PDISK_PATH
                 assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
-                assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
+                # Since 26.4, the base config reports the effective slot count.
+                expected_slot_count = inferred_slot_count if self.versions[1] >= (26, 4) else CONST_INITIAL_SLOT_COUNT
+                assert pdisk.ExpectedSlotCount == expected_slot_count
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 assert pdisk.PDiskMetrics.ExpectedSlotCount == inferred_slot_count
                 assert pdisk.PDiskMetrics.SlotSizeInUnits == inferred_slot_size_in_units
@@ -263,7 +265,9 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.Path == CONST_PDISK_PATH
                 assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
-                assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
+                # Since 26.4, the base config reports the effective slot count.
+                expected_slot_count = inferred_slot_count if self.versions[0] >= (26, 4) else CONST_INITIAL_SLOT_COUNT
+                assert pdisk.ExpectedSlotCount == expected_slot_count
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
                     assert not pdisk.PDiskMetrics.HasField('ExpectedSlotCount')

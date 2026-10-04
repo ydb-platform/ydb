@@ -254,6 +254,89 @@ def _progress_state(total: int = 4) -> dict:
     return shard_progress.empty_state("99", "relwithdebinfo", "ydb/", total)
 
 
+class HostCountTest(unittest.TestCase):
+    def _minutes(self, minutes: float, threads: int = 52) -> float:
+        return minutes * 60.0 * threads
+
+    def test_more_volume_asks_for_more_shards(self) -> None:
+        threads = 52
+        nodes = 100
+        light = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(30), threads=threads, free_runners=None
+        )
+        medium = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(90), threads=threads, free_runners=None
+        )
+        heavy = shard_graph.choose_host_count(
+            result_nodes=nodes, total_weight_sec=self._minutes(150), threads=threads, free_runners=None
+        )
+        self.assertEqual(light, 1)
+        self.assertEqual(medium, 4)
+        self.assertEqual(heavy, 8)
+        self.assertLess(light, medium)
+        self.assertLess(medium, heavy)
+
+    def test_one_free_runner_forces_a_single_job(self) -> None:
+        huge = self._minutes(250)
+        for free in (0, 1):
+            chosen = shard_graph.choose_host_count(
+                result_nodes=80, total_weight_sec=huge, threads=52, free_runners=free
+            )
+            self.assertEqual(chosen, 1)
+
+    def test_cap_is_16_when_there_are_more_nodes(self) -> None:
+        chosen = shard_graph.choose_host_count(
+            result_nodes=100,
+            total_weight_sec=self._minutes(4000),
+            threads=52,
+            free_runners=None,
+        )
+        self.assertEqual(chosen, 16)
+
+    def test_fewer_nodes_than_desired_shards_shrinks_the_count(self) -> None:
+        chosen = shard_graph.choose_host_count(
+            result_nodes=3,
+            total_weight_sec=self._minutes(4000),
+            threads=52,
+            free_runners=None,
+        )
+        self.assertEqual(chosen, 3)
+
+    def test_explicit_count_beats_auto(self) -> None:
+        chosen = shard_graph.choose_host_count(
+            result_nodes=50,
+            total_weight_sec=self._minutes(4000),
+            threads=52,
+            free_runners=1,
+            explicit=2,
+        )
+        self.assertEqual(chosen, 2)
+
+    def test_quota_math_reports_one_free_slot(self) -> None:
+        config = {
+            "quotas": {"vcpu": 10, "ram_gb": 10, "nrd_ssd_gb": 10, "instances": 2},
+            "reserved": {},
+            "headroom_fraction": 1.0,
+            "footprints": {
+                "build-preset-relwithdebinfo": {"vcpu": 5, "ram_gb": 5, "nrd_ssd_gb": 5},
+            },
+            "default_footprint": {"vcpu": 5, "ram_gb": 5, "nrd_ssd_gb": 5},
+        }
+        free = shard_graph.compute_max_new_runners(
+            shard_graph.Counter({"build-preset-relwithdebinfo": 1}),
+            "build-preset-relwithdebinfo",
+            config,
+        )
+        self.assertEqual(free, 1)
+        chosen = shard_graph.choose_host_count(
+            result_nodes=40,
+            total_weight_sec=self._minutes(250),
+            threads=52,
+            free_runners=free,
+        )
+        self.assertEqual(chosen, 1)
+
+
 class ShardProgressTest(unittest.TestCase):
     def test_eta_is_unknown_until_the_first_result_and_done_at_the_end(self) -> None:
         self.assertEqual(shard_progress.eta_label(0, 4, None), "unknown")

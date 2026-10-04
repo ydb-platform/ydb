@@ -95,6 +95,10 @@ inputs:
     type: string
     default: ""
     description: "Filtered context.json for one shard. Requires skip_graph_compare."
+  publish_github_status:
+    type: boolean
+    default: true
+    description: "Post build_*/test_* statuses and the monolithic PR comment. Shard jobs set this false; shard_progress owns that comment."
 
 outputs:
   success:
@@ -105,7 +109,7 @@ runs:
   using: "composite"
   steps:
     - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: inputs.publish_github_status && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
@@ -223,6 +227,9 @@ runs:
         GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
+        if [ "${{ inputs.publish_github_status }}" = "false" ]; then
+          export SKIP_PR_COMMENT=1
+        fi
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
         trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
@@ -868,7 +875,7 @@ runs:
         echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: inputs.publish_github_status && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -886,6 +893,7 @@ runs:
         fi
 
     - name: analyze tests results
+      if: inputs.publish_github_status
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}

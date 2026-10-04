@@ -85,6 +85,10 @@ inputs:
     type: string
     default: ""
     description: "Artifact subdirectory for one shard, for example shard_0."
+  publish_github_status:
+    type: boolean
+    default: true
+    description: "Post monolithic commit statuses and PR comments. False on shard jobs."
 defaults:
   run:
     shell: bash
@@ -152,3 +156,4 @@ runs:
         skip_graph_compare: ${{ inputs.skip_graph_compare }}
         prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
         prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
+        publish_github_status: ${{ inputs.publish_github_status }}

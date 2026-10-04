@@ -22,8 +22,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -36,6 +40,33 @@ DEFAULT_SIZE_WEIGHTS = {
     "large": 3600.0,
 }
 DEFAULT_THREADS = 52
+MAX_SHARDS = 16
+# Single-job minutes under this stay on one host (PR 47597 "pr" profile).
+VOLUME_LIGHT_MINUTES = 60.0
+VOLUME_TIERS: tuple[tuple[float, int], ...] = (
+    (120.0, 4),
+    (200.0, 8),
+    (math.inf, 12),
+)
+# Keep the slowest shard's ideal wall time inside the PR-check budget.
+MAX_SHARD_WALL_MIN = 240.0
+
+# Folder quota snapshot from PR 47597 (.github/config/runner_capacity.yml, 2026-06-13).
+# Free hosts = how many more VMs of this preset fit after queued/in-progress jobs.
+# If the Actions API cannot be read, availability is unknown and only volume applies.
+RUNNER_CAPACITY: dict[str, Any] = {
+    "quotas": {"vcpu": 5400, "ram_gb": 23000, "instances": 110, "nrd_ssd_gb": 200000},
+    "reserved": {"vcpu": 200, "ram_gb": 600, "instances": 22, "nrd_ssd_gb": 16000},
+    "headroom_fraction": 0.9,
+    "footprints": {
+        "build-preset-relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+        "build-preset-release-asan": {"vcpu": 96, "ram_gb": 288, "nrd_ssd_gb": 2417},
+        "build-preset-release-msan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2417},
+        "build-preset-release-tsan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2417},
+    },
+    "default_footprint": {"vcpu": 96, "ram_gb": 320, "nrd_ssd_gb": 2417},
+}
+_CAPACITY_RESOURCES = ("vcpu", "ram_gb", "nrd_ssd_gb")
 
 _TEST_KIND_LEAVES = frozenset(
     {
@@ -285,6 +316,157 @@ def extract_node_path(node: dict[str, Any]) -> str | None:
     return None
 
 
+def volume_shard_count(total_weight_sec: float, threads: int) -> int:
+    """How many hosts the graph weight wants, before pool and caps.
+
+    Minutes = total slot-seconds / 60 / threads. Under 60 minutes stays one
+    job. Then the PR 47597 tiers: 4, 8, 12. A wall floor raises that so the
+    ideal slowest shard stays within 240 minutes.
+    """
+    if threads < 1:
+        raise ValueError("threads must be >= 1")
+    minutes = float(total_weight_sec) / 60.0 / float(threads)
+    if minutes < VOLUME_LIGHT_MINUTES:
+        count = 1
+    else:
+        count = int(VOLUME_TIERS[-1][1])
+        for upper, tier in VOLUME_TIERS:
+            if minutes < float(upper):
+                count = int(tier)
+                break
+    if minutes <= 0:
+        return 1
+    wall = max(1, math.ceil(minutes / MAX_SHARD_WALL_MIN))
+    return max(count, wall)
+
+
+def choose_host_count(
+    *,
+    result_nodes: int,
+    total_weight_sec: float,
+    threads: int,
+    free_runners: int | None = None,
+    explicit: int | None = None,
+    max_shards: int = MAX_SHARDS,
+) -> int:
+    """Hosts for one preset.
+
+    ``explicit`` wins over auto. Auto is volume, then capped by free runners
+    when that number is known: 0 or 1 free host forces a single job. Unknown
+    availability (``None``) does not cap. The result is at least 1 when there
+    is work, at most ``max_shards``, and never above ``result_nodes``.
+    """
+    if result_nodes < 1:
+        raise ValueError("no result nodes")
+    if explicit is not None:
+        if explicit < 1:
+            raise ValueError("explicit shard_count must be >= 1")
+        desired = explicit
+    else:
+        desired = volume_shard_count(total_weight_sec, threads)
+        if free_runners is not None:
+            if free_runners <= 1:
+                desired = 1
+            else:
+                desired = min(desired, free_runners)
+    return max(1, min(desired, max_shards, result_nodes))
+
+
+def compute_max_new_runners(
+    demand: Counter[str],
+    preset_label: str,
+    config: dict[str, Any] | None = None,
+) -> int:
+    """How many more runners of ``preset_label`` fit in the folder quota.
+
+    Same arithmetic as PR 47597 ``compute_max_new_runners``: subtract busy
+    jobs' footprints and the static reserve from the quota, then see how
+    many VMs of this preset fit in the tightest resource.
+    """
+    cfg = config or RUNNER_CAPACITY
+    quotas = cfg["quotas"]
+    reserved = cfg.get("reserved") or {}
+    headroom = float(cfg.get("headroom_fraction", 1.0))
+    footprints = cfg["footprints"]
+    default_footprint = cfg["default_footprint"]
+
+    def footprint(label: str) -> dict[str, int]:
+        found = footprints.get(label) or default_footprint
+        return {res: int(found[res]) for res in _CAPACITY_RESOURCES}
+
+    used = {res: 0.0 for res in _CAPACITY_RESOURCES}
+    used_instances = 0
+    for label, count in demand.items():
+        fp = footprint(label)
+        for res in _CAPACITY_RESOURCES:
+            used[res] += fp[res] * count
+        used_instances += count
+
+    fits = [((quotas["instances"] - reserved.get("instances", 0)) * headroom) - used_instances]
+    target = footprint(preset_label)
+    for res in _CAPACITY_RESOURCES:
+        free = ((quotas[res] - reserved.get(res, 0)) * headroom) - used[res]
+        fits.append(free / target[res])
+    return max(int(math.floor(min(fits))), 0)
+
+
+def lookup_free_runners(preset_label: str) -> int | None:
+    """Busy Actions jobs vs RUNNER_CAPACITY. None if the pool cannot be read."""
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not token or not repo:
+        print("runner availability unknown (no token); not capping by pool", file=sys.stderr)
+        return None
+    try:
+        demand = _count_busy_runner_jobs(repo, token)
+        free = compute_max_new_runners(demand, preset_label)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, KeyError, TimeoutError) as exc:
+        print(f"runner availability unknown ({exc}); not capping by pool", file=sys.stderr)
+        return None
+    print(f"free runners for {preset_label}: {free} (busy={dict(demand)})", file=sys.stderr)
+    return free
+
+
+def _count_busy_runner_jobs(repo: str, token: str) -> Counter[str]:
+    demand: Counter[str] = Counter()
+    known = set(RUNNER_CAPACITY["footprints"])
+    for status in ("queued", "in_progress"):
+        payload = _github_get(
+            f"https://api.github.com/repos/{repo}/actions/runs?status={status}&per_page=100",
+            token,
+        )
+        for run in payload.get("workflow_runs") or []:
+            jobs = _github_get(
+                f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100",
+                token,
+            )
+            for job in jobs.get("jobs") or []:
+                if job.get("status") not in ("queued", "in_progress"):
+                    continue
+                for label in job.get("labels") or []:
+                    if label in known or str(label).startswith("build-preset-"):
+                        demand[str(label)] += 1
+                        break
+    return demand
+
+
+def _github_get(url: str, token: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "ydb-shard-hosts",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.load(response)
+    if not isinstance(payload, dict):
+        raise ValueError(f"unexpected response from {url}")
+    return payload
+
+
 def bin_pack(weights: dict[str, float], shard_count: int) -> tuple[list[list[str]], list[float]]:
     """Longest-processing-time pack. Sort and tie-break are part of the contract."""
     if shard_count < 1:
@@ -454,6 +636,17 @@ def render_summary(plan: dict[str, Any]) -> str:
         f"**Result nodes:** {plan['total_result_nodes']}, weight {plan['total_weight']}",
         f"**Weighting:** {plan['weighting']['mode']}, threads {plan['threads']}",
         "",
+    ]
+    policy = plan.get("host_policy") or {}
+    if policy:
+        lines.append(
+            f"**Hosts:** mode={policy.get('mode')}, "
+            f"volume={policy.get('volume_shards')}, "
+            f"free_runners={policy.get('free_runners')}, "
+            f"chosen={policy.get('chosen')}"
+        )
+        lines.append("")
+    lines += [
         "| Shard | Result nodes | Weight | Sample paths |",
         "| ---: | ---: | ---: | --- |",
     ]
@@ -474,12 +667,39 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _resolve_requested_count(raw: str) -> int | None:
+    text = raw.strip().lower()
+    if text == "auto":
+        return None
+    if not text.isdigit() or int(text) < 1:
+        raise ValueError("shard-count must be 'auto' or a positive integer")
+    return int(text)
+
+
 def _cmd_plan(args: argparse.Namespace) -> int:
     graph = load_graph(args.graph)
     context = None
     if args.context:
         context = json.loads(args.context.read_text(encoding="utf-8"))
-    plan = build_plan(graph, args.shard_count, threads=args.threads, context=context)
+    explicit = _resolve_requested_count(str(args.shard_count))
+    probe = build_plan(graph, 1, threads=args.threads, context=context)
+    free_runners = None
+    if explicit is None and args.preset_label:
+        free_runners = lookup_free_runners(args.preset_label)
+    chosen = choose_host_count(
+        result_nodes=int(probe["total_result_nodes"]),
+        total_weight_sec=float(probe["total_weight"]),
+        threads=args.threads,
+        free_runners=free_runners,
+        explicit=explicit,
+    )
+    plan = probe if chosen == 1 else build_plan(graph, chosen, threads=args.threads, context=context)
+    plan["host_policy"] = {
+        "mode": "auto" if explicit is None else "explicit",
+        "volume_shards": volume_shard_count(float(probe["total_weight"]), args.threads),
+        "free_runners": free_runners,
+        "chosen": chosen,
+    }
     _write_json(args.output, plan)
     summary = render_summary(plan)
     if args.summary:
@@ -516,7 +736,12 @@ def main(argv: list[str] | None = None) -> int:
     plan = sub.add_parser("plan", help="Write shard_plan.json")
     plan.add_argument("--graph", type=Path, required=True)
     plan.add_argument("--context", type=Path)
-    plan.add_argument("--shard-count", type=int, required=True)
+    plan.add_argument("--shard-count", required=True, help="'auto' or an explicit positive integer")
+    plan.add_argument(
+        "--preset-label",
+        default="",
+        help="Runner label for the pool cap, e.g. build-preset-relwithdebinfo. Used when shard-count=auto.",
+    )
     plan.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     plan.add_argument("-o", "--output", type=Path, required=True)
     plan.add_argument("--summary", type=Path)

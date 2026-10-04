@@ -52,7 +52,7 @@ struct TStreamingAggregationTypeAnnTest {
 
     TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)",
         TStringBuf itemType = "(StructType '('key (DataType 'String)))",
-        TStringBuf save = "state", TStringBuf load = "state", TStringBuf init = "(Int64 '0)")
+        TStringBuf save = "state", TStringBuf load = "state", TStringBuf init = "(Int64 '0)", TStringBuf merge = "left")
     {
         const TString program = TStringBuilder() << R"((
             (return (AggregationTraits )" << itemType << R"(
@@ -60,7 +60,7 @@ struct TStreamingAggregationTypeAnnTest {
                 (lambda '(item state) state)
                 (lambda '(state) )" << save << R"()
                 (lambda '(state) )" << load << R"()
-                (lambda '(left right) left)
+                (lambda '(left right) )" << merge << R"()
                 (lambda '(state) )" << finish << ") " << defaultValue << ")) )";
         auto traits = ParseAndAnnotate(program, Ctx, /*instant=*/false, /*wholeProgram=*/false, Types);
         UNIT_ASSERT_C(traits, Ctx.IssueManager.GetIssues().ToString());
@@ -633,6 +633,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         }
         for (const TStringBuf type : {
                 "(PgType 'int4)",
+                "(MultiType (DataType 'Int64))",
                 "(StructType '('member (DataType 'String)))",
                 "(TaggedType (DataType 'String) 'tag)",
                 "(VariantType (TupleType (DataType 'String) (DataType 'Int64)))",
@@ -744,10 +745,10 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
                 {test.List({test.Atom("value"), traits})}, std::move(settings));
             TStringBuf expectedError;
-            if (TiedTable && !testCase.Supported) {
-                expectedError = "Unsupported saved state type for streaming aggregation output state table, column: value";
-            } else if (!DisableCheckpoints && !traits->Child(NNodes::TCoAggregationTraits::idx_SaveHandler)->GetTypeAnn()->IsPersistable()) {
+            if ((TiedTable || !DisableCheckpoints) && !traits->Child(NNodes::TCoAggregationTraits::idx_SaveHandler)->GetTypeAnn()->IsPersistable()) {
                 expectedError = "Expected persistable data, but got:";
+            } else if (TiedTable && !testCase.Supported) {
+                expectedError = "Unsupported saved state type for streaming aggregation output state table, column: value";
             }
             UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), expectedError.empty()
                 ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
@@ -778,8 +779,43 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             test.Ctx.IssueManager.GetIssues().ToString());
         if (!supported) {
             UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
-                "Unsupported saved state type for streaming aggregation output state table, column: value");
+                "Expected persistable data, but got:");
         }
+    }
+
+    Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateRequiresMerge, TiedTable, HasMerge) {
+        TStreamingAggregationTypeAnnTest test;
+        const auto traits = test.Traits("state", "(Null)", "(StructType '('key (DataType 'String)))",
+            "state", "state", "(Int64 '0)", HasMerge ? "left" : "(Void)");
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+            {test.List({test.Atom("value"), traits})}, TiedTable ? TExprNodeList{
+                test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})})} : TExprNodeList{});
+        UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), TiedTable && !HasMerge
+            ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        if constexpr (TiedTable && !HasMerge) {
+            UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
+                "Merge handler must be specified for streaming aggregation tied to an output state table");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingAggregationPendingInputMayBeNonPersistable, TiedTable) {
+        TStreamingAggregationTypeAnnTest test;
+        const auto traits = test.Traits("state", "(Null)",
+            "(StructType '('key (DataType 'String)) '('payload (ResourceType 'TestInput)))");
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+            {test.List({test.Atom("value"), traits})}, TiedTable ? TExprNodeList{
+                test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})})} : TExprNodeList{});
+        const auto* rowType = test.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            test.Ctx.MakeType<TItemExprType>("key", test.Ctx.MakeType<TDataExprType>(EDataSlot::String)),
+            test.Ctx.MakeType<TItemExprType>("payload", test.Ctx.MakeType<TResourceExprType>("TestInput"))});
+        node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(rowType));
+        // Pending lookups retain saved aggregate contributions, not input resources.
+        test.CheckType(node);
     }
 
     Y_UNIT_TEST(StreamingAggregationOutputStateSerializationDoesNotMutateSharedTraits) {

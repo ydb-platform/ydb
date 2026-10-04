@@ -3473,13 +3473,10 @@ TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
-    // Keys must support both ExportTypeToProto and SDK FormatType for DECLARE.
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Data: {
             const auto slot = type.Cast<TDataExprType>()->GetSlot();
-            return IsDataTypeNumeric(slot) || IsDataTypeDate(slot) || IsDataTypeInterval(slot)
-                || (IsDataTypeTzDate(slot) && !IsDataTypeBigDate(slot))
-                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
+            return !(IsDataTypeTzDate(slot) && IsDataTypeBigDate(slot));
         }
         case ETypeAnnotationKind::Optional:
             return IsStreamingAggregationOutputTableKeyType(*type.Cast<TOptionalExprType>()->GetItemType());
@@ -3508,14 +3505,7 @@ bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
 }
 
 bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type) {
-    // Saved values only need ExportTypeToProto; their types are not formatted as SQL.
     switch (type.GetKind()) {
-        case ETypeAnnotationKind::Data: {
-            const auto slot = type.Cast<TDataExprType>()->GetSlot();
-            return IsDataTypeNumeric(slot) || IsDataTypeDateOrTzDateOrInterval(slot)
-                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Yson, EDataSlot::Json,
-                    EDataSlot::JsonDocument, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
-        }
         case ETypeAnnotationKind::Pg:
             return NKikimr::NPg::TypeDescFromPgTypeId(type.Cast<TPgExprType>()->GetId()) != nullptr;
         case ETypeAnnotationKind::Optional:
@@ -3543,11 +3533,9 @@ bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type)
         }
         case ETypeAnnotationKind::Tagged:
             return IsStreamingAggregationOutputTableStateType(*type.Cast<TTaggedExprType>()->GetBaseType());
-        case ETypeAnnotationKind::Variant: {
-            const auto* const underlying = type.Cast<TVariantExprType>()->GetUnderlyingType();
-            return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::Struct}, underlying->GetKind())
-                && IsStreamingAggregationOutputTableStateType(*underlying);
-        }
+        case ETypeAnnotationKind::Variant:
+            return IsStreamingAggregationOutputTableStateType(*type.Cast<TVariantExprType>()->GetUnderlyingType());
+        case ETypeAnnotationKind::Data:
         case ETypeAnnotationKind::Void:
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::EmptyList:
@@ -3888,6 +3876,13 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
                 const auto& finish = *trait.Child(TCoAggregationTraits::idx_FinishHandler);
                 const auto& save = *trait.Child(TCoAggregationTraits::idx_SaveHandler);
                 const auto& load = *trait.Child(TCoAggregationTraits::idx_LoadHandler);
+                const auto& merge = *trait.Child(TCoAggregationTraits::idx_MergeHandler);
+
+                if (merge.Tail().IsCallable("Void")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(merge.Pos()), "Merge handler must be specified for streaming aggregation tied to an output state table"));
+                    return TStatus::Error;
+                }
+
                 if (IsIdentityLambda(finish)) {
                     if (!IsIdentityLambda(save) || !IsIdentityLambda(load)) {
                         auto children = trait.ChildrenList();
@@ -3912,16 +3907,6 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!normalizedHandlers.empty()) {
                 output = ctx.ChangeChild(*input, TKqpStreamingAggregation::idx_Handlers, ctx.NewList(handlers->Pos(), std::move(normalizedHandlers)));
                 return TStatus::Repeat;
-            }
-
-            for (const auto& handler : handlers->Children()) {
-                const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
-                if (!IsStreamingAggregationOutputTableStateType(*save.GetTypeAnn())) {
-                    ctx.AddError(TIssue(ctx.GetPosition(save.Pos()), TStringBuilder()
-                        << "Unsupported saved state type for streaming aggregation output state table, column: "
-                        << handler->Head().Content() << ", type: " << *save.GetTypeAnn()));
-                    return TStatus::Error;
-                }
             }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -3950,10 +3935,18 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
     }
 
     const auto stateTablePath = GetSetting(*settings, "state_table_path");
-    if ((stateTablePath && !stateTablePath->Tail().Content().empty()) || !config.DisableCheckpoints.Get().GetOrElse(false)) {
+    const auto outputStateTable = GetSetting(*settings, "output_state_table");
+    if (outputStateTable || (stateTablePath && !stateTablePath->Tail().Content().empty()) || !config.DisableCheckpoints.Get().GetOrElse(false)) {
         for (const auto& handler : handlers->Children()) {
             const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
             if (!EnsurePersistableType(save.Pos(), *save.GetTypeAnn(), ctx)) {
+                return TStatus::Error;
+            }
+
+            if (outputStateTable && !IsStreamingAggregationOutputTableStateType(*save.GetTypeAnn())) {
+                ctx.AddError(TIssue(ctx.GetPosition(save.Pos()), TStringBuilder()
+                    << "Unsupported saved state type for streaming aggregation output state table, column: "
+                    << handler->Head().Content() << ", type: " << *save.GetTypeAnn()));
                 return TStatus::Error;
             }
         }

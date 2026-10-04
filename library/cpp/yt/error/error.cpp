@@ -934,8 +934,37 @@ void TraverseError(const TError& error, const TErrorVisitor& visitor, int depth)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TErrorException::TErrorException(const TErrorException& other)
+    : Error_(other.Error_)
+{ }
+
+TErrorException::TErrorException(TErrorException&& other) noexcept
+    : Error_(std::move(other.Error_))
+{ }
+
+TErrorException& TErrorException::operator=(const TErrorException& other)
+{
+    if (this != &other) {
+        Error_ = other.Error_;
+        auto guard = Guard(CachedWhatLock_);
+        CachedWhat_.clear();
+    }
+    return *this;
+}
+
+TErrorException& TErrorException::operator=(TErrorException&& other) noexcept
+{
+    if (this != &other) {
+        Error_ = std::move(other.Error_);
+        auto guard = Guard(CachedWhatLock_);
+        CachedWhat_.clear();
+    }
+    return *this;
+}
+
 const char* TErrorException::what() const noexcept
 {
+    auto guard = Guard(CachedWhatLock_);
     if (CachedWhat_.empty()) {
         CachedWhat_ = ToString(Error_);
     }

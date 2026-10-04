@@ -42,5 +42,3 @@ cat /path/to/backup/directory/hive/72057594037968897/backup_20251007T193502_g214
 ```text
 ea4bdc2f7afaf7b6d35adbf13b5360e4e4a19046f742effdf1b4f0bb9c449185
 ```
-
-```

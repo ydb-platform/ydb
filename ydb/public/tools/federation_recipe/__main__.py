@@ -509,7 +509,7 @@ class FederationRecipe(object):
         with open('lb_config_manager_endpoint.txt', 'w') as f:
             f.write(cm_endpoint)
 
-        cm_binary = yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm24092026')
+        cm_binary = yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm-binary-test')
 
         command = [
             cm_binary,

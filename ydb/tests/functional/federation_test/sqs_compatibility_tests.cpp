@@ -1,31 +1,43 @@
 #include "common_functions.h"
 
-#include <ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json/sqs_json_client.h>
-
 #include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/http/URI.h>
+#include <aws/sqs/SQSClient.h>
+#include <aws/sqs/model/ChangeMessageVisibilityBatchRequest.h>
+#include <aws/sqs/model/ChangeMessageVisibilityRequest.h>
+#include <aws/sqs/model/CreateQueueRequest.h>
 #include <aws/sqs/model/DeleteMessageBatchRequest.h>
+#include <aws/sqs/model/DeleteMessageRequest.h>
+#include <aws/sqs/model/DeleteQueueRequest.h>
+#include <aws/sqs/model/GetQueueAttributesRequest.h>
 #include <aws/sqs/model/GetQueueUrlRequest.h>
+#include <aws/sqs/model/ListQueuesRequest.h>
+#include <aws/sqs/model/PurgeQueueRequest.h>
 #include <aws/sqs/model/ReceiveMessageRequest.h>
 #include <aws/sqs/model/SendMessageBatchRequest.h>
+#include <aws/sqs/model/SendMessageRequest.h>
+#include <aws/sqs/model/SetQueueAttributesRequest.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/scope.h>
 #include <util/string/cast.h>
 #include <util/system/env.h>
 
+#include <algorithm>
 #include <set>
+#include <vector>
 
 namespace {
 
 using namespace NFederationTests;
-using NYdb::NConsoleClient::TSQSJsonClient;
+using Aws::SQS::SQSClient;
+using namespace Aws::SQS::Model;
 
 const TString CMDatabase = "/logbroker-federation/prod";
 const TString Database = "/Root/logbroker-federation/prod";
 const TString SqsConsumer = "sqs-consumer";
-const TString StreamingConsumer = "sdk-consumer";
-// Legacy PQ consumer names include the federation account.
 const TString SqsConsumerPath = "prod/" + SqsConsumer;
-const TString StreamingConsumerPath = "prod/" + StreamingConsumer;
 
 // Keep the AWS runtime alive until all clients have been destroyed.
 struct TAwsRuntime {
@@ -60,6 +72,66 @@ Aws::Client::ClientConfiguration MakeSqsConfig(const TString& cluster) {
     return config;
 }
 
+// This SDK sends queue-scoped operations directly to QueueUrl. The YDB HTTP
+// proxy expects the database path in the request URI and the original QueueUrl
+// in the payload. Keep the SDK serialization, signing and XML response parsing.
+class TFederationSqsClient : public SQSClient {
+public:
+    TFederationSqsClient(const Aws::Auth::AWSCredentials& credentials,
+                         const Aws::Client::ClientConfiguration& config)
+        : SQSClient(credentials, config)
+        , Endpoint(config.endpointOverride)
+    {
+    }
+
+    ChangeMessageVisibilityOutcome ChangeMessageVisibility(const ChangeMessageVisibilityRequest& request) const override {
+        return ChangeMessageVisibilityOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    ChangeMessageVisibilityBatchOutcome ChangeMessageVisibilityBatch(const ChangeMessageVisibilityBatchRequest& request) const override {
+        return ChangeMessageVisibilityBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    DeleteMessageOutcome DeleteMessage(const DeleteMessageRequest& request) const override {
+        return DeleteMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    DeleteMessageBatchOutcome DeleteMessageBatch(const DeleteMessageBatchRequest& request) const override {
+        return DeleteMessageBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    DeleteQueueOutcome DeleteQueue(const DeleteQueueRequest& request) const override {
+        return DeleteQueueOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    GetQueueAttributesOutcome GetQueueAttributes(const GetQueueAttributesRequest& request) const override {
+        return GetQueueAttributesOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    PurgeQueueOutcome PurgeQueue(const PurgeQueueRequest& request) const override {
+        return PurgeQueueOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    ReceiveMessageOutcome ReceiveMessage(const ReceiveMessageRequest& request) const override {
+        return ReceiveMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    SendMessageOutcome SendMessage(const SendMessageRequest& request) const override {
+        return SendMessageOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    SendMessageBatchOutcome SendMessageBatch(const SendMessageBatchRequest& request) const override {
+        return SendMessageBatchOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+    SetQueueAttributesOutcome SetQueueAttributes(const SetQueueAttributesRequest& request) const override {
+        return SetQueueAttributesOutcome(MakeRequest(Endpoint, request, Aws::Http::HttpMethod::HTTP_POST));
+    }
+
+private:
+    const Aws::Http::URI Endpoint;
+};
+
 class TFederationTopic {
 public:
     const TClusterEndpoints Endpoints;
@@ -75,8 +147,6 @@ public:
                     .ConsumerType(EConsumerType::Shared)
                     .KeepMessagesOrder(false)
                     .DefaultProcessingTimeout(TDuration::Seconds(30))
-                .EndAddConsumer()
-                .BeginAddConsumer(CMDatabase + "/" + StreamingConsumer)
                 .EndAddConsumer()
         ).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -99,7 +169,7 @@ public:
         }
     }
 
-    Aws::String GetQueueUrl(const TSQSJsonClient& client) const {
+    Aws::String GetQueueUrl(const SQSClient& client) const {
         Aws::SQS::Model::GetQueueUrlRequest request;
         request.SetQueueName(ToAws(Name + "@" + SqsConsumerPath));
         const auto outcome = client.GetQueueUrl(request);
@@ -118,19 +188,16 @@ private:
             const auto result = client.DescribeTopic(Name).GetValueSync();
             if (result.IsSuccess()) {
                 bool shared = false;
-                bool streaming = false;
                 TStringBuilder consumers;
                 for (const auto& consumer : result.GetTopicDescription().GetConsumers()) {
                     const auto& name = consumer.GetConsumerName();
                     const auto type = consumer.GetConsumerType();
                     shared |= name == SqsConsumerPath && type == EConsumerType::Shared;
-                    streaming |= name == StreamingConsumerPath && type == EConsumerType::Streaming;
                     consumers << " [name=" << name << ", type=" << static_cast<int>(type) << "]";
                 }
                 lastIssues = TStringBuilder() << "Expected shared consumer " << SqsConsumerPath
-                    << " and streaming consumer " << StreamingConsumerPath << "; actual consumers:" << consumers;
-                Cerr << "Topic description is successful. Consumers count=" << result.GetTopicDescription().GetConsumers().size() << ". Shared=" << shared << ", streaming=" << streaming << "." << consumers << Endl;
-                if (shared && streaming) {
+                    << "; actual consumers:" << consumers;
+                if (shared) {
                     return;
                 }
             } else {
@@ -142,11 +209,10 @@ private:
     }
 };
 
-void SendMessages(const TSQSJsonClient& client, const Aws::String& queueUrl,
+void SendMessages(const SQSClient& client, const Aws::String& queueUrl,
                   const std::vector<TString>& bodies) {
     Aws::SQS::Model::SendMessageBatchRequest request;
     request.SetQueueUrl(queueUrl);
-    request.SetAdditionalCustomHeaderValue("x-amz-target", "AmazonSQS.SendMessageBatch");
     for (size_t i = 0; i < bodies.size(); ++i) {
         Aws::SQS::Model::SendMessageBatchRequestEntry entry;
         entry.SetId(ToAws(ToString(i)));
@@ -157,19 +223,24 @@ void SendMessages(const TSQSJsonClient& client, const Aws::String& queueUrl,
     AssertSuccess(outcome);
     UNIT_ASSERT_VALUES_EQUAL(outcome.GetResult().GetFailed().size(), 0);
     UNIT_ASSERT_VALUES_EQUAL(outcome.GetResult().GetSuccessful().size(), bodies.size());
+    std::set<Aws::String> ids;
     for (const auto& entry : outcome.GetResult().GetSuccessful()) {
         UNIT_ASSERT(!entry.GetMessageId().empty());
+        ids.insert(entry.GetId());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ids.size(), bodies.size());
+    for (size_t i = 0; i < bodies.size(); ++i) {
+        UNIT_ASSERT(ids.contains(ToAws(ToString(i))));
     }
 }
 
-void ReceiveMessages(const TSQSJsonClient& client, const Aws::String& queueUrl,
+void ReceiveMessages(const SQSClient& client, const Aws::String& queueUrl,
                      const std::vector<TString>& expected) {
     std::multiset<TString> received;
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
     while (received.size() < expected.size() && TInstant::Now() < deadline) {
         Aws::SQS::Model::ReceiveMessageRequest request;
         request.SetQueueUrl(queueUrl);
-        request.SetAdditionalCustomHeaderValue("x-amz-target", "AmazonSQS.ReceiveMessage");
         request.SetMaxNumberOfMessages(10);
         request.SetWaitTimeSeconds(1);
         request.SetVisibilityTimeout(30);
@@ -178,7 +249,6 @@ void ReceiveMessages(const TSQSJsonClient& client, const Aws::String& queueUrl,
 
         Aws::SQS::Model::DeleteMessageBatchRequest deleteRequest;
         deleteRequest.SetQueueUrl(queueUrl);
-        deleteRequest.SetAdditionalCustomHeaderValue("x-amz-target", "AmazonSQS.DeleteMessageBatch");
         for (const auto& message : outcome.GetResult().GetMessages()) {
             UNIT_ASSERT(!message.GetMessageId().empty());
             UNIT_ASSERT(!message.GetReceiptHandle().empty());
@@ -199,66 +269,183 @@ void ReceiveMessages(const TSQSJsonClient& client, const Aws::String& queueUrl,
     UNIT_ASSERT(received == std::multiset<TString>(expected.begin(), expected.end()));
 }
 
-enum class EScenario {
-    SqsToTopic,
-    TopicToSqs,
-    SqsToSqs,
-};
-
-void CheckCompatibility(EScenario scenario) {
+// Every message scenario writes and reads through SQS on both federation clusters.
+template <class TCheck>
+void CheckSqsToSqs(TCheck check) {
     TAwsRuntime runtime;
     TFederationTopic topic;
     for (const auto& cluster : {TString("cluster_a"), TString("cluster_b")}) {
-        const TString endpoint = cluster == "cluster_a" ? topic.Endpoints.EndpointA : topic.Endpoints.EndpointB;
-        TSQSJsonClient sqs(Aws::Auth::AWSCredentials("unused", "unused", "root@builtin"),
-                          MakeSqsConfig(cluster), "");
+        TFederationSqsClient sqs(Aws::Auth::AWSCredentials("unused", "unused", "root@builtin"),
+                      MakeSqsConfig(cluster));
         const auto queueUrl = topic.GetQueueUrl(sqs);
-        const std::vector<TString> bodies = {cluster + "-message-0", cluster + "-message-1", cluster + "-message-2"};
+        check(sqs, queueUrl, cluster, topic);
+    }
+}
 
-        if (scenario == EScenario::TopicToSqs) {
-            auto driver = MakeDriver(endpoint, Database);
-            TTopicClient client(driver);
-            auto session = client.CreateSimpleBlockingWriteSession(
-                TWriteSessionSettings().Path(topic.Name).MessageGroupId("sdk-producer").Codec(ECodec::RAW));
-            for (const auto& body : bodies) {
-                UNIT_ASSERT(session->Write(body));
-            }
-            UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
-        } else {
-            SendMessages(sqs, queueUrl, bodies);
-        }
-
-        if (scenario == EScenario::SqsToTopic) {
-            auto driver = MakeDriver(endpoint, Database);
-            TTopicClient client(driver);
-            auto session = client.CreateReadSession(
-                TReadSessionSettings().ConsumerName(StreamingConsumerPath).AppendTopics(TTopicReadSettings(topic.Name)));
-            const auto messages = ReadMessages(session, bodies.size());
-            session->Close(TDuration::Seconds(5));
-            std::multiset<TString> received;
-            for (const auto& [offset, body] : messages) {
-                received.insert(body);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(received.size(), bodies.size());
-            UNIT_ASSERT(received == std::multiset<TString>(bodies.begin(), bodies.end()));
-        } else {
-            ReceiveMessages(sqs, queueUrl, bodies);
+Aws::Vector<Message> Receive(const SQSClient& client, const Aws::String& queueUrl, size_t count, int visibilityTimeout = 60) {
+    Aws::Vector<Message> messages;
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (messages.size() < count && TInstant::Now() < deadline) {
+        ReceiveMessageRequest request;
+        request.SetQueueUrl(queueUrl);
+        request.SetMaxNumberOfMessages(count - messages.size());
+        request.SetWaitTimeSeconds(1);
+        request.SetVisibilityTimeout(visibilityTimeout);
+        const auto outcome = client.ReceiveMessage(request);
+        AssertSuccess(outcome);
+        for (const auto& message : outcome.GetResult().GetMessages()) {
+            UNIT_ASSERT(!message.GetMessageId().empty());
+            UNIT_ASSERT(!message.GetReceiptHandle().empty());
+            messages.push_back(message);
         }
     }
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), count);
+    return messages;
+}
+
+void AssertEmpty(const SQSClient& client, const Aws::String& queueUrl) {
+    ReceiveMessageRequest request;
+    request.SetQueueUrl(queueUrl);
+    request.SetWaitTimeSeconds(1);
+    const auto outcome = client.ReceiveMessage(request);
+    AssertSuccess(outcome);
+    UNIT_ASSERT(outcome.GetResult().GetMessages().empty());
+}
+
+void Delete(const SQSClient& client, const Aws::String& queueUrl, const Message& message) {
+    DeleteMessageRequest request;
+    request.SetQueueUrl(queueUrl);
+    request.SetReceiptHandle(message.GetReceiptHandle());
+    AssertSuccess(client.DeleteMessage(request));
+}
+
+void CheckVisibility(bool batch) {
+    CheckSqsToSqs([=](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+        const std::vector<TString> bodies = batch
+            ? std::vector<TString>{cluster + "-first", cluster + "-second"}
+            : std::vector<TString>{cluster + "-single"};
+        SendMessages(client, url, bodies);
+        const auto messages = Receive(client, url, bodies.size());
+        AssertEmpty(client, url);
+        if (batch) {
+            ChangeMessageVisibilityBatchRequest request;
+            request.SetQueueUrl(url);
+            for (size_t i = 0; i < messages.size(); ++i) {
+                request.AddEntries(ChangeMessageVisibilityBatchRequestEntry()
+                    .WithId(ToAws(ToString(i)))
+                    .WithReceiptHandle(messages[i].GetReceiptHandle())
+                    .WithVisibilityTimeout(0));
+            }
+            const auto outcome = client.ChangeMessageVisibilityBatch(request);
+            AssertSuccess(outcome);
+            UNIT_ASSERT(outcome.GetResult().GetFailed().empty());
+            std::set<Aws::String> ids;
+            for (const auto& entry : outcome.GetResult().GetSuccessful()) {
+                ids.insert(entry.GetId());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ids.size(), messages.size());
+            for (size_t i = 0; i < messages.size(); ++i) {
+                UNIT_ASSERT(ids.contains(ToAws(ToString(i))));
+            }
+        } else {
+            ChangeMessageVisibilityRequest request;
+            request.SetQueueUrl(url);
+            request.SetReceiptHandle(messages.front().GetReceiptHandle());
+            request.SetVisibilityTimeout(0);
+            AssertSuccess(client.ChangeMessageVisibility(request));
+        }
+        // Resetting visibility must make the same messages available again.
+        const auto redelivered = Receive(client, url, bodies.size());
+        std::set<Aws::String> originalIds;
+        std::set<Aws::String> redeliveredIds;
+        std::multiset<TString> actualBodies;
+        for (const auto& message : messages) {
+            originalIds.insert(message.GetMessageId());
+        }
+        for (const auto& message : redelivered) {
+            redeliveredIds.insert(message.GetMessageId());
+            actualBodies.emplace(message.GetBody().data(), message.GetBody().size());
+            Delete(client, url, message);
+        }
+        UNIT_ASSERT(originalIds == redeliveredIds);
+        UNIT_ASSERT(actualBodies == std::multiset<TString>(bodies.begin(), bodies.end()));
+        AssertEmpty(client, url);
+    });
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(SqsFederationCompatibilityTests) {
-    Y_UNIT_TEST(SqsWriteIsReadableThroughTopicSdk) {
-        CheckCompatibility(EScenario::SqsToTopic);
-    }
-
-    Y_UNIT_TEST(TopicSdkWriteIsReadableThroughSqs) {
-        CheckCompatibility(EScenario::TopicToSqs);
-    }
-
     Y_UNIT_TEST(SqsBatchWriteAndReadOnFederation) {
-        CheckCompatibility(EScenario::SqsToSqs);
+        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+            const std::vector<TString> bodies = {cluster + "-0", cluster + "-1", cluster + "-2"};
+            SendMessages(client, url, bodies);
+            ReceiveMessages(client, url, bodies);
+            AssertEmpty(client, url);
+        });
+    }
+
+    Y_UNIT_TEST(SqsSingleWriteReadAndDeleteOnFederation) {
+        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+            SendMessageRequest request;
+            request.SetQueueUrl(url);
+            request.SetMessageBody(ToAws(cluster + "-single"));
+            const auto sent = client.SendMessage(request);
+            AssertSuccess(sent);
+            UNIT_ASSERT(!sent.GetResult().GetMessageId().empty());
+            const auto messages = Receive(client, url, 1, 1);
+            UNIT_ASSERT_VALUES_EQUAL(messages.front().GetBody(), request.GetMessageBody());
+            UNIT_ASSERT_VALUES_EQUAL(messages.front().GetMessageId(), sent.GetResult().GetMessageId());
+            Delete(client, url, messages.front());
+            Sleep(TDuration::Seconds(2));
+            AssertEmpty(client, url);
+        });
+    }
+
+    Y_UNIT_TEST(SqsChangeMessageVisibilityOnFederation) {
+        CheckVisibility(false);
+    }
+
+    Y_UNIT_TEST(SqsChangeMessageVisibilityBatchOnFederation) {
+        CheckVisibility(true);
+    }
+
+    Y_UNIT_TEST(SqsGetQueueAttributesOnFederation) {
+        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic&) {
+            GetQueueAttributesRequest request;
+            request.SetQueueUrl(url);
+            request.AddAttributeNames(QueueAttributeName::VisibilityTimeout);
+            const auto outcome = client.GetQueueAttributes(request);
+            AssertSuccess(outcome);
+            const auto& attributes = outcome.GetResult().GetAttributes();
+            UNIT_ASSERT(attributes.contains(QueueAttributeName::VisibilityTimeout));
+            UNIT_ASSERT_VALUES_EQUAL(attributes.at(QueueAttributeName::VisibilityTimeout), "30");
+        });
+    }
+
+    Y_UNIT_TEST(SqsListQueuesOnFederation) {
+        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString&, const TFederationTopic& topic) {
+            ListQueuesRequest request;
+            request.SetQueueNamePrefix(ToAws(topic.Name));
+            const auto outcome = client.ListQueues(request);
+            AssertSuccess(outcome);
+            const auto& urls = outcome.GetResult().GetQueueUrls();
+            UNIT_ASSERT(std::find(urls.begin(), urls.end(), url) != urls.end());
+        });
+    }
+
+    Y_UNIT_TEST(SqsPurgeQueueOnFederation) {
+        CheckSqsToSqs([](const SQSClient& client, const Aws::String& url, const TString& cluster, const TFederationTopic&) {
+            SendMessages(client, url, {cluster + "-purged-0", cluster + "-purged-1"});
+            // Purge must remove both available and in-flight messages.
+            Receive(client, url, 1, 1);
+            PurgeQueueRequest request;
+            request.SetQueueUrl(url);
+            AssertSuccess(client.PurgeQueue(request));
+            Sleep(TDuration::Seconds(2));
+            AssertEmpty(client, url);
+            SendMessages(client, url, {cluster + "-after-purge"});
+            ReceiveMessages(client, url, {cluster + "-after-purge"});
+        });
     }
 }

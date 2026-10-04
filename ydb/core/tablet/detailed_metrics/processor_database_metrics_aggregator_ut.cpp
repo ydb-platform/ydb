@@ -79,9 +79,8 @@ namespace {
     };
 
     struct TSimulatedNode {
-        NMonitoring::TDynamicCounterPtr Root = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        TNodeDatabaseMetricsAggregatorPtr Leaders = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, false);
-        TNodeDatabaseMetricsAggregatorPtr Followers = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, true);
+        TNodeDatabaseMetricsAggregatorPtr Leaders = CreateNodeDatabaseMetricsAggregator(DATABASE_PATH, false);
+        TNodeDatabaseMetricsAggregatorPtr Followers = CreateNodeDatabaseMetricsAggregator(DATABASE_PATH, true);
     };
 
     const TDetailedMetricsDescriptor& GetDataShardDescriptor() {
@@ -438,6 +437,39 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         fixture.Processor->RecalculateAllCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 10u + 20u);
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 5u + 6u);
+    }
+
+    /**
+     * Verify that the "table" label holds the path of the table relative to
+     * the database, and that only a whole path component is ever stripped.
+     */
+    Y_UNIT_TEST(TablePathIsRelativeToTheDatabase) {
+        // NOTE: /Root/db1 is a PREFIX of /Root/db10, but not a parent of it
+        auto publicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto processor = CreateProcessorDatabaseMetricsAggregator(publicRoot, "/Root/db1");
+
+        const TVector<std::pair<TString, TString>> cases = {
+            // Within the database: the database path and the separator are stripped
+            {"/Root/db1/dir/table", "dir/table"},
+            {"/Root/db1/table",     "table"},
+
+            // NOT within the database: the path is reported as is, so that the odd
+            // looking label is noticed instead of the counters being silently misplaced
+            {"/Root/db10/table",    "/Root/db10/table"},
+            {"/Root/other/table",   "/Root/other/table"},
+        };
+
+        TPublicReport report;
+        for (const auto& [tablePath, _] : cases) {
+            report.Table(TPublicValues(), tablePath);
+        }
+        processor->ApplyFromNode(1, false, report.Get());
+        processor->RecalculateAllCounters();
+
+        for (const auto& [tablePath, expectedLabel] : cases) {
+            UNIT_ASSERT_C(FindPublicTableGroup(publicRoot, expectedLabel),
+                          "no table group " << expectedLabel << " for " << tablePath);
+        }
     }
 
     Y_UNIT_TEST(GaugeDropToZeroReflectedAfterRecalculate) {

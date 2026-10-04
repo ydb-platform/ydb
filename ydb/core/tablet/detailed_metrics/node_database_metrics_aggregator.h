@@ -7,8 +7,6 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -17,11 +15,8 @@
 namespace NKikimr {
 
 /**
- * Guards the VALUES published into the detailed metrics counter tree, so that a reader
- * never observes an aggregate midway through being republished.
- *
- * A reader MUST hold it across its whole traversal. Locking from inside a traversal
- * deadlocks.
+ * Guards the state of the node aggregators: the Tablet Counters Aggregator actors feed it,
+ * the SysView Service packs it.
  */
 TMutex& DetailedMetricsLock();
 
@@ -56,18 +51,6 @@ struct TDetailedMetricsTableInfo {
  * The per-node, per-database, per-role aggregator of the detailed metrics: Pack() reports
  * the public metric values of every TABLE bucket (the leaders of a table level table collapsed)
  * and every PARTITION leaf (one tablet of either role, kept as its public metric values only).
- *
- * The TABLE buckets also fill the counter group the instance is handed with a debug view
- * of their low level counters, refreshed by RecalculateAllCounters():
- *
- *     ydb_detailed_raw                        (private, created by the caller)
- *       |
- *       +-- the target group of BOTH instances
- *           database=<database path>
- *             table=<table path relative to the database>
- *               type=<tablet type>/category=executor|app
- *
- * The groups of a table live as long as its TABLE bucket, a partition level table has none.
  */
 class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
@@ -86,14 +69,13 @@ public:
     ) = 0;
 
     /**
-     * Drop everything this tablet contributed to the tree, removing the groups,
-     * which are left empty.
+     * Drop everything this tablet contributed.
      *
      * @param[in] tabletId The tablet ID and its role are sufficient: this class owns
      *                      the reverse map from (tabletId, followerId) -> the table's
-     *                      relative path (the same key the table entries and their
-     *                      counter groups are addressed by), because the forget event
-     *                      from the Tablet Counters Aggregator carries no table identity.
+     *                      relative path (the same key the table entries are addressed by),
+     *                      because the forget event from the Tablet Counters Aggregator
+     *                      carries no table identity.
      *
      * @note A tablet of an unknown table is silently ignored, and forgetting a tablet
      *       twice is not an error.
@@ -104,18 +86,14 @@ public:
      *       nothing but the reverse map could reach it afterwards.
      */
     virtual void ForgetTablet(ui64 tabletId, ui32 followerId) = 0;
-
-    virtual void RecalculateAllCounters() = 0;
 };
 
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;
 
 /**
- * @param[in] targetCounterGroup The group to fill with the low level counters of the TABLE buckets
  * @param[in] isFollowerRole The role of the tablets this instance is fed
  */
 TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(
-    NMonitoring::TDynamicCounterPtr targetCounterGroup,
     const TString& databasePath,
     bool isFollowerRole
 );

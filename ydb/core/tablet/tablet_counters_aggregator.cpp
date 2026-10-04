@@ -93,9 +93,7 @@ TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
 namespace {
 
 ////////////////////////////////////////////
-// Detailed metrics (the private per node counter tree)
-
-const TString DETAILED_METRICS_RAW_GROUP = "ydb_detailed_raw";
+// Detailed metrics
 
 // TEvTabletSetTableInfo::MetricsLevel is a plain ui32 (to keep the event free of the
 // schemeshard proto header), carrying the raw values of the schemeshard proto enum;
@@ -137,25 +135,6 @@ bool IsOlderThan(const TDetailedMetricsTableInfo& lhs, const TDetailedMetricsTab
     return std::tie(lhs.TableId, lhs.SchemaVersion) < std::tie(rhs.TableId, rhs.SchemaVersion);
 }
 
-::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
-    ::NMonitoring::TDynamicCounterPtr countersRoot, const TActorContext& ctx)
-{
-    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
-    static TMutex lock;
-    TGuard<TMutex> guard(lock);
-
-    auto group = countersRoot->FindSubgroup("counters", DETAILED_METRICS_RAW_GROUP);
-    if (!group) {
-        group = MakeIntrusive<::NMonitoring::TDynamicCounters>(
-            ::NMonitoring::TCountableBase::EVisibility::Private);
-        countersRoot->RegisterSubgroup("counters", DETAILED_METRICS_RAW_GROUP, group);
-
-        YDB_LOG_INFO_CTX(ctx, "Created the private root group of the detailed metrics counter tree");
-    }
-
-    return group;
-}
-
 } // namespace <anonymous>
 
 ////////////////////////////////////////////
@@ -163,7 +142,7 @@ class TTabletMon {
 public:
     //
     TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId,
-            bool dbCountersEnabled, bool detailedMetricsEnabled, const TActorContext& ctx)
+            bool dbCountersEnabled, bool detailedMetricsEnabled)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
         , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all"))
         , IsFollower(isFollower)
@@ -173,10 +152,6 @@ public:
     {
         if (!IsFollower) {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
-        }
-
-        if (DetailedMetricsEnabled) {
-            DetailedMetricsGroup = GetDetailedMetricsRawGroup(counters, ctx);
         }
     }
 
@@ -619,12 +594,6 @@ public:
         AllTypes->RecalcAll();
         for (auto& [_, counters] : CountersByTabletType) {
             counters->RecalcAll();
-        }
-
-        for (auto& [_, db] : DetailedMetricsByPathId) {
-            if (db.Aggregator) {
-                db.Aggregator->RecalculateAllCounters();
-            }
         }
 
         if (YdbCounters) {
@@ -1270,7 +1239,6 @@ private:
 
     void CreateDetailedMetricsAggregator(TDetailedMetricsForDb& db, const TActorContext& ctx) {
         db.Aggregator = CreateNodeDatabaseMetricsAggregator(
-            DetailedMetricsGroup,
             db.DatabasePath,
             IsFollower
         );
@@ -1404,8 +1372,6 @@ private:
     bool DbCountersEnabled = false;
     bool DetailedMetricsEnabled = false;
 
-    ::NMonitoring::TDynamicCounterPtr DetailedMetricsGroup;
-
     THashMap<TPathId, TDetailedMetricsForDb> DetailedMetricsByPathId;
 };
 
@@ -1495,7 +1461,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     }
 
     TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId,
-        dbCountersEnabled, detailedMetricsEnabled, ctx);
+        dbCountersEnabled, detailedMetricsEnabled);
     auto mon = appData->Mon;
     if (mon) {
         if (!Follower)

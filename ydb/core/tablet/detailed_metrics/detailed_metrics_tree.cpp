@@ -4,17 +4,11 @@
 
 namespace NKikimr::NDetailedMetrics {
 
-    const TString DATABASE_LABEL = "database";
     const TString TABLE_LABEL = "table";
     const TString DETAILED_METRICS_LABEL = "detailed_metrics";
     const TString TABLET_ID_LABEL = "tablet_id";
     const TString FOLLOWER_ID_LABEL = "follower_id";
     const TString PER_PARTITION_VALUE = "per_partition";
-
-    const TString TYPE_LABEL = "type";
-    const TString CATEGORY_LABEL = "category";
-    const TString EXECUTOR_CATEGORY = "executor";
-    const TString APP_CATEGORY = "app";
 
     TStringBuf ChopTrailingSlash(TStringBuf path) {
         path.ChopSuffix("/");
@@ -43,26 +37,9 @@ namespace NKikimr::NDetailedMetrics {
             ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(tablet.second));
     }
 
-    NMonitoring::TDynamicCounterPtr GetOrCreateTypeGroup(
-        NMonitoring::TDynamicCounterPtr bucketGroup, TTabletTypes::EType tabletType)
-    {
-        return bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType));
-    }
-
     TSubgroupPath MakeTabletPath(const TTabletKey& tablet, TSubgroupPath prefix) {
         prefix.emplace_back(TABLET_ID_LABEL, ToString(tablet.first));
         prefix.emplace_back(FOLLOWER_ID_LABEL, ToString(tablet.second));
-        return prefix;
-    }
-
-    TSubgroupPath MakeRawBucketPath(
-        const TBucketKey& key, TTabletTypes::EType tabletType, TSubgroupPath prefix)
-    {
-        if (key) {
-            prefix.emplace_back(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
-            return MakeTabletPath(*key, std::move(prefix));
-        }
-        prefix.emplace_back(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType));
         return prefix;
     }
 

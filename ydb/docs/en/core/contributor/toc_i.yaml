@@ -3,6 +3,8 @@ items:
   href: suggest-change.md
 - name: Ya Make build system
   href: build-ya.md
+- name: Logging
+  href: logging.md
 - name: Releases
   href: manage-releases.md
 - name: Documentation
@@ -94,5 +96,3 @@ items:
   items:
   - name: Chaos Testing
     href: testing/chaos-testing.md
-- name: Logging
-  href: logging.md

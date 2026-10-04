@@ -28,13 +28,10 @@ SRCS(
     federation_tests.cpp
     common_functions.cpp
     cluster_write_close_test.cpp
-<<<<<<< HEAD
     sqs_xml_compatibility_tests.cpp
     sqs_json_compatibility_tests.cpp
-=======
     ../kafka/test_common/helpers.cpp
     kafka_compatibility_tests.cpp
->>>>>>> main
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)

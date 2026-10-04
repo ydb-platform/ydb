@@ -487,7 +487,7 @@ private:
     public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
-        std::set<ui64> UnorderedOffsets; // Groupless; ordered so groupless messages are served by increasing offset
+        absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless. Iteration order is arbitrary.
 
     private:
         absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents

@@ -14,9 +14,56 @@ fairness behaviour, while **reusing** the existing data structures. Concretely:
   - `ByOffset` — return the oldest message (smallest offset), i.e. current STD behaviour.
   - `ByMessageGroupFairness` — pick based on least-recently-served MessageGroupId with fairness.
 - Default policy for STD reads is `ByMessageGroupFairness`.
-- Groupless messages (`HasMessageGroupId == false`) stay independently available; their
-  relative return order does not matter (current offset order is acceptable).
-- **FIFO behaviour must remain byte-for-byte unchanged.**
+- There is no mixed / every-Nth mode. A call uses whichever policy the caller passes.
+- **FIFO grouped selection stays as it is.** Iteration order of `UnorderedOffsets` is not
+  part of that requirement: the container is a hash set, so the order is arbitrary.
+  Tests must not canonicalize it and must not depend on numeric hash values — only on
+  hash equality.
+
+## Decisions
+
+These override earlier wording in this plan where they disagree.
+
+### Selection parameter
+
+`Next` / `Read` take `EReadSelectionPolicy`:
+
+- `ByOffset` — smallest eligible offset. Resume through `TStorage::TPosition`, the same cursor the offset scan on trunk uses (`SlowPosition`, then `FastPosition`). Do not keep `UnorderedOffsets` ordered for this. `std::set` / `flat_hash_set` iteration is not an offset order.
+- `ByMessageGroupFairness` — the group fairness walk.
+
+No third mode, no internal counter, no random fraction of calls. If a caller wants an oldest message, it passes `ByOffset` on that call. The default for STD remains `ByMessageGroupFairness`. FIFO ignores the parameter.
+
+### Where a not-yet-read group is inserted
+
+Unspecified. Pushing it to the back, as FIFO does, is allowed. It is not a requirement, and neither is pushing it to the front. Tests must accept any insertion strategy: they must not assert which never-read group comes first. The required fairness property is the one FIFO already has for a group that **has** been read: after `Next` serves it, that group goes to the back and is not served again while another eligible group is still ahead of it.
+
+### Groupless messages
+
+Messages with `HasMessageGroupId == false` take part in the same `Next` selection as grouped ones.
+
+Both of the following are valid:
+
+- Prefer groupless on some calls and grouped messages on others (for example even calls try groupless first, odd calls try a group first). Either class can be returned while the other class still has `Unprocessed` messages.
+- Walk the fairness list first and only then `UnorderedOffsets`, which is what FIFO does today.
+
+The implementation uses the second strategy so STD and FIFO share `SearchForEligibleMessage` and the existing groupless fallback. Consequences of that choice:
+
+- While any eligible group remains, `ByMessageGroupFairness` returns a grouped message.
+- A groupless message is returned once no eligible group remains, including when grouped messages exist but are locked, skipped, delayed, or retention-expired.
+- A grouped message can be returned while groupless `Unprocessed` messages exist.
+
+`UnorderedOffsets` stays `absl::flat_hash_set<ui64>`. Order inside it is arbitrary and is not restored as a sorted order. Tests assert the set of returned groupless offsets, not their sequence.
+
+### Unlock and the fairness list
+
+On explicit `Unlock`, moving the group to the back is allowed no matter how many `Unprocessed` messages it still has. Tests must not require the group to keep its previous position, and must not require that it moves. After unlock the message is `Unprocessed` again and is readable on a later `Next`.
+
+### What tests must not depend on
+
+- Numeric values of hashes, or any total order of hashes. Two messages are in the same group exactly when their hashes compare equal.
+- Iteration order of `UnorderedOffsets`.
+- The slot where a group that has not been read yet is inserted.
+- The list position of a group after `Unlock`.
 
 ## Current State (analysis)
 
@@ -36,7 +83,7 @@ Files involved:
     `LastOffset`, `Size`, `Locked`.
   - `UnlockedMessageGroupsId` (set) + `UnlockedMessageGroupsIdViewOrder`
     (`TIntrusiveList<TOrderedMessageGroupIdHash>`) — the fairness queue.
-  - `UnorderedOffsets` — groupless offsets.
+  - `UnorderedOffsets` (`absl::flat_hash_set<ui64>`) — groupless offsets. Iteration order is arbitrary.
 - [`SearchForEligibleMessage()`](../ydb/core/persqueue/pqtablet/partition/mlp/mlp_storage.cpp:204)
   walks `UnlockedMessageGroupsIdViewOrder`, for each group starts at `FirstOffset` and
   walks the chain, returns the first usable message and the iterator so `Next` can
@@ -108,7 +155,9 @@ and a helper to advance a group's read cursor. Behaviour split:
     from `UnlockedMessageGroupsId(+ViewOrder)`, else rotate to back (fairness). Group is
     NOT added to `LockedMessageGroupsId` (STD has no group-level lock concept).
   - On **unlock/undelay/DLQ-wakeup** (STD): increment unprocessed count; ensure group is
-    present in `UnlockedMessageGroupsId(+ViewOrder)`.
+    present in `UnlockedMessageGroupsId(+ViewOrder)`. Moving the group to the back on
+    unlock is allowed regardless of the remaining unprocessed count, and so is leaving
+    it where it was. Tests must not pick one of these.
   - On **commit/remove** (STD): decrement `Size`; when `Size == 0` erase the group.
 
 ### 4. Generalized eligible-message search
@@ -136,7 +185,8 @@ Next(deadline, position, skip, policy):
 ```
 - The fairness STD path mirrors the FIFO path: `SearchForEligibleMessage`, rotate the
   chosen group to the back of `UnlockedMessageGroupsIdViewOrder`, `DoLock`, then fall
-  back to draining `UnorderedOffsets` (groupless).
+  back to `UnorderedOffsets` (groupless). This is the selected groupless strategy;
+  see Decisions. `ByOffset` does not use that set: it continues from `TPosition`.
 - `DoLock` must call the mode-aware status-change so STD keeps the group eligible if
   more unprocessed messages remain (step 3).
 
@@ -175,20 +225,28 @@ Next(deadline, position, skip, policy):
 - FIFO ignores the policy entirely, so FIFO call sites need no changes.
 
 ### 9. Tests
-- Generalize the reference [`TFairnessModel`](../ydb/core/persqueue/pqtablet/partition/mlp/ut/mlp_storage_ut.cpp:3025)
-  to support `KeepMessageOrder = false` with **multiple in-flight messages per group**
-  (its current `GetAvailalableOffsets` asserts one-in-flight-per-group via `visited`).
-  Add an STD variant of the model / oracle that:
-  - allows multiple in-flight per group,
-  - still enforces fairness (least-recently-served group among eligible ones),
-  - keeps groupless independently available.
-- New unit tests:
-  - STD `ByMessageGroupFairness`: fairness ordering across groups, multiple in-flight per
-    group allowed, groupless drainable.
-  - STD `ByOffset`: regression that legacy offset order is preserved.
-  - Snapshot/WAL restore for STD rebuilds groups (round-trip a state, then read).
-  - Retention-expired / skipMessageGroups interaction in STD fairness path.
-- Keep all existing FIFO tests green (proves FIFO unchanged).
+- STD fairness tests must accept any initial insertion order of not-yet-read groups.
+  With no messages added between calls, one pass over the currently eligible groups
+  returns each group once, and the next pass repeats that same cyclic order. Inside a
+  group the smaller `Unprocessed` offset comes first. Do not assert which group is first.
+- Groupless tests follow the selected strategy (groups, then `UnorderedOffsets`): a
+  grouped message is returned while an eligible group exists; groupless offsets come
+  afterwards as a set, with no asserted order. Also drain both classes together.
+- `ByOffset` keeps ascending order across a shared `TPosition`, including a locked hole,
+  a message sitting in the slow zone, and a retention-expired offset.
+- After snapshot + WAL, `Next` returns an `Unprocessed` message and does not return one
+  that was locked before the snapshot.
+- Retention: an expired head is skipped and a later message of that group is returned;
+  a group whose messages are all expired does not hide another group.
+- `skipMessageGroups` hides that group and does not hide the others.
+- A delayed message is not returned. After the delay expires and deadlines are processed
+  it can be returned. Do not assert where that group sits in the fairness list.
+- DLQ: in STD a DLQ message does not block the rest of its group. `WakeUpDLQ` makes it
+  readable again.
+- Removing a non-head message of a group from the slow zone leaves the chain readable.
+- Unlock makes that message readable again. Do not assert fairness-list position.
+- Keep existing FIFO tests green. Do not add a FIFO test that pins `UnorderedOffsets`
+  iteration order.
 
 ## Risks / Watch-points
 - Relaxing `AFL_ENSURE(status == Unprocessed)` in the chain walk must not weaken FIFO

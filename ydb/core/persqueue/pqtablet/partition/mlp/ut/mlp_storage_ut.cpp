@@ -3588,7 +3588,7 @@ Y_UNIT_TEST(FairnessGrouplessAlwaysAvailable) {
     }
 }
 
-// Collects the set of offsets that Next may return in the current storage state by repeatedly locking heads and
+// Collects the set of offsets that Next may return in the current storage state by repeatedly locking them and
 // then unlocking them, so the returned messages can be treated as an unordered candidate set.
 static TSet<ui64> ProbeCandidates(TStorage& storage, const absl::flat_hash_set<ui32>& skip = {}) {
     TSet<ui64> res;
@@ -3606,6 +3606,316 @@ static TSet<ui64> ProbeCandidates(TStorage& storage, const absl::flat_hash_set<u
         storage.Unlock(offset);
     }
     return res;
+}
+
+Y_UNIT_TEST(StdFairnessCycleIgnoresInitialInsertionOrder) {
+    // One pass visits every eligible group once, in whatever order the fairness list was built.
+    // The next pass repeats that same cycle. The first visit of a group returns its smaller offset.
+    // The test does not assert which group is first: a not-yet-read group may be inserted anywhere.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    const ui32 groupByOffset[] = {1, 2, 3, 1, 2, 3};
+    for (ui64 offset = 0; offset < 6; ++offset) {
+        storage.AddMessage(offset, true, groupByOffset[offset], TInstant::Now());
+    }
+
+    auto nextOffset = [&]() {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        return result->Offset;
+    };
+
+    std::vector<ui32> firstRound;
+    TSet<ui32> seen;
+    for (int i = 0; i < 3; ++i) {
+        ui64 offset = nextOffset();
+        UNIT_ASSERT_C(offset < 3, "first visit must return the smaller offset of the group");
+        ui32 group = groupByOffset[offset];
+        UNIT_ASSERT_C(!seen.contains(group), "a group must not be served twice before the other eligible groups");
+        seen.insert(group);
+        firstRound.push_back(group);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seen.size(), 3);
+
+    for (ui32 group : firstRound) {
+        ui64 offset = nextOffset();
+        UNIT_ASSERT_VALUES_EQUAL(groupByOffset[offset], group);
+        UNIT_ASSERT_C(offset >= 3, "second visit must return the remaining offset of the same group");
+    }
+}
+
+Y_UNIT_TEST(StdFairnessGroupsBeforeGroupless) {
+    // Selected strategy, shared with FIFO: an eligible group is returned before any groupless message.
+    // Groupless offsets are still returned once no eligible group remains, and their mutual order is not fixed.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, false, 0, TInstant::Now());
+    storage.AddMessage(1, true, 7, TInstant::Now());
+    storage.AddMessage(2, true, 7, TInstant::Now());
+    storage.AddMessage(3, false, 0, TInstant::Now());
+
+    TStorage::TPosition position;
+    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(first.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 1);
+    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(second.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 2);
+
+    TSet<ui64> groupless;
+    for (int i = 0; i < 2; ++i) {
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        groupless.insert(result->Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(groupless, (TSet<ui64>{0, 3}));
+
+    auto empty = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(!empty.has_value());
+}
+
+Y_UNIT_TEST(StdFairnessRestoredFromSnapshotThenNext) {
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 16, .KeepMessageOrder = false});
+    utils.Storage.AddMessage(0, true, 1, utils.TimeProvider->Now());
+    utils.Storage.AddMessage(1, true, 2, utils.TimeProvider->Now());
+
+    utils.Begin();
+    auto read = utils.ReadMessages(1);
+    UNIT_ASSERT_VALUES_EQUAL(read.size(), 1);
+    utils.End();
+
+    const ui64 lockedOffset = read.front().Offset;
+    const ui64 expectedOffset = lockedOffset == 0 ? 1 : 0;
+
+    TUtils loaded(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 16, .KeepMessageOrder = false});
+    loaded.LoadSnapshot(utils.BeginSnapshot);
+    loaded.LoadWAL(utils.WAL);
+    loaded.Storage.InitMetrics();
+
+    TStorage::TPosition position;
+    auto result = loaded.Storage.Next(loaded.TimeProvider->Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(result.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, expectedOffset);
+
+    auto empty = loaded.Storage.Next(loaded.TimeProvider->Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(!empty.has_value());
+}
+
+Y_UNIT_TEST(StdFairnessRetentionSkipsExpiredAndDoesNotHideOtherGroups) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
+
+    // Group 1: expired head, fresh tail. Group 2: both expired. Group 3: fresh.
+    storage.AddMessage(0, true, 1, timeProvider->Now());
+    storage.AddMessage(1, true, 1, timeProvider->Now() + TDuration::Seconds(20));
+    storage.AddMessage(2, true, 2, timeProvider->Now());
+    storage.AddMessage(3, true, 2, timeProvider->Now());
+    storage.AddMessage(4, true, 3, timeProvider->Now() + TDuration::Seconds(20));
+    timeProvider->Tick(TDuration::Seconds(6));
+
+    auto candidates = ProbeCandidates(storage);
+    UNIT_ASSERT_C(!candidates.contains(0), "expired head is not returned");
+    UNIT_ASSERT(candidates.contains(1));
+    UNIT_ASSERT_C(!candidates.contains(2) && !candidates.contains(3), "a fully expired group is not returned");
+    UNIT_ASSERT(candidates.contains(4));
+    UNIT_ASSERT_VALUES_EQUAL(candidates.size(), 2);
+}
+
+Y_UNIT_TEST(StdFairnessSkipMessageGroups) {
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+    storage.AddMessage(2, true, 2, TInstant::Now());
+    storage.AddMessage(3, true, 3, TInstant::Now());
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {1, 2, 3});
+        UNIT_ASSERT(!result.has_value());
+    }
+
+    auto skipped = ProbeCandidates(storage, {1});
+    UNIT_ASSERT_VALUES_EQUAL(skipped, (TSet<ui64>{2, 3}));
+
+    auto all = ProbeCandidates(storage);
+    UNIT_ASSERT_VALUES_EQUAL(all, (TSet<ui64>{0, 1, 2, 3}));
+}
+
+Y_UNIT_TEST(StdDelayedMessageBecomesReadableAfterUndelay) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, true, 1, timeProvider->Now(), TDuration::Seconds(1));
+    storage.AddMessage(1, true, 2, timeProvider->Now());
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 1);
+    }
+
+    timeProvider->Tick(TDuration::Seconds(2));
+    storage.ProccessDeadlines();
+    {
+        auto [message, _] = storage.GetMessage(0);
+        UNIT_ASSERT(message != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Unprocessed);
+    }
+
+    TSet<ui64> seen;
+    for (int i = 0; i < 4; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
+        if (!result.has_value()) {
+            break;
+        }
+        seen.insert(result->Offset);
+    }
+    UNIT_ASSERT(seen.contains(0));
+}
+
+Y_UNIT_TEST(StdDlqDoesNotBlockTheRestOfTheGroup) {
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.SetMaxMessageProcessingCount(1);
+    storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+    storage.AddMessage(2, true, 2, TInstant::Now());
+
+    TStorage::TPosition position;
+    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(first.has_value());
+    const ui64 dlqOffset = first->Offset;
+    UNIT_ASSERT(storage.Unlock(dlqOffset) == EOperationResult::Success);
+    {
+        auto [message, _] = storage.GetMessage(dlqOffset);
+        UNIT_ASSERT(message != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::DLQ);
+    }
+
+    TSet<ui64> readable;
+    for (int i = 0; i < 4; ++i) {
+        TStorage::TPosition nextPosition;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), nextPosition);
+        if (!result.has_value()) {
+            break;
+        }
+        readable.insert(result->Offset);
+    }
+    UNIT_ASSERT_C(!readable.contains(dlqOffset), "a DLQ message is not returned");
+    for (ui64 offset : {ui64(0), ui64(1), ui64(2)}) {
+        if (offset != dlqOffset) {
+            UNIT_ASSERT_C(readable.contains(offset), "STD does not block the rest of the group or other groups");
+        }
+    }
+
+    UNIT_ASSERT(storage.WakeUpDLQ());
+    TStorage::TPosition afterWake;
+    auto woken = storage.Next(TInstant::Now() + TDuration::Seconds(1), afterWake);
+    UNIT_ASSERT(woken.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(woken->Offset, dlqOffset);
+}
+
+Y_UNIT_TEST(StdSlowZoneMiddleUnlinkKeepsTheChain) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = false});
+    auto now = timeProvider->Now();
+    storage.AddMessage(0, true, 7, now);
+    storage.AddMessage(1, true, 7, now);
+    storage.AddMessage(2, true, 7, now);
+    UNIT_ASSERT(storage.AddMessage(10, true, 8, now));
+
+    for (const auto& message : storage) {
+        if (message.Offset <= 2) {
+            UNIT_ASSERT_C(message.SlowZone, message.Offset);
+        }
+    }
+
+    UNIT_ASSERT(storage.Commit(1) == EOperationResult::Success);
+    {
+        auto [message, _] = storage.GetMessage(1);
+        UNIT_ASSERT(message == nullptr);
+    }
+
+    auto candidates = ProbeCandidates(storage);
+    UNIT_ASSERT_VALUES_EQUAL(candidates, (TSet<ui64>{0, 2, 10}));
+}
+
+Y_UNIT_TEST(StdByOffsetSkipsLockedHole) {
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 2, TInstant::Now());
+    storage.AddMessage(2, true, 1, TInstant::Now());
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 0);
+    }
+
+    TStorage::TPosition position;
+    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    UNIT_ASSERT(first.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 1);
+    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    UNIT_ASSERT(second.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 2);
+}
+
+Y_UNIT_TEST(StdByOffsetReadsSlowZoneBeforeFast) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = false});
+    auto now = timeProvider->Now();
+    storage.AddMessage(0, true, 1, now);
+    storage.AddMessage(1, true, 1, now);
+    UNIT_ASSERT(storage.AddMessage(8, true, 2, now));
+
+    TStorage::TPosition position;
+    std::vector<ui64> seen;
+    for (int i = 0; i < 3; ++i) {
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        UNIT_ASSERT(result.has_value());
+        seen.push_back(result->Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seen, (std::vector<ui64>{0, 1, 8}));
+}
+
+Y_UNIT_TEST(StdByOffsetSkipsRetentionExpired) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
+    storage.AddMessage(0, true, 1, timeProvider->Now());
+    storage.AddMessage(1, true, 2, timeProvider->Now() + TDuration::Seconds(20));
+    timeProvider->Tick(TDuration::Seconds(6));
+
+    TStorage::TPosition position;
+    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    UNIT_ASSERT(result.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 1);
+}
+
+Y_UNIT_TEST(StdUnlockMakesMessageReadableAgain) {
+    // Unlock returns the message to Unprocessed. List position after Unlock is intentionally not asserted:
+    // moving the group to the back is allowed for any remaining size, and so is leaving it in place.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+
+    TStorage::TPosition position;
+    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(first.has_value());
+    UNIT_ASSERT(second.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 0);
+    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 1);
+
+    UNIT_ASSERT(storage.Unlock(1) == EOperationResult::Success);
+
+    TStorage::TPosition again;
+    auto unlocked = storage.Next(TInstant::Now() + TDuration::Seconds(1), again);
+    UNIT_ASSERT(unlocked.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(unlocked->Offset, 1);
 }
 
 Y_UNIT_TEST(FairnessWithRetention) {

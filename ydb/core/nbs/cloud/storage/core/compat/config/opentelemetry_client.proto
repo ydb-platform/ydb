@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package NCloud.NProto;
+
+import "ydb/core/nbs/cloud/storage/core/compat/config/grpc_client.proto";
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/config";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TOpentelemetryTraceConfig
+{
+    optional TGrpcClientConfig ClientConfig = 1;
+
+    optional string ServiceName = 2;
+}

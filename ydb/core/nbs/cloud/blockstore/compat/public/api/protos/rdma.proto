@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TRdmaEndpoint
+{
+    string Host = 1;
+    uint32 Port = 2;
+}

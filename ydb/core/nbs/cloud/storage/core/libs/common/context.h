@@ -14,7 +14,9 @@ enum class EProcessingStage
 {
     Postponed,
     Backoff,
-    Last
+    Shaping,
+
+    Last = Shaping,
 };
 
 struct TRequestTime
@@ -33,7 +35,7 @@ struct TRequestTime
 struct TCallContextBase: public TThrRefBase
 {
 private:
-    TAtomic Stage2Time[static_cast<int>(EProcessingStage::Last)] = {};
+    TAtomic Stage2Time[static_cast<int>(EProcessingStage::Last) + 1] = {};
     TAtomic RequestStartedCycles = 0;
     TAtomic ResponseSentCycles = 0;
     TAtomic PossiblePostponeMicroSeconds = 0;

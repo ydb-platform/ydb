@@ -20,6 +20,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
 
+#include <util/generic/scope.h>
 #include <util/system/backtrace.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -873,12 +874,19 @@ protected:
     void ExtractKey(TUnboxedValuePod* keyBuffer)
     {
         auto keys = keyBuffer;
-        for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
-            auto& keyField = Nodes.KeyNodes[i]->RefValue(Ctx);
-            keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
-            *keys = keyField;
-            keys->Ref();
-            keys++;
+        try {
+            for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
+                auto& keyField = Nodes.KeyNodes[i]->RefValue(Ctx);
+                keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
+                *keys = keyField;
+                keys->Ref();
+                keys++;
+            }
+        } catch (...) {
+            for (auto* key = keyBuffer; key != keys; ++key) {
+                key->UnRef();
+            }
+            throw;
         }
     }
 
@@ -1124,6 +1132,11 @@ protected:
 
                 LoadItem(inputPtrs.data());
                 ExtractKey(TempKeyBuffer.data());
+                Y_DEFER {
+                    for (auto& key : TempKeyBuffer) {
+                        key.UnRef();
+                    }
+                };
 
                 // TODO: Checkpoint: ensure RefCounts are == 1
 
@@ -1150,10 +1163,6 @@ protected:
                     GenericAggregation->InitState(statePtr, inputPtrs.data());
                 } else {
                     GenericAggregation->UpdateState(statePtr, inputPtrs.data());
-                }
-
-                for (auto& key : TempKeyBuffer) {
-                    key.UnRef();
                 }
 
                 if (isNew) {
@@ -1217,6 +1226,7 @@ protected:
         TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
 
         LoadItemAndKey(input, keyBuf.data());
+        Y_DEFER { DiscardComputedKey(keyBuf); };
 
         {
             auto stateNodesIter = Nodes.InitResultNodes.begin();
@@ -1236,13 +1246,12 @@ protected:
                 *out = node->GetValue(Ctx);
             }
         }
-
-        DiscardComputedKey(keyBuf);
     }
 
     EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
         TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
         LoadItemAndKey(input, keyBuf.data());
+        Y_DEFER { DiscardComputedKey(keyBuf); };
         return ProcessFetchedRow(input, keyBuf, Hasher(keyBuf.data()));
     }
 
@@ -1270,8 +1279,6 @@ protected:
                 rowBuffer[i] = *input[i];
                 rowBuffer[i].Ref();
             }
-            DiscardComputedKey(keyBuf);
-
             if (SampleSpillingInput) {
                 auto estimated = EstimateUvPackSize(
                     TArrayRef<const TUnboxedValuePod>(rowBuffer, InputUnpackedWidth),
@@ -1321,8 +1328,6 @@ protected:
         } else {
             GenericAggregation->UpdateState(statePtr, input);
         }
-
-        DiscardComputedKey(keyBuf);
 
         auto canFitMoreKeys = [&]() -> bool {
             if (isNew) {

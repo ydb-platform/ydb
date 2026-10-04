@@ -1140,13 +1140,14 @@ void RunTemporalAggregationTest(bool useFlow, bool useBlocks, bool isAggregator,
 }
 
 template<bool LLVM>
-void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failInit) {
-    TDqSetup<LLVM> setup(GetHashCombineNodeFactory());
+void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failInit, bool spilling = false) {
+    TDqSetup<LLVM, true> setup(GetHashCombineNodeFactory());
     auto& pb = setup.GetDqProgramBuilder();
     auto* optionalInput = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
     auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
         pb.NewStreamType(pb.NewMultiType({optionalInput, stringType}))).Build();
+    const auto keySource = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", stringType).Build();
     const bool mixed = mixedWidth != 0;
     const size_t width = mixed ? mixedWidth : 5;
     const size_t prefix = mixed ? 1 : 0;
@@ -1178,8 +1179,8 @@ void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failI
     if (useFlow) {
         input = pb.ToFlow(input, {});
     }
-    auto root = GetOperatorNode(pb, true, false, 128_MB, input,
-        [&](TRuntimeNode::TList) -> TRuntimeNode::TList { return {pb.template NewDataLiteral<ui32>(0)}; },
+    auto root = GetOperatorNode(pb, true, spilling, 128_MB, input,
+        [&](TRuntimeNode::TList) -> TRuntimeNode::TList { return {TRuntimeNode(keySource, false)}; },
         [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return results(items, failInit); },
         [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList) { return results(items, true); },
         [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
@@ -1188,15 +1189,22 @@ void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failI
     }
     NUdf::TUnboxedValue initial = NUdf::TUnboxedValuePod(NUdf::TStringValue("initial heap string for throwing aggregation"));
     NUdf::TUnboxedValue replacement = NUdf::TUnboxedValuePod(NUdf::TStringValue("replacement heap string for throwing aggregation"));
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string key for throwing aggregation"));
     std::vector<std::vector<NUdf::TUnboxedValue>> snapshots;
-    auto graph = setup.BuildGraph(root, {source});
+    auto graph = setup.BuildGraph(root, {source, keySource});
     ApplyTestPoint(graph, [&](TDqHashCombineTestPoints& points) {
         points.SetStateSnapshotOnDestroy([&](std::vector<NUdf::TUnboxedValue> values) {
             snapshots.push_back(std::move(values));
         });
     });
+    auto storage = spilling ? std::make_shared<TPreallocatedSpillerFactory>(1_MB) : nullptr;
+    graph->GetContext().SpillerFactory = storage;
+    graph->GetEntryPoint(1, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(key));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
         new TGeneratedWideStream(failInit ? 1 : 2, [&](size_t row) {
+            if (spilling && row == 0) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
             return std::vector<NUdf::TUnboxedValue>{
                 row == 0 && !failInit ? NUdf::TUnboxedValuePod(i64{1}) : NUdf::TUnboxedValuePod{},
                 row == 0 ? initial : replacement};
@@ -1205,31 +1213,87 @@ void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failI
     std::vector<NUdf::TUnboxedValue> output(prefix + width);
     {
         TThrowingBindTerminator terminator;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(output.data(), output.size()), TTerminateException,
+        auto fetch = [&] {
+            while (stream.WideFetch(output.data(), output.size()) == NUdf::EFetchStatus::Yield) {
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        };
+        UNIT_ASSERT_EXCEPTION_CONTAINS(fetch(), TTerminateException,
             "aggregation partial state test");
     }
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
     stream = {};
     graph.Destroy();
-    UNIT_ASSERT_VALUES_EQUAL(snapshots.size(), 1);
-    const auto& state = snapshots.front();
-    if (mixed) {
-        const auto value = state[0].GetElement(0);
-        UNIT_ASSERT_VALUES_EQUAL(TString(value.AsStringRef()), TString((failInit ? initial : replacement).AsStringRef()));
-    }
-    for (size_t i = 0; i < width; ++i) {
-        const auto& value = state[prefix + i];
-        const bool completed = i + 1 < width;
-        const bool present = completed ? i % 2 == 0 : !failInit && i % 2 != 0;
-        UNIT_ASSERT_VALUES_EQUAL(bool(value), present);
-        if (value) {
-            const i64 actual = mixed ? (i % 3 == 0 ? value.Get<i64>() : i % 3 == 1 ? value.Get<i32>() : value.Get<i16>()) :
-                bits == 64 ? value.Get<i64>() : bits == 32 ? value.Get<i32>() : value.Get<i16>();
-            UNIT_ASSERT_VALUES_EQUAL(actual, (completed ? 200 : 100) + i);
+    if (spilling) {
+        UNIT_ASSERT(!storage->GetCreatedSpillers().empty());
+        UNIT_ASSERT(snapshots.empty());
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.size(), 1);
+        const auto& state = snapshots.front();
+        if (mixed) {
+            const auto value = state[0].GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(TString(value.AsStringRef()), TString((failInit ? initial : replacement).AsStringRef()));
+        }
+        for (size_t i = 0; i < width; ++i) {
+            const auto& value = state[prefix + i];
+            const bool completed = i + 1 < width;
+            const bool present = completed ? i % 2 == 0 : !failInit && i % 2 != 0;
+            UNIT_ASSERT_VALUES_EQUAL(bool(value), present);
+            if (value) {
+                const i64 actual = mixed ? (i % 3 == 0 ? value.Get<i64>() : i % 3 == 1 ? value.Get<i32>() : value.Get<i16>()) :
+                    bits == 64 ? value.Get<i64>() : bits == 32 ? value.Get<i32>() : value.Get<i16>();
+                UNIT_ASSERT_VALUES_EQUAL(actual, (completed ? 200 : 100) + i);
+            }
         }
     }
     snapshots.clear();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
     UNIT_ASSERT_VALUES_EQUAL(initial.RefCount(), 1);
     UNIT_ASSERT_VALUES_EQUAL(replacement.RefCount(), 1);
+}
+
+template<bool LLVM>
+void RunThrowingKeyTest(bool useFlow, bool failFirst) {
+    TDqSetup<LLVM> setup(GetHashCombineNodeFactory());
+    auto& pb = setup.GetDqProgramBuilder();
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto* optionalInput = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({stringType, optionalInput}))).Build();
+    TRuntimeNode input(source, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = GetOperatorNode(pb, true, false, 128_MB, input,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {items[0], pb.Unwrap(items[1],
+                pb.template NewDataLiteral<NUdf::EDataSlot::String>("aggregation partial key test"), __FILE__, __LINE__, 0)};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+            return {pb.template NewDataLiteral<ui64>(1)};
+        },
+        [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList) { return keys; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string for partial key extraction"));
+    auto graph = setup.BuildGraph(root, {source});
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(failFirst ? 1 : 2, [&](size_t row) {
+            return std::vector<NUdf::TUnboxedValue>{key,
+                row == 0 && !failFirst ? NUdf::TUnboxedValuePod(i64{1}) : NUdf::TUnboxedValuePod{}};
+        })));
+    auto stream = graph->GetValue();
+    NUdf::TUnboxedValue output[2];
+    {
+        TThrowingBindTerminator terminator;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(output, 2), TTerminateException,
+            "aggregation partial key test");
+    }
+    stream = {};
+    graph.Destroy();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
 }
 
 std::vector<NUdf::TUnboxedValue> WideNullableKey(size_t group) {
@@ -2060,6 +2124,15 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 RunThrowingStateTest<UseLLVM>(UseFlow, 64, width, init);
             }
         }
+    }
+
+    Y_UNIT_TEST_QUAD(TestStateExceptionDuringSpillReplay, UseLLVM, UseFlow) {
+        RunThrowingStateTest<UseLLVM>(UseFlow, 64, 0, false, true);
+    }
+
+    Y_UNIT_TEST_QUAD(TestPartialKeyException, UseLLVM, UseFlow) {
+        RunThrowingKeyTest<UseLLVM>(UseFlow, true);
+        RunThrowingKeyTest<UseLLVM>(UseFlow, false);
     }
 
     Y_UNIT_TEST_QUAD(TestWideNullableKeyGrouping, UseLLVM, UseFlow) {

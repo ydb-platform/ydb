@@ -53,8 +53,8 @@ items:
   - name: Hive
     href: hive.md
     items:
-     - name: Tablet Boot Process
-       href: hive-booting.md
+    - name: Tablet Boot Process
+      href: hive-booting.md
   - name: DataShard
     items:
     - name: Locks and transaction change visibility
@@ -94,3 +94,5 @@ items:
   items:
   - name: Chaos Testing
     href: testing/chaos-testing.md
+- name: Logging
+  href: logging.md

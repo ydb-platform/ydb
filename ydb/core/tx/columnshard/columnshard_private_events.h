@@ -95,10 +95,25 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
+        EvContinueUnusedHistory,
+        EvUnusedHistoryPortionsReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    // Drives the unused-history scan one batch at a time instead of blocking the tablet on a single turn.
+    struct TEvContinueUnusedHistory: NActors::TEventLocal<TEvContinueUnusedHistory, EvContinueUnusedHistory> {};
+
+    // Carries the portion addresses to walk, collected off the tablet mailbox.
+    struct TEvUnusedHistoryPortionsReady: NActors::TEventLocal<TEvUnusedHistoryPortionsReady, EvUnusedHistoryPortionsReady> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+
+        explicit TEvUnusedHistoryPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+            : Portions(std::move(portions))
+        {
+        }
+    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

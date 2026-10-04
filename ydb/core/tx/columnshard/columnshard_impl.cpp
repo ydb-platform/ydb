@@ -1318,6 +1318,13 @@ void TColumnShard::Die(const TActorContext& ctx) {
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
+        case TEvTablet::TEvCutTabletHistory::EventType:
+            // The cookie is the interval index plus one; clearing Attempted lets the next periodic wakeup resend.
+            if (UnusedHistoryScan && ev->Cookie && ev->Cookie <= UnusedHistoryScan->Intervals.size()) {
+                UnusedHistoryScan->Intervals[ev->Cookie - 1].Attempted = false;
+                UnusedHistoryScan->RetryDelivery = true;
+            }
+            break;
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
             YDB_LOG_WARN("",
                 {"event", "failed_to_deliver_config_subscription_request"});
@@ -1857,6 +1864,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
+    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},
@@ -1973,6 +1981,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(TEvPrivate::TEvContinueUnusedHistory, Handle);
+        HFunc(TEvPrivate::TEvUnusedHistoryPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);

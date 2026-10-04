@@ -13,6 +13,9 @@
 
 namespace NKikimr::NColumnShard {
 
+// Channels 0 and 1 are the executor's own log and system channels; data starts here.
+inline constexpr ui32 FirstDataChannel = 2;
+
 struct TLimits {
 private:
     static constexpr ui64 MAX_BLOB_SIZE_LIMIT = 8 * 1024 * 1024;

@@ -6,7 +6,9 @@
 
 #include <util/generic/string.h>
 
+#include <set>
 #include <tuple>
+#include <utility>
 
 namespace NKikimrColumnShardProto {
 class TBlobRange;
@@ -15,6 +17,9 @@ class TUnifiedBlobId;
 }   // namespace NKikimrColumnShardProto
 
 namespace NKikimr::NOlap {
+
+// Channel and generation of every blob the GC bookkeeping still owns, ordered so a range query is a lower_bound.
+using TPendingGCBlobGenerations = std::set<std::pair<ui32, ui32>>;
 
 class IBlobGroupSelector {
 protected:

@@ -25,6 +25,8 @@ namespace NKikimr::NOlap {
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
+bool HasPendingGCBlobsInRange(const TPendingGCBlobGenerations& generations, ui32 channel, ui32 from, ui32 to);
+
 // A batch of blobs that are written by a single task.
 // The batch is later saved or discarded as a whole.
 class TBlobBatch: public TMoveOnly {
@@ -190,6 +192,8 @@ public:
     bool IsWeightedDataChannelSelectionEnabled() const {
         return WeightedDataChannelSelection;
     }
+
+    TPendingGCBlobGenerations GetPendingGCBlobGenerations() const;
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);

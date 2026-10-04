@@ -13,9 +13,19 @@ private:
     THashMap<TString, std::shared_ptr<TSourceSession>> SourceSessions;
     THashMap<TString, std::shared_ptr<TDestinationSession>> DestSessions;
     TAtomicCounter SharingSessions;
+    bool AdmissionSeen = false;
 
 public:
     TSessionsManager() = default;
+
+    // A session that was admitted once may still hold links the scan cannot see, so history stays frozen for this generation.
+    void OnSharingAdmission() {
+        AdmissionSeen = true;
+    }
+
+    bool CanCutHistory() const {
+        return !AdmissionSeen && SourceSessions.empty() && DestSessions.empty();
+    }
 
     void StartSharingSession() {
         SharingSessions.Inc();

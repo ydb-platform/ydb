@@ -542,6 +542,30 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     return result;
 }
 
+TPendingGCBlobGenerations TBlobManager::GetPendingGCBlobGenerations() const {
+    TPendingGCBlobGenerations result;
+    const auto add = [&](const TLogoBlobID& id) {
+        if (id.TabletID() == static_cast<ui64>(SelfTabletId)) {
+            result.emplace(id.Channel(), id.Generation());
+        }
+    };
+    for (const auto& id : BlobsToKeep) {
+        add(id);
+    }
+    for (const auto& [blob, _] : BlobsToDelete) {
+        add(blob.GetLogoBlobId());
+    }
+    for (const auto& [blob, _] : BlobsToDeleteDelayed) {
+        add(blob.GetLogoBlobId());
+    }
+    return result;
+}
+
+bool HasPendingGCBlobsInRange(const TPendingGCBlobGenerations& generations, const ui32 channel, const ui32 from, const ui32 to) {
+    const auto it = generations.lower_bound({ channel, from });
+    return it != generations.end() && it->first == channel && it->second < to;
+}
+
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
     // We assume here that all the channels have the same group type.
     // We get [2] because it is the first channel where we store data.

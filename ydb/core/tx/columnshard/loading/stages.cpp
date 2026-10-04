@@ -42,7 +42,12 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     AFL_VERIFY(Self->StoragesManager);
-    return Self->StoragesManager->LoadIdempotency(txc.DB);
+    if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
+        return false;
+    }
+    // The channel history is known from the storage info, but the shared-blob links only after the storages load.
+    Self->InitUnusedHistoryScan();
+    return true;
 }
 
 bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

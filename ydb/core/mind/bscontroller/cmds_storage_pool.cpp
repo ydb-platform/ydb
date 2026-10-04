@@ -174,8 +174,9 @@ namespace NKikimr::NBsController {
                     GroupContentChanged.insert(it->second);
                 }
             }
-            // retain some fields
+            // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
             storagePool.BridgeMode = cur.BridgeMode;
+            storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
         } else {
             // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
@@ -263,6 +264,39 @@ namespace NKikimr::NBsController {
         }
 
         storagePools.erase(id);
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TUpdateStoragePoolSettings& cmd, TStatus& /*status*/) {
+        const TBoxStoragePoolId id(cmd.GetBoxId(), cmd.GetStoragePoolId());
+        const auto it = StoragePools.Get().find(id);
+        if (it == StoragePools.Get().end()) {
+            throw TExError() << "StoragePoolId# " << id << " not found";
+        } else if (it->second.DDisk) {
+            throw TExError() << "can't invoke UpdateStoragePoolSettings against DDisk pool";
+        }
+
+        NKikimrBlobStorage::TStoragePoolSettings settings;
+        Serialize(&settings, it->second);
+        const auto *descriptor = settings.GetDescriptor();
+        const auto *reflection = settings.GetReflection();
+        for (const auto& name : cmd.GetReset()) {
+            const auto *field = descriptor->FindFieldByName(name);
+            if (!field) {
+                throw TExError() << "unknown setting# " << name;
+            } else if (reflection->HasField(cmd.GetSettings(), field)) {
+                throw TExError() << "setting# " << name << " is both set and reset";
+            }
+            reflection->ClearField(&settings, field);
+        }
+        settings.MergeFrom(cmd.GetSettings());
+
+        const TMaybe<ui32> numLeadingDisks = settings.HasVDiskHeapAllocatorNumLeadingDisks()
+            ? MakeMaybe(settings.GetVDiskHeapAllocatorNumLeadingDisks())
+            : Nothing();
+        if (numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks) {
+            StoragePools.Unshare().at(id).VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
+            HeapAllocatorNumLeadingDisksChanged.insert(id);
+        }
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/, TStatus& status) {

@@ -620,6 +620,67 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             << " mismatches# " << FormatList(mismatches));
     }
 
+    // Heap-mode gauges {SizeClass, Stripe} of each running VDisk of the static group, keyed by order number.
+    THashMap<ui32, std::pair<i64, i64>> StaticGroupHeapModes(TTestBasicRuntime& runtime) {
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        THashMap<ui32, std::pair<i64, i64>> modes;
+        for (ui32 orderNumber = 0; orderNumber < 8; ++orderNumber) {
+            auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "vdisks");
+            const std::pair<TString, TString> chain[] = {
+                {"storagePool", "static"},
+                {"group", Sprintf("%09" PRIu32, groupId)},
+                {"orderNumber", Sprintf("%02" PRIu32, orderNumber)},
+                {"pdisk", Sprintf("%09" PRIu32, 0)},
+            };
+            for (const auto& [name, value] : chain) {
+                if (counters) {
+                    counters = counters->FindSubgroup(name, value);
+                }
+            }
+            if (!counters) {
+                continue; // the VDisk is not running
+            }
+            counters->EnumerateSubgroups([&](const TString& name, const TString& media) {
+                const auto state = counters->FindSubgroup(name, media)->FindSubgroup("subsystem", "state");
+                UNIT_ASSERT(state);
+                modes[orderNumber] = {state->GetCounter("HeapAllocatorSizeClass")->Val(),
+                    state->GetCounter("HeapAllocatorStripe")->Val()};
+            });
+        }
+        return modes;
+    }
+
+    // Block-4-2 static group: eight VDisks, order number equals the domain index.
+    // N = 1 enables only order 0. Poisoning that disk drops both gauges.
+    CUSTOM_UNIT_TEST(StaticGroupHeapAllocatorNumLeadingDisks) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, "", nullptr, {}, [&](ui32, TNodeWardenConfig& config) {
+            config.FeatureFlags->SetEnableVDiskHeapAllocator(true);
+            config.BlobStorageConfig->SetVDiskHeapAllocatorNumLeadingDisks(1);
+        }, false);
+
+        const auto modes = StaticGroupHeapModes(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(modes.size(), 8);
+        for (const auto& [orderNumber, mode] : modes) {
+            const bool stripe = orderNumber == 0;
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.first, stripe ? 0 : 1, orderNumber);
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.second, stripe ? 1 : 0, orderNumber);
+        }
+
+        runtime.Send(new IEventHandle(MakeBlobStorageVDiskID(runtime.GetNodeId(0), 0, 0), {}, new TEvents::TEvPoisonPill()), 0);
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::TSystem::Gone));
+        runtime.DispatchEvents(options);
+
+        const auto after = StaticGroupHeapModes(runtime);
+        UNIT_ASSERT_C(!after.contains(0), "order 0 gauges survived VDisk termination");
+        UNIT_ASSERT_VALUES_EQUAL(after.size(), 7);
+        for (const auto& [orderNumber, mode] : after) {
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.first, 1, orderNumber);
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.second, 0, orderNumber);
+        }
+    }
+
     void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored,
             NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
         auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max());

@@ -47,6 +47,7 @@ PY_SRCS(
 
     dstool_cmd_pool_create_virtual.py
     dstool_cmd_pool_list.py
+    dstool_cmd_pool_set.py
 
     dstool_cmd_box_list.py
 

@@ -1,0 +1,2612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TPC-C Now</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23bc4c00'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui,sans-serif' font-size='14' font-weight='800' fill='white'%3ETC%3C/text%3E%3C/svg%3E" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
+    --muted: #656d76; --bad: #cf222e; --warn: #bf8700; --ok: #1a7f37; --info: #0969da;
+    --broken: #a40e26; --broken-bg: #ffd7d5;
+    --regress: #bc4c00; --regress-bg: #fff1e5;
+    --miss: #8250df; --miss-bg: #fbefff;
+  }
+  * { box-sizing: border-box; }
+  html { max-width: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+    max-width: 100%; overflow-x: hidden; /* page never grows; panes scroll inside */
+  }
+  .wrap {
+    max-width: 1400px; width: 100%; margin: 0 auto; padding: 14px 14px 48px;
+    min-width: 0;
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 15px; margin: 16px 0 8px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .note {
+    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: #0550ae; margin: 0 0 8px;
+  }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 999px; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge.broken { background: var(--broken-bg); color: var(--broken); }
+  .badge.missing { background: var(--miss-bg); color: var(--miss); }
+  .badge.regression, .badge.both, .badge.lat, .badge.tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.lat_tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
+  .badge.in_progress { background: #ddf4ff; color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    background: #eaeef2; color: var(--muted); font-weight: 600;
+  }
+  a.pill.ticket {
+    display: inline-block; background: #ddf4ff; color: #0969da; text-decoration: none;
+    font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: middle; margin: 2px 2px 0 0;
+  }
+  a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  a.pill.ticket.closed {
+    background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de;
+  }
+  a.pill.ticket.closed:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #8c959f66; }
+  a.pill.ticket.wait-next {
+    background: #ddf4ff; color: #0550ae; box-shadow: inset 0 0 0 1px #0969da44;
+  }
+  a.pill.ticket.wait-next:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  .counters {
+    display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .counter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; flex: 1 1 0; min-width: 96px;
+  }
+  .counter .n {
+    font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
+    line-height: 1.1; white-space: nowrap;
+  }
+  .counter .n .sel { font-size: 0.85em; opacity: .85; }
+  .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .counter.hot .n { color: var(--broken); }
+  .counter.regress .n { color: var(--regress); }
+  .counter.miss .n { color: var(--miss); }
+  .counter.info .n { color: var(--info); }
+  .counter.warn .n { color: var(--warn); }
+  .counter.ok .n { color: var(--ok); }
+
+  .heat-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    max-width: 100%; min-width: 0; margin-bottom: 18px;
+    overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  table.heat {
+    border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px;
+  }
+  table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  table.heat th:first-child, table.heat td:first-child {
+    text-align: left; position: sticky; left: 0; z-index: 2;
+    background: #fafbfc; box-shadow: 1px 0 0 var(--border);
+  }
+  table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+  .cell {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
+  }
+  .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
+  .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
+  .cell.regression, .cell.lat, .cell.tpmc, .cell.both {
+    background: var(--regress-bg); color: var(--regress); cursor: pointer;
+  }
+  .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
+  .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
+  .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell.nodata { background: #f6f8fa; color: #656d76; cursor: pointer; }
+  /* compare deltas: 40% was · 20% blend · 40% now */
+  .cell.delta-worse {
+    /* ok → bad */
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
+    color: var(--bad); cursor: pointer;
+  }
+  .cell.delta-worse-hot {
+    /* already bad → worse (lat/tpmC grew further): light red → dark red */
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #ffcecb 60%, #ff8182 100%);
+    color: var(--broken); cursor: pointer;
+    box-shadow: inset 0 0 0 1px #ff818266;
+  }
+  .cell.delta-better {
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; cursor: pointer;
+  }
+  .cell.delta-mixed {
+    background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #ddf4ff 60%, #ddf4ff 100%);
+    color: #9a6700; cursor: pointer;
+  }
+  .cell.delta-same { background: #f6f8fa; color: var(--muted); cursor: pointer; }
+  .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
+  .cell .cnt { font-size: 11px; opacity: .85; }
+  .cmp-cell { text-align: left; vertical-align: middle; min-width: 200px; }
+  .cmp-cell select {
+    max-width: 280px; width: 100%; padding: 4px 6px; font: inherit; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 6px; background: #fff;
+  }
+  .heat-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .heat-legend .swatch { display: inline-flex; align-items: center; gap: 6px; }
+  .heat-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 0;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+  }
+  label { display: grid; gap: 2px; font-size: 10px; color: var(--muted); }
+  select, input[type="date"] {
+    min-width: 110px; padding: 4px 6px; border: 1px solid var(--border);
+    border-radius: 5px; background: #fff; font: inherit; font-size: 12px;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+  .toolbar button, .btn {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 5px;
+    padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
+  .top-filters {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px;
+    margin: 0 0 12px; padding: 6px 10px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .top-filters .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+  .top-filters .sep { width: 1px; height: 22px; background: var(--border); flex: 0 0 auto; }
+  .top-filters .wave-btn { padding: 3px 8px; font-size: 11px; border-radius: 999px; }
+  .top-filters .filters { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .top-filters label { display: flex; flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
+  .top-filters select, .top-filters input[type="date"] { min-width: 0; }
+  .inbox-filters { margin: 0 0 8px; }
+
+  #inbox {
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  table.inbox {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: transparent; border: 0;
+    table-layout: auto;
+  }
+  table.inbox th {
+    text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
+  }
+  table.inbox td {
+    padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  table.inbox tr:last-child td { border-bottom: 0; }
+  table.inbox tr.row { cursor: pointer; }
+  table.inbox tr.row:hover { filter: brightness(0.985); }
+  table.inbox tr.row.open { background: #f6f8fa; }
+  table.inbox tr.detail td {
+    background: #f6f8fa; padding: 12px 14px;
+    /* Keep dive/charts inside the visible inbox width (not clipped by page). */
+    max-width: 0; /* colspan cell inherits table width */
+    overflow-x: auto;
+  }
+  table.inbox tr.detail.hidden { display: none; }
+  .cluster { font-weight: 700; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .bad { color: var(--bad); }
+  .okish { color: var(--ok); }
+  .num { text-align: right; }
+  .mcell { min-width: 132px; text-align: left; line-height: 1.25; }
+  .mcell .big {
+    font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--text);
+  }
+  .mcell .big.bad { color: var(--bad); }
+  .mcell .big.muted { color: var(--muted); }
+  .mcell .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .mcell .delta { margin-top: 4px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mcell .delta.bad { color: var(--bad); }
+  .mcell .delta.good { color: var(--ok); }
+
+  .dive { display: grid; gap: 12px; min-width: 0; max-width: 100%; }
+  .runs {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 5px;
+  }
+  .run-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 6px; font-size: 10px; line-height: 1.25; min-width: 0;
+    cursor: pointer; transition: box-shadow .12s, border-color .12s;
+  }
+  .run-card:hover { border-color: var(--info); }
+  .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
+  .run-card.cmp { border-color: #9a6700; box-shadow: 0 0 0 2px #9a670033; }
+  .run-card .t {
+    font-weight: 650; margin-bottom: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .run-card .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart-box {
+    height: 260px; min-width: 0; max-width: 100%;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  .chart-box canvas { max-width: 100% !important; }
+  .pair {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;
+    min-width: 0; width: 100%;
+  }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  a { color: var(--info); }
+  .wave-btn {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
+    cursor: pointer; white-space: nowrap;
+  }
+  .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
+  .wave-btn:hover { filter: brightness(0.97); }
+  .counter.info .n { color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+
+  /* Floating Save / Copy context — visible when a dive row is open */
+  .duty-fab-wrap {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1200;
+    display: none; flex-direction: column-reverse; align-items: flex-end; gap: 12px;
+  }
+  .duty-fab-wrap.visible { display: flex; }
+  .duty-fab {
+    width: 68px; height: 68px; border-radius: 50%; border: 3px solid #fff;
+    background: linear-gradient(145deg, #e5534b 0%, #a40e26 100%);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 8px 28px #cf222e88, 0 2px 8px #0004;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+  }
+  .duty-fab:hover { transform: scale(1.08); filter: brightness(1.06); }
+  .duty-fab:active { transform: scale(0.96); }
+  .duty-fab svg { width: 34px; height: 34px; display: block; }
+  .duty-fab-copy {
+    width: 48px; height: 48px; border-width: 2px;
+    background: linear-gradient(145deg, #54aeff 0%, #0969da 100%);
+    box-shadow: 0 6px 18px #0969da66, 0 2px 6px #0003;
+  }
+  .duty-fab-copy svg { width: 22px; height: 22px; }
+  .duty-fab-toast {
+    position: absolute; right: 80px; bottom: 18px;
+    background: #24292f; color: #fff; font-size: 13px; font-weight: 650;
+    padding: 8px 12px; border-radius: 8px; white-space: nowrap;
+    box-shadow: 0 4px 16px #0004; pointer-events: none;
+  }
+  .duty-fab-toast.fail { background: #a40e26; }
+  .duty-fab-hint {
+    position: absolute; right: 80px; bottom: 52px;
+    background: #fff; color: var(--text); font-size: 12px; font-weight: 650;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+    box-shadow: 0 4px 14px #0002; white-space: nowrap; pointer-events: none;
+  }
+
+  /* Mobile: keep wide tables inside scroll panes; do not grow the page width. */
+  @media (max-width: 720px) {
+    .wrap { padding: 10px 8px 80px; }
+    h1 { font-size: 18px; }
+    .note { font-size: 11px; }
+    .cell { min-width: 56px; padding: 4px 6px; gap: 4px; font-size: 11px; }
+    .cmp-cell { min-width: 140px; }
+    .cmp-cell select { max-width: 160px; }
+    .mcell { min-width: 96px; }
+    table.heat { font-size: 11px; }
+    table.heat th, table.heat td { padding: 6px; }
+    table.inbox { font-size: 12px; }
+    table.inbox th, table.inbox td { padding: 8px; }
+    table.inbox th:nth-child(n+4),
+    table.inbox tr.row td:nth-child(n+4) { display: none; }
+    table.inbox tr.detail td { padding: 10px; }
+    .filters { gap: 6px; }
+    .filters label { min-width: 0; }
+    .filters select { min-width: 0; max-width: 100%; }
+    .duty-fab-wrap { right: 12px; bottom: 12px; gap: 8px; }
+    .duty-fab { width: 56px; height: 56px; }
+    .duty-fab svg { width: 28px; height: 28px; }
+    .duty-fab-copy { width: 44px; height: 44px; }
+    .duty-fab-hint, .duty-fab-toast { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TPC-C Now</h1>
+  <div class="sub" id="subtitle"></div>
+
+  <div class="top-filters" id="topFilters">
+    <span class="lbl">Wave</span>
+    <span id="waveBar" style="display:inline-flex;gap:4px">
+      <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true" title="данные последнего завершённого">finished</button>
+      <button type="button" class="wave-btn" data-wave="all" aria-pressed="false" title="latest в т.ч. in progress">all</button>
+    </span>
+    <span class="sep"></span>
+    <div class="filters" id="branchBar">
+      <label>Branch <select id="fBranch"></select></label>
+      <label>From <input type="date" id="winFrom" /></label>
+      <label>To <input type="date" id="winTo" /></label>
+      <div class="toolbar">
+        <button type="button" id="winApply">Apply</button>
+        <button type="button" id="winReset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="counters" id="counters"></div>
+
+  <h2>Heatmap · Cluster × run_type</h2>
+  <div class="heat-wrap">
+    <div class="heat-legend">
+      <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · lat cap / outlier</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>lat↑ / tpmC↓ · с Δ%</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
+      <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
+      <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+      <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#ffebe9 60%,#ffebe9 100%);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse (ok→bad)</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#ffcecb 60%,#ff8182 100%);box-shadow:inset 0 0 0 1px #a40e26"></span>compare worse (bad→worse)</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fff8c5 0%,#fff8c5 40%,#ddf4ff 60%,#ddf4ff 100%);box-shadow:inset 0 0 0 1px #9a6700"></span>compare mixed (lat↔tpmC)</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
+    </div>
+    <div id="heatmap"></div>
+  </div>
+
+  <h2>Inbox</h2>
+  <div class="filters inbox-filters">
+    <label>Issue
+      <select id="fIssue">
+        <option value="">all hot</option>
+        <option value="ok">ok / watch</option>
+        <option value="missing">missing</option>
+        <option value="in_progress">in progress</option>
+        <option value="broken">broken</option>
+        <option value="lat">lat↑</option>
+        <option value="tpmc">tpmC↓</option>
+        <option value="both">lat+tpmc</option>
+        <option value="stale">stale</option>
+      </select>
+    </label>
+    <label>Cluster
+      <select id="fDb"><option value="">all</option></select>
+    </label>
+    <label>Run type
+      <select id="fFam"><option value="">all</option></select>
+    </label>
+  </div>
+  <div id="inbox"></div>
+</div>
+
+<div id="dutyFab" class="duty-fab-wrap" aria-hidden="true">
+  <span class="duty-fab-hint">Save context</span>
+  <span class="duty-fab-toast" hidden></span>
+  <button type="button" class="duty-fab" id="dutyFabSave"
+    title="Save context — скачать JSON инцидента для duty_agent"
+    aria-label="Save context">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="currentColor" d="M8 6h24l8 8v28H8V6z"/>
+      <path fill="#fff" d="M14 6h16v13H14z" opacity=".95"/>
+      <path fill="#fff" d="M14 30h20v10H14z" opacity=".92"/>
+      <circle cx="36" cy="14" r="11" fill="#fff"/>
+      <path fill="#a40e26" d="M36 6.5l8.5 15h-17L36 6.5z"/>
+      <rect x="34.6" y="12" width="2.8" height="5.5" rx="1" fill="#fff"/>
+      <rect x="34.6" y="19" width="2.8" height="2.4" rx="1" fill="#fff"/>
+    </svg>
+  </button>
+  <button type="button" class="duty-fab duty-fab-copy" id="dutyFabCopy"
+    title="Copy context — скопировать JSON в буфер"
+    aria-label="Copy context">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+    </svg>
+  </button>
+</div>
+
+<script type="application/json" id="tpcc-report-data">__TPCC_REPORT_DATA__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('tpcc-report-data').textContent);
+const charts = {};
+const UI = DATA.ui || {};
+let winFrom = UI.default_from || null;
+let winTo = UI.default_to || null;
+const WAVE_KEY = 'tpcc_now_wave_view';
+function defaultWave() { return 'finished'; }
+function loadWave() {
+  try {
+    const v = localStorage.getItem(WAVE_KEY);
+    return (v === 'all' || v === 'finished') ? v : defaultWave();
+  } catch (_) {
+    return defaultWave();
+  }
+}
+let waveState = loadWave();
+function waveView() { return waveState; }
+
+const CMP_KEY = 'tpcc_now_compare_waves';
+let compareState = {};
+try { compareState = JSON.parse(sessionStorage.getItem(CMP_KEY) || '{}') || {}; } catch (_) { compareState = {}; }
+function cmpKey(branch, db) { return `${branch || ''}|${db || ''}`; }
+function getCompareId(branch, db) {
+  return compareState[cmpKey(branch, db)] || '';
+}
+function setCompareId(branch, db, id) {
+  const k = cmpKey(branch, db);
+  if (!id) delete compareState[k];
+  else compareState[k] = id;
+  try { sessionStorage.setItem(CMP_KEY, JSON.stringify(compareState)); } catch (_) {}
+}
+function waveListFor(branch, db) {
+  return (DATA.wave_list && DATA.wave_list[cmpKey(branch, db)]) || [];
+}
+function waveEntry(branch, db, id) {
+  if (!id) return null;
+  return waveListFor(branch, db).find(w => w.id === id || w.ci_version === id || w.day === id) || null;
+}
+function pctChange(base, now) {
+  if (base == null || now == null) return null;
+  const b = Number(base), n = Number(now);
+  if (!Number.isFinite(b) || !Number.isFinite(n) || b === 0) return null;
+  return ((n - b) / b) * 100;
+}
+function itemMetrics(item) {
+  return (item.issue === 'in_progress' && item.finished) ? item.finished : item;
+}
+/** Last non-synthetic history index (skip trailing in_progress/missing). */
+function lastCompletedHistIndex(hist) {
+  const n = (hist && hist.labels || []).length;
+  const markers = (hist && hist.markers) || [];
+  for (let i = n - 1; i >= 0; i--) {
+    const m = markers[i] || 'ok';
+    if (m !== 'in_progress' && m !== 'missing') return i;
+  }
+  return n - 1;
+}
+/** True when prev7 before index/wave has at least one metric — else classify is undefined. */
+function baselineUsable(lat_base, tpmc_base) {
+  return lat_base != null || tpmc_base != null;
+}
+/**
+ * Pairwise classify now vs a single baseline point (same thresholds as generate.classify_slice).
+ * Mirror: tpcc/classify_rules.py classify_pair_values
+ * Returns null when baseline is empty (unless capped) — never greenwash window-edge compare.
+ */
+function classifyPairValues(lat_base, tpmc_base, lat_now, tpmc_now, capped_now) {
+  if (!capped_now && !baselineUsable(lat_base, tpmc_base)) return null;
+  const lat_pct = pctChange(lat_base, lat_now);
+  const tpmc_pct = pctChange(tpmc_base, tpmc_now);
+  let lat_status = 'ok';
+  const reasons = [];
+  if (capped_now) {
+    lat_status = 'broken';
+    reasons.push('lat capped');
+  } else if (lat_base != null && lat_now != null && lat_now > lat_base * 3) {
+    lat_status = 'broken';
+    reasons.push('lat outlier >3×');
+  } else if (lat_pct != null && lat_pct >= 10) {
+    lat_status = 'regression';
+    reasons.push(`lat ${pct(lat_pct)}`);
+  } else if (lat_pct != null && lat_pct >= 7) {
+    lat_status = 'watch';
+    reasons.push(`lat ${pct(lat_pct)} watch`);
+  }
+  let tpmc_status = 'ok';
+  if (tpmc_pct != null && tpmc_pct <= -10) {
+    tpmc_status = 'regression';
+    reasons.push(`tpmC ${pct(tpmc_pct)}`);
+  } else if (tpmc_pct != null && tpmc_pct <= -5) {
+    tpmc_status = 'watch';
+    reasons.push(`tpmC ${pct(tpmc_pct)} watch`);
+  }
+  let status = 'ok';
+  if (lat_status === 'broken') status = 'broken';
+  else if (lat_status === 'regression' || tpmc_status === 'regression') status = 'regression';
+  else if (lat_status === 'watch' || tpmc_status === 'watch') status = 'watch';
+  let kind = 'ok';
+  const latHot = lat_status === 'broken' || lat_status === 'regression';
+  const tpmcHot = tpmc_status === 'regression';
+  if (lat_status === 'broken') kind = tpmcHot ? 'both' : 'broken';
+  else if (latHot && tpmcHot) kind = 'both';
+  else if (latHot) kind = 'lat';
+  else if (tpmcHot) kind = 'tpmc';
+  else if (lat_status === 'watch') kind = 'lat';
+  else if (tpmc_status === 'watch') kind = 'tpmc';
+  const issue = kind === 'ok' ? (status === 'watch' ? 'watch' : 'ok') : kind;
+  return {
+    status, kind, issue, reasons,
+    lat_pct, tpmc_pct,
+    n_lat: (latHot || lat_status === 'broken') ? 1 : 0,
+    n_tpmc: tpmcHot ? 1 : 0,
+    n_broken: lat_status === 'broken' ? 1 : 0,
+    capped_now: capped_now ? 1 : 0,
+  };
+}
+/** Display baseline: alert (median prev7) or values from selected compare wave + recalculated status. */
+function resolveDisplayMetrics(item) {
+  const metrics = itemMetrics(item);
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const alert = {
+    mode: 'alert',
+    lat_base: metrics.lat_base,
+    lat_now: metrics.lat_now,
+    lat_pct: metrics.lat_pct,
+    tpmc_base: metrics.tpmc_base,
+    tpmc_now: metrics.tpmc_now,
+    tpmc_pct: metrics.tpmc_pct,
+    status: metrics.status,
+    kind: metrics.kind,
+    issue: metrics.issue || metrics.kind,
+    reasons: metrics.reasons || [],
+    capped_now: metrics.capped_now || 0,
+    label: `median prev${win}`,
+    cmp_day: null,
+  };
+  const cmpId = getCompareId(item.branch, item.db);
+  if (!cmpId) return alert;
+  const wave = waveEntry(item.branch, item.db, cmpId);
+  if (!wave) return alert;
+  const hist = sliceHistory(item);
+  const n = (hist.labels || []).length;
+  if (!n) return { ...alert, note: 'no history for compare' };
+  const nowIdx = lastCompletedHistIndex(hist);
+  const cmpIdx = findHistIndexForWave(hist, wave, { preferUsable: true });
+  if (cmpIdx < 0 || nowIdx < 0) {
+    return { ...alert, note: `compare ${wave.day || cmpId} not in history` };
+  }
+  const markers = hist.markers || [];
+  // Never use lat-cap (32768) as compare baseline — looks like a fake −55% win.
+  let lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  if (!histPointUsableForCompare(hist, cmpIdx)
+      || (lat_base != null && lat_base >= 30000)) {
+    lat_base = null;
+  }
+  const tpmc_base = hist.tpmc[cmpIdx] == null ? null : Number(hist.tpmc[cmpIdx]);
+  const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
+  const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
+  const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
+  const lat_now = capped ? lat_now_raw : lat_now_raw;
+  const pair = classifyPairValues(lat_base, tpmc_base, capped ? null : lat_now, tpmc_now, capped);
+  const day = wave.day || cmpId;
+  if (!pair) {
+    return { ...alert, note: `compare ${day}: empty baseline point` };
+  }
+  return {
+    mode: 'compare',
+    lat_base,
+    lat_now: lat_now_raw,
+    lat_pct: pair.lat_pct,
+    tpmc_base,
+    tpmc_now,
+    tpmc_pct: pair.tpmc_pct,
+    status: pair.status,
+    kind: pair.kind,
+    issue: pair.issue,
+    reasons: pair.reasons.map(x => `${x} vs compare ${day}`),
+    capped_now: pair.capped_now,
+    label: `compare ${day}`,
+    cmp_day: day,
+  };
+}
+function compareReasonsLine(dm) {
+  if (!dm || dm.mode !== 'compare') return null;
+  if (dm.reasons && dm.reasons.length) return dm.reasons.join(' · ');
+  const bits = [];
+  if (dm.lat_pct != null) bits.push(`lat ${pct(dm.lat_pct)} vs ${dm.label}`);
+  if (dm.tpmc_pct != null) bits.push(`tpmC ${pct(dm.tpmc_pct)} vs ${dm.label}`);
+  if (!bits.length) bits.push(dm.issue === 'ok' ? `ok vs ${dm.label}` : `${dm.label}: нет чисел для Δ`);
+  return bits.join(' · ');
+}
+function metricBitsFromDm(dm) {
+  const bits = [];
+  const issue = dm.issue || dm.kind || 'ok';
+  if (issue === 'broken' || (dm.capped_now > 0)) {
+    if (dm.capped_now > 0) bits.push('lat capped');
+    else bits.push('lat broken');
+    if (dm.lat_pct != null && dm.lat_pct >= 10) bits.push(`lat↑ ${pct(dm.lat_pct)}`);
+  } else if ((issue === 'lat' || issue === 'both') && dm.lat_pct != null) {
+    bits.push(`lat↑ ${pct(dm.lat_pct)}`);
+  } else if (issue === 'lat' || issue === 'both') {
+    bits.push('lat↑');
+  } else if (issue === 'watch' && dm.lat_pct != null) {
+    bits.push(`lat↑ ${pct(dm.lat_pct)} watch`);
+  }
+  if ((issue === 'tpmc' || issue === 'both') && dm.tpmc_pct != null) {
+    bits.push(`tpmC↓ ${pct(dm.tpmc_pct)}`);
+  } else if (issue === 'tpmc' || issue === 'both') {
+    bits.push('tpmC↓');
+  }
+  return bits;
+}
+function syncWaveButtons() {
+  const v = waveView();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.wave === v ? 'true' : 'false');
+  });
+}
+function setWave(v) {
+  if (v !== 'all' && v !== 'finished') return;
+  waveState = v;
+  try { localStorage.setItem(WAVE_KEY, waveState); } catch (_) {}
+  syncWaveButtons();
+  destroyCharts();
+  renderAll();
+}
+function rowKey(r) {
+  return r.id || `${r.branch || ''}|${r.db || ''}|${r.suite || ''}|${r.issue || ''}`;
+}
+function suiteKey(r) {
+  return `${r.branch || ''}|${r.db || ''}|${r.suite || ''}`;
+}
+function preferLatestBySuite(rows) {
+  const by = new Map();
+  const passthrough = [];
+  for (const r of rows) {
+    if (!r.suite || r.suite === '—') {
+      passthrough.push(r);
+      continue;
+    }
+    const sk = suiteKey(r);
+    const prev = by.get(sk);
+    if (!prev) { by.set(sk, r); continue; }
+    if (r.issue === 'in_progress') by.set(sk, r);
+    else if (prev.issue !== 'in_progress') by.set(sk, r);
+  }
+  return [...passthrough, ...by.values()];
+}
+function candidateRows() {
+  const mode = waveView();
+  const seen = new Set();
+  const rows = [];
+  for (const raw of (DATA.inbox || [])) {
+    let r = raw;
+    // Finished wave: use finished twin when present (do not drop the suite).
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    rows.push(r);
+  }
+  if (mode === 'all') return preferLatestBySuite(rows);
+  return rows;
+}
+function issueFromTpccPart(part) {
+  if (!part) return 'ok';
+  const st = part.status || '';
+  const kind = part.kind || '';
+  if (st === 'missing' || kind === 'missing') return 'missing';
+  if (st === 'in_progress' || kind === 'in_progress') return 'in_progress';
+  if (st === 'stale' || kind === 'stale') return 'stale';
+  if (st === 'broken' || kind === 'broken') return 'broken';
+  if (st === 'both' || kind === 'both') return 'both';
+  if (st === 'lat' || kind === 'lat') return 'lat';
+  if (st === 'tpmc' || kind === 'tpmc') return 'tpmc';
+  if (st === 'regression') return 'lat';
+  return 'ok';
+}
+/** Compare-aware issue from same-prev7 heatmap now-side (not pairwise dive Δ). */
+function effectiveIssue(r) {
+  const cmpId = getCompareId(r.branch, r.db);
+  if (!cmpId) return r.issue;
+  const wave = waveEntry(r.branch, r.db, cmpId);
+  if (!wave) return r.issue;
+  if (r.issue === 'missing' || r.issue === 'in_progress' || r.issue === 'stale') return r.issue;
+  const part = classifySliceNowVsWaveBaseline(r, wave);
+  if (!part) return r.issue;
+  return issueFromTpccPart(part);
+}
+function isHotIssue(issue) {
+  return ['broken', 'lat', 'tpmc', 'both', 'missing', 'stale', 'in_progress', 'regression'].includes(issue);
+}
+/** Ok/watch slices that become hot under active compare — must appear in "all hot". */
+function compareElevatedOkRows() {
+  const mode = waveView();
+  const out = [];
+  const seen = new Set();
+  for (const raw of (DATA.ok || [])) {
+    let r = raw;
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    if (!getCompareId(r.branch, r.db)) continue;
+    if (!isHotIssue(effectiveIssue(r))) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function mergeRowPools(...pools) {
+  // Dedupe by suite (not row id): hot + unwrapped in_progress twin share suite, differ by id.
+  const seen = new Set();
+  const out = [];
+  for (const pool of pools) {
+    for (const r of (pool || [])) {
+      const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
+function fmt(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function pct(v) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '+' : '';
+  return s + v.toFixed(0) + '%';
+}
+/** Big now · quiet base · Δ. */
+function metricCellHtml(base, now, pctVal, unit, dm, isWorse) {
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const cmp = dm && dm.mode === 'compare';
+  const baseHint = cmp ? `compare ${dm.cmp_day || ''}` : `median prev${win}`;
+  const u = unit ? `\u00a0${unit}` : '';
+  let abs = null;
+  if (base != null && now != null && Number.isFinite(Number(base)) && Number.isFinite(Number(now))) {
+    abs = Number(now) - Number(base);
+  }
+  const absStr = abs == null ? '—' : `${abs > 0 ? '+' : ''}${fmt(abs)}${u}`;
+  const worse = !!isWorse;
+  const better = pctVal != null && !worse && (
+    (unit === 'ms' && pctVal <= -10) || (unit !== 'ms' && pctVal >= 10)
+  );
+  const bigCls = now == null ? 'muted' : (worse ? 'bad' : '');
+  const dCls = worse ? 'bad' : (better ? 'good' : '');
+  const deltaTxt = abs == null ? 'Δ —' : `Δ ${absStr}${pctVal != null ? ' (' + pct(pctVal) + ')' : ''}`;
+  return `<div class="mcell" title="${esc(cmp ? 'baseline = selected compare day' : 'baseline = median prev' + win)}">
+    <div class="big ${bigCls}">${now == null ? '—' : fmt(now) + u}</div>
+    <div class="sub">base ${base == null ? '—' : fmt(base) + u} · ${esc(baseHint)}</div>
+    <div class="delta ${dCls}">${deltaTxt}</div>
+  </div>`;
+}
+function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
+  if (!tickets || !tickets.length) return '';
+  return tickets.map(t => {
+    const title = String(t.title || '');
+    const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
+    const qhint = (t.queries && t.queries.length)
+      ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
+    const closed = String(t.state || 'open').toLowerCase() === 'closed';
+    const cls = closed ? 'pill ticket closed' : 'pill ticket';
+    const label = closed
+      ? `#${t.number} · closed · ${short}`
+      : `#${t.number} · ${short}`;
+    const tip = closed ? `[closed] ${title}${qhint}` : title + qhint;
+    return `<a class="${cls}" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(tip)}" onclick="event.stopPropagation()">` +
+      `${esc(label)}</a>`;
+  }).join(' ');
+}
+
+function dutyDecisionPillHtml(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return '';
+  const url = dec.analysis_url || dec.result_url || '';
+  if (!url) return '';
+  const tip = dec.summary
+    ? `wait next wave · ${dec.summary}`
+    : 'wait next wave — duty report (no new ticket)';
+  return `<a class="pill ticket wait-next" href="${esc(url)}" target="_blank" rel="noopener" ` +
+    `title="${esc(tip)}" onclick="event.stopPropagation()">wait next</a>`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function destroyCharts(prefix) {
+  for (const k of Object.keys(charts)) {
+    if (!prefix || k.startsWith(prefix)) {
+      try { charts[k].destroy(); } catch (_) {}
+      delete charts[k];
+    }
+  }
+}
+function dayOf(ts) {
+  if (!ts) return null;
+  return String(ts).slice(0, 10);
+}
+function dayInRange(day, from, to) {
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+function itemInWindow(r) {
+  const days = [dayOf(r.last_ts), dayOf(r.last_seen)].filter(Boolean);
+  for (const run of (r.now_runs || [])) {
+    if (run.day) days.push(run.day);
+    else if (run.ts) days.push(dayOf(run.ts));
+    else if (run.label) days.push(dayOf(run.label));
+  }
+  for (const hist of [r.history, r.history_by_commit]) {
+    if (!hist) continue;
+    const n = (hist.labels || []).length;
+    for (let i = 0; i < n; i++) {
+      days.push(dayOf((hist.days && hist.days[i]) || hist.labels[i]));
+    }
+  }
+  if (!days.length) return true;
+  return days.some(d => dayInRange(d, winFrom, winTo));
+}
+function metricBits(r) {
+  /** Human label of what went wrong + delta. Uses finished twin for in_progress. */
+  const m = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
+  const issue = (r.issue === 'in_progress' && r.finished) ? (r.finished.issue || r.finished.kind) : (r.issue || r.kind);
+  const bits = [];
+  const latHot = issue === 'lat' || issue === 'both' || issue === 'broken'
+    || (m.lat_pct != null && m.lat_pct >= 10) || (m.capped_now > 0);
+  const tpmcHot = issue === 'tpmc' || issue === 'both'
+    || (m.tpmc_pct != null && m.tpmc_pct <= -10);
+  if (issue === 'broken' || (m.capped_now > 0)) {
+    if (m.capped_now > 0) bits.push(`lat capped ×${m.capped_now}`);
+    else bits.push('lat broken');
+    if (m.lat_pct != null && m.lat_pct >= 10) bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot && m.lat_pct != null) {
+    bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot) {
+    bits.push('lat↑');
+  }
+  if (tpmcHot && m.tpmc_pct != null) {
+    bits.push(`tpmC↓ ${pct(m.tpmc_pct)}`);
+  } else if (tpmcHot) {
+    bits.push('tpmC↓');
+  }
+  if (issue === 'watch' && m.lat_pct != null) bits.push(`lat↑ ${pct(m.lat_pct)} watch`);
+  return bits;
+}
+function statusLabel(r) {
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  const dm = resolveDisplayMetrics(r);
+  if (dm.mode === 'compare') {
+    if (r.issue === 'in_progress') {
+      const bits = metricBitsFromDm(dm);
+      return bits.length ? `in progress · cmp ${bits.join(' · ')}` : 'in progress';
+    }
+    const bits = metricBitsFromDm(dm);
+    if (bits.length) return bits.join(' · ');
+    return dm.issue === 'ok' || dm.status === 'ok' ? 'ok' : (dm.issue || dm.status || 'ok');
+  }
+  if (r.issue === 'in_progress') {
+    if (!r.finished) return 'in progress';
+    const finBits = metricBits({ ...r.finished, issue: r.finished.issue || r.finished.kind });
+    return finBits.length
+      ? `in progress · fin ${finBits.join(' · ')}`
+      : `in progress · fin ${r.finished.issue || r.finished.status || 'ok'}`;
+  }
+  if (r.issue === 'ok') return 'ok';
+  const bits = metricBits(r);
+  if (bits.length) return bits.join(' · ');
+  return r.issue || r.status || 'ok';
+}
+function badgeClass(r) {
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  if (r.issue === 'in_progress') return 'in_progress';
+  const dm = resolveDisplayMetrics(r);
+  if (dm.mode === 'compare') {
+    if (dm.issue === 'broken' || dm.status === 'broken') return 'broken';
+    if (dm.issue === 'both') return 'both';
+    if (dm.issue === 'lat' || dm.issue === 'watch') return 'lat';
+    if (dm.issue === 'tpmc') return 'tpmc';
+    if (dm.status === 'regression') return 'regression';
+    return dm.status || 'ok';
+  }
+  if (r.issue === 'broken' || r.status === 'broken') return 'broken';
+  if (r.issue === 'both') return 'both';
+  if (r.issue === 'lat' || r.issue === 'watch') return 'lat';
+  if (r.issue === 'tpmc') return 'tpmc';
+  if (r.status === 'regression') return 'regression';
+  return r.status || 'ok';
+}
+/** True when a hist point can be a lat/tpmC compare baseline (not cap / synthetic). */
+function histPointUsableForCompare(hist, i) {
+  if (!hist || i < 0) return false;
+  const m = (hist.markers || [])[i] || 'ok';
+  if (m === 'capped' || m === 'missing' || m === 'in_progress') return false;
+  const lat = hist.lat90 ? hist.lat90[i] : null;
+  if (lat != null && Number.isFinite(Number(lat)) && Number(lat) >= 30000) return false;
+  const tpmc = hist.tpmc ? hist.tpmc[i] : null;
+  return lat != null || tpmc != null;
+}
+/**
+ * Index of wave day (or sha) in hist.
+ * preferUsable: last non-capped point of the day — for compare baseline / chart marks.
+ * Without it: last point of the day (may be lat-cap) — for wave coverage / prev7 anchor.
+ */
+function findHistIndexForWave(hist, wave, opts) {
+  if (!hist || !wave) return -1;
+  const preferUsable = !!(opts && opts.preferUsable);
+  const day = wave.day || wave.id || wave.ci_version;
+  const days = hist.days || [];
+  let lastAny = -1;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i] !== day) continue;
+    if (lastAny < 0) lastAny = i;
+    if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
+  }
+  if (lastAny >= 0) return lastAny; // day exists but only capped/synthetic — caller nulls lat
+  const sha = (wave.sha8 && wave.sha8 !== '—') ? String(wave.sha8).slice(0, 8) : '';
+  if (sha) {
+    const vers = hist.versions || [];
+    let lastSha = -1;
+    for (let i = vers.length - 1; i >= 0; i--) {
+      if (!vers[i] || String(vers[i]).slice(0, 8) !== sha) continue;
+      if (lastSha < 0) lastSha = i;
+      if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
+    }
+    if (lastSha >= 0) return lastSha;
+  }
+  const labels = hist.labels || [];
+  let lastLab = -1;
+  for (let i = labels.length - 1; i >= 0; i--) {
+    if (!(day && String(labels[i]).startsWith(day))) continue;
+    if (lastLab < 0) lastLab = i;
+    if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
+  }
+  if (lastLab >= 0) return lastLab;
+  return -1;
+}
+/** All hist indices for a calendar day (run cards · cmp highlight). */
+function histIndicesForDay(hist, day) {
+  const out = [];
+  if (!hist || !day) return out;
+  const days = hist.days || [];
+  for (let i = 0; i < days.length; i++) {
+    if (days[i] === day) out.push(i);
+  }
+  if (out.length) return out;
+  const labels = hist.labels || [];
+  for (let i = 0; i < labels.length; i++) {
+    if (String(labels[i] || '').startsWith(day)) out.push(i);
+  }
+  return out;
+}
+/** Median prev-N baseline ending just before idx (same window as alert rules). */
+function baselineBeforeIndex(hist, idx) {
+  const latArr = (hist && hist.lat90) || [];
+  const tpmcArr = (hist && hist.tpmc) || [];
+  const markers = (hist && hist.markers) || [];
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const start = Math.max(0, idx - win);
+  const latBaseVals = [];
+  const tpmcBaseVals = [];
+  for (let i = start; i < idx; i++) {
+    const m = markers[i] || 'ok';
+    if (m === 'missing' || m === 'in_progress' || m === 'capped') continue;
+    if (latArr[i] != null && Number.isFinite(Number(latArr[i])) && Number(latArr[i]) < 30000) {
+      latBaseVals.push(Number(latArr[i]));
+    }
+    if (tpmcArr[i] != null && Number.isFinite(Number(tpmcArr[i]))) {
+      tpmcBaseVals.push(Number(tpmcArr[i]));
+    }
+  }
+  return { latBase: medianOf(latBaseVals), tpmcBase: medianOf(tpmcBaseVals) };
+}
+function pairToHeatStatus(pair) {
+  let status = pair.status;
+  if (pair.kind === 'lat' && status === 'regression') status = 'lat';
+  if (pair.kind === 'tpmc' && status === 'regression') status = 'tpmc';
+  if (pair.kind === 'both') status = 'both';
+  return {
+    status,
+    kind: pair.kind,
+    lat_pct: pair.lat_pct,
+    tpmc_pct: pair.tpmc_pct,
+    n_lat: pair.n_lat,
+    n_tpmc: pair.n_tpmc,
+    n_broken: pair.n_broken,
+  };
+}
+function classifyAtIndex(hist, idx) {
+  /** Mirror generate.classify_slice at a history index (vs prev baseline_runs). */
+  if (!hist || idx < 0) return null;
+  const latArr = hist.lat90 || [];
+  const tpmcArr = hist.tpmc || [];
+  const markers = hist.markers || [];
+  if (idx >= latArr.length && idx >= tpmcArr.length) return null;
+  const marker = markers[idx] || 'ok';
+  if (marker === 'missing') {
+    return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  if (marker === 'in_progress') {
+    return { status: 'in_progress', kind: 'in_progress', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  const latNowRaw = latArr[idx];
+  const capped = marker === 'capped' || (latNowRaw != null && Number(latNowRaw) >= 30000);
+  const latNow = capped ? null : (latNowRaw == null ? null : Number(latNowRaw));
+  const tpmcNow = tpmcArr[idx] == null ? null : Number(tpmcArr[idx]);
+  const { latBase, tpmcBase } = baselineBeforeIndex(hist, idx);
+  const pair = classifyPairValues(latBase, tpmcBase, latNow, tpmcNow, capped);
+  // Empty prev7 → null (not fake ok). Caller falls back / skips.
+  if (!pair) return null;
+  return pairToHeatStatus(pair);
+}
+function sliceHistory(item) {
+  if (item.issue === 'in_progress' && item.finished && item.finished.history) {
+    return item.finished.history;
+  }
+  return item.history || {};
+}
+function classifySliceAtWave(item, wave) {
+  if (!wave) return null;
+  const hist = sliceHistory(item);
+  const idx = findHistIndexForWave(hist, wave);
+  if (idx < 0) {
+    const names = new Set(wave.suite_names || []);
+    if (names.size && item.suite && !names.has(item.suite)) {
+      return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0 };
+    }
+    return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0 };
+  }
+  // null = insufficient prev7 at this index (not the same as suite missing from wave).
+  return classifyAtIndex(hist, idx);
+}
+/** Now (last completed) vs selected compare-day raw values — used in dive Δ vs cmp. */
+function classifySlicePairwise(item, wave) {
+  if (!wave) return null;
+  const names = new Set(wave.suite_names || []);
+  if (names.size && item.suite && !names.has(item.suite)) {
+    return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  const hist = sliceHistory(item);
+  const cmpIdx = findHistIndexForWave(hist, wave, { preferUsable: true });
+  const nowIdx = lastCompletedHistIndex(hist);
+  if (cmpIdx < 0 || nowIdx < 0) {
+    return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  const markers = hist.markers || [];
+  let lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  if (!histPointUsableForCompare(hist, cmpIdx)
+      || (lat_base != null && lat_base >= 30000)) {
+    lat_base = null;
+  }
+  const tpmc_base = hist.tpmc[cmpIdx] == null ? null : Number(hist.tpmc[cmpIdx]);
+  const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
+  const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
+  const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
+  // Pairwise uses the compare *point* as base (not prev7). Point itself is the baseline.
+  const pair = classifyPairValues(lat_base, tpmc_base, capped ? null : lat_now_raw, tpmc_now, capped);
+  if (!pair) {
+    return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  return pairToHeatStatus(pair);
+}
+/**
+ * Heatmap now-side: latest vs the *same* prev7 baseline as the compare wave.
+ * No suite_names→missing on now (incomplete compare days must not paint the cell missing).
+ * null = suite not in compare wave history → skip in aggregate.
+ * Coverage issues keep the server inbox signal.
+ */
+function classifySliceNowVsWaveBaseline(item, wave) {
+  if (!wave) return null;
+  // Prefer finished twin metrics over synthetic in_progress coverage stub.
+  if (item.issue === 'in_progress' && item.finished) {
+    return classifySliceNowVsWaveBaseline(unwrapFinishedTwin(item), wave);
+  }
+  if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
+    return {
+      status: item.issue,
+      kind: item.issue,
+      n_lat: 0, n_tpmc: 0, n_broken: 0,
+      lat_pct: null, tpmc_pct: null,
+    };
+  }
+  const hist = sliceHistory(item);
+  const cmpIdx = findHistIndexForWave(hist, wave);
+  if (cmpIdx < 0) return null;
+  const nowIdx = lastCompletedHistIndex(hist);
+  if (nowIdx < 0) {
+    return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  const markers = hist.markers || [];
+  const { latBase, tpmcBase } = baselineBeforeIndex(hist, cmpIdx);
+  const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
+  const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
+  const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
+  const pair = classifyPairValues(latBase, tpmcBase, capped ? null : lat_now_raw, tpmc_now, capped);
+  // Window-edge compare (no prev7 before wave) → skip; liveCell falls back to alert.
+  if (!pair) return null;
+  return pairToHeatStatus(pair);
+}
+/** Synthetic in_progress → finished twin for classify/compare (keeps branch/db/suite). */
+function unwrapFinishedTwin(r) {
+  if (!r || r.issue !== 'in_progress' || !r.finished) return r;
+  const fin = r.finished;
+  const issue = (fin.issue && fin.issue !== 'in_progress')
+    ? fin.issue
+    : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
+  return {
+    ...fin,
+    // Identity / labels from parent when twin omits them (avoid blank "WH" + dup rows).
+    id: fin.id || r.id,
+    branch: r.branch || fin.branch,
+    db: r.db || fin.db,
+    cluster: r.cluster || fin.cluster || r.db || fin.db,
+    family: r.family != null ? r.family : fin.family,
+    suite: r.suite || fin.suite,
+    run_type: fin.run_type || r.run_type,
+    warehouses: fin.warehouses != null ? fin.warehouses : r.warehouses,
+    wh_label: (fin.wh_label != null && fin.wh_label !== '') ? fin.wh_label : r.wh_label,
+    wave: fin.wave || r.wave,
+    version: fin.version || r.version,
+    issue,
+    // Duty pills on parent; keep them when Wave=finished unwraps the twin.
+    tickets: (r.tickets && r.tickets.length) ? r.tickets : (fin.tickets || []),
+  };
+}
+/**
+ * Row for compare pool:
+ * - in_progress + finished → twin (real was/now vs compare wave)
+ * - in_progress + no twin + Wave=finished → skip
+ * - in_progress + no twin + Wave=all → keep (coverage stub)
+ */
+function rowForCompare(r) {
+  if (!r || r.issue !== 'in_progress') return r;
+  if (r.finished) return unwrapFinishedTwin(r);
+  if (waveView() === 'finished') return null;
+  return r;
+}
+function allSliceRows(branch, db, fam) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    const r = rowForCompare(raw);
+    if (!r) continue;
+    if (branch && r.branch !== branch) continue;
+    if (r.db !== db || r.family !== fam) continue;
+    if (!r.suite || r.suite === '—') continue;
+    const k = `${r.branch}|${r.db}|${r.suite}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function aggregateSide(parts) {
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    lat: 3, tpmc: 3, stale: 2, watch: 2, nodata: 1.5, in_progress: 1, ok: 0,
+  };
+  // best starts null — must not seed with nodata, else ok (rank 0) never wins.
+  let best = null;
+  let n_lat = 0, n_tpmc = 0, n_broken = 0, n_hot = 0;
+  let lat_pct = null, tpmc_pct = null;
+  if (!parts.length) {
+    return { status: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, n_hot: 0, lat_pct: null, tpmc_pct: null };
+  }
+  for (const p of parts) {
+    const st = p.status || 'ok';
+    if (best == null || (rank[st] || 0) > (rank[best] || 0)) best = st;
+    n_lat += p.n_lat || 0;
+    n_tpmc += p.n_tpmc || 0;
+    n_broken += p.n_broken || 0;
+    if (st !== 'ok' && st !== 'nodata') n_hot++;
+    if (p.lat_pct != null) lat_pct = lat_pct == null ? p.lat_pct : Math.max(lat_pct, p.lat_pct);
+    if (p.tpmc_pct != null) tpmc_pct = tpmc_pct == null ? p.tpmc_pct : Math.min(tpmc_pct, p.tpmc_pct);
+  }
+  return { status: best || 'nodata', n_lat, n_tpmc, n_broken, n_hot, lat_pct, tpmc_pct };
+}
+function statusSeverity(st) {
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    lat: 3, tpmc: 3, stale: 2, watch: 2, nodata: 1.5, in_progress: 1, ok: 0,
+  };
+  return rank[st] || 0;
+}
+function shortCellStatus(st, live) {
+  if (st === 'ok') return 'ok';
+  if (st === 'nodata') return 'no data';
+  if (st === 'missing') return live && live.n_hot ? `missing ${live.n_hot}` : 'missing';
+  if (st === 'stale') return live && live.n_hot ? `stale ${live.n_hot}` : 'stale';
+  if (st === 'in_progress') return live && live.n_hot ? `in progress ${live.n_hot}` : 'in progress';
+  const parts = [];
+  if (live && live.n_broken) parts.push(live.n_broken > 1 ? `broken ${live.n_broken}` : 'broken');
+  else if (st === 'broken') parts.push('broken');
+  const showLat = st === 'lat' || st === 'regression' || st === 'both' || st === 'watch'
+    || (live && (live.n_lat || (live.lat_pct != null && live.lat_pct >= 7)));
+  const showTpmc = st === 'tpmc' || st === 'both' || st === 'regression'
+    || (st === 'watch' && live && live.tpmc_pct != null && live.tpmc_pct <= -5)
+    || (live && (live.n_tpmc || (live.tpmc_pct != null && live.tpmc_pct <= -10)
+      || (live.tpmc_drift_pct != null && live.tpmc_drift_pct <= -3.5)));
+  if (showLat && st !== 'broken') {
+    if (live && live.lat_pct != null) parts.push(`lat ${pct(live.lat_pct)}`);
+    else if (live && live.n_lat) parts.push(`lat↑ ${live.n_lat}`);
+    else parts.push('lat↑');
+  }
+  if (showTpmc) {
+    if (live && live.tpmc_pct != null) parts.push(`tpmC ${pct(live.tpmc_pct)}`);
+    else if (live && live.n_tpmc) parts.push(`tpmC↓ ${live.n_tpmc}`);
+    else parts.push('tpmC↓');
+  }
+  if (st === 'watch' && !parts.length) {
+    return (live && live.lat_pct != null) ? `lat ${pct(live.lat_pct)}` : 'watch';
+  }
+  if (st === 'both' && !parts.length) parts.push('lat↑ · tpmC↓');
+  return parts.length ? parts.join(' · ') : (st || 'ok');
+}
+function formatWaveOption(w) {
+  const t = String(w.max_ts || '').slice(11, 16) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : '';
+  return `${w.day || w.id} · ${t} · ${w.sha8 || '—'}${cov ? ' · ' + cov : ''}`;
+}
+/** Cluster waves available for compare — any past day with ≥1 suite (incomplete OK). */
+function comparableWaves(branch, db) {
+  return waveListFor(branch, db).filter(w => !w.current && (w.suites || 0) > 0);
+}
+function histRunAt(hist, idx) {
+  if (!hist || idx < 0) return null;
+  const markers = hist.markers || [];
+  const capped = markers[idx] === 'capped';
+  const lat = hist.lat90 ? hist.lat90[idx] : null;
+  return {
+    day: (hist.days && hist.days[idx]) || '',
+    label: (hist.labels && hist.labels[idx]) || '',
+    tpmc: hist.tpmc ? hist.tpmc[idx] : null,
+    lat90: capped ? null : lat,
+    lat_raw: lat,
+    lat_capped: capped,
+    version: (hist.versions && hist.versions[idx]) || '',
+    report: (hist.reports && hist.reports[idx]) || null,
+  };
+}
+/** Cards = every completed history point (same grain as chart bars; day may repeat). */
+function runCardsForItem(item) {
+  const hist = sliceHistory(item);
+  const markers = hist.markers || [];
+  const cards = [];
+  const nowIdx = lastCompletedHistIndex(hist);
+  for (let i = 0; i < (hist.labels || []).length; i++) {
+    const m = markers[i] || 'ok';
+    if (m === 'missing' || m === 'in_progress') continue;
+    const run = histRunAt(hist, i);
+    if (!run || !run.day) continue;
+    if (winFrom || winTo) {
+      if (!dayInRange(run.day, winFrom, winTo)) continue;
+    }
+    cards.push({ ...run, histIdx: i, isNow: i === nowIdx });
+  }
+  // keep chronological order; ensure now is last if present
+  if (nowIdx >= 0) {
+    const idx = cards.findIndex(c => c.histIdx === nowIdx);
+    if (idx >= 0 && idx !== cards.length - 1) {
+      const [x] = cards.splice(idx, 1);
+      cards.push({ ...x, isNow: true });
+    }
+  }
+  return cards;
+}
+function compareSelectHtml(branch, db) {
+  const older = comparableWaves(branch, db);
+  if (!older.length) {
+    return `<td class="cmp-cell"><span class="muted" style="font-size:11px">нет волн</span></td>`;
+  }
+  // Drop stale selection if wave is incomplete / left the list.
+  const cur = getCompareId(branch, db);
+  if (cur && !older.some(w => w.id === cur || w.ci_version === cur || w.day === cur)) {
+    setCompareId(branch, db, '');
+  }
+  const selNow = getCompareId(branch, db);
+  const opt = (w) => {
+    const sel = (selNow && (selNow === w.id || selNow === w.ci_version || selNow === w.day)) ? ' selected' : '';
+    return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
+  };
+  const opts = [`<option value="">— compare —</option>`].concat(older.map(opt));
+  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Day-wave baseline (можно неполный день — у кого нет данных, будет no data)">${opts.join('')}</select></td>`;
+}
+function sideIsHot(side) {
+  if (!side) return false;
+  const st = side.status || '';
+  return ['broken', 'regression', 'lat', 'tpmc', 'both', 'watch'].includes(st)
+    || (side.n_lat || 0) > 0 || (side.n_tpmc || 0) > 0 || (side.n_broken || 0) > 0
+    || (side.lat_pct != null && side.lat_pct >= 7)
+    || (side.tpmc_pct != null && side.tpmc_pct <= -10);
+}
+function liveCellNow(branch, db, fam) {
+  const rows = candidateRows().filter(r => {
+    if (branch && r.branch !== branch) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    return itemInWindow(r);
+  });
+  // Empty under filters ≠ verified ok — green only when DATA.ok has slices.
+  if (!rows.length) {
+    const oks = (DATA.ok || []).filter(r => {
+      if (branch && r.branch !== branch) return false;
+      if (r.db !== db || r.family !== fam) return false;
+      return itemInWindow(r);
+    });
+    if (oks.length) {
+      const watch = oks.some(r => r.issue === 'watch' || r.status === 'watch');
+      let lat_pct = null, tpmc_pct = null;
+      for (const r of oks) {
+        const m = itemMetrics(r);
+        if (m.lat_pct != null) lat_pct = lat_pct == null ? m.lat_pct : Math.max(lat_pct, m.lat_pct);
+        if (m.tpmc_pct != null) tpmc_pct = tpmc_pct == null ? m.tpmc_pct : Math.min(tpmc_pct, m.tpmc_pct);
+      }
+      return { status: watch ? 'watch' : 'ok', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct, tpmc_pct };
+    }
+    return { status: 'nodata', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    lat: 3, tpmc: 3, stale: 2, in_progress: 1, ok: 0, watch: 2,
+  };
+  let best = null;
+  let n_lat = 0, n_tpmc = 0, n_broken = 0;
+  let lat_pct = null, tpmc_pct = null;
+  for (const r of rows) {
+    let st = r.status || r.issue || 'ok';
+    const issue = r.issue;
+    // Prefer issue kind for lat/tpmc cells (status may stay "regression").
+    if (issue === 'lat' || issue === 'tpmc' || issue === 'both' || issue === 'broken') st = issue;
+    if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+    if (issue === 'broken' || (issue === 'both' && r.status === 'broken')) n_broken++;
+    if (issue === 'lat' || issue === 'both' || issue === 'broken') n_lat++;
+    if (issue === 'tpmc' || issue === 'both') n_tpmc++;
+    const m = itemMetrics(r);
+    if (m.lat_pct != null) lat_pct = lat_pct == null ? m.lat_pct : Math.max(lat_pct, m.lat_pct);
+    if (m.tpmc_pct != null) tpmc_pct = tpmc_pct == null ? m.tpmc_pct : Math.min(tpmc_pct, m.tpmc_pct);
+  }
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return { status: best || 'ok', n_hot: hot.length, n_lat, n_tpmc, n_broken, lat_pct, tpmc_pct };
+}
+/** Alert thresholds for compare paint (same as generate LAT_TOL / TPMC_TOL). */
+function parseTolPct(v, fallback) {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.abs(v) >= 1 ? Math.abs(v) : Math.abs(v) * 100;
+  const m = String(v ?? '').match(/-?\d+(?:\.\d+)?/);
+  return m ? Math.abs(Number(m[0])) : fallback;
+}
+function tpccCompareTol() {
+  const rules = DATA.rules || {};
+  return {
+    lat: parseTolPct(rules.lat, 10),   // lat↑ pp vs baseline
+    tpmc: parseTolPct(rules.tpmc, 10), // |tpmC↓| pp vs baseline
+  };
+}
+/** Hard problem band for compare coloring (watch/soft → 0, not painted). */
+function tpccHardBand(side) {
+  if (!side) return 0;
+  const st = side.status || '';
+  if (st === 'broken' || (side.n_broken || 0) > 0) return 2;
+  if (st === 'lat' || st === 'tpmc' || st === 'both' || st === 'regression'
+    || (side.n_lat || 0) > 0 || (side.n_tpmc || 0) > 0) return 1;
+  const tol = tpccCompareTol();
+  if (side.lat_pct != null && side.lat_pct >= tol.lat) return 1;
+  if (side.tpmc_pct != null && side.tpmc_pct <= -tol.tpmc) return 1;
+  return 0;
+}
+/**
+ * Compare cell paint only on *significant* changes:
+ * - cross into/out of hard lat↑ / tpmC↓ / broken, or
+ * - already hard and moved by another full tolerance step (≥10pp).
+ * Small noise (+6%, watch-only) → same (keep solid now-status color).
+ */
+function compareDeltaTpcc(prev, now) {
+  const tol = tpccCompareTol();
+  const pb = tpccHardBand(prev);
+  const nb = tpccHardBand(now);
+  const latStep = (prev.lat_pct != null && now.lat_pct != null) ? (now.lat_pct - prev.lat_pct) : 0;
+  // positive tpmcStep = tpmC got worse (lower than before vs same baseline)
+  const tpmcStep = (prev.tpmc_pct != null && now.tpmc_pct != null) ? (prev.tpmc_pct - now.tpmc_pct) : 0;
+  const brokenUp = (now.n_broken || 0) > (prev.n_broken || 0);
+  const brokenDown = (now.n_broken || 0) < (prev.n_broken || 0);
+  if (nb > pb || brokenUp) return pb >= 1 ? 'worse-hot' : 'worse';
+  if (nb < pb || brokenDown) return 'better';
+  if (pb >= 1 && nb >= 1) {
+    const latWorse = latStep >= tol.lat;
+    const latBetter = latStep <= -tol.lat;
+    const tpmcWorse = tpmcStep >= tol.tpmc;
+    const tpmcBetter = tpmcStep <= -tol.tpmc;
+    if ((latWorse && tpmcBetter) || (latBetter && tpmcWorse)) return 'mixed';
+    if (latWorse || tpmcWorse) return 'worse-hot';
+    if (latBetter || tpmcBetter) return 'better';
+  }
+  return 'same';
+}
+/** Mirror: tpcc/classify_rules.py resolve_compare_cell */
+function resolveCompareCell(prev, now) {
+  const delta = compareDeltaTpcc(prev, now);
+  const nowSt = now.status || 'ok';
+  const paint = delta === 'same' ? nowSt : `delta-${delta}`;
+  return {
+    ...now,
+    compare: true,
+    prev,
+    delta,
+    paint,
+    status: paint,
+    delta_status: nowSt,
+  };
+}
+function liveCell(branch, db, fam) {
+  const alertNow = liveCellNow(branch, db, fam);
+  const cmpId = getCompareId(branch, db);
+  if (!cmpId) return alertNow;
+  const wave = waveEntry(branch, db, cmpId);
+  if (!wave) return alertNow;
+  const slices = allSliceRows(branch, db, fam);
+  // Pair both sides on the same slice set (cmp history point or coverage issue).
+  const prevParts = [];
+  const nowParts = [];
+  for (const r of slices) {
+    const nowPart = classifySliceNowVsWaveBaseline(r, wave);
+    if (!nowPart) continue;
+    let prevPart;
+    if (nowPart.status === 'missing' || nowPart.status === 'in_progress' || nowPart.status === 'stale') {
+      prevPart = { ...nowPart };
+    } else {
+      prevPart = classifySliceAtWave(r, wave);
+      // Keep suite when prev lacks baseline but now classified (shouldn't happen often).
+      if (!prevPart) continue;
+      if (prevPart.status === 'nodata' && nowPart.status === 'ok') continue;
+    }
+    prevParts.push(prevPart);
+    nowParts.push(nowPart);
+  }
+  // No usable compare baseline (e.g. oldest wave / empty prev7) → keep alert paint.
+  // Fixes: green "ok =" while inbox still has alert-broken and DATA.ok is empty.
+  if (!nowParts.length) return alertNow;
+  return resolveCompareCell(aggregateSide(prevParts), aggregateSide(nowParts));
+}
+/** Compare-side label: always prefer % vs that side's baseline (not slice counts). */
+function sideMetricLabel(side) {
+  if (!side) return '—';
+  const parts = [];
+  if ((side.n_broken || 0) > 0 || side.status === 'broken') parts.push('broken');
+  if (side.lat_pct != null && (
+    (side.n_lat || 0) > 0 || side.status === 'broken' || side.status === 'lat'
+    || side.status === 'regression' || side.status === 'both' || side.status === 'watch'
+    || Math.abs(side.lat_pct) >= 0.5
+  )) {
+    parts.push(`lat ${pct(side.lat_pct)}`);
+  }
+  if (side.tpmc_pct != null && (
+    (side.n_tpmc || 0) > 0 || side.status === 'tpmc' || side.status === 'both'
+    || side.status === 'regression' || Math.abs(side.tpmc_pct) >= 0.5
+  )) {
+    parts.push(`tpmC ${pct(side.tpmc_pct)}`);
+  }
+  if (parts.length) return parts.join(' · ');
+  return shortCellStatus(side.status, side);
+}
+function cellLabel(st, live) {
+  if (live && live.compare && live.prev) {
+    const a = sideMetricLabel(live.prev);
+    const b = sideMetricLabel({
+      ...live,
+      status: live.delta_status || live.status,
+    });
+    if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
+    return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;
+  }
+  if (st === 'ok') return 'ok';
+  if (st === 'nodata') return 'no data';
+  const parts = [];
+  if (live.n_broken) parts.push(live.n_broken > 1 ? `broken ${live.n_broken}` : 'broken');
+  else if (st === 'broken') parts.push('broken');
+  if (st !== 'broken' && (live.n_lat || st === 'lat' || st === 'regression' || st === 'watch'
+    || (live.lat_pct != null && live.lat_pct >= 7))) {
+    if (live.lat_pct != null) parts.push(`lat ${pct(live.lat_pct)}`);
+    else if (live.n_lat) parts.push(`lat↑ ${live.n_lat}`);
+    else parts.push('lat↑');
+  }
+  if (live.n_tpmc || st === 'tpmc' || st === 'both'
+    || (live.tpmc_pct != null && live.tpmc_pct <= -10)) {
+    if (live.tpmc_pct != null) parts.push(`tpmC ${pct(live.tpmc_pct)}`);
+    else if (live.n_tpmc) parts.push(`tpmC↓ ${live.n_tpmc}`);
+    else parts.push('tpmC↓');
+  }
+  if (st === 'missing') parts.push(live.n_hot ? `missing ${live.n_hot}` : 'missing');
+  if (st === 'stale') parts.push(live.n_hot ? `stale ${live.n_hot}` : 'stale');
+  if (st === 'in_progress') parts.push(live.n_hot ? `in progress ${live.n_hot}` : 'in progress');
+  if (!parts.length) {
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  return parts.map(esc).join(' · ');
+}
+function sliceHist(hist) {
+  if (!hist || !(hist.labels || []).length) return hist;
+  if (!winFrom && !winTo) return hist;
+  const out = { labels: [], days: [], tpmc: [], lat90: [], markers: [], versions: [], reports: [] };
+  for (let i = 0; i < hist.labels.length; i++) {
+    const day = dayOf((hist.days && hist.days[i]) || hist.labels[i]);
+    if (!dayInRange(day, winFrom, winTo)) continue;
+    out.labels.push(hist.labels[i]);
+    out.days.push(hist.days ? hist.days[i] : day);
+    out.tpmc.push(hist.tpmc ? hist.tpmc[i] : null);
+    out.lat90.push(hist.lat90 ? hist.lat90[i] : null);
+    out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+    out.versions.push(hist.versions ? hist.versions[i] : null);
+    out.reports.push(hist.reports ? hist.reports[i] : null);
+  }
+  return out;
+}
+function selectedBranch() {
+  return document.getElementById('fBranch')?.value || '';
+}
+function heatSelection() {
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  return (db || fam) ? { db, fam } : null;
+}
+function rowsForSummary({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  return candidateRows().filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+function countOkSlices({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  const base = currentSummaryBase();
+  if (!db && !fam) return base.ok_slices || 0;
+  return (DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return r.issue === 'ok' || r.issue === 'watch';
+  }).length;
+}
+function summarizeRows(rows, { db = '', fam = '' } = {}) {
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  const base = currentSummaryBase();
+  return {
+    missing: rows.filter(r => r.issue === 'missing').length,
+    in_progress: rows.filter(r => r.issue === 'in_progress').length,
+    broken: rows.filter(r => (r.issue === 'broken' || r.issue === 'both') && r.status === 'broken').length,
+    lat: rows.filter(r => r.issue === 'lat' || r.issue === 'both').length,
+    tpmc: rows.filter(r => r.issue === 'tpmc' || r.issue === 'both').length,
+    stale: rows.filter(r => r.issue === 'stale').length,
+    ok_slices: countOkSlices({ db, fam }),
+    hot: hot.length,
+    slices: base.slices || 0,
+  };
+}
+function currentSummaryBase() {
+  const br = selectedBranch();
+  if (!br) return DATA.summary || {};
+  return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
+}
+function currentSummary() {
+  // Branch/date totals only — heatmap cell must not replace widgets.
+  return summarizeRows(rowsForSummary());
+}
+function selectedSummary() {
+  const sel = heatSelection();
+  if (!sel) return null;
+  return summarizeRows(rowsForSummary(sel), sel);
+}
+function fmtNM(n, m, selected) {
+  const N = n || 0;
+  const M = m || 0;
+  if (!selected) return String(M);
+  return `<span class="sel">${N}</span>/${M}`;
+}
+function renderHeader() {
+  const total = currentSummary();
+  const sel = selectedSummary();
+  const s = sel || total;
+  const genAt = (DATA.generated_at || (DATA.meta && DATA.meta.generated_at) || '')
+    .replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
+  document.getElementById('subtitle').innerHTML =
+    `Updated <b>${esc(genAt || '—')}</b>`;
+
+  document.getElementById('counters').innerHTML = `
+    <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
+    <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
+    <div class="counter hot"><div class="n">${fmtNM(s.broken, total.broken, !!sel)}</div><div class="lbl">Broken</div></div>
+    <div class="counter regress"><div class="n">${fmtNM(s.lat, total.lat, !!sel)}</div><div class="lbl">Lat↑</div></div>
+    <div class="counter regress"><div class="n">${fmtNM(s.tpmc, total.tpmc, !!sel)}</div><div class="lbl">tpmC↓</div></div>
+    <div class="counter warn"><div class="n">${fmtNM(s.stale, total.stale, !!sel)}</div><div class="lbl">Stale</div></div>
+    <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
+  `;
+}
+function formatWave(w) {
+  if (!w) return '—';
+  const day = w.day || String(w.max_ts || '').slice(0, 10) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : 'activity';
+  const age = (w.age_hours != null) ? `${w.age_hours}h` : '—';
+  const only = w.activity_only ? ' <span class="pill">no wave</span>' : '';
+  return `${esc(day)} · ${esc(cov)} · ${esc(age)}${only}`;
+}
+function waveInWindow(w) {
+  if (!w) return null;
+  const day = w.day || dayOf(w.max_ts);
+  if (!dayInRange(day, winFrom, winTo)) return null;
+  return w;
+}
+function waveFor(branch, db) {
+  const waves = DATA.waves || {};
+  const act = DATA.last_activity || {};
+  let w = null;
+  if (branch && waves[`${branch}|${db}`]) w = waves[`${branch}|${db}`];
+  else if (branch && act[`${branch}|${db}`]) w = act[`${branch}|${db}`];
+  else if (!branch) {
+    const byDb = DATA.waves_by_db || {};
+    if (byDb[db]) w = byDb[db];
+    else if (act[db]) w = act[db];
+  }
+  return waveInWindow(w);
+}
+function dbsForBranch(branch) {
+  const h = DATA.heatmap || {};
+  const map = h.dbs_by_branch || (DATA.ui && DATA.ui.dbs_by_branch) || {};
+  if (branch && map[branch] && map[branch].length) return map[branch];
+  if (!branch) {
+    const all = new Set(h.dbs || []);
+    Object.values(map).forEach(list => (list || []).forEach(d => all.add(d)));
+    return [...all].sort();
+  }
+  return [];
+}
+function uiBranches() {
+  return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
+}
+function renderHeatmap() {
+  const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
+  let br = selectedBranch();
+  const branches = br ? [br] : (h.branches || uiBranches());
+  let html = '';
+  for (const branch of branches) {
+    const dbs = dbsForBranch(branch);
+    if (branches.length > 1) {
+      html += `<div class="muted" style="padding:10px 12px 0;font-weight:650">${esc(branch)} · ${dbs.length} clusters</div>`;
+    }
+    if (!dbs.length) {
+      html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
+      continue;
+    }
+    html += `<table class="heat"><thead><tr><th>Cluster</th>`;
+    for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
+    html += `<th>Compare</th><th>Last wave</th></tr></thead><tbody>`;
+    for (const db of dbs) {
+      html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
+      for (const fam of h.families) {
+        const live = liveCell(branch, db, fam);
+        const st = live.status || 'ok';
+        const tip = live.compare && live.prev
+          ? `compare → now, both vs prev7 before compare: ${sideMetricLabel(live.prev)} → ${sideMetricLabel({ ...live, status: live.delta_status || live.status })}`
+          : `${live.n_hot || 0} slices`
+            + (live.lat_pct != null ? ` · lat ${pct(live.lat_pct)}` : (live.n_lat ? ` · lat↑ ${live.n_lat}` : ''))
+            + (live.tpmc_pct != null ? ` · tpmC ${pct(live.tpmc_pct)}` : (live.n_tpmc ? ` · tpmC↓ ${live.n_tpmc}` : ''));
+        const heat = heatSelection();
+        const selected = !!(heat && heat.db === db && heat.fam === fam
+          && (!selectedBranch() || selectedBranch() === branch));
+        // paint from resolveCompareCell / alert liveCellNow
+        const cellCls = live.paint || ((live.compare && live.delta && live.delta !== 'same')
+          ? (st.startsWith('delta-') ? st : `delta-${live.delta}`)
+          : (live.delta_status || st));
+        html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
+      }
+      html += compareSelectHtml(branch, db);
+      html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(waveFor(branch, db))}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const root = document.getElementById('heatmap');
+  root.innerHTML = html || '<div class="empty">нет данных</div>';
+  root.querySelectorAll('select.cmp-wave').forEach(sel => {
+    sel.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      setCompareId(sel.dataset.cmpBranch, sel.dataset.cmpDb, sel.value || '');
+      destroyCharts();
+      renderAll();
+    });
+    sel.addEventListener('click', (ev) => ev.stopPropagation());
+  });
+  root.querySelectorAll('.cell.regression, .cell.lat, .cell.tpmc, .cell.both, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.nodata, .cell.watch, .cell.delta-worse, .cell.delta-worse-hot, .cell.delta-better, .cell.delta-mixed, .cell.delta-same').forEach(el => {
+    el.addEventListener('click', () => {
+      const db = el.dataset.db || '';
+      const fam = el.dataset.fam || '';
+      const branch = el.dataset.branch || '';
+      const fDb = document.getElementById('fDb');
+      const fFam = document.getElementById('fFam');
+      const fIssue = document.getElementById('fIssue');
+      const same = fDb.value === db && fFam.value === fam
+        && (!branch || selectedBranch() === branch);
+      if (same) {
+        fDb.value = '';
+        fFam.value = '';
+        fIssue.value = '';
+      } else {
+        if (branch) document.getElementById('fBranch').value = branch;
+        fDb.value = db;
+        fFam.value = fam;
+        // Issue filter from *now* side of the cell (compare-aware), not CSS class alone.
+        // delta-worse on an alert-ok slice used to force "all hot" → empty inbox.
+        const live = liveCell(branch, db, fam);
+        const nowSt = live.compare ? (live.delta_status || live.status) : (live.status || '');
+        // nodata cell ≠ ok: clear Issue so drill shows suites in Cluster×Run type
+        // (TPC-C has no dedicated nodata Issue option; false "ok" hid real data).
+        if (nowSt === 'ok' || nowSt === 'watch') fIssue.value = 'ok';
+        else if (nowSt === 'in_progress') fIssue.value = 'in_progress';
+        else if (nowSt === 'missing') fIssue.value = 'missing';
+        else if (nowSt === 'stale') fIssue.value = 'stale';
+        else if (nowSt === 'broken') fIssue.value = 'broken';
+        else if (nowSt === 'lat') fIssue.value = 'lat';
+        else if (nowSt === 'tpmc') fIssue.value = 'tpmc';
+        else if (nowSt === 'both') fIssue.value = 'both';
+        else if (nowSt === 'nodata') fIssue.value = '';
+        else fIssue.value = '';
+      }
+      renderAll();
+      if (!same) {
+        document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+}
+function filteredInbox() {
+  const issue = document.getElementById('fIssue').value;
+  const db = document.getElementById('fDb').value;
+  const fam = document.getElementById('fFam').value;
+  const br = selectedBranch();
+  const drill = !!(db && fam);
+  let pool;
+  if (issue === 'ok') {
+    // Include hot rows whose compare-effective issue is ok (and vice versa via effectiveIssue).
+    pool = mergeRowPools(DATA.ok || [], candidateRows());
+  } else if (issue === 'in_progress') {
+    pool = (DATA.inbox || []).filter(r => r.issue === 'in_progress');
+  } else if (!issue && drill) {
+    // Heatmap drill / run-type switch: show the slice even if alert-ok (compare may paint it).
+    pool = mergeRowPools(candidateRows(), DATA.ok || []);
+  } else {
+    // all hot (+ specific hot filters): include ok slices elevated by compare
+    pool = mergeRowPools(candidateRows(), compareElevatedOkRows());
+  }
+  return pool.filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    if (issue === 'ok') {
+      const eff = effectiveIssue(r);
+      if (r.issue !== 'ok' && r.issue !== 'watch' && eff !== 'ok' && eff !== 'watch') return false;
+    } else if (issue === 'in_progress') {
+      if (r.issue !== 'in_progress') return false;
+    } else if (issue) {
+      // Match alert issue or compare-recalculated issue
+      if (r.issue !== issue && effectiveIssue(r) !== issue) return false;
+    } else if (!drill) {
+      // all hot, no drill: alert-hot or compare-elevated
+      if (!isHotIssue(r.issue) && !isHotIssue(effectiveIssue(r))) return false;
+    }
+    // all hot + drill: any matching slice (ok or hot)
+    return true;
+  });
+}
+/** Heatmap drill safety: if Issue filter empties the slice, show all suites in that cell. */
+function filteredInboxOrDrill() {
+  const rows = filteredInbox();
+  if (rows.length) return rows;
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  if (!db || !fam) return rows;
+  const br = selectedBranch();
+  return mergeRowPools(candidateRows(), DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+function medianOf(nums) {
+  const a = nums.filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+/** Higher-worse metric (lat): red if above trailing median. */
+function colorsLatVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    if (n >= 30000) return '#8a1f1a';
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n > ref * 3) return '#8a1f1a';
+    if (n > ref * 1.1) return '#e5534b';
+    if (n < ref * 0.93) return '#3fb950';
+    return '#5b8def';
+  });
+}
+/** Higher-better metric (tpmC): red if below trailing median. */
+function colorsTpmcVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n < ref * (1 / 3)) return '#8a1f1a';
+    if (n < ref * 0.9) return '#e5534b';
+    if (n > ref * 1.07) return '#3fb950';
+    return '#5b8def';
+  });
+}
+function datalensGitBranch(branch) {
+  if (!branch || branch === '(empty)' || branch === '—') return '';
+  if (branch.startsWith('origin/')) return branch;
+  return 'origin/' + branch;
+}
+function datalensRunType(item) {
+  if (item.run_type) return item.run_type;
+  const fam = item.family;
+  if (fam && fam !== '—') return 'ydb_cli_' + fam;
+  return '';
+}
+/** DataLens TPC-C dashboard for this slice (cluster × run_type × branch). */
+function datalensUrl(item) {
+  const ui = DATA.ui || {};
+  const base = ui.datalens_base || 'https://datalens.yandex/wf5xdbbl923ok';
+  const tab = ui.datalens_tab || '9l5';
+  const params = new URLSearchParams();
+  params.set('tab', tab);
+  const runType = datalensRunType(item);
+  const cluster = item.cluster || item.db || '';
+  const gitBranch = datalensGitBranch(item.branch);
+  if (runType) params.set('run_type', runType);
+  if (cluster) params.set('cluster', cluster);
+  if (gitBranch) params.set('git_branch', gitBranch);
+  return `${base}?${params.toString()}`;
+}
+function openDatalens(item) {
+  const url = datalensUrl(item);
+  if (!url) return;
+  window.open(url, '_blank', 'noopener');
+}
+/** Prefer Allure report for a history bar; fallback DataLens (slice-level). */
+function openHistReport(hist, idx, item) {
+  const url = (hist && hist.reports && hist.reports[idx]) || null;
+  if (url) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  openDatalens(item);
+}
+
+function mountHistory(item, id) {
+  const metrics = itemMetrics(item);
+  const srcRun = (item.issue === 'in_progress' && item.finished && item.finished.history)
+    ? item.finished.history
+    : (item.history || {});
+  const srcCommit = (item.issue === 'in_progress' && item.finished && item.finished.history_by_commit)
+    ? item.finished.history_by_commit
+    : (item.history_by_commit || item.history || {});
+  const histRun = sliceHist(srcRun);
+  const histCommit = sliceHist(srcCommit);
+  const box = document.getElementById(id + '_hist');
+  if (!box) return;
+  if (!(histRun.labels || []).length && !(histCommit.labels || []).length) {
+    box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
+    return;
+  }
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const dm = resolveDisplayMetrics(item);
+  const tpmcBase = dm.tpmc_base;
+  const latBase = dm.lat_base;
+  const baseMode = dm.mode;
+  const baseStroke = baseMode === 'compare' ? '#9a6700' : '#0969da';
+  const baseTitle = baseMode === 'compare'
+    ? `compare baseline (${dm.cmp_day})`
+    : `alert baseline (median prev${win})`;
+  const dashUrl = datalensUrl(item);
+  const cmpId = getCompareId(item.branch, item.db);
+  const cmpWave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  let showBase = true;
+  const deltaBits = [];
+  if (dm.lat_pct != null) deltaBits.push(`lat ${fmt(dm.lat_base)} → ${fmt(dm.lat_now)}&nbsp;ms (${pct(dm.lat_pct)})`);
+  if (dm.tpmc_pct != null) deltaBits.push(`tpmC ${fmt(dm.tpmc_base)} → ${fmt(dm.tpmc_now)} (${pct(dm.tpmc_pct)})`);
+  box.innerHTML = `
+  <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
+    <input type="checkbox" id="${id}_base" checked /> показать ${esc(baseTitle)}
+  </label>
+  ${deltaBits.length ? `<div class="muted" style="margin:0 0 8px;font-weight:650;color:${baseMode === 'compare' ? '#9a6700' : 'inherit'}">${baseMode === 'compare' ? 'Δ vs compare' : 'Δ vs alert'}: ${deltaBits.join(' · ')}</div>` : ''}
+  <div class="muted" style="margin:8px 0 4px;font-weight:650">X = дата запуска</div>
+  <div class="pair">
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_run_tpmc"></canvas></div>
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_run_lat"></canvas></div>
+  </div>
+  <div class="muted" style="margin:14px 0 4px;font-weight:650">X = дата коммита (git_commit_timestamp)</div>
+  <div class="pair">
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_cmt_tpmc"></canvas></div>
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_cmt_lat"></canvas></div>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
+    синий = synthetic in_progress · оранжевый = synthetic missing ·
+    <b>тёмная рамка</b> = now · <b>оранжевая</b> = все прогоны compare-дня ·
+    <b>клик по столбцу → Allure report</b> (если есть; иначе DataLens)
+    ${dashUrl ? ` · <a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">DataLens</a>` : ''}
+    ${(tpmcBase != null || latBase != null)
+      ? ` · ${esc(baseTitle)}: tpmC ${fmt(tpmcBase)} · lat ${fmt(latBase)}&nbsp;ms`
+      : ''}
+  </div>`;
+
+  function paint() {
+    destroyCharts(id + '_');
+    const cmpDay = cmpWave ? (cmpWave.day || cmpWave.id || cmpWave.ci_version || '') : '';
+    // All run-date bars of the selected day (= cmp cards); numeric baseline still preferUsable.
+    const runCmpDayIdxs = (cmpWave && cmpDay) ? histIndicesForDay(histRun, cmpDay) : [];
+    const runCmpVers = new Set(
+      runCmpDayIdxs.map(i => String((histRun.versions || [])[i] || '').slice(0, 8)).filter(Boolean)
+    );
+    function markIndices(hist) {
+      const nowIdx = (hist.labels || []).length ? (hist.labels.length - 1) : -1;
+      let compareIdxs = [];
+      if (cmpWave && cmpDay) {
+        if (hist === histRun) {
+          compareIdxs = runCmpDayIdxs.slice();
+        } else {
+          // Same SHAs as run-date cmp cards (not "every commit that calendar day").
+          const vers = hist.versions || [];
+          for (let i = 0; i < vers.length; i++) {
+            const v = String(vers[i] || '').slice(0, 8);
+            if (v && runCmpVers.has(v)) compareIdxs.push(i);
+          }
+          if (!compareIdxs.length) compareIdxs = histIndicesForDay(hist, cmpDay);
+        }
+      }
+      return { now: nowIdx, compareIdxs };
+    }
+    function bar(cid, hist, vals, label, colors, alertBase, unit) {
+      const el = document.getElementById(cid);
+      if (!el) return;
+      if (!(hist.labels || []).length) {
+        el.parentElement.innerHTML = '<div class="empty">нет точек</div>';
+        return;
+      }
+      const markers = hist.markers || [];
+      const marks = markIndices(hist);
+      const cmpSet = new Set(marks.compareIdxs || []);
+      const nBars = (hist.labels || []).length;
+      const valueFont = nBars > 24 ? '8px sans-serif' : (nBars > 14 ? '9px sans-serif' : '10px sans-serif');
+      const unitSuffix = unit ? ` ${unit}` : '';
+      const fmtU = (v) => (v == null || Number.isNaN(v)) ? '—' : `${fmt(v)}${unitSuffix}`;
+      // Keep status fill; now = dark border, all compare-day bars = orange.
+      const bg = colors;
+      const borderColors = (hist.labels || []).map((_, i) => (
+        i === marks.now ? '#1f2328' : (cmpSet.has(i) ? '#9a6700' : 'transparent')
+      ));
+      const borderWidths = (hist.labels || []).map((_, i) => (
+        (i === marks.now || cmpSet.has(i)) ? 3 : 0
+      ));
+      charts[cid] = new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: hist.labels,
+          datasets: [{
+            data: vals,
+            backgroundColor: bg,
+            borderColor: borderColors,
+            borderWidth: borderWidths,
+            borderSkipped: false,
+            barPercentage: 0.9,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          layout: { padding: { top: 18 } },
+          onClick: (_e, els) => {
+            if (!els.length) return;
+            openHistReport(hist, els[0].index, item);
+          },
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (it) => {
+                  const v = it.raw;
+                  return v == null ? '—' : fmtU(v);
+                },
+                afterLabel: (it) => {
+                  const bits = [];
+                  const i = it.dataIndex;
+                  if (i === marks.now) bits.push('now');
+                  if (cmpSet.has(i)) bits.push('compare day');
+                  const m = markers[i];
+                  if (m === 'in_progress') bits.push('SYNTHETIC · day-wave in progress');
+                  else if (m === 'missing') bits.push('SYNTHETIC · missing in completed wave');
+                  else if (m === 'capped') bits.push('lat capped');
+                  const ver = (hist.versions || [])[i];
+                  if (ver) bits.push(`sha ${ver}`);
+                  bits.push((hist.reports && hist.reports[i]) ? 'клик → report' : 'клик → DataLens');
+                  const cur = vals[i];
+                  const start = Math.max(0, i - win);
+                  const ref = medianOf(vals.slice(start, i));
+                  if (cur != null && ref != null && ref > 0) {
+                    bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmtU(ref)})`);
+                  }
+                  if (showBase && alertBase != null) {
+                    bits.push(`${baseTitle} ${fmtU(alertBase)}`);
+                  }
+                  return bits.join(' · ');
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+            y: {
+              beginAtZero: true,
+              grace: '18%',
+              ticks: { color: '#656d76' },
+              grid: { color: 'rgba(0,0,0,.06)' },
+              title: unit ? { display: true, text: unit, color: '#656d76', font: { size: 11 } } : undefined,
+            }
+          }
+        },
+        plugins: [{
+          id: 'tpccbase',
+          afterDraw(chart) {
+            if (!showBase || alertBase == null) return;
+            const y = chart.scales.y.getPixelForValue(alertBase);
+            const { left, right, top, bottom } = chart.chartArea;
+            if (y < top || y > bottom) return;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = baseStroke; ctx.lineWidth = 1;
+            ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+            ctx.fillStyle = baseStroke; ctx.font = '10px sans-serif';
+            ctx.fillText(`${baseTitle} ${fmtU(alertBase)}`, left + 4, Math.max(top + 10, y - 4));
+            ctx.restore();
+          }
+        }, {
+          id: 'barValueLabels',
+          afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data) return;
+            const { top } = chart.chartArea;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.fillStyle = '#1f2328';
+            ctx.font = valueFont;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            meta.data.forEach((bar, i) => {
+              const v = vals[i];
+              if (v == null || !Number.isFinite(Number(v))) return;
+              const text = unit ? `${fmt(v)}${unit}` : fmt(v);
+              const x = bar.x;
+              let y = bar.y - 3;
+              if (y < top + 10) y = top + 10;
+              ctx.fillText(text, x, y);
+            });
+            ctx.restore();
+          }
+        }]
+      });
+    }
+    function markColors(hist, colors) {
+      const markers = hist.markers || [];
+      return colors.map((c, i) => {
+        const m = markers[i];
+        if (m === 'in_progress') return '#54aeff';
+        if (m === 'missing') return '#fb8500';
+        if (m === 'capped') return '#8a1f1a';
+        return c;
+      });
+    }
+    if ((histRun.labels || []).length) {
+      bar(id + '_run_tpmc', histRun, histRun.tpmc || [], 'tpmC · by run date (↑ better)',
+        markColors(histRun, colorsTpmcVsMavg(histRun.tpmc)), tpmcBase, '');
+      bar(id + '_run_lat', histRun, histRun.lat90 || [], 'NewOrder p90 · by run date (↓ better)',
+        markColors(histRun, colorsLatVsMavg(histRun.lat90)), latBase, 'ms');
+    }
+    if ((histCommit.labels || []).length) {
+      bar(id + '_cmt_tpmc', histCommit, histCommit.tpmc || [], 'tpmC · by commit date (↑ better)',
+        markColors(histCommit, colorsTpmcVsMavg(histCommit.tpmc)), tpmcBase, '');
+      bar(id + '_cmt_lat', histCommit, histCommit.lat90 || [], 'NewOrder p90 · by commit date (↓ better)',
+        markColors(histCommit, colorsLatVsMavg(histCommit.lat90)), latBase, 'ms');
+    }
+  }
+
+  const chk = document.getElementById(id + '_base');
+  if (chk) {
+    chk.addEventListener('change', () => { showBase = chk.checked; paint(); });
+  }
+  paint();
+}
+/** Compact history for duty context (day-grain). */
+function compactHist(hist, maxPts) {
+  if (!hist || !hist.labels) return null;
+  const n = hist.labels.length;
+  const start = Math.max(0, n - (maxPts || 24));
+  const slice = (arr) => (arr || []).slice(start);
+  return {
+    mode: hist.mode || null,
+    labels: slice(hist.labels),
+    lat90: slice(hist.lat90),
+    tpmc: slice(hist.tpmc),
+    versions: slice(hist.versions),
+    days: slice(hist.days),
+    reports: slice(hist.reports),
+    nodata: slice(hist.nodata),
+  };
+}
+
+function dutyReportMeta(kind) {
+  const ui = DATA.ui || {};
+  let url = null;
+  try { url = (location && location.href) ? location.href.split('#')[0] : null; } catch (_) {}
+  return {
+    kind,
+    url,
+    window: [ui.default_from || null, ui.default_to || null],
+    generated_at: DATA.generated_at || null,
+    source: DATA.source || null,
+  };
+}
+
+function downloadDutyJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function copyDutyJson(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+function flashDutyBtn(btn, okMsg, failMsg, ok) {
+  const wrap = document.getElementById('dutyFab');
+  const toast = wrap && wrap.querySelector('.duty-fab-toast');
+  if (toast) {
+    toast.textContent = ok ? okMsg : failMsg;
+    toast.hidden = false;
+    toast.classList.toggle('fail', !ok);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.hidden = true; }, 1800);
+    return;
+  }
+  const prev = btn.textContent;
+  btn.textContent = ok ? okMsg : failMsg;
+  setTimeout(() => { btn.textContent = prev; }, 1600);
+}
+
+let dutyFabRows = [];
+function syncDutyFab(rows) {
+  if (rows) dutyFabRows = rows;
+  const wrap = document.getElementById('dutyFab');
+  if (!wrap) return;
+  const open = document.querySelector('#inbox tr.row.open');
+  const on = !!open;
+  wrap.classList.toggle('visible', on);
+  wrap.setAttribute('aria-hidden', on ? 'false' : 'true');
+  if (open) wrap.dataset.openId = open.dataset.id || '';
+  else delete wrap.dataset.openId;
+}
+async function dutyFabAction(mode) {
+  const wrap = document.getElementById('dutyFab');
+  const id = wrap && wrap.dataset.openId;
+  if (!id) return;
+  const idx = Number(document.querySelector(`#inbox tr.row[data-id="${id}"]`)?.dataset.idx);
+  const item = dutyFabRows[idx];
+  if (!item) return;
+  const pack = buildDutyContext(item, id);
+  const sel = pack.selection || {};
+  const sha = (sel.focus_run && (sel.focus_run.sha || sel.focus_run.day || sel.focus_run.label)) || 'run';
+  const fname = `perf-duty-tpcc-${dutySafeName(sel.suite)}-${dutySafeName(sha)}.json`;
+  const btn = document.getElementById(mode === 'save' ? 'dutyFabSave' : 'dutyFabCopy');
+  if (mode === 'save') {
+    downloadDutyJson(fname, pack);
+    flashDutyBtn(btn, 'Saved ✓', 'Save failed', true);
+  } else {
+    const ok = await copyDutyJson(pack);
+    flashDutyBtn(btn, ok ? 'Copied ✓' : 'Copy failed', 'Copy failed', ok);
+  }
+}
+
+function dutySafeName(s) {
+  return String(s || 'suite').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+}
+
+/** Frozen incident pack for duty_agent (schema perf-duty-context/v1). */
+function buildDutyContext(item, diveId) {
+  const fin = (item.issue === 'in_progress' && item.finished) ? item.finished : null;
+  const data = fin || item;
+  const dm = resolveDisplayMetrics(item);
+  const runs = data.now_runs || [];
+  const focusRun = runs.length ? runs[runs.length - 1] : null;
+  const react = [...document.querySelectorAll('.react-btn[aria-pressed="true"]')]
+    .map(b => b.dataset.react).filter(Boolean);
+  let dash = null;
+  try { dash = datalensUrl(item); } catch (_) {}
+  return {
+    schema: 'perf-duty-context/v1',
+    generated_at: new Date().toISOString(),
+    report: dutyReportMeta('tpcc'),
+    selection: {
+      branch: item.branch || null,
+      db: item.db || item.cluster || null,
+      suite: item.suite || null,
+      family: item.family || null,
+      warehouses: item.warehouses != null ? item.warehouses : null,
+      wh_label: item.wh_label || null,
+      run_type: item.run_type || null,
+      focus_run: focusRun ? {
+        label: focusRun.label || null,
+        day: focusRun.day || null,
+        sha: focusRun.version || null,
+        ts: focusRun.ts || null,
+        tpmc: focusRun.tpmc != null ? focusRun.tpmc : null,
+        lat90: focusRun.lat90 != null ? focusRun.lat90 : null,
+        lat_capped: !!focusRun.lat_capped,
+        report: focusRun.report || data.report || item.report || null,
+      } : null,
+    },
+    suite_now: {
+      issue: item.issue || null,
+      status: item.status || null,
+      kind: item.kind || null,
+      lat_now: dm.lat_now != null ? dm.lat_now : item.lat_now,
+      lat_base: dm.lat_base != null ? dm.lat_base : item.lat_base,
+      lat_pct: dm.lat_pct != null ? dm.lat_pct : item.lat_pct,
+      tpmc_now: dm.tpmc_now != null ? dm.tpmc_now : item.tpmc_now,
+      tpmc_base: dm.tpmc_base != null ? dm.tpmc_base : item.tpmc_base,
+      tpmc_pct: dm.tpmc_pct != null ? dm.tpmc_pct : item.tpmc_pct,
+      capped_now: item.capped_now != null ? item.capped_now : null,
+      reasons: item.reasons || [],
+      display_mode: dm.mode || 'alert',
+      last_ts: item.last_ts || null,
+      wave: item.wave || null,
+    },
+    queries: [],
+    sticky_query: null,
+    sticky_detail: null,
+    suite_history: compactHist(data.history || item.history, 24),
+    compare: { wave_id: getCompareId(item.branch, item.db) || null },
+    links: { datalens: dash },
+    hints: { react, wave_view: waveView() },
+    known_tickets: (item.tickets || []).map(t => ({
+      number: t.number,
+      title: t.title,
+      url: t.url,
+      fingerprint: t.fingerprint || null,
+      queries: t.queries || [],
+    })),
+  };
+}
+
+function diveHtml(r, id) {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  const data = fin || r;
+  const waveNote = (r.issue === 'in_progress')
+    ? `<div class="muted" style="margin-bottom:8px">Day-wave <code>${esc(r.wave || '')}</code> in progress` +
+      (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '') +
+      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(statusLabel({ ...fin, issue: fin.issue || fin.kind }))})` : ' · finished twin нет') +
+      `</div>`
+    : '';
+  if (fin) {
+    r.now_runs = data.now_runs;
+    r.history = data.history || r.history;
+    r.history_by_commit = data.history_by_commit || r.history_by_commit;
+  }
+  const cmpId = getCompareId(r.branch, r.db);
+  const runList = runCardsForItem(r);
+  const latestDay = runList.length ? (runList[runList.length - 1].day || '') : '';
+  const nCmp = Math.max(0, runList.filter(x => !x.isNow).length);
+  const nDays = new Set(runList.map(c => c.day).filter(Boolean)).size;
+  let dashUrl = null;
+  try { dashUrl = datalensUrl(r); } catch (_) {}
+  const dashLink = dashUrl
+    ? `<a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="DataLens · cluster × run_type × branch">dashboard</a>`
+    : '';
+  const runs = runList.map((run) => {
+    const lat = run.lat_capped
+      ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}&nbsp;ms</span>`
+      : `${fmt(run.lat90)}&nbsp;ms`;
+    const isLatest = !!run.isNow;
+    const isCmp = !!(cmpId && run.day && run.day === cmpId && !isLatest);
+    const cls = isLatest ? 'run-card active' : (isCmp ? 'run-card cmp' : 'run-card');
+    const link = run.report
+      ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>`
+      : '—';
+    return `<div class="${cls}" data-run-day="${esc(run.day || '')}" data-run-latest="${isLatest ? '1' : '0'}" title="${isLatest ? 'now · клик очищает compare' : 'клик = baseline для compare'}">
+      <div class="t">${esc(run.label)}</div>
+      <div>tpmC ${fmt(run.tpmc)} · lat ${lat}</div>
+      <div class="muted">${esc(run.version || '')}${isCmp ? ' · cmp' : (isLatest ? ' · now' : '')}</div>
+      <div>${link}</div>
+    </div>`;
+  }).join('') || `<div class="muted">${
+    r.issue === 'in_progress' && !fin
+      ? `Day-wave <code>${esc(r.wave || '')}</code> ещё едет` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+      : r.issue === 'missing'
+        ? `Нет в завершённой day-wave <code>${esc(r.wave || '')}</code>` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+        : 'Нет последних прогонов (missing/stale)'
+  }</div>`;
+
+  const dm = resolveDisplayMetrics(r);
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const nowCard = runList.length ? runList[runList.length - 1] : null;
+  const reportUrl = (nowCard && nowCard.report) || data.report || r.report || null;
+  const reportLink = reportUrl
+    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Allure</a>`
+    : '—';
+  const absLat = (dm.lat_base != null && dm.lat_now != null) ? (dm.lat_now - dm.lat_base) : null;
+  const absTpmc = (dm.tpmc_base != null && dm.tpmc_now != null) ? (dm.tpmc_now - dm.tpmc_base) : null;
+  const fmtAbs = (v, u) => v == null ? '—' : `${v > 0 ? '+' : ''}${fmt(v)}${u || ''}`;
+  const summaryHtml = dm.mode === 'compare'
+    ? `<div style="display:grid;gap:4px;margin-bottom:4px">
+         <div style="font-weight:700;color:#9a6700">Compare ${esc(dm.cmp_day || '')} → now</div>
+         <div>lat: base <b>${fmt(dm.lat_base)}</b> ms → now <b>${fmt(dm.lat_now)}</b> ms · Δ <b class="${dm.lat_pct != null && dm.lat_pct >= 10 ? 'bad' : ''}">${fmtAbs(absLat, ' ms')} (${pct(dm.lat_pct)})</b></div>
+         <div>tpmC: base <b>${fmt(dm.tpmc_base)}</b> → now <b>${fmt(dm.tpmc_now)}</b> · Δ <b class="${dm.tpmc_pct != null && dm.tpmc_pct <= -10 ? 'bad' : ''}">${fmtAbs(absTpmc, '')} (${pct(dm.tpmc_pct)})</b></div>
+         <div class="muted" style="font-size:11px">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}</div>
+       </div>`
+    : `<div class="muted">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}${
+        (r.tpmc_drift_pct != null)
+          ? ` · drift ${pct(r.tpmc_drift_pct)} vs lookback`
+          : ''
+      }</div>`;
+  const reasonHtml = summaryHtml;
+  const linksRow = [
+    `Allure: ${reportLink}`,
+    dashLink ? `Dashboard: ${dashLink}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const ticketsHtml = ticketPillsHtml(r.tickets);
+  const waitPill = dutyDecisionPillHtml(r.duty_decision);
+  const ticketRow = [ticketsHtml, waitPill].filter(Boolean).join(' ');
+  return `<div class="dive" data-dive-branch="${esc(r.branch || '')}" data-dive-db="${esc(r.db || '')}" data-dive-latest-day="${esc(latestDay)}">
+    ${waveNote}
+    ${reasonHtml}
+    ${ticketRow ? `<div style="margin:0 0 8px">${ticketRow}</div>` : ''}
+    <div class="muted" style="margin-bottom:6px">${linksRow}</div>
+    <div>
+      <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} + now · ${nDays}d; клик = day-baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
+      <div class="runs">${runs}</div>
+    </div>
+    <div class="toolbar" style="margin:8px 0 0">
+      <span class="muted" style="font-size:12px">Save / Copy context → красная кнопка справа внизу</span>
+    </div>
+    <div id="${id}_hist"></div>
+  </div>`;
+}
+function renderInbox() {
+  destroyCharts();
+  const rows = filteredInboxOrDrill();
+  const root = document.getElementById('inbox');
+  if (!rows.length) {
+    const issue = document.getElementById('fIssue').value;
+    const db = document.getElementById('fDb')?.value || '';
+    const fam = document.getElementById('fFam')?.value || '';
+    const drill = !!(db && fam);
+    if (drill) {
+      root.innerHTML = '<div class="empty">no runs</div>';
+      return;
+    }
+    root.innerHTML = issue === 'ok'
+      ? '<div class="empty">Нет ok-slice под фильтры.</div>'
+      : '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
+    return;
+  }
+  const body = rows.map((r, idx) => {
+    const id = 'dive_' + idx;
+    const dm = resolveDisplayMetrics(r);
+    const statusLbl = esc(statusLabel(r));
+    const badgeCls = badgeClass(r);
+    const latWorse = dm.lat_pct != null && dm.lat_pct >= 10;
+    const tpmcWorse = dm.tpmc_pct != null && dm.tpmc_pct <= -10;
+    const ticketsRow = ticketPillsHtml(r.tickets);
+    return `
+      <tr class="row" data-idx="${idx}" data-id="${id}">
+        <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span>
+          <div class="muted" style="margin-top:4px">${dm.mode === 'compare' ? 'режим: compare' : 'режим: alert'}</div></td>
+        <td><span class="cluster">${esc(r.db)}</span>
+          <div class="muted">${esc(r.branch)}</div></td>
+        <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
+          <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div>
+          ${ticketsRow ? `<div style="margin-top:3px">${ticketsRow}</div>` : ''}</td>
+        <td>${metricCellHtml(dm.lat_base, dm.lat_now, dm.lat_pct, 'ms', dm, latWorse)}</td>
+        <td>${metricCellHtml(dm.tpmc_base, dm.tpmc_now, dm.tpmc_pct, '', dm, tpmcWorse)}</td>
+        <td class="muted">${esc(r.last_ts || '—')}
+          ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
+        </td>
+      </tr>
+      <tr class="detail hidden" data-detail="${id}"><td colspan="6">${diveHtml(r, id)}</td></tr>`;
+  }).join('');
+
+  root.innerHTML = `<table class="inbox">
+    <thead><tr>
+      <th>Status</th><th>Cluster</th><th>Slice</th>
+      <th>Lat p90</th><th>tpmC</th><th>Wave / last</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="muted" style="margin-top:8px">Показано ${rows.length} · клик = deep dive</div>`;
+
+  root.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.id;
+      const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      root.querySelectorAll('tr.row.open').forEach(other => {
+        if (other === tr) return;
+        other.classList.remove('open');
+        const od = root.querySelector(`tr.detail[data-detail="${other.dataset.id}"]`);
+        if (od) od.classList.add('hidden');
+        destroyCharts(other.dataset.id + '_');
+      });
+      const open = tr.classList.toggle('open');
+      detail.classList.toggle('hidden', !open);
+      if (!open) destroyCharts(id + '_');
+      else {
+        const idx = Number(tr.dataset.idx);
+        const item = rows[idx];
+        if (item) {
+          mountHistory(item, id);
+          detail.querySelectorAll('.run-card[data-run-day]').forEach(card => {
+            card.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const dive = card.closest('.dive');
+              const branch = dive?.dataset.diveBranch || item.branch;
+              const db = dive?.dataset.diveDb || item.db;
+              const day = card.dataset.runDay || '';
+              const latest = card.dataset.runLatest === '1';
+              if (latest || !day) {
+                setCompareId(branch, db, '');
+              } else {
+                // Allow any day this slice has — incomplete cluster coverage is fine.
+                setCompareId(branch, db, day);
+              }
+              destroyCharts();
+              renderAll();
+              // Re-open the same row after re-render.
+              const again = document.querySelector(`#inbox tr.row[data-id="${id}"]`);
+              if (again && !again.classList.contains('open')) again.click();
+              else syncDutyFab(filteredInbox());
+            });
+          });
+        }
+      }
+      syncDutyFab(rows);
+    });
+  });
+  syncDutyFab(rows);
+}
+function renderAll() {
+  renderHeader();
+  renderHeatmap();
+  renderInbox();
+}
+function setupDateBar() {
+  const fromEl = document.getElementById('winFrom');
+  const toEl = document.getElementById('winTo');
+  fromEl.value = winFrom || UI.default_from || '';
+  toEl.value = winTo || UI.default_to || '';
+  if (UI.default_from) { fromEl.min = UI.default_from; toEl.min = UI.default_from; }
+  if (UI.default_to) { fromEl.max = UI.default_to; toEl.max = UI.default_to; }
+  document.getElementById('winApply').addEventListener('click', () => {
+    let a = fromEl.value || null;
+    let b = toEl.value || null;
+    if (a && b && a > b) { const t = a; a = b; b = t; }
+    winFrom = a; winTo = b;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  document.getElementById('winReset').addEventListener('click', () => {
+    winFrom = UI.default_from || null;
+    winTo = UI.default_to || null;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  [fromEl, toEl].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') document.getElementById('winApply').click();
+    });
+  });
+}
+function setupFilters() {
+  const ui = DATA.ui || {};
+  const branches = uiBranches();
+  const def = ui.default_branch || 'main';
+  document.getElementById('fBranch').innerHTML =
+    `<option value="">all</option>` +
+    branches.map(b => `<option value="${esc(b)}"${b === def ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  if (branches.includes(def)) document.getElementById('fBranch').value = def;
+
+  const fams = [...new Set([
+    ...((DATA.heatmap && DATA.heatmap.families) || []),
+    ...(DATA.inbox || []).map(r => r.family).filter(Boolean),
+  ])].sort();
+  document.getElementById('fFam').innerHTML = '<option value="">all</option>' +
+    fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  refreshDbFilter();
+  setupDateBar();
+  syncWaveButtons();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.addEventListener('click', () => setWave(btn.dataset.wave));
+  });
+  ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'fBranch') refreshDbFilter();
+      renderAll();
+    });
+  });
+}
+function refreshDbFilter() {
+  const br = selectedBranch();
+  const keep = document.getElementById('fDb').value;
+  const dbs = br
+    ? dbsForBranch(br)
+    : [...new Set((DATA.inbox || []).map(r => r.db).filter(Boolean))].sort();
+  document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
+    dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if (dbs.includes(keep)) document.getElementById('fDb').value = keep;
+}
+
+setupFilters();
+document.getElementById('dutyFabSave')?.addEventListener('click', () => dutyFabAction('save'));
+document.getElementById('dutyFabCopy')?.addEventListener('click', () => dutyFabAction('copy'));
+renderAll();
+</script>
+</body>
+</html>

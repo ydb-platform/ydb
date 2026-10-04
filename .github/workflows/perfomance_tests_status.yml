@@ -1,0 +1,154 @@
+name: Performance-tests-status-reports
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        description: "Optional commit SHA to build reports from"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  reports:
+    name: Build and publish Now reports
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 1
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Setup s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: "ydb-builds"
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+
+      - name: Install Python deps
+        run: python3 -m pip install -q "ydb[yc]>=3.20"
+
+      - name: Install GitHub CLI
+        run: |
+          set -eux
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
+          fi
+          # Analytic runners often lack gh; pin a release into PATH for duty known_issues.
+          GH_VER=2.74.0
+          mkdir -p "$RUNNER_TEMP/gh-bin"
+          curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/gh-bin" --strip-components=1
+          echo "$RUNNER_TEMP/gh-bin/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/gh-bin/bin/gh" --version
+
+      # Refresh OLAP marts used by Now/duty (same as collect_analytics_fast) so hourly
+      # reports do not wait up to ~30 min for the scheduled mart job.
+      - name: Upload olap perfomance suites data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_suites_mart.sql --table_path perfomance/olap/fast_results_siutes --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite --ttl_min 43200 --ttl_key RunTs
+
+      - name: Upload olap perfomance data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Run_start_timestamp Db Suite Test Branch --ttl_min 43200 --ttl_key Run_start_timestamp
+
+      - name: Fetch data and generate reports
+        id: build
+        env:
+          # duty known_issues via `gh search` (REST fallback if gh still missing)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          PUBLISH_DIR="${RUNNER_TEMP}/perfomance_tests_status_publish"
+          rm -rf "$PUBLISH_DIR"
+          mkdir -p "$PUBLISH_DIR"
+          set +e
+          python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-dir "$PUBLISH_DIR"
+          rc=$?
+          set -e
+          echo "publish_dir=$PUBLISH_DIR" >> "$GITHUB_OUTPUT"
+          # Avoid 0/1 GITHUB_OUTPUT (JS falsy "0" breaks env wiring) — use yes/no.
+          if [[ -f "$PUBLISH_DIR/olap-report.html" ]]; then echo "olap_ok=yes" >> "$GITHUB_OUTPUT"
+          else echo "olap_ok=no" >> "$GITHUB_OUTPUT"; fi
+          if [[ -f "$PUBLISH_DIR/tpcc-report.html" ]]; then echo "tpcc_ok=yes" >> "$GITHUB_OUTPUT"
+          else echo "tpcc_ok=no" >> "$GITHUB_OUTPUT"; fi
+          if [[ ! -f "$PUBLISH_DIR/olap-report.html" && ! -f "$PUBLISH_DIR/tpcc-report.html" ]]; then
+            echo "Both reports failed (rc=$rc)"
+            exit 1
+          fi
+          if [[ ! -f "$PUBLISH_DIR/olap-report.html" || ! -f "$PUBLISH_DIR/tpcc-report.html" ]]; then
+            echo "Partial success (generator rc=$rc)"
+          fi
+
+      - name: Upload reports to S3 (stable URLs)
+        env:
+          PUBLISH_DIR: ${{ steps.build.outputs.publish_dir }}
+          OLAP_OK: ${{ steps.build.outputs.olap_ok }}
+          TPCC_OK: ${{ steps.build.outputs.tpcc_ok }}
+          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+        run: |
+          set -eux
+          S3_STABLE="s3://ydb-builds/main/perfomance_tests_status"
+          URL_STABLE="${AWS_ENDPOINT}/ydb-builds/main/perfomance_tests_status"
+
+          {
+            echo "## Performance tests status reports"
+            echo ""
+            echo "| Report | Status | Link |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$OLAP_OK" == "yes" ]]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+              --guess-mime-type --no-check-md5 --force \
+              "$PUBLISH_DIR/olap-report.html" "$S3_STABLE/olap-report.html"
+            echo "| OLAP Now | published | [${URL_STABLE}/olap-report.html](${URL_STABLE}/olap-report.html) |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| OLAP Now | **FAILED** (previous S3 object kept) | — |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [[ "$TPCC_OK" == "yes" ]]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+              --guess-mime-type --no-check-md5 --force \
+              "$PUBLISH_DIR/tpcc-report.html" "$S3_STABLE/tpcc-report.html"
+            echo "| TPC-C Now | published | [${URL_STABLE}/tpcc-report.html](${URL_STABLE}/tpcc-report.html) |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| TPC-C Now | **FAILED** (previous S3 object kept) | — |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          {
+            echo ""
+            echo "Stable paths (overwritten each successful run, no versioning)."
+            if [[ -f "$PUBLISH_DIR/status.json" ]]; then
+              echo ""
+              echo "<details><summary>status.json</summary>"
+              echo ""
+              echo '```json'
+              cat "$PUBLISH_DIR/status.json"
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$OLAP_OK" != "yes" || "$TPCC_OK" != "yes" ]]; then
+            exit 1
+          fi

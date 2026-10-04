@@ -14,8 +14,8 @@ SRCS(
 PEERDIR(
     ydb/services/metadata/manager
     ydb/core/formats/arrow/serializer
-    ydb/core/tx/columnshard/engines/storage/optimizer/abstract
-    ydb/core/tx/columnshard/data_accessor/abstract
+    ydb/core/tx/columnshard/engines/storage/optimizer/abstract/interface
+    ydb/core/tx/columnshard/data_accessor/abstract/interface
     ydb/core/kqp/gateway/utils
     ydb/core/protos
 )

@@ -1,5 +1,12 @@
+from contextlib import contextmanager
+from unittest.mock import MagicMock
+
 import pytest
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
+from ydb.tests.library.compatibility.fixtures import (
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+    MixedClusterFixture,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -12,7 +19,7 @@ class BaseColumnTableCompatibilityTest:
             },
             "table_service_config": {
                 "enable_olap_sink": True,
-            }
+            },
         }
 
     def create_simple_column_table(self, session_pool, table_name, additional_columns=None):
@@ -51,7 +58,9 @@ class BaseColumnTableCompatibilityTest:
                 {values_str}
         """
 
-        session_pool.execute_with_retries(query)
+        # A tablet can restart after readiness, leaving the commit outcome unknown.
+        # Retrying this fixed UPSERT preserves the same keys and values.
+        session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(idempotent=True, max_retries=10))
 
     def get_table_count(self, session_pool, table_name):
         query = f"SELECT COUNT(*) as cnt FROM `{table_name}`"
@@ -59,12 +68,11 @@ class BaseColumnTableCompatibilityTest:
         return result_sets[0].rows[0]["cnt"]
 
     def get_standard_test_data(self, prefix="test_value", count=2, start_id=1):
-        return [
-            {"id": start_id + i, "value": f"{prefix}_{start_id + i}"}
-            for i in range(count)
-        ]
+        return [{"id": start_id + i, "value": f"{prefix}_{start_id + i}"} for i in range(count)]
 
-    def get_test_data_with_column(self, prefix="test_value", count=2, start_id=1, column_name="new_column", column_value=42):
+    def get_test_data_with_column(
+        self, prefix="test_value", count=2, start_id=1, column_name="new_column", column_value=42
+    ):
         return [
             {"id": start_id + i, "value": f"{prefix}_{start_id + i}", column_name: column_value + i}
             for i in range(count)
@@ -72,8 +80,7 @@ class BaseColumnTableCompatibilityTest:
 
     def get_mixed_cluster_test_data(self, prefix="mixed_cluster_value", count=2, start_id=1):
         return [
-            {"id": start_id + i, "value": f"{prefix}_{start_id + i}", "cluster_version": "mixed"}
-            for i in range(count)
+            {"id": start_id + i, "value": f"{prefix}_{start_id + i}", "cluster_version": "mixed"} for i in range(count)
         ]
 
     def add_column_and_insert_data(self, session_pool, table_name, column_name, column_type="Int32", test_data=None):
@@ -128,6 +135,39 @@ class BaseColumnTableCompatibilityTest:
                     assert actual_row[key] == expected_value.encode('utf-8')
                 else:
                     assert actual_row[key] == expected_value
+
+
+class TestColumnTableUpsertRetries(BaseColumnTableCompatibilityTest):
+    @pytest.fixture
+    def pool(self, monkeypatch):
+        # Exercise the real SDK retry loop without waiting between failures.
+        monkeypatch.setattr("ydb.retries.time.sleep", lambda _: None)
+        pool = MagicMock()
+        pool._should_stop.is_set.return_value = False
+        pool.execute_with_retries = lambda *args, **kwargs: ydb.QuerySessionPool.execute_with_retries(
+            pool, *args, **kwargs
+        )
+        return pool
+
+    def test_retries_same_upsert(self, pool):
+        execute = pool.checkout.return_value.__enter__.return_value.execute
+        execute.side_effect = [ydb.Undetermined("response lost"), []]
+
+        self.insert_test_data(pool, "column_table", [{"id": 13, "value": "rolling_value_13"}])
+
+        assert execute.call_count == 2
+        assert execute.call_args_list[0] == execute.call_args_list[1]
+
+    @pytest.mark.parametrize("error, attempts", [(ydb.Undetermined, 11), (ydb.BadRequest, 1)])
+    def test_preserves_failure(self, pool, error, attempts):
+        execute = pool.checkout.return_value.__enter__.return_value.execute
+        execute.side_effect = error("persistent failure")
+
+        with pytest.raises(error, match="persistent failure"):
+            self.insert_test_data(pool, "column_table", [{"id": 13, "value": "rolling_value_13"}])
+
+        assert execute.call_count == attempts
+        assert all(call == execute.call_args_list[0] for call in execute.call_args_list)
 
 
 class TestTableSchemaCompatibilityRestart(RestartToAnotherVersionFixture, BaseColumnTableCompatibilityTest):
@@ -203,7 +243,9 @@ class TestTableSchemaCompatibilityRestart(RestartToAnotherVersionFixture, BaseCo
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"ALTER TABLE `{table_name}` ADD COLUMN version_column String"
             session_pool.execute_with_retries(query)
-            test_data_with_version = [{"id": 5, "value": "test_value_5", "final_column": 2.71, "version_column": "new_version"}]
+            test_data_with_version = [
+                {"id": 5, "value": "test_value_5", "final_column": 2.71, "version_column": "new_version"}
+            ]
             self.insert_test_data(session_pool, table_name, test_data_with_version)
             query = f"SELECT id, value, final_column, version_column FROM `{table_name}` ORDER BY id"
             result_sets = session_pool.execute_with_retries(query)
@@ -225,6 +267,43 @@ class TestTableSchemaCompatibilityRolling(RollingUpgradeAndDowngradeFixture, Bas
         config = self.get_column_table_config()
         yield from self.setup_cluster(**config)
 
+    def test_upsert_after_lost_commit_response(self, monkeypatch):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Test is not supported for this cluster version")
+
+        table_name = "test_upsert_lost_response"
+        expected = self.get_standard_test_data(prefix="committed_value")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            self.create_simple_column_table(session_pool, table_name)
+            checkout = session_pool.checkout
+            requests = []
+
+            @contextmanager
+            def checkout_with_lost_response(*args, **kwargs):
+                with checkout(*args, **kwargs) as session:
+                    execute = session.execute
+
+                    def lose_first_response(query, *args, **kwargs):
+                        requests.append(query)
+                        result = list(execute(query, *args, **kwargs))
+                        # The server has completed the write before its response is lost.
+                        if len(requests) == 1:
+                            raise ydb.Undetermined("injected loss after commit")
+                        return iter(result)
+
+                    with monkeypatch.context() as patch:
+                        patch.setattr(session, "execute", lose_first_response)
+                        yield session
+
+            with monkeypatch.context() as patch:
+                patch.setattr(session_pool, "checkout", checkout_with_lost_response)
+                self.insert_test_data(session_pool, table_name, expected)
+
+            assert len(requests) == 2
+            assert requests[0] == requests[1]
+            self.verify_table_data(session_pool, table_name, expected)
+            assert self.get_table_count(session_pool, table_name) == len(expected)
+
     def test_table_operations_during_rolling_upgrade(self):
         if min(self.versions) < (25, 1):
             pytest.skip("Test is not supported for this cluster version")
@@ -234,6 +313,7 @@ class TestTableSchemaCompatibilityRolling(RollingUpgradeAndDowngradeFixture, Bas
             self.create_simple_column_table(session_pool, table_name)
             test_data = self.get_standard_test_data(prefix="initial_value")
             self.insert_test_data(session_pool, table_name, test_data)
+            expected_data = list(test_data)
 
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -243,6 +323,8 @@ class TestTableSchemaCompatibilityRolling(RollingUpgradeAndDowngradeFixture, Bas
                 self.insert_test_data(session_pool, table_name, test_data)
                 count = self.get_table_count(session_pool, table_name)
                 assert count == new_id
+                expected_data.extend(test_data)
+                self.verify_table_data(session_pool, table_name, expected_data)
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"ALTER TABLE `{table_name}` ADD COLUMN rolling_column Int32"
@@ -251,6 +333,10 @@ class TestTableSchemaCompatibilityRolling(RollingUpgradeAndDowngradeFixture, Bas
             self.insert_test_data(session_pool, table_name, test_data)
             count = self.get_table_count(session_pool, table_name)
             assert count >= 10
+            expected_data.extend(test_data)
+            self.verify_table_data(session_pool, table_name, expected_data)
+            result = session_pool.execute_with_retries(f"SELECT rolling_column FROM `{table_name}` WHERE id = 999")
+            assert result[0].rows[0]["rolling_column"] == 42
 
     def test_schema_changes_during_rolling_upgrade(self):
         if min(self.versions) < (25, 1):
@@ -269,13 +355,17 @@ class TestTableSchemaCompatibilityRolling(RollingUpgradeAndDowngradeFixture, Bas
                 column_name = f"step_column_{step_count}"
                 query = f"ALTER TABLE `{table_name}` ADD COLUMN {column_name} Int32"
                 session_pool.execute_with_retries(query)
-                test_data = [
-                    {"id": step_count + 1, "value": f"step_value_{step_count}", column_name: step_count * 10}
-                ]
+                test_data = [{"id": step_count + 1, "value": f"step_value_{step_count}", column_name: step_count * 10}]
 
                 self.insert_test_data(session_pool, table_name, test_data)
                 count = self.get_table_count(session_pool, table_name)
                 assert count == step_count + 1
+                result = session_pool.execute_with_retries(
+                    f"SELECT value, {column_name} FROM `{table_name}` WHERE id = {step_count + 1}"
+                )
+                assert len(result[0].rows) == 1
+                assert result[0].rows[0]["value"] == f"step_value_{step_count}".encode("utf-8")
+                assert result[0].rows[0][column_name] == step_count * 10
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"SELECT * FROM `{table_name}` ORDER BY id LIMIT 1"

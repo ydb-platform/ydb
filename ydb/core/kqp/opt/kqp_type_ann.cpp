@@ -3064,16 +3064,36 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+// RewriteSelect records SELECT order in the final projecting Map. Follow only
+// its output wrappers; the struct type has canonical name order instead.
+TString GetSelectColumn(const TExprNode::TPtr& input, size_t index) {
+    if (auto map = TMaybeNode<TKqpOpMap>(input)) {
+        Y_ENSURE(map.Cast().Project(), "Expected SELECT projection");
+        return map.Cast().MapElements().Item(index).Variable().StringValue();
+    }
+    if (auto alias = TMaybeNode<TKqpOpReplaceAlias>(input)) {
+        const auto name = GetSelectColumn(alias.Cast().Input().Ptr(), index);
+        const auto dot = name.find('.');
+        return alias.Cast().Alias().StringValue() + "." + name.substr(dot == TString::npos ? 0 : dot + 1);
+    }
+    Y_ENSURE(TKqpOpLimit::Match(input.Get()) || TKqpOpSort::Match(input.Get()) || TKqpOpSetOp::Match(input.Get()),
+        "Expected SELECT projection, got " << input->Content());
+    return GetSelectColumn(input->HeadPtr(), index);
+}
+
 TStatus AnnotateOpReplaceColumns(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto structType = input->ChildPtr(TKqpOpReplaceColumns::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TVector<const TItemExprType*> structItemTypes;
     auto typeItems = structType->GetItems();
     auto columns = input->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
+    Y_ENSURE(typeItems.size() == columns->ChildrenSize());
 
-    for (size_t i=0; i<typeItems.size(); i++) {
-        auto item = typeItems[i];
+    for (size_t i = 0; i < typeItems.size(); i++) {
+        const auto name = GetSelectColumn(input->ChildPtr(TKqpOpReplaceColumns::idx_Input), i);
+        const auto* type = structType->FindItemType(name);
+        Y_ENSURE(type, "Unknown projection column " << name);
         auto newName = columns->ChildPtr(i)->Content();
-        structItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, item->GetItemType()));
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, type));
     }
 
     auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);

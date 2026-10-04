@@ -283,6 +283,67 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         UNIT_ASSERT(left.GetReplicate().GetInput()->GetChild(0)->Kind == EOperator::EmptySource);
     }
 
+    Y_UNIT_TEST(PositionalRenamePreservesProjectionAcrossSharedInputs) {
+        for (const TString kind : {"union_all", "union"}) {
+            TExprContext ctx;
+            TTypeAnnotationContext typeCtx;
+            const TPositionHandle pos;
+            const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            const auto rowType = [&](const TString& prefix) {
+                return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(
+                    TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>(prefix + "a", type),
+                        ctx.MakeType<TItemExprType>(prefix + "z", type)}));
+            };
+            auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
+            TExprNode::TListType elements;
+            for (const TString name : {"z", "a"}) {
+                auto constant = MakeConstant("Uint64", name == "z" ? "1" : "2", pos, &ctx).Node;
+                constant->TailPtr()->SetTypeAnn(type);
+                elements.push_back(ctx.NewCallable(pos, "KqpOpMapElementLambda",
+                    {empty, ctx.NewAtom(pos, name), constant, ctx.NewAtom(pos, "false")}));
+            }
+            auto map = ctx.NewCallable(pos, "KqpOpMap",
+                {empty, ctx.NewList(pos, std::move(elements)), ctx.NewAtom(pos, "true")});
+            map->SetTypeAnn(rowType(""));
+            auto alias = ctx.NewCallable(pos, "KqpOpReplaceAlias", {map, ctx.NewAtom(pos, "s")});
+            alias->SetTypeAnn(rowType("s."));
+            const auto rename = [&]() {
+                auto result = ctx.NewCallable(pos, "KqpOpReplaceColumns", {alias,
+                    ctx.NewList(pos, {ctx.NewAtom(pos, "z"), ctx.NewAtom(pos, "a")})});
+                result->SetTypeAnn(rowType(""));
+                return result;
+            };
+            auto setOp = ctx.NewCallable(pos, "KqpOpSetOp", {rename(), rename(), ctx.NewAtom(pos, kind)});
+            setOp->SetTypeAnn(rowType(""));
+            auto root = ctx.NewCallable(pos, "KqpOpReplaceColumns", {setOp,
+                ctx.NewList(pos, {ctx.NewAtom(pos, "first"), ctx.NewAtom(pos, "second")})});
+
+            PlanConverter converter(typeCtx, ctx);
+            auto plan = converter.ExprNodeToOperator(root);
+            const auto& registry = converter.PlanProps.InfoUnitRegistry;
+            const auto checkRename = [&](const TOpMap& op, const TString& prefix, bool outer) {
+                for (const auto& [id, element] : op.GetMapElements().Items()) {
+                    const auto input = element.GetColumnAccess();
+                    const auto& name = registry.Get(id).GetColumnName();
+                    const auto expected = outer ? (name == "first" ? "z" : "a") : name;
+                    UNIT_ASSERT_VALUES_EQUAL(registry.Get(input).GetFullName(), prefix + expected);
+                    UNIT_ASSERT(op.GetChild(0)->GetOutputIUs().Contains(input));
+                }
+            };
+            checkRename(CastOperator<TOpMap>(*plan), "", true);
+            auto* merge = plan->GetChild(0).Get();
+            if (kind == "union") {
+                merge = merge->GetChild(0).Get();
+            }
+            UNIT_ASSERT(merge->Kind == EOperator::UnionAll);
+            for (ui32 i = 0; i < 2; ++i) {
+                checkRename(CastOperator<TOpMap>(*merge->GetChild(i)), "s.", false);
+            }
+            UNIT_ASSERT(!merge->GetChild(0)->GetChild(0)->GetOutputIUs().HasAny(
+                merge->GetChild(1)->GetChild(0)->GetOutputIUs()));
+        }
+    }
+
     Y_UNIT_TEST(RootKeepsOptionalQueryHintsSeparateFromOutputNames) {
         TExprContext ctx;
         TTypeAnnotationContext typeCtx;

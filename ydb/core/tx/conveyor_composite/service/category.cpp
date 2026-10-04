@@ -32,9 +32,9 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
     if (const auto tasksCount = it->second->GetTasksCount()) {
         YDB_LOG_WARN("",
             {"event", "unregister_process_with_queued_tasks"},
-            {"process_id", processId},
+            {"processId", processId},
             {"category", ::ToString(Category)},
-            {"tasks_count", tasksCount});
+            {"tasksCount", tasksCount});
     }
     const auto identity = it->second->GetSchedulerQueryIdentity();
     auto identityIt = ProcessesByIdentity.find(identity);

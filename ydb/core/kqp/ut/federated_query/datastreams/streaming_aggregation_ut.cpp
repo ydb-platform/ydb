@@ -2421,6 +2421,153 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
         readSession->ExpectSessionClosed();
     }
 
+    Y_UNIT_TEST_F(TextChangeAddsAggregationAndRequiresForceToRemoveOldState, TOutputTableAggregationTestFixture) {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingQueryStateRecompute(true);
+        const auto pqGateway = SetupMockPqGateway({.DefaultTopicSettings = {.Consumers = {"old", "new"}}});
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String, total Int64, PRIMARY KEY (key));
+            CREATE TABLE aggregateCount (key String, total Uint64, PRIMARY KEY (key));
+        )");
+        const auto body = [&](bool sum, bool count, TStringBuf consumer = "old") {
+            TString query = fmt::format(R"(
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA pq.Consumer = "{1}";
+                $input = SELECT * FROM `source`.`{0}` WITH (FORMAT = "json_each_row",
+                    SCHEMA (key String NOT NULL, value Int64 NOT NULL));
+            )", InputTopic, consumer);
+            if (sum) {
+                query += "UPSERT INTO aggregateResult SELECT key, SUM(value) AS total FROM $input GROUP BY key;";
+            }
+            if (count) {
+                query += "UPSERT INTO aggregateCount SELECT key, COUNT(*) AS total FROM $input GROUP BY key;";
+            }
+            return query;
+        };
+        const auto rows = [](TStringBuf table) {
+            return fmt::format("SELECT Unwrap(key || ':' || CAST(total AS String)) AS Data FROM {} ORDER BY key;", table);
+        };
+        const auto alter = [&](bool sum, bool count, bool force, bool failure = false) {
+            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY aggregation SET (FORCE = " << (force ? "TRUE" : "FALSE")
+                << ") AS DO BEGIN " << body(sum, count) << " END DO;",
+                failure ? EStatus::BAD_REQUEST : EStatus::SUCCESS, failure ? "output table is missing" : "");
+        };
+        ExecQuery("CREATE STREAMING QUERY aggregation AS DO BEGIN " + body(true, false) + " END DO;");
+        WaitStreamingQueryStatus("aggregation");
+        auto reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent({{0, R"({"key":"a","value":5})", {}}, {1, R"({"key":"a","value":2})", {}}});
+        WaitOutputRows(rows("aggregateResult"), {"a:7"});
+        WaitAggregationCheckpoint();
+
+        alter(true, true, false);
+        reader->ExpectSessionClosed();
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent(2, R"({"key":"a","value":3})");
+        WaitOutputRows(rows("aggregateResult"), {"a:10"});
+        WaitOutputRows(rows("aggregateCount"), {"a:1"}); // The new aggregation starts at the checkpoint offset.
+        WaitAggregationCheckpoint();
+
+        alter(false, true, false, true);
+        alter(false, true, true);
+        reader->ExpectSessionClosed();
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent(3, R"({"key":"a","value":4})");
+        WaitOutputRows(rows("aggregateResult"), {"a:10"});
+        WaitOutputRows(rows("aggregateCount"), {"a:2"});
+        WaitAggregationCheckpoint();
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = FALSE);");
+        reader->ExpectSessionClosed();
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = TRUE);");
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent(4, R"({"key":"a","value":1})");
+        WaitOutputRows(rows("aggregateCount"), {"a:3"});
+        WaitAggregationCheckpoint();
+        // The mock SDK cannot describe consumers. This injects a provider preparation failure
+        // while leaving ordinary source checkpoint restoration available to compute actors.
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (FORCE = FALSE) AS DO BEGIN "
+            + body(false, true, "new") + " END DO;", EStatus::BAD_REQUEST, "Failed to prepare sources for recovery");
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (FORCE = TRUE) AS DO BEGIN "
+            + body(false, true, "new") + " END DO;");
+        reader->ExpectSessionClosed();
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent(5, R"({"key":"a","value":1})");
+        WaitOutputRows(rows("aggregateCount"), {"a:4"});
+        FinishOutputAggregation();
+        reader->ExpectSessionClosed();
+        DropTopics();
+    }
+
+    Y_UNIT_TEST_TWIN_F(TextChangePreservesOffsetsAndOutputAggregation, MultipleTasks, TOutputTableAggregationTestFixture) {
+        AggregationAppConfig.MutableFeatureFlags()->SetEnableStreamingQueryStateRecompute(true);
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (
+                key String, total Int64, minimum Int64, PRIMARY KEY (key)
+            );
+        )");
+        const auto body = [&](const TString& filter, bool nullableKey = false, bool extraAggregate = false, ui32 tasks = 0) {
+            tasks = tasks ? tasks : (MultipleTasks ? 2 : 1);
+            return fmt::format(R"(
+                PRAGMA ydb.MaxTasksPerStage = "{tasks}";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{"tx": 0, "stage": 0, "tasks": {tasks}}},
+                    {{"tx": 0, "stage": 1, "tasks": {tasks}}}
+                ] @@;
+                UPSERT INTO aggregateResult
+                SELECT key, SUM(value) AS total {extra}
+                FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                    SCHEMA (key String {required}, value Int64 NOT NULL))
+                {filter} GROUP BY key;
+            )", "input"_a = InputTopic, "filter"_a = filter, "tasks"_a = tasks,
+                "required"_a = nullableKey ? "" : "NOT NULL",
+                "extra"_a = extraAggregate ? ", MIN(value) AS minimum" : "");
+        };
+        ExecQuery("CREATE STREAMING QUERY aggregation AS DO BEGIN " + body("") + " END DO;");
+        WaitStreamingQueryStatus("aggregation");
+        auto reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":5})", {}},
+            {1, R"({"key":"a","value":2})", {}},
+        });
+        const TString resultQuery = R"(
+            SELECT Unwrap(key || ":" || CAST(total AS String)) AS Data FROM aggregateResult ORDER BY key;
+        )";
+        WaitOutputRows(resultQuery, {"a:7"});
+        WaitAggregationCheckpoint();
+
+        const auto alter = [&](const TString& query, const TString& error = "") {
+            ExecQuery("ALTER STREAMING QUERY aggregation SET (FORCE = FALSE) AS DO BEGIN " + query + " END DO;",
+                error ? EStatus::BAD_REQUEST : EStatus::SUCCESS, error);
+        };
+        alter(body("", true), "key type changed for output table /Root/aggregateResult, previous: "
+            "Type (Struct) with 1 members { Member [key] : { Type (Data), schemeType: String, schemeTypeId: 4097 } } , new: "
+            "Type (Struct) with 1 members { Member [key] : { Type (Optional) { Optional item type: { "
+            "Type (Data), schemeType: String, schemeTypeId: 4097 } } } }");
+        alter(body("", false, true), "saved state type changed for output table /Root/aggregateResult, previous: "
+            "Type (Struct) with 1 members { Member [Sum0] : { Type (Data), schemeType: Int64, schemeTypeId: 3 } } , new: "
+            "Type (Struct) with 2 members { Member [Min0] : { Type (Data), schemeType: Int64, schemeTypeId: 3 } "
+            "Member [Sum0] : { Type (Data), schemeType: Int64, schemeTypeId: 3 } }");
+        alter(body("", false, false, MultipleTasks ? 1 : 2), "task count changed");
+        alter(body("WHERE value > 0"));
+        reader->ExpectSessionClosed();
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent({
+            {2, R"({"key":"a","value":3})", {}},
+            {3, R"({"key":"a","value":-100})", {}},
+            {4, R"({"key":"b","value":4})", {}},
+        });
+        WaitOutputRows(resultQuery, {"a:10", "b:4"});
+        WaitAggregationCheckpoint();
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = FALSE);");
+        reader->ExpectSessionClosed();
+        ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = TRUE);");
+        reader = pqGateway->WaitReadSession(InputTopic);
+        reader->AddDataReceivedEvent(5, R"({"key":"a","value":1})");
+        WaitOutputRows(resultQuery, {"a:11", "b:4"});
+        FinishOutputAggregation();
+        reader->ExpectSessionClosed();
+        DropTopics();
+    }
+
     Y_UNIT_TEST_F(RestoresRowsAndCachesInterleavedKeys, TOutputTableAggregationTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
         PrepareOutputTable(R"(

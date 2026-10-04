@@ -2,3 +2,4 @@
 .ymc.ymc-tooltip-layer{position:fixed;inset:0;pointer-events:none;z-index:1000}
 .ymc-allocation{font:13px/1.4 Arial,sans-serif;color:#30343b}.ymc-allocation-summary{margin:6px 0}.ymc-allocation-bar{display:flex;height:24px;border-radius:4px;overflow:hidden;background:#e4e8ee}.ymc-allocation-bar>span{flex:none;height:100%}.ymc-allocation-legend{display:flex;flex-wrap:wrap;gap:4px 10px;margin:8px 0}.ymc-allocation-legend>span,.ymc-allocation-legend>button{display:inline-flex;align-items:center;font:inherit;padding:2px 5px;border:1px solid #dce1e8;border-radius:4px;background:white;max-width:100%;overflow-wrap:anywhere;text-align:left}.ymc-allocation-legend button{cursor:pointer}
 .ymc-allocation .ymc-dot{display:inline-block;flex:none;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.imo #imo-lines .ymc-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}.ymc-allocation-bar>span{cursor:crosshair}

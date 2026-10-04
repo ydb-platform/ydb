@@ -403,10 +403,10 @@ TString RenderOverviewPage() {
 <div class='imo' id='imo-root'>
 <header><a href='metrics'>Metric viewer</a><label>History <select id='imo-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label><button id='imo-now' type='button'>Now</button><label><input id='imo-live' type='checkbox'> Live via JSON</label><button id='imo-refresh' type='button'>Refresh</button><span id='imo-status' role='status'>Loading registry...</span></header>
 <div id='imo-summary'></div>
-<section><h3>Chunk allocation by storage line</h3><div id='imo-allocation'></div></section>
 <div class='imo-grid' id='imo-cards'></div>
 <div class='imo-details'><section><h3>Registry configuration</h3><dl id='imo-config'></dl></section>
 <section><h3>Storage state</h3><dl id='imo-storage'></dl></section></div>
+<section><h3>Chunk allocation by storage line</h3><div id='imo-allocation'></div></section>
 <h3>Metric lines</h3><input id='imo-filter' type='search' aria-label='Filter metric lines' placeholder='Filter by metric or labels'>
 <div class='imo-scroll'><table><thead><tr><th>ID</th><th>Line</th><th>Metrics</th><th>Labels</th><th>Frontend</th><th>Chunks</th><th>State</th></tr></thead><tbody id='imo-lines'></tbody></table></div>
 </div>

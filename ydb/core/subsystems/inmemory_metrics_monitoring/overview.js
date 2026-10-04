@@ -14,7 +14,7 @@ const panels=[
 ];
 const queries=panels.flatMap(panel=>panel.metrics.map(metric=>({id:metric,metric:'inmemory_metrics.'+metric,filters:[]})));
 let data=null,series=[],fixed=null,selectedLine=null,controller,timer,version=0;
-const allocation=createAllocationBar($('allocation'),{onSelect:segment=>{selectedLine=segment.lineId;$('filter').value=segment.name;drawLines();}});
+const allocation=createAllocationBar($('allocation'),{legend:false,maxSegments:64,onPin:pause,onSelect:segment=>{selectedLine=segment.lineId;$('filter').value=segment.name;drawLines();}});
 function pause(){clearTimeout(timer);$('live').checked=false;}
 const cards=panels.map(panel=>{
     const card=text('section','');card.className='imo-card';card.append(text('h3',panel.title));
@@ -31,7 +31,7 @@ function draw(){
  function entries(id,values){$(id).replaceChildren();for(const [label,value] of values)$(id).append(text('dt',label),text('dd',value===undefined?'Unavailable':String(value)));}
  function drawLines(){
   if(!data)return;const needle=$('filter').value.toLowerCase();$('lines').replaceChildren();
-  for(const line of data.lines){if(selectedLine!==null&&String(line.id)!==String(selectedLine))continue;if(!(line.name+' '+line.fields.map(field=>field.name).join(' ')+' '+labels(line.labels)).toLowerCase().includes(needle))continue;const row=document.createElement('tr');row.append(text('td',line.id),text('td',line.name));const metrics=document.createElement('td');for(const field of line.fields){const link=text('a',field.name);link.href='metrics?'+new URLSearchParams({metric:field.name});metrics.append(link);}row.append(metrics,text('td',labels(line.labels)),text('td',line.frontend),text('td',line.chunks??'Unavailable'),text('td',(line.closed?'Closed':'Active')+(line.readable?'':' / Unsupported')));$('lines').append(row);}
+  for(const line of data.lines){if(selectedLine!==null&&String(line.id)!==String(selectedLine))continue;if(!(line.name+' '+line.fields.map(field=>field.name).join(' ')+' '+labels(line.labels)).toLowerCase().includes(needle))continue;const row=document.createElement('tr'),name=text('td',line.name),dot=text('span','');dot.className='ymc-dot';dot.style.background=allocation.getColor('line-'+line.id);name.prepend(dot);row.addEventListener('pointerenter',()=>allocation.highlight('line-'+line.id));row.addEventListener('pointerleave',()=>allocation.highlight(null));row.append(text('td',line.id),name);const metrics=document.createElement('td');for(const field of line.fields){const link=text('a',field.name);link.href='metrics?'+new URLSearchParams({metric:field.name});metrics.append(link);}row.append(metrics,text('td',labels(line.labels)),text('td',line.frontend),text('td',line.chunks??'Unavailable'),text('td',(line.closed?'Closed':'Active')+(line.readable?'':' / Unsupported')));$('lines').append(row);}
  }
 
 function drawRegistry(){

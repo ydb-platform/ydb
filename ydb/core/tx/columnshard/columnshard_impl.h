@@ -1,6 +1,7 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
+#include "columnshard_move_data.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -191,6 +192,7 @@ template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    friend class TMoveDataDriver;
     friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
@@ -345,6 +347,15 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    virtual void MoveDataCompleted(const TActorContext& ctx) override;
+    // Split out of MoveDataCompleted so the driver can drive it without claiming vacuum finished.
+    void CheckMoveDataGate(const TActorContext& ctx);
+    void RestartMoveDataActualizer();
+    void SetupMoveDataMetadata();
+    void SetupMoveDataRewrites();
+    void StartMoveDataDriver(const TActorContext& ctx);
+    void StopMoveDataDriver(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -392,6 +403,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void OnTieringModified(const std::optional<TInternalPathId> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
+    TMoveDataState MoveDataState;
+    // Owns the move; the tablet records requests, starts the vacuum leg and pokes it.
+    TActorId MoveDataDriverId;
 
 public:
     TAtomicCounter InitShardCounter;

@@ -787,6 +787,17 @@ public:
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
+            if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard &&
+                read->ChildrenSize() > TKiReadTable::idx_Settings)
+            {
+                const auto& settings = *read->Child(TKiReadTable::idx_Settings);
+                if (HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+                    HasSetting(settings, "samplingmemtablestride"))
+                {
+                    ctx.AddError(TIssue(node->Pos(ctx), "Sampling is supported only for row tables"));
+                    return nullptr;
+                }
+            }
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 // SHOW CREATE EXTERNAL DATA SOURCE / EXTERNAL TABLE reads never touch
                 // the external source itself — they are rewritten downstream into

@@ -28,6 +28,22 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
+bool ValidateReadSampling(const TCoNameValueTupleList& settingsNode, bool index, TExprContext& ctx) {
+    const bool sampling = HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingRateSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingSeedSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingMemtableStrideSettingName);
+    if (!sampling) {
+        return true;
+    }
+    if (index || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::ReverseSettingName)) {
+        ctx.AddError(TIssue(ctx.GetPosition(settingsNode.Pos()), index
+            ? "Sampling is not supported for index reads"
+            : "Sampling is not supported for reverse reads"));
+        return false;
+    }
+    return true;
+}
+
 bool RightJoinSideAllowed(const TStringBuf& joinType) {
     return joinType != "LeftOnly" && joinType != "LeftSemi";
 }
@@ -246,6 +262,10 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
         return TStatus::Error;
     }
 
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqlReadTableBase::idx_Settings)), readIndex, ctx)) {
+        return TStatus::Error;
+    }
+
     auto table = ResolveTable(node->Child(TKqlReadTableBase::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
@@ -401,6 +421,10 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
 TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqpReadRangesSourceSettings::idx_Settings)), false, ctx)) {
+        return TStatus::Error;
+    }
+
     auto table = ResolveTable(node->Child(TKqpReadRangesSourceSettings::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
@@ -488,6 +512,10 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     // prefix
     if (!EnsureMinArgsCount(*node, argCount, ctx) && EnsureMaxArgsCount(*node, argCount + 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqlReadTableRangesBase::idx_Settings)), index, ctx)) {
         return TStatus::Error;
     }
 

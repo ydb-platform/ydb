@@ -74,6 +74,7 @@ public:
     struct TShardState : public TIntrusiveListItem<TShardState> {
 
         TOwnedCellVec LastKey;
+        TMaybe<NKikimrTxDataShard::TReadSamplingContinuation> SamplingContinuation;
         TMaybe<ui32> FirstUnprocessedRequest;
         TMaybe<ui32> ReadId;
         ui64 TabletId;
@@ -92,6 +93,10 @@ public:
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
         {
+        }
+
+        bool ResumeInclusive() const {
+            return SamplingContinuation && SamplingContinuation->GetLastProcessedKeyInclusive();
         }
 
         TTableRange GetBounds(bool reverse) {
@@ -126,7 +131,7 @@ public:
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     } else {
                         return TTableRange(
-                            LastKey, false,
+                            LastKey, ResumeInclusive(),
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     }
                 }
@@ -216,7 +221,7 @@ public:
                 if (!lastKeyEmpty) {
                     // It is range, where read was interrupted. Restart operation from last read key.
                     result.emplace_back(std::move(TSerializedTableRange(
-                        TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
+                        TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), ResumeInclusive(), rangeIt->ToInclusive
                         )));
                     ++rangeIt;
                 }
@@ -241,6 +246,16 @@ public:
                 FillUnprocessedPoints(ev.Keys, reversed);
             } else {
                 FillUnprocessedRanges(ev.Ranges, keyTypes, reversed);
+                if (ev.Record.HasSampling()) {
+                    // Subsequent tokens index the ranges of this request, not
+                    // the original request before any checkpoint handovers.
+                    Ranges = ev.Ranges;
+                    LastKey = {};
+                    FirstUnprocessedRequest.Clear();
+                    if (SamplingContinuation) {
+                        *ev.Record.MutableSampling()->MutableContinuation() = *SamplingContinuation;
+                    }
+                }
                 for (auto& range : ev.Ranges) {
                     MakePrefixRange(range, keyTypes.size());
                 }
@@ -303,6 +318,7 @@ public:
         TShardState* Shard = nullptr;
         bool Finished = false;
         ui64 LastSeqNo;
+        bool SamplingCheckpoint = false;
         TMaybe<TString> SerializedContinuationToken;
 
         void RegisterMessage(const TEvDataShard::TEvReadResult& result) {
@@ -712,6 +728,12 @@ public:
                             {"range", DebugPrintRange(KeyColumnTypes, intersection, tr)});
 
                         newShard->AddRange(TSerializedTableRange(intersection));
+                        if (j == 0 && state->SamplingContinuation) {
+                            // Only the first remaining range inherits the pending
+                            // selection. DataShard clips it to the child's range.
+                            newShard->SamplingContinuation = state->SamplingContinuation;
+                            newShard->SamplingContinuation->SetLastProcessedKeyInclusive(intersection.InclusiveFrom);
+                        }
                     } else {
                         break;
                     }
@@ -815,6 +837,9 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
+        if (Settings->HasSampling() && !Reads[id].SamplingCheckpoint) {
+            return RuntimeError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+        }
 
         auto* state = Reads[id].Shard;
 
@@ -852,6 +877,9 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
+        if (Settings->HasSampling() && !Reads[id].SamplingCheckpoint) {
+            return RuntimeError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+        }
 
         auto state = Reads[id].Shard;
         YDB_LOG_DEBUG("Retrying read",
@@ -888,6 +916,13 @@ public:
 
         auto ev = GetDefaultReadSettings();
         auto& record = ev->Record;
+
+        if (Settings->HasSampling()) {
+            *record.MutableSampling() = Settings->GetSampling();
+            if (!state->HasRanges()) {
+                return RuntimeError("Sampling does not support key lookups", NDqProto::StatusIds::BAD_REQUEST);
+            }
+        }
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
 
@@ -1104,6 +1139,40 @@ public:
             NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
             return RuntimeError(message, status, issues);
         };
+
+        // Preserve schema errors so the session can invalidate a stale query plan.
+        if (Settings->HasSampling() && record.GetStatus().GetCode() != Ydb::StatusIds::SCHEME_ERROR) {
+            const auto status = record.GetStatus().GetCode();
+            NKikimrTxDataShard::TReadContinuationToken token;
+            const bool hasSamplingState = record.HasContinuationToken()
+                && token.ParseFromString(record.GetContinuationToken()) && token.HasSampling();
+            if (record.GetSeqNo() != Reads[id].LastSeqNo + 1) {
+                return replyError("Sampled reader lost a result before its sampling checkpoint", NDqProto::StatusIds::ABORTED);
+            }
+            if (status == Ydb::StatusIds::SUCCESS) {
+                // Older shards may ignore Sampling and finish a full read in
+                // one response, without ever returning a continuation token.
+                if (!record.HasSamplingStats()) {
+                    return replyError("DataShard did not confirm sampling support", NDqProto::StatusIds::ABORTED);
+                }
+                if (!record.GetFinished() && !hasSamplingState) {
+                    return replyError("Sampled read returned no sampling continuation", NDqProto::StatusIds::ABORTED);
+                }
+            } else {
+                // Only a terminal checkpoint from the reader proves that no
+                // unpublished decision remains. An earlier successful result
+                // is not sufficient to restart a lost reader.
+                if (!hasSamplingState || (status != Ydb::StatusIds::OVERLOADED && status != Ydb::StatusIds::NOT_FOUND)) {
+                    return replyError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+                }
+                Reads[id].SamplingCheckpoint = true;
+                Reads[id].SerializedContinuationToken = record.GetContinuationToken();
+                auto* shard = Reads[id].Shard;
+                shard->FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
+                shard->LastKey = TOwnedCellVec(TSerializedCellVec(token.GetLastProcessedKey()).GetCells());
+                shard->SamplingContinuation = token.GetSampling();
+            }
+        }
 
         if (UseFollowers && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS && Reads[id].Shard->SuccessBatches > 0) {
             // read from follower is interrupted with error after several successful responses.
@@ -1491,7 +1560,7 @@ public:
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
                 auto& record = msg.Record;
-                if (!Reads[id].Finished) {
+                if (!Reads[id].Finished && (!Settings->HasSampling() || !Reads[id].SamplingCheckpoint)) {
                     TMaybe<ui64> limit;
                     if (Settings->GetItemsLimit()) {
                         limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);

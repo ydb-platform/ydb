@@ -99,6 +99,8 @@ struct TTaskDistribution {
     // stage by its transaction-local index, while the graph keys stages by a graph-wide unique StageId.
     TVector<ui64> StageIdBases;
 
+    THashMap<TStageId, TVector<NKikimrTxDataShard::TKqpReadRangesSourceSettings>> SampledSources;
+
     TStageId Key(ui32 txIdx, ui32 stageIdx) const {
         return TStageId(txIdx, StageIdBases.at(txIdx) + stageIdx);
     }
@@ -311,7 +313,15 @@ public:
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
             if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                 bool isFullScan = false;
-                stageInfo.Meta.PrunedPartitions.emplace_back(pruner.Prune(stage.GetSources(0).GetReadRangesSource(), stageInfo, isFullScan));
+                const auto& source = stage.GetSources(0).GetReadRangesSource();
+                stageInfo.Meta.PrunedPartitions.emplace_back(pruner.Prune(source, stageInfo, isFullScan));
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.back();
+                if (!partitions.empty() && (stage.GetIsSinglePartition()
+                    || source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()))
+                {
+                    auto [startShard, shardInfo] = pruner.MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
+                }
             } else if (Graph->GetMeta().IsScan || stageInfo.Meta.IsOlap()) {
                 for (const auto& op : stage.GetTableOps()) {
                     bool isFullScan = false;
@@ -388,6 +398,11 @@ public:
                     reply->Result.TasksPerStageNode[stageId][*task.Meta.ExpectedNodeId]++;
                 } else {
                     ++reply->Result.UnplacedTasks;
+                }
+                for (const auto& input : task.Inputs) {
+                    if (input.Meta.SourceSettings && input.Meta.SourceSettings->HasSampling()) {
+                        reply->Result.SampledSources[stageId].push_back(*input.Meta.SourceSettings);
+                    }
                 }
             }
         }
@@ -879,6 +894,91 @@ inline void AssertShuffleEliminationHashMapping(const TTaskDistribution& dist, u
 // ============================================================================
 
 Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
+
+    Y_UNIT_TEST_F(SamplingBudgetAcrossNodes, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/Sampled` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 32, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32);
+        )");
+        TBuildConfig config;
+        config.NodeCount = 32;
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/Sampled`
+            WITH (sampling_rate="0.5", sampling_seed="42", sampling_memtable_stride="16");
+        )", config);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 1);
+        const auto& [stageId, sources] = *dist.SampledSources.begin();
+        UNIT_ASSERT(sources.size() > 1);
+        UNIT_ASSERT(sources.size() <= 12);
+        UNIT_ASSERT(dist.TasksPerStageNode.at(stageId).size() > 1);
+        ui64 slots = 0;
+        ui32 ranges = 0;
+        for (const auto& source : sources) {
+            UNIT_ASSERT(source.GetMaxInFlightShards() > 0);
+            slots += source.GetMaxInFlightShards();
+            ranges += source.GetRanges().KeyRangesSize();
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetRate(), 0.5);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetSeed(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetMemtableStride(), 16);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+        UNIT_ASSERT_VALUES_EQUAL(ranges, 32);
+    }
+
+    Y_UNIT_TEST_F(SamplingBudgetSharedBySources, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/SampledA` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 16, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+            CREATE TABLE `/Root/SampledB` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 16, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )");
+        TBuildConfig config;
+        config.NodeCount = 16;
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/SampledA` WITH (sampling_rate="0.5", sampling_seed="42")
+            UNION ALL
+            SELECT SUM(Value) FROM `/Root/SampledB` WITH (sampling_rate="0.5", sampling_seed="43");
+        )", config);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 2);
+        ui64 slots = 0;
+        ui32 actors = 0;
+        ui32 ranges = 0;
+        for (const auto& [_, sources] : dist.SampledSources) {
+            UNIT_ASSERT(!sources.empty());
+            actors += sources.size();
+            for (const auto& source : sources) {
+                UNIT_ASSERT(source.GetMaxInFlightShards() > 0);
+                slots += source.GetMaxInFlightShards();
+                ranges += source.GetRanges().KeyRangesSize();
+            }
+        }
+        UNIT_ASSERT(actors <= 12);
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+        UNIT_ASSERT_VALUES_EQUAL(ranges, 32);
+    }
+
+    Y_UNIT_TEST_F(SamplingBudgetAllowsSplitChildren, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/Sampled` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )");
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/Sampled` WITH (sampling_rate="0.5", sampling_seed="42");
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 1);
+        const auto& sources = dist.SampledSources.begin()->second;
+        UNIT_ASSERT(!sources.empty());
+        UNIT_ASSERT(sources.size() <= 2);
+        ui64 slots = 0;
+        for (const auto& source : sources) {
+            UNIT_ASSERT(source.GetMaxInFlightShards() > 1);
+            slots += source.GetMaxInFlightShards();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+    }
 
     Y_UNIT_TEST_F(TpchQuery01, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(

@@ -162,6 +162,7 @@ TString RenderPage() {
 .imm details.imm-editor{margin:8px 0}.imm-editor>summary{font-size:12px;color:#707985;display:list-item}.imm-editor>summary span{margin-left:12px}.imm-query-actions{margin-bottom:0}.imm-query-actions .imm-query-help{margin-left:auto!important}.imm button[aria-pressed=true]{background:#e4eef9}.imm #imm-stats{font-size:12px;color:#707985}.imm [data-control=builder] .imm-condition input{line-height:18px}.imm-suggestions{position:fixed;z-index:1000;overflow:auto;padding:4px;background:white;border:1px solid #cbd2dc;border-radius:5px;box-shadow:0 4px 16px #0002;box-sizing:border-box}.imm-suggestions button{display:block;width:100%;text-align:left;border:0;border-radius:3px;padding:4px 8px;overflow-wrap:anywhere}.imm-suggestions button[aria-selected=true]{background:#e4eef9}.imm-suggestions>div{padding:4px 8px}
 
 .imm #imm-charts{display:grid;gap:8px}.imm #imm-charts>.imm-chart{min-width:0}.imm-chart-title{font-weight:bold;margin:0 0 4px}.imm #imm-charts.imm-separated{grid-template-columns:repeat(var(--columns,2),minmax(0,1fr))}@media(max-width:800px){.imm #imm-charts.imm-separated{grid-template-columns:1fr}}
+.imm-settings{margin-left:auto;position:relative}.imm-settings>summary{cursor:pointer;border:1px solid #cbd2dc;border-radius:4px;padding:3px 7px;list-style:none}.imm-settings[open]>summary{background:#e4eef9}.imm-settings-panel{position:absolute;right:0;bottom:calc(100% + 6px);width:280px;background:white;border:1px solid #cbd2dc;border-radius:6px;box-shadow:0 4px 20px #0002;padding:10px;z-index:10;display:grid;gap:7px}.imm-settings-panel>label{display:flex;justify-content:space-between;align-items:center;gap:8px}.imm-settings-panel input[type=number]{width:110px}.imm-settings-panel select{width:110px}.imm-settings-panel [role=alert]{color:#a32828}
 </style>
 <div class='imm' id='imm-root'>
 <header><nav><a href='metrics?page=dashboard'>Dashboard</a> &middot; <a href='metrics?page=overview'>Overview</a></nav><span id='imm-status' class='imm-muted' role='status'>Loading metrics...</span></header>
@@ -180,14 +181,23 @@ TString RenderPage() {
 <label>History <select id='imm-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label>
 <button id='imm-now' type='button'>Now</button><button id='imm-refresh' type='button'>Refresh</button>
 <label><input type='checkbox' id='imm-auto'> Live via JSON</label><button id='imm-toggle-legend' type='button' aria-pressed='true' aria-controls='imm-legend-panel'>Legend</button>
-</div>
+<details class='imm-settings' id='imm-settings'><summary>Settings</summary><div class='imm-settings-panel'>
+<label>Display <select id='imm-display' aria-label='Display type'><option value='line'>Lines</option><option value='area'>Area</option></select></label>
+<label>Height, px <input id='imm-height' aria-label='Chart height' type='number' min='160' max='800' step='1' value='360'></label>
+<label>Units <select id='imm-unit' aria-label='Value units'><option value='number'>Number</option><option value='bytes'>Bytes (IEC)</option><option value='percent'>Percent</option><option value='seconds'>Seconds</option><option value='milliseconds'>Milliseconds</option><option value='cores'>CPU cores</option></select></label>
+<label>Decimals <select id='imm-precision' aria-label='Decimal places'><option value='auto'>Auto</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<label>Y minimum <input id='imm-y-min' aria-label='Y minimum' type='number' step='any' placeholder='Auto'></label>
+<label>Y maximum <input id='imm-y-max' aria-label='Y maximum' type='number' step='any' placeholder='Auto'></label>
+<label>Show legend <input id='imm-settings-legend' type='checkbox' checked></label>
+<span class='imm-muted'>Y limits use raw metric units.</span><span id='imm-settings-error' role='alert'></span><button id='imm-settings-reset' type='button'>Reset settings</button>
+</div></details></div>
 <div id='imm-notes' role='status'></div>
 <p id='imm-count' class='imm-muted'></p>
 <div class='imm-scroll' id='imm-legend-panel'><table><thead><tr><th><input id='imm-all' type='checkbox' checked aria-label='Show all series'></th><th><button class='imm-sort' data-sort='name' type='button'>Series</button></th><th><button class='imm-sort' data-sort='last' type='button'>Last</button></th><th><button class='imm-sort' data-sort='min' type='button'>Min</button></th><th><button class='imm-sort' data-sort='max' type='button'>Max</button></th><th><button class='imm-sort' data-sort='avg' type='button'>Avg</button></th><th>Samples / state</th></tr></thead><tbody id='imm-legend'></tbody></table></div>
 
 </div>
 <script type='module'>
-import {createMetricChart,seriesStats} from '../static/metric-chart/chart.js';
+import {createMetricChart,seriesStats,defaultChartSettings,formatMetricValue} from '../static/metric-chart/chart.js';
 import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metric-chart/client.js';
 (() => {
  const $=id=>document.getElementById('imm-'+id);
@@ -196,10 +206,9 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  let field=params.get('metric')||'harmonizer.budget', lines=[], series=[], common=[], hidden=new Set(), fixed=null, begin=0,end=0,controller,timer,version=0,sort='name',direction=1,lastToggle=null,limited=false;
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
  const numeric=v=>v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
- const fmt=v=>v===null||v===undefined?'\u2014':typeof v==='string'?v:Number(v).toLocaleString(undefined,{maximumSignificantDigits:6});
  const visible=()=>series.filter(s=>(s.display+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
  const client=createInMemoryMetricsClient({endpoint:location.pathname});
- let charts=[];
+ let charts=[],chartSettings={...defaultChartSettings};
  let editors=[],appliedQueries=[],nextQueryId=0;
  const pageControl=$;
  function createEditor(initial){
@@ -285,7 +294,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   list.forEach((s,index)=>{const r=document.createElement('tr');if(hidden.has(s.key))r.className='imm-legend-hidden';const c=document.createElement('td'),check=document.createElement('input');check.type='checkbox';check.checked=!hidden.has(s.key);check.setAttribute('aria-label','Show '+(s.display));
    check.addEventListener('click',e=>{if(e.shiftKey&&lastToggle!==null){for(let i=Math.min(index,lastToggle);i<=Math.max(index,lastToggle);i++)check.checked?hidden.delete(list[i].key):hidden.add(list[i].key);}else check.checked?hidden.delete(s.key):hidden.add(s.key);lastToggle=index;draw();});c.append(check);r.append(c);
    const name=text('td',s.display,'imm-legend-name'),dot=text('span','','imm-dot');dot.style.background=s.color;name.prepend(dot);r.append(name);
-   for(const f of ['last','min','max','avg'])r.append(text('td',fmt(s.stat[f])));
+   for(const f of ['last','min','max','avg'])r.append(text('td',formatMetricValue(s.stat[f],chartSettings)));
    r.append(text('td',s.stat.count+' / '+(!s.readable?'Unsupported':s.closed?'Closed':s.points.length?'Active':'No retained samples')+(s.truncated?' / truncated':'')));$('legend').append(r);
   });$('all').checked=list.length>0&&list.every(s=>!hidden.has(s.key));$('all').indeterminate=list.some(s=>hidden.has(s.key))&&list.some(s=>!hidden.has(s.key));
  }
@@ -302,7 +311,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  function drawChart(element,group){
   const active=visible().filter(s=>!hidden.has(s.key)&&(group.id===null||s.queryId===group.id));
   const host=document.createElement('div');element.append(host);
-  const chart=createMetricChart(host,{onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
+  const chart=createMetricChart(host,{settings:chartSettings,onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
   chart.setData({series:active,begin,end,title:group.title,emptyText:!appliedQueries.length?'No applied queries. Use Apply queries.':!series.length?'No lines match the applied query.':active.length?'No retained numeric samples in this interval':'No visible series. Select rows in the legend.'});
  }
  async function refresh(){
@@ -313,7 +322,17 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   }catch(e){if(e.name==='AbortError')return;$('status').textContent=e.message+' \u00b7 Showing last successful data (stale)';$('status').className='imm-error';}
   finally{if(current===version&&$('auto').checked&&!fixed)timer=setTimeout(refresh,2000);}
  }
- $('toggle-legend').addEventListener('click',()=>{const panel=$('legend-panel');panel.hidden=!panel.hidden;$('toggle-legend').setAttribute('aria-pressed',String(!panel.hidden));});
+ function setLegend(show){$('legend-panel').hidden=!show;$('toggle-legend').setAttribute('aria-pressed',String(show));$('settings-legend').checked=show;}
+ function applySettings(){
+  const minimum=$('y-min').value===''?null:Number($('y-min').value),maximum=$('y-max').value===''?null:Number($('y-max').value),height=Number($('height').value);
+  if(!$('height').checkValidity()||height<160||height>800||!$('y-min').checkValidity()||!$('y-max').checkValidity()||(minimum!==null&&!Number.isFinite(minimum))||(maximum!==null&&!Number.isFinite(maximum))||(minimum!==null&&maximum!==null&&minimum>=maximum)){$('settings-error').textContent='Use height 160-800 and Y minimum below maximum.';return;}
+  chartSettings={type:$('display').value,height,unit:$('unit').value,precision:$('precision').value==='auto'?null:Number($('precision').value),min:minimum,max:maximum};$('settings-error').textContent='';
+  for(const chart of charts)chart.setSettings(chartSettings);legend();setLegend($('settings-legend').checked);
+ }
+ for(const name of ['display','height','unit','precision','y-min','y-max'])$(name).addEventListener('input',applySettings);
+ $('settings-legend').addEventListener('input',()=>setLegend($('settings-legend').checked));
+ $('settings-reset').addEventListener('click',()=>{$('display').value='line';$('height').value=360;$('unit').value='number';$('precision').value='auto';$('y-min').value='';$('y-max').value='';$('settings-legend').checked=true;applySettings();});
+ $('toggle-legend').addEventListener('click',()=>setLegend($('legend-panel').hidden));
  $('root').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.defaultPrevented){e.preventDefault();applyQueries();}});
  $('apply').addEventListener('click',applyQueries);$('add-query').addEventListener('click',()=>{addEditor({metric:editors.at(-1).card.querySelector('[data-control=field]').value,filters:[]});});
  $('separate').addEventListener('change',()=>{remember();draw();});$('columns').addEventListener('change',()=>{remember();draw();});

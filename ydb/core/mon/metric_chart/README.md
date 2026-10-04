@@ -53,3 +53,15 @@ configuration of the destination server; the module does not change access rules
 
 The in-memory dashboard at `/actors/metrics?page=dashboard` is a second consumer.
 It uses the same chart and JSON client without the viewer's query editor.
+
+Pass `settings: {type: 'area', height: 240, unit: 'bytes', precision: 2,
+min: 0, max: null}` to `createMetricChart`, or call `chart.setSettings(patch)`
+to update presentation without fetching data. Defaults are line, 360 px,
+number, automatic precision and automatic Y limits including zero. Units:
+number, bytes (IEC), percent, seconds, milliseconds, cores. Unit selection
+formats values without converting percent or time scales. Y limits use raw
+metric units; null restores automatic bounds. Supply finite bounds with
+min < max, height 160..800 and precision null or 0..6. Area fill preserves
+on-change steps and null gaps; overlapping areas are not stacked.
+`formatMetricValue(value, settings)` formats axes, tooltip and legend values.
+With default settings, exact textual values remain intact.

@@ -40,5 +40,6 @@ $('refresh').addEventListener('click',refresh);
 $('now').addEventListener('click',()=>{fixed=null;refresh();});
 $('period').addEventListener('change',()=>{fixed=null;refresh();});
 $('live').addEventListener('change',()=>{clearTimeout(timer);if($('live').checked){fixed=null;refresh();}});
-window.addEventListener('pagehide',()=>{++version;clearTimeout(timer);controller?.abort();for(const {chart} of cards)chart.destroy();});
+window.addEventListener('pagehide',event=>{++version;clearTimeout(timer);controller?.abort();if(!event.persisted)for(const {chart} of cards)chart.destroy();});
+window.addEventListener('pageshow',event=>{if(event.persisted)refresh();});
 refresh();

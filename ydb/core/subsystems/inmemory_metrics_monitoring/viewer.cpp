@@ -322,7 +322,8 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  for(const b of document.querySelectorAll('.imm-sort'))b.addEventListener('click',()=>{const next=b.dataset.sort;direction=sort===next?-direction:next==='name'?1:-1;sort=next;lastToggle=null;legend();});
  $('period').addEventListener('change',()=>{fixed=null;refresh();});$('now').addEventListener('click',()=>{fixed=null;refresh();});$('refresh').addEventListener('click',refresh);
  $('auto').addEventListener('change',()=>{clearTimeout(timer);if($('auto').checked){fixed=null;refresh();}});
-  window.addEventListener('pagehide',()=>{for(const chart of charts)chart.destroy();++version;clearTimeout(timer);if(controller)controller.abort();});
+  window.addEventListener('pagehide',event=>{if(!event.persisted)for(const chart of charts)chart.destroy();++version;clearTimeout(timer);if(controller)controller.abort();});
+ window.addEventListener('pageshow',event=>{if(event.persisted)refresh();});
  try{
   const sources=params.has('queries')?JSON.parse(params.get('queries')):[params.get('query')||field];
   if(!Array.isArray(sources)||sources.length>8||sources.some(q=>typeof q!=='string'))throw Error('Expected at most 8 queries.');

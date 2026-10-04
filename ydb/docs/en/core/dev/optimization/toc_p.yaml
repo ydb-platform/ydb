@@ -5,3 +5,9 @@ items:
   href: hints.md
 - name: Parameterized queries and recompilation
   href: parameterized-queries.md
+- name: "layout"
+  href: layout.md
+- name: "metrics"
+  href: metrics.md
+- name: "structure"
+  href: structure.md

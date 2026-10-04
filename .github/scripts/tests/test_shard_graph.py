@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 import shard_graph
+import shard_progress
 
 
 def _node(
@@ -247,6 +248,170 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(filt.returncode, 0, filt.stderr)
                 covered.update(json.loads(out.read_text(encoding="utf-8"))["result"])
             self.assertEqual(covered, {"test-a", "test-b", "lib"})
+
+
+def _progress_state(total: int = 4) -> dict:
+    return shard_progress.empty_state("99", "relwithdebinfo", "ydb/", total)
+
+
+class ShardProgressTest(unittest.TestCase):
+    def test_eta_is_unknown_until_the_first_result_and_done_at_the_end(self) -> None:
+        self.assertEqual(shard_progress.eta_label(0, 4, None), "unknown")
+        self.assertEqual(shard_progress.eta_label(0, 4, 100), "unknown")
+        # elapsed * (m - n) / n = 300s * 3 / 1 = 15m
+        self.assertEqual(shard_progress.eta_label(1, 4, 300), "15m")
+        self.assertEqual(shard_progress.eta_label(4, 4, 300), "done")
+
+    def test_failure_is_visible_before_the_last_shard(self) -> None:
+        state = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/a/unittest/Foo"],
+            run_url="https://example.test/run/99",
+        )
+        body = shard_progress.render_comment(state, "2026-10-04T12:05:00Z")
+        self.assertIn("**Progress:** 1/4", body)
+        self.assertIn("**ETA:** 15m", body)
+        self.assertIn("**Status:** running", body)
+        self.assertIn("shard 0 **failure**", body)
+        self.assertIn("`ydb/a/unittest/Foo`", body)
+        self.assertIn("shard_0", body)
+        self.assertIn("https://example.test/job/0", body)
+
+    def test_merge_keeps_every_shard_and_uses_the_earliest_start(self) -> None:
+        first = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:02:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+        )
+        second = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:10:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/b"],
+            run_url="https://example.test/run/99",
+        )
+        merged = shard_progress.merge_states([first, second])
+        self.assertEqual(shard_progress.received_count(merged), 2)
+        self.assertEqual(merged["started_at"], "2026-10-04T12:00:00Z")
+        body = shard_progress.render_comment(merged, "2026-10-04T12:10:00Z")
+        self.assertIn("**Progress:** 2/4", body)
+        self.assertIn("shard 0 **failure**", body)
+        self.assertNotIn("**Status:** success", body)
+
+    def test_full_set_is_the_final_summary(self) -> None:
+        state = _progress_state(2)
+        for shard_id, result in ((0, "success"), (1, "failure")):
+            state = shard_progress.apply_shard(
+                state,
+                shard_id=shard_id,
+                result=result,
+                started_at="2026-10-04T12:00:00Z",
+                finished_at="2026-10-04T12:04:00Z",
+                job_url=f"https://example.test/job/{shard_id}",
+                log_prefix=f"shard_{shard_id}",
+                failed_tests=["ydb/bad"] if result == "failure" else [],
+                run_url="https://example.test/run/99",
+            )
+        body = shard_progress.render_comment(state, "2026-10-04T12:04:00Z")
+        self.assertIn("**Progress:** 2/2", body)
+        self.assertIn("**ETA:** done", body)
+        self.assertIn("**Status:** failure", body)
+        parsed = shard_progress.parse_state(body)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(set(parsed["shards"]), {"0", "1"})
+
+    def test_comment_update_retries_on_etag_conflict(self) -> None:
+        header = shard_progress.marker("99", "relwithdebinfo")
+        store = _ConflictStore()
+        initial = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=0,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+        )
+        store.create(shard_progress.render_comment(initial, "2026-10-04T12:05:00Z"))
+        incoming = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=1,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:10:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=["ydb/late"],
+            run_url="https://example.test/run/99",
+        )
+        body = shard_progress.sync_comment(store, header, incoming, "2026-10-04T12:10:00Z")
+        self.assertGreaterEqual(store.conflicts, 1)
+        self.assertIn("**Progress:** 2/4", body)
+        self.assertIn("`ydb/late`", body)
+        self.assertIn("shard 0", body)
+        self.assertEqual(len(store.rows), 1)
+
+
+class _MemComment:
+    def __init__(self, comment_id: int, body: str, etag: str) -> None:
+        self.id = comment_id
+        self.body = body
+        self.etag = etag
+
+
+class _ConflictStore:
+    def __init__(self) -> None:
+        self.rows: dict[int, _MemComment] = {}
+        self.next_id = 1
+        self.conflicts_left = 1
+        self.conflicts = 0
+
+    def list_marker(self, header: str) -> list[_MemComment]:
+        return [row for row in self.rows.values() if row.body.startswith(header)]
+
+    def get(self, comment_id: int) -> _MemComment:
+        row = self.rows[comment_id]
+        return _MemComment(row.id, row.body, row.etag)
+
+    def create(self, body: str) -> _MemComment:
+        row = _MemComment(self.next_id, body, "etag-1")
+        self.next_id += 1
+        self.rows[row.id] = row
+        return row
+
+    def update(self, comment_id: int, body: str, etag: str) -> None:
+        row = self.rows[comment_id]
+        if self.conflicts_left and etag == row.etag:
+            self.conflicts_left -= 1
+            self.conflicts += 1
+            row.etag = row.etag + "-stale"
+            raise shard_progress.Conflict(str(comment_id))
+        if etag != row.etag:
+            raise shard_progress.Conflict(str(comment_id))
+        row.body = body
+        row.etag = row.etag + "-ok"
+
+    def delete(self, comment_id: int) -> None:
+        self.rows.pop(comment_id, None)
 
 
 if __name__ == "__main__":

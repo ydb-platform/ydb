@@ -79,6 +79,22 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Save graph.json and context.json, then skip the test loop. Run-tests uses this when shard_count > 1."
+  skip_graph_compare:
+    type: boolean
+    default: false
+    description: "Replay prebuilt_graph_path instead of configuring a new graph."
+  prebuilt_graph_path:
+    type: string
+    default: ""
+    description: "Filtered graph.json for one shard. Requires skip_graph_compare."
+  prebuilt_context_path:
+    type: string
+    default: ""
+    description: "Filtered context.json for one shard. Requires skip_graph_compare."
 
 outputs:
   success:
@@ -371,19 +387,51 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
+        # save_test_graph with tests off is the Run-tests prepare job.
+        # -A is added only on that command so the saved graph contains test nodes.
+        GRAPH_ONLY=false
+        if [ "${{ inputs.save_test_graph }}" = "true" ] && [ "${{ inputs.run_tests }}" != "true" ]; then
+          GRAPH_ONLY=true
+        fi
+
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
         YA_MAKE_COMMAND="./ya make ${params[@]}"
-        GRAPH_PATH=$(realpath graph.json)
-        CONTEXT_PATH=$(realpath context.json)
+        if [ "${{ inputs.skip_graph_compare }}" = "true" ]; then
+          if [ ! -f "${{ inputs.prebuilt_graph_path }}" ] || [ ! -f "${{ inputs.prebuilt_context_path }}" ]; then
+            echo "skip_graph_compare requires existing prebuilt_graph_path and prebuilt_context_path"
+            exit 1
+          fi
+          GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
+          CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+            if [ -e "$TARGET" ]; then
+              YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+            fi
+          done
+          if [ -z "$YA_MAKE_TARGET" ]; then
+            YA_MAKE_TARGET="ydb"
+          fi
+        else
+          GRAPH_PATH=$(realpath graph.json)
+          CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
+          COMPARE_COMMAND="$YA_MAKE_COMMAND"
+          if [ "$GRAPH_ONLY" = "true" ]; then
+            case " $COMPARE_COMMAND " in
+              *" -A "*) ;;
+              *) COMPARE_COMMAND="$COMPARE_COMMAND -A" ;;
+            esac
+          fi
+
           analytics start graph_compare
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$COMPARE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
           analytics end graph_compare --rc "$RC"
@@ -411,9 +459,27 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             YA_MAKE_COMMAND+=" --retest"
           fi
-          $YA_MAKE_COMMAND -k --cache-tests \
-            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-            $YA_MAKE_TARGET
+          if [ "$GRAPH_ONLY" = "true" ]; then
+            SAVE_COMMAND="$YA_MAKE_COMMAND"
+            case " $SAVE_COMMAND " in
+              *" -A "*) ;;
+              *) SAVE_COMMAND="$SAVE_COMMAND -A" ;;
+            esac
+            if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+              SAVE_COMMAND="$SAVE_COMMAND --bazel-remote-store --bazel-remote-base-uri ${{ inputs.bazel_remote_uri }}"
+            fi
+            if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+              SAVE_COMMAND="$SAVE_COMMAND --bazel-remote-username ${{ inputs.bazel_remote_username }} --bazel-remote-password-file $BAZEL_REMOTE_PASSWORD_FILE --bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs"
+            fi
+            $SAVE_COMMAND -k --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              $YA_MAKE_TARGET
+          else
+            $YA_MAKE_COMMAND -k --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              $YA_MAKE_TARGET
+          fi
+        fi
         fi
 
         export CI_YA_ATTEMPT=1
@@ -444,6 +510,18 @@ runs:
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
+
+        if [ "$GRAPH_ONLY" = "true" ]; then
+          analytics end prepare_ya_make
+          if [ -f "$GRAPH_PATH" ]; then
+            cp -f "$GRAPH_PATH" "$PUBLIC_DIR/graph.json"
+          fi
+          if [ -f "$CONTEXT_PATH" ]; then
+            cp -f "$CONTEXT_PATH" "$PUBLIC_DIR/context.json"
+          fi
+          echo "Saved test graph for sharding; test loop skipped."
+          echo "status=true" >> $GITHUB_OUTPUT
+        else
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
@@ -760,7 +838,9 @@ runs:
             df -h /coredumps || true
           fi
 
-          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+          # Shard replay must keep the filtered graph. Dropping it makes the
+          # next try use the full build_target and rerun tests owned by other shards.
+          if [ "${{ inputs.skip_graph_compare }}" != "true" ] && [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
               GRAPH_PATH=""
               CONTEXT_PATH=""
           fi
@@ -775,6 +855,7 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+        fi
         fi
 
     - name: resolve-status-sha
@@ -840,8 +921,20 @@ runs:
       run: |
         set -x
         echo "::group::s3-sync"
+        if [ "${{ inputs.save_test_graph }}" = "true" ]; then
+          if [ -f graph.json ]; then
+            cp -f graph.json "$PUBLIC_DIR/graph.json"
+          fi
+          if [ -f context.json ]; then
+            cp -f context.json "$PUBLIC_DIR/context.json"
+          fi
+        fi
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        if [ -n "${S3_SUBDIR:-}" ]; then
+          echo "00 [Artifacts ${S3_SUBDIR}](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        else
+          echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        fi
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"

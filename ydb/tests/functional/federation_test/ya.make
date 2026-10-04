@@ -17,7 +17,7 @@ TIMEOUT(350)
 # mirror tests, which kills DisableWriteOnClusterA. Medium max is 600s,
 # so the cases cannot share one budget. Keep this factor >= the test count.
 FORK_SUBTESTS()
-SPLIT_FACTOR(8)
+SPLIT_FACTOR(24)
 
 ADDINCL(
     contrib/libs/librdkafka/src-cpp

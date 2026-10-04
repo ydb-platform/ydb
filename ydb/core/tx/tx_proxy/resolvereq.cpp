@@ -145,11 +145,11 @@ namespace {
 
             NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
-            LOG_LOG_S_SAMPLED_BY(ctx, (resp->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
-                    NKikimrServices::TX_PROXY, TxId,
-                    "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                    << " HANDLE EvNavigateKeySetResult TResolveTablesActor marker# P1 ErrorCount# "
-                    << resp->ErrorCount);
+            YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (resp->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE EvNavigateKeySetResult TResolveTablesActor",
+                {"actor", ctx.SelfID},
+                {"txid", TxId},
+                {"errorCount", resp->ErrorCount},
+                {"marker", "P1"});
 
             if (resp->ErrorCount > 0) {
                 TStringBuilder builder;
@@ -266,10 +266,11 @@ namespace {
 
             NSchemeCache::TSchemeCacheRequest* request = ev->Get()->Request.Get();
 
-            LOG_LOG_S_SAMPLED_BY(ctx, (request->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
-                    NKikimrServices::TX_PROXY, TxId,
-                    "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-                    << " HANDLE EvResolveKeySetResult TResolveTablesActor marker# P2 ErrorCount# " << request->ErrorCount);
+            YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (request->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE EvResolveKeySetResult TResolveTablesActor",
+                {"actor", ctx.SelfID},
+                {"txid", TxId},
+                {"errorCount", request->ErrorCount},
+                {"marker", "P2"});
 
             WallClockResolved = Now();
 

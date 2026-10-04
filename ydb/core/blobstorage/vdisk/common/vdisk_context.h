@@ -41,6 +41,7 @@ namespace NKikimr {
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCounters;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskMemCounters;
         // latency histograms
         NVDiskMon::THistograms Histograms;
@@ -105,7 +106,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskSpaceReportCounters = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

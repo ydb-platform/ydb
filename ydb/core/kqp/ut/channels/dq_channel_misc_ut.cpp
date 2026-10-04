@@ -128,7 +128,13 @@ struct TMonPageTest : public TSessionTest {
         std::shared_ptr<TNodeState> session;
         UNIT_ASSERT_C(WaitFor([&]() {
             session = FindNodeState(Service0, peerNodeId);
-            return session && GetOutputCount(session) == 1 && GetInputPopBytes(session) > 0;
+            if (!session || GetOutputCount(session) != 1 || GetInputPopBytes(session) == 0) {
+                return false;
+            }
+            // all of the inbound channel is in: data still on the way would bounce off the destroyed session,
+            // and the reconciliation of the peer would create another
+            auto inbound = FindInputDescriptor(session, 2);
+            return inbound && inbound->FinishPushed.load();
         }, TDuration::Seconds(10)), "the channels did not come up");
 
         auto page = Render(NodeIndex0, "");

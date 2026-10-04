@@ -1811,7 +1811,6 @@ private:
 
     //TGroupStatusTracker GroupStatusTracker;
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
-    THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
     void ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
             TNodeId nodeId);

@@ -1,6 +1,6 @@
 #include "remap.h"
 
-#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 

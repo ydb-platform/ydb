@@ -570,15 +570,29 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             const auto* settingsList = node.Child(TKqpStreamingAggregation::idx_Settings);
 
             TString stateTablePath;
+            TRuntimeNode outputStateTable;
             for (const auto& setting : settingsList->Children()) {
                 if (setting->ChildrenSize() >= 1 && setting->Child(0)->IsAtom() && setting->Child(0)->Content() == "state_table_path") {
                     if (setting->ChildrenSize() >= 2 && setting->Child(1)->IsAtom()) {
                         stateTablePath = TString(setting->Child(1)->Content());
                     }
-                    break;
+                } else if (setting->Head().Content() == "output_state_table") {
+                    const auto& binding = setting->Tail();
+                    TVector<std::pair<std::string_view, TRuntimeNode>> columns;
+                    for (const auto& pair : binding.Tail().Children()) {
+                        columns.emplace_back(pair->Head().Content(), ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(pair->Tail().Content()));
+                    }
+                    outputStateTable = ctx.PgmBuilder().NewTuple({
+                        ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(binding.Head().Content()),
+                        ctx.PgmBuilder().NewStruct(columns)
+                    });
                 }
             }
-            auto stateTablePathArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
+
+            YQL_ENSURE(stateTablePath.empty() || !outputStateTable.GetNode(), "Explicit and output state tables cannot be used together");
+            const auto stateTablePathArg = outputStateTable.GetNode()
+                ? outputStateTable
+                : ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
 
             const auto stateName = [](const TExprNode& handler) {
                 const auto& names = handler.Head();

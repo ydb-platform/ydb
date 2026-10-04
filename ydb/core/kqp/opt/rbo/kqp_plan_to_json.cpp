@@ -183,7 +183,8 @@ void BuildPlanLookupIndex(
     }
 
     if (kind == EPlanIndexKind::Execution) {
-        if (planMap.contains("PlanNodeType") && planMap.at("PlanNodeType") == "Connection") {
+        if (planMap.contains("PlanNodeType") && planMap.at("PlanNodeType") == "Connection"
+            && !planMap.contains("CTE Name")) {
             auto& subplan = planMap.at("Plans").GetArraySafe().at(0);
             TConnectionInfo connectionInfo;
             connectionInfo.FromBroadcast = planMap.at("Node Type") == "Broadcast";
@@ -473,10 +474,10 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
             }
         }
 
-        // Otherwise, construct a new plan object for each outgoing connection of the stage
-        // and include the stage in each connection
+        // A stage with multiple outputs is rendered once. Other connections refer to it as a CTE.
         else {
             THashMap<int, size_t> outputOccurrences;
+            TString cteName;
             for (int outputStageId : stageOutputs) {
                 const auto& conns = PlanProps.StageGraph.GetConnections(stageId, outputStageId);
                 // Replicate ports can connect the same two stages more than once.
@@ -485,21 +486,28 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                 auto connJson = conn->ToJson(PlanProps.InfoUnitRegistry);
                 connJson["PlanNodeId"] = nodeCounter++;
 
-                auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                stage["Node Type"] = stageName;
-                stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+                if (!cteName.empty()) {
+                    connJson["CTE Name"] = cteName;
+                } else {
+                    auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+                    stage["Node Type"] = stageName;
+                    stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
 
-                if (ops.size()) {
-                    stage["Operators"] = operatorList;
-                }
-                if (stageInputs.size()) {
-                    stage["Plans"] = planList;
-                }
-                stage["PlanNodeId"] = nodeCounter++;
+                    if (ops.size()) {
+                        stage["Operators"] = operatorList;
+                    }
+                    if (stageInputs.size()) {
+                        stage["Plans"] = planList;
+                    }
+                    if (stageOutputs.size() > 1) {
+                        cteName = TStringBuilder() << stageName << "_" << stageId;
+                        stage["Parent Relationship"] = "InitPlan";
+                        stage["Subplan Name"] = "CTE " + cteName;
+                    }
+                    stage["PlanNodeId"] = nodeCounter++;
 
-                auto connPlans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-                connPlans.AppendValue(stage);
-                connJson["Plans"] = connPlans;
+                    connJson["Plans"].AppendValue(std::move(stage));
+                }
 
                 processedStages[std::make_pair(stageId, outputStageId)].push_back(std::move(connJson));
             }

@@ -321,7 +321,7 @@ The result of calling the `YDB_LOG_CREATE_MESSAGE` macro is an instance of the `
 
 {% note info %}
 
-We can consider that the `TStructuredMessage` class is a specialized container for storing pairs `{name, value}` attached to journal messages.
+The `TStructuredMessage` class can be considered a specialized container for storing pairs `{name, value}` attached to journal messages.
 
 {% endnote %}
 
@@ -467,7 +467,7 @@ The following style for writing message texts is recommended:
    - if the text is a separate sentence, no period is placed at the end of the message;
    - if the text consists of several sentences, they are separated by periods, but no period is placed after the last sentence.
 
-2. The text may contain class and function names. If an actor logs the fact of receiving a message, a good practice is to log with the text `Handle <имя класса-события>`.
+2. The text may contain class and function names. If an actor logs the fact of receiving a message, a good practice is to log with the text `Handle <event class name>`.
 3. Messages are fixed text without dynamically generated fragments.
 4. All dynamic information known only at runtime must be placed as attached parameters.
 
@@ -518,7 +518,7 @@ YDB_LOG_ERROR("Response timeout elapsed",
     {"timeout", timeout});
 ```
 
-If you use the previously mentioned rule for aligning message texts and parameter names, you get the sentence `Response timeout elapsed (node=<строка>, request=<число>, wait=<число>, timeout=<число>)`, where it will be unclear: is the value `node` a host name or some internal node identifier name? Is the value `request` a sequence number or a numeric identifier? What is the value `wait` and how should it be interpreted? In what units is the value `wait` specified?
+If you use the previously mentioned rule for aligning message texts and parameter names, you get the sentence `Response timeout elapsed (node=<string>, request=<number>, wait=<number>, timeout=<number>)`, where it will be unclear: is the value `node` a host name or some internal node identifier name? Is the value `request` a sequence number or a numeric identifier? What is the value `wait` and how should it be interpreted? In what units is the value `wait` specified?
 
 {% endlist %}
 

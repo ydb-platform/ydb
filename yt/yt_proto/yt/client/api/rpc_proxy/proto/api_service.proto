@@ -1046,6 +1046,7 @@ message TRspGetTabletInfos
         required int64 total_row_count = 1;
         required int64 trimmed_row_count = 2;
         optional int64 delayed_lockless_row_count = 7;
+        optional int64 flushed_row_count = 8;
         optional uint64 barrier_timestamp = 3;
         optional uint64 last_write_timestamp = 4;
 
@@ -3748,6 +3749,8 @@ message TReqGetQuery
     required NYT.NProto.TGuid query_id = 2;
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 3;
     optional uint64 timestamp = 4;
+    repeated string progress_parts = 5;
+    optional uint32 min_progress_revision = 6;
 }
 
 message TRspGetQuery

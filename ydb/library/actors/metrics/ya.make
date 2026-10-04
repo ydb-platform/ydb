@@ -15,6 +15,7 @@ SRCS(
     line_write.h
     line_write.cpp
     metric_line.h
+    lines/group_line_frontend.h
     lines/on_change_line_frontend.h
     lines/raw_line_frontend.h
 )

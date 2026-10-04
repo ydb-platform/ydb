@@ -118,7 +118,53 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         }
     }
 
-    // ReadTokenAsLabelValue's loop runs MAX_LABEL_VALUE_LEN times: one iteration per
+    Y_UNIT_TEST(QuotedMetricNameWithDotsAndLabels) {
+        auto samples = Decode(
+            "# HELP \"service_account.authorized_key.create_token_events_count_total\" Total number of attempts\n"
+            "# TYPE \"service_account.authorized_key.create_token_events_count_total\" counter\n"
+            "{\"service_account.authorized_key.create_token_events_count_total\",service=\"iam\",cloud_id=\"yc.compute.cloud\",folder_id=\"example-folder\"} 2\n");
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1);
+        const auto& sample = samples.GetSamples(0);
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::RATE);
+        UNIT_ASSERT_EQUAL(sample.LabelsSize(), 4);
+        ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "service_account.authorized_key.create_token_events_count_total");
+        ASSERT_LABEL_EQUAL(sample.GetLabels(1), "cloud_id", "yc.compute.cloud");
+        ASSERT_LABEL_EQUAL(sample.GetLabels(2), "folder_id", "example-folder");
+        ASSERT_LABEL_EQUAL(sample.GetLabels(3), "service", "iam");
+        ASSERT_UINT_POINT(sample, TInstant::Zero(), ui64(2));
+    }
+
+    Y_UNIT_TEST(QuotedMetricNameWithDotsWithoutLabels) {
+        auto samples = Decode(
+            "# HELP \"service_account.authorized_key.create_token_events_count_total\" Total number of attempts\n"
+            "# TYPE \"service_account.authorized_key.create_token_events_count_total\" counter\n"
+            "{\"service_account.authorized_key.create_token_events_count_total\"} 2\n");
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1);
+        const auto& sample = samples.GetSamples(0);
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::RATE);
+        UNIT_ASSERT_EQUAL(sample.LabelsSize(), 1);
+        ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "service_account.authorized_key.create_token_events_count_total");
+        ASSERT_UINT_POINT(sample, TInstant::Zero(), ui64(2));
+    }
+
+    Y_UNIT_TEST(QuotedUtf8MetricAndLabelNames) {
+        auto samples = Decode(
+            "# HELP \"число.запросов\" Число запросов\n"
+            "# TYPE \"число.запросов\" counter\n"
+            "{\"число.запросов\",\"сервис\"=\"авторизация\"} 42\n");
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1);
+        const auto& sample = samples.GetSamples(0);
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::RATE);
+        UNIT_ASSERT_EQUAL(sample.LabelsSize(), 2);
+        ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "число.запросов");
+        ASSERT_LABEL_EQUAL(sample.GetLabels(1), "сервис", "авторизация");
+        ASSERT_UINT_POINT(sample, TInstant::Zero(), ui64(42));
+    }
+
+    // ReadQuotedString's loop runs MAX_LABEL_VALUE_LEN times: one iteration per
     // appended character plus one final iteration to detect the closing quote. So the
     // longest value it can successfully parse is (MAX_LABEL_VALUE_LEN - 1) characters.
     Y_UNIT_TEST(LabelValueAtNewLimitIsAccepted) {
@@ -139,7 +185,7 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         const auto inputMetrics = TString("m{l=\"") + value + "\"} 1\n";
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(Decode(inputMetrics), TPrometheusDecodeException,
-            "trying to parse too long label value, size >= 1024");
+            "trying to parse too long quoted string, size >= 1024");
     }
 
     Y_UNIT_TEST(NameAlreadyPresent) {
@@ -457,6 +503,35 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
                     { 0.05, 0.1, 0.2, 0.5, 1, HISTOGRAM_INF_BOUND },
                     { 24054, 9390, 66948, 28997, 4599, 10332 });
             ASSERT_HIST_POINT(s, TInstant::Zero(), *hist);
+        }
+    }
+
+    Y_UNIT_TEST(QuotedHistogramName) {
+        auto samples = Decode(
+                "# TYPE \"request.duration\" histogram\n"
+                "{\"request.duration_bucket\",route=\"a\",le=\"1\"} 1\n"
+                "{\"request.duration_bucket\",route=\"a\",le=\"+Inf\"} 2\n"
+                "{\"request.duration_bucket\",route=\"b\",le=\"1\"} 3\n"
+                "{\"request.duration_bucket\",route=\"b\",le=\"+Inf\"} 4\n");
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 2);
+        {
+            const auto& sample = samples.GetSamples(0);
+            UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::HIST_RATE);
+            UNIT_ASSERT_EQUAL(sample.LabelsSize(), 2);
+            ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "request.duration");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(1), "route", "a");
+            auto histogram = ExplicitHistogramSnapshot({1, HISTOGRAM_INF_BOUND}, {1, 1});
+            ASSERT_HIST_POINT(sample, TInstant::Zero(), *histogram);
+        }
+        {
+            const auto& sample = samples.GetSamples(1);
+            UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::HIST_RATE);
+            UNIT_ASSERT_EQUAL(sample.LabelsSize(), 2);
+            ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "request.duration");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(1), "route", "b");
+            auto histogram = ExplicitHistogramSnapshot({1, HISTOGRAM_INF_BOUND}, {3, 1});
+            ASSERT_HIST_POINT(sample, TInstant::Zero(), *histogram);
         }
     }
 

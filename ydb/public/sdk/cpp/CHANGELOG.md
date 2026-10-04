@@ -1,3 +1,5 @@
+## v3.24.0
+
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
 
 * Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
@@ -380,7 +381,7 @@ struct TStorageTableStats {
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
     ui64 AffectedPartitions = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TQueryTableStats {
@@ -575,11 +576,12 @@ struct TBatchOperationTableStats {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TBatchOperationExecutionStats {
 public:
-    explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+    TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, bool collectAffectedRows);
 
     void TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats);
 
@@ -587,6 +589,7 @@ public:
 
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool CollectAffectedRows;
 
     // Local stats
     TInstant StartTs = TInstant::Max();

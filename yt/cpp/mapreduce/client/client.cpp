@@ -369,6 +369,18 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+TFilePartitions TClientBase::GetFilePartitions(
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    return RequestWithRetry<TFilePartitions>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &ranges, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetFilePartitions(TransactionId_, path, ranges, options);
+        });
+}
+
 void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
 {
     CheckShutdown();
@@ -432,6 +444,13 @@ IFileReaderPtr TClientBase::CreateFileReader(
         Context_,
         TransactionId_,
         options);
+}
+
+IFileReaderPtr TClientBase::CreateFilePartitionReader(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_->CreatePolicyForReaderRequest(), cookie, options);
 }
 
 IFileWriterPtr TClientBase::CreateFileWriter(

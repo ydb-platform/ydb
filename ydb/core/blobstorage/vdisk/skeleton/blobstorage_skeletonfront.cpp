@@ -810,6 +810,17 @@ namespace NKikimr {
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter);
 
+            // report every change of local chunk space color to the NodeWarden right away (it forwards the report to
+            // BS_CONTROLLER); from then on NodeWarden takes this VDisk's color from these reports only
+            if (TActorSystem *actorSystem = VCtx->ActorSystem; actorSystem && !baseInfo.DonorMode) {
+                const ui32 nodeId = ctx.SelfID.NodeId();
+                VCtx->GetOutOfSpaceState().SetLocalChunkColorChangedCallback([actorSystem, nodeId, vdiskId = SelfVDiskId,
+                        pdiskId = baseInfo.PDiskId, vslotId = baseInfo.VDiskSlotId](NPDisk::TStatusFlags flags, ui64 sequence) {
+                    actorSystem->Send(MakeBlobStorageNodeWardenID(nodeId), new TEvBlobStorage::TEvControllerUpdateDiskStatus(
+                        vdiskId, nodeId, pdiskId, vslotId, flags, sequence));
+                });
+            }
+
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
                     VCtx->VDiskLogPrefix,
@@ -2479,12 +2490,21 @@ namespace NKikimr {
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);
+            // Donors stay at zero, so the gauges count the disks that serve the group. A donor never touches them:
+            // its counter chain may coincide with the acceptor's when both live on the same PDisk.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.SetHeapAllocatorStripe(Config->UseHeapAllocator);
+            }
         }
 
         void PassAway() override {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             DisconnectClients(ctx);
             ActiveActors.KillAndClear(ctx);
+            // Zero before the unlink so a scrape during teardown does not keep a stale 1.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.ClearHeapAllocatorMode();
+            }
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));

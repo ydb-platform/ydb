@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "dst_creator.h"
 #include "dst_schema_changer.h"
 
 #include <ydb/core/base/path.h>
@@ -221,6 +222,58 @@ private:
     TVector<TEvTxUserProxy::TEvProposeTransaction::TPtr> PendingRequests;
 };
 
+class TAttachAllocationGate: public TActorBootstrapped<TAttachAllocationGate> {
+    static constexpr ui64 Ready = 6;
+    static constexpr ui64 Blocked = 7;
+    static constexpr ui64 Release = 8;
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxId::TPtr& ev) {
+        if (++Allocations[ev->Sender] == 2) {
+            UNIT_ASSERT(!PendingRequest);
+            PendingRequest = std::move(ev);
+            Send(Notify, new TEvents::TEvWakeup(Blocked));
+        } else {
+            Send(ev->Forward(TxProxy));
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, Release);
+        UNIT_ASSERT(PendingRequest);
+        Send(PendingRequest->Forward(TxProxy));
+    }
+
+public:
+    TAttachAllocationGate(const TActorId& txProxy, const TActorId& notify)
+        : TxProxy(txProxy)
+        , Notify(notify)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Notify, new TEvents::TEvWakeup(Ready));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxId, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
+        default:
+            Send(ev->Forward(TxProxy));
+        }
+    }
+
+    static ui64 ReadyTag() { return Ready; }
+    static ui64 BlockedTag() { return Blocked; }
+    static ui64 ReleaseTag() { return Release; }
+
+private:
+    const TActorId TxProxy;
+    const TActorId Notify;
+    THashMap<TActorId, ui32> Allocations;
+    TEvTxUserProxy::TEvAllocateTxId::TPtr PendingRequest;
+};
+
 struct TReplicationTestInfo {
     ui64 ControllerId = 0;
     TPathId PathId;
@@ -401,7 +454,7 @@ struct TSchemaAltererTestEnv {
             new TEvTxUserProxy::TEvAllocateTxIdResult(dstAlterTxId + 1, services, {}));
     }
 
-    void ReplyMatchingDescription() {
+    void ReplyMatchingDescription(bool withExtraFamily = false) {
         const auto request = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(PipeCache);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
@@ -417,6 +470,11 @@ struct TSchemaAltererTestEnv {
         for (const auto& key : Schema.GetPrimaryKeyColumnNames()) {
             table->AddKeyColumnNames(key);
         }
+        if (withExtraFamily) {
+            auto* family = table->MutablePartitionConfig()->AddColumnFamilies();
+            family->SetId(1);
+            family->SetName("manual");
+        }
         Runtime.Send(Alterer, PipeCache, description.Release());
     }
 
@@ -426,7 +484,215 @@ struct TSchemaAltererTestEnv {
     }
 };
 
+struct TPendingAttachment {
+    TReplicationTestInfo Info;
+    ui64 TargetId = 0;
+    TPathId DstPathId;
+};
+
+TPendingAttachment StartPendingAttachment(TTestEnv& env) {
+    env.GetRuntime().GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+    CreateSourceTable(env, "replica1");
+    const auto info = StartReplication(env);
+    UNIT_ASSERT(info.Config.GetSkipInitialScan());
+
+    ui64 targetId = 0;
+    bool foundTarget = false;
+    for (ui32 attempt = 0; attempt < 50; ++attempt) {
+        const auto result = DescribeReplication(env, info);
+        if (result->Get()->Record.TargetsSize()) {
+            targetId = result->Get()->Record.GetTargets(0).GetId();
+            foundTarget = true;
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(foundTarget);
+
+    // Keep this test focused on attachment: source stream setup is independent
+    // and may otherwise delay destination progress in the controller.
+    env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
+        NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
+    DescribeReplication(env, info);
+
+    env.GetRuntime().Register(CreateDstCreator(
+        env.GetSender(), env.GetSchemeshardId("/Root/table1"), env.GetYdbProxy(),
+        "/Root", info.PathId, 1, targetId, TReplication::ETargetKind::Table,
+        "/Root/table1", "/Root/replica1", EReplicationMode::ReadOnly,
+        EConsistencyLevel::Row, true));
+
+    auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
+    const auto dstPathId = prepare->Get()->DstPathId;
+    env.SendAsync(info.ControllerId,
+        new TEvPrivate::TEvPrepareAttachDst(1, targetId, dstPathId));
+    env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDstResult>(env.GetSender());
+    env.GetRuntime().Send(prepare->Sender, env.GetSender(),
+        new TEvPrivate::TEvPrepareAttachDstResult());
+
+    const auto attached = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+    UNIT_ASSERT(attached->Get()->IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
+        .GetTable().GetReplicationConfig().GetMode(),
+        NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+
+    return {info, targetId, dstPathId};
+}
+
+void AssertEventuallyDone(TTestEnv& env, const TReplicationTestInfo& info) {
+    for (ui32 attempt = 0; attempt < 150; ++attempt) {
+        if (DescribeReplication(env, info)->Get()->Record.GetState().HasDone()) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+
+    const auto result = DescribeReplication(env, info);
+    UNIT_ASSERT_C(result->Get()->Record.GetState().HasDone(),
+        result->Get()->Record.GetState().DebugString());
+}
+
+void AssertDestinationWritable(TTestEnv& env) {
+    UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
+        .GetTable().GetReplicationConfig().GetMode(),
+        NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+}
+
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
+    Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {
+        TTestEnv env;
+        const auto pending = StartPendingAttachment(env);
+        const auto& info = pending.Info;
+        const auto targetId = pending.TargetId;
+        const auto dstPathId = pending.DstPathId;
+
+        auto request = MakeHolder<TEvController::TEvAlterReplication>();
+        info.PathId.ToProto(request->Record.MutablePathId());
+        request->Record.MutableConfig()->CopyFrom(info.Config);
+        request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
+        request->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(
+            NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE);
+        request->Record.MutableOperationId()->SetTxId(100);
+        env.SendAsync(info.ControllerId, std::move(request));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
+        env.SendAsync(info.ControllerId,
+            new TEvPrivate::TEvCreateDstResult(1, targetId, dstPathId));
+        AssertEventuallyDone(env, info);
+        AssertDestinationWritable(env);
+    }
+
+    Y_UNIT_TEST(DoneAfterRestartWithoutSource) {
+        TTestEnv env;
+        const auto pending = StartPendingAttachment(env);
+        const auto& info = pending.Info;
+
+        auto request = MakeHolder<TEvController::TEvAlterReplication>();
+        info.PathId.ToProto(request->Record.MutablePathId());
+        request->Record.MutableConfig()->CopyFrom(info.Config);
+        auto* connection = request->Record.MutableConfig()->MutableSrcConnectionParams();
+        connection->SetEndpoint("localhost:1");
+        connection->MutableOAuthToken()->SetToken("root@builtin");
+        request->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(
+            NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE);
+        request->Record.MutableOperationId()->SetTxId(101);
+        env.SendAsync(info.ControllerId, std::move(request));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
+
+        RestartController(env, info.ControllerId);
+        AssertEventuallyDone(env, info);
+        AssertDestinationWritable(env);
+    }
+
+    Y_UNIT_TEST(DropCascadeDuringAttachment) {
+        TTestEnv env;
+        const auto pending = StartPendingAttachment(env);
+        const auto& info = pending.Info;
+
+        auto request = MakeHolder<TEvController::TEvDropReplication>();
+        info.PathId.ToProto(request->Record.MutablePathId());
+        request->Record.MutableOperationId()->SetTxId(102);
+        request->Record.SetCascade(true);
+        env.SendAsync(info.ControllerId, std::move(request));
+        DescribeReplication(env, info);
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvDropStreamResult(1, pending.TargetId,
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
+        env.SendAsync(info.ControllerId,
+            new TEvPrivate::TEvCreateDstResult(1, pending.TargetId, pending.DstPathId));
+
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
+        UNIT_ASSERT(result->Get()->Record.GetStatus()
+            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
+        AssertDestinationWritable(env);
+    }
+
+    Y_UNIT_TEST(DropWaitsForDelayedAttachAllocation) {
+        TTestEnv env;
+        auto& runtime = env.GetRuntime();
+        runtime.GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+        CreateSourceTable(env, "replica1");
+        const auto info = StartReplication(env);
+
+        ui64 targetId = 0;
+        for (ui32 attempt = 0; attempt < 50; ++attempt) {
+            const auto result = DescribeReplication(env, info);
+            if (result->Get()->Record.TargetsSize()) {
+                targetId = result->Get()->Record.GetTargets(0).GetId();
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(targetId);
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
+        DescribeReplication(env, info);
+
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto gate = runtime.Register(new TAttachAllocationGate(txProxy, env.GetSender()));
+        runtime.RegisterService(MakeTxProxyID(), gate);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
+            ->Get()->Tag, TAttachAllocationGate::ReadyTag());
+
+        auto resume = MakeHolder<TEvController::TEvAlterReplication>();
+        info.PathId.ToProto(resume->Record.MutablePathId());
+        resume->Record.MutableConfig()->CopyFrom(info.Config);
+        resume->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
+        resume->Record.MutableSwitchState()->MutableStandBy();
+        resume->Record.MutableOperationId()->SetTxId(103);
+        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+        UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
+            ->Get()->Tag, TAttachAllocationGate::BlockedTag());
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+
+        auto drop = MakeHolder<TEvController::TEvDropReplication>();
+        info.PathId.ToProto(drop->Record.MutablePathId());
+        drop->Record.MutableOperationId()->SetTxId(104);
+        drop->Record.SetCascade(true);
+        env.SendAsync(info.ControllerId, std::move(drop));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
+            == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvDropStreamResult(1, targetId,
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
+        Sleep(TDuration::MilliSeconds(200));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
+            == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+        AssertDestinationWritable(env);
+
+        env.SendAsync(gate, new TEvents::TEvWakeup(TAttachAllocationGate::ReleaseTag()));
+        const auto dropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
+        UNIT_ASSERT(dropped->Get()->Record.GetStatus()
+            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
+        AssertDestinationWritable(env);
+    }
+}
 
 Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
     using namespace NTestHelpers;
@@ -486,6 +752,21 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         env.ExpectUnlink();
     }
 
+    Y_UNIT_TEST(ExtraUnusedDestinationFamilyDoesNotBlockAlter) {
+        TSchemaAltererTestEnv env(MakeFamilySchemaChange("ssd"), 100);
+        env.ReplyMatchingDescription(true);
+
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        const auto& transaction = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+            proposal->Get()->Ev.Get())->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetAlterTable().GetPartitionConfig().ColumnFamiliesSize(), 2);
+
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
+        env.ExpectUnlink();
+    }
+
     Y_UNIT_TEST(CombinedFamilyCreationAndReassignmentCompletes) {
         TEnv env;
         const auto info = StartReplication(env);
@@ -541,10 +822,29 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         CompleteSchemaChange(env, controllerId, worker, next);
 
-        auto withColumn = next;
-        withColumn.MutableVersion()->SetStep(300);
-        withColumn.MutableVersion()->SetTxId(30);
-        withColumn.SetSourceSchemaVersion(4);
+        auto withoutMedia = next;
+        withoutMedia.MutableVersion()->SetStep(300);
+        withoutMedia.MutableVersion()->SetTxId(30);
+        withoutMedia.SetSourceSchemaVersion(4);
+        withoutMedia.MutableFamilies(1)->ClearMedia();
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, withoutMedia));
+        const auto resetRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(resetRelease->Get()->Record.GetSchema().SerializeAsString(), withoutMedia.SerializeAsString());
+        const auto reset = env.GetDescription("/Root/replica1");
+        bool mediaReset = false;
+        for (const auto& family : reset.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies()) {
+            if (family.GetId() == archiveId) {
+                mediaReset = family.GetStorageConfig().GetData().GetAllowOtherKinds();
+            }
+        }
+        UNIT_ASSERT(mediaReset);
+        CompleteSchemaChange(env, controllerId, worker, withoutMedia);
+
+        auto withColumn = withoutMedia;
+        withColumn.MutableVersion()->SetStep(400);
+        withColumn.MutableVersion()->SetTxId(40);
+        withColumn.SetSourceSchemaVersion(5);
         auto* extra = withColumn.AddColumns();
         extra->SetName("extra");
         extra->SetType("Uint64");

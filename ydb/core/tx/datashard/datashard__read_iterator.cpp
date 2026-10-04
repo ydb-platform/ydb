@@ -1,4 +1,5 @@
 #include "datashard_failpoints.h"
+#include "read_iterator_sampling.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
@@ -11,11 +12,13 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
+#include <ydb/core/tablet_flat/flat_table_key_blocks.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/system/hp_timer.h>
 
+#include <cmath>
 #include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
@@ -112,6 +115,8 @@ struct TReadIteratorVectorTop {
 namespace {
 
 constexpr ui64 MinRowsPerCheck  = 1000;
+// Skipped units and empty ranges produce no rows to trigger time checks.
+constexpr ui64 SampledWorkPerTimeCheck = 64;
 constexpr ui64 MinBytesPerCheck = 1_MB;
 
 TMaybe<ui64> ResolveVictimQuerySpanId(TMaybe<ui64> lockVictimQuerySpanId, ui64 currentQuerySpanId) {
@@ -432,6 +437,20 @@ class TReader {
 
     const bool UsePrechargeForExtBlobs;
 
+    struct TSamplingCtx {
+        TAutoPtr<NTable::TSubset> Subset;
+        NTable::TKeyBlocksLayout Layout;
+        std::unique_ptr<NTable::TKeyBlockIterator> Units;
+        TSamplingSelector Selector;
+    };
+
+    std::unique_ptr<TSamplingCtx> SamplingCtx;
+    NKikimrTxDataShard::TReadSamplingStats SamplingStats;
+    std::optional<NTable::TBounds> SamplingPending;
+    // Commit new sampling decisions before a page-fault retry.
+    bool SamplingProgress = false;
+    ui64 SampledWorkSinceCheck = 0;
+
     enum class EReadStatus {
         Done,
         NeedData,
@@ -454,6 +473,7 @@ public:
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
         , UsePrechargeForExtBlobs(Self->GetUsePrechargeForExtBlobs())
+        , SamplingPending(state.PendingSelectedUnit)
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -753,16 +773,18 @@ public:
                 return true;
             }
 
-            if (ShouldStop())
+            if (State.Sampling ? ShouldStopSampled() : ShouldStop())
                 return true;
 
             const auto& range = State.Request->Ranges[FirstUnprocessedQuery];
-            auto status = ReadRange(txc, range);
+            auto status = State.Sampling ? ReadRangeSampled(txc, range) : ReadRange(txc, range);
             switch (status) {
             case EReadStatus::Done:
                 break;
             case EReadStatus::NeedData:
-                PrechargeRangesAfter(txc, FirstUnprocessedQuery);
+                if (!State.Sampling) {
+                    PrechargeRangesAfter(txc, FirstUnprocessedQuery);
+                }
                 return false;
             case EReadStatus::NeedContinue:
                 return true;
@@ -822,7 +844,12 @@ public:
         }
 
         // since no keys, then we must have ranges (has been checked initially)
-        return ReadRanges(txc);
+        if (State.Sampling) {
+            SamplingStats = State.SamplingStats;
+        }
+        const bool done = ReadRanges(txc);
+        ReleaseSamplingIterator();
+        return done;
     }
 
     bool HasUnreadQueries() const {
@@ -894,6 +921,14 @@ public:
             // FirstUnprocessedQuery is definitely partially read range
             if (LastProcessedKey)
                 continuationToken.SetLastProcessedKey(LastProcessedKey);
+
+            if (State.Sampling) {
+                auto* sampling = continuationToken.MutableSampling();
+                sampling->SetLastProcessedKeyInclusive(LastProcessedKeyErased);
+                if (SamplingPending) {
+                    SaveSamplingBounds(*SamplingPending, *sampling->MutablePendingSelectedUnit());
+                }
+            }
 
             bool res = continuationToken.SerializeToString(record.MutableContinuationToken());
             Y_ASSERT(res);
@@ -971,6 +1006,10 @@ public:
         record.SetReadId(State.ReadId.ReadId);
         record.SetSeqNo(State.SeqNo + 1);
 
+        if (State.Sampling) {
+            *record.MutableSamplingStats() = SamplingStats;
+        }
+
         if (!State.IsHeadRead) {
             State.ReadVersion.ToProto(record.MutableSnapshot());
         }
@@ -1005,6 +1044,10 @@ public:
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
         state.LastProcessedKeyErased = LastProcessedKeyErased;
+        if (State.Sampling) {
+            state.PendingSelectedUnit = SamplingPending;
+            state.SamplingStats = SamplingStats;
+        }
         if (sentResult) {
             state.ConsumeSeqNo(RowsRead, BytesInResult);
         }
@@ -1019,6 +1062,168 @@ public:
     bool NeedVolatileWaitForCommit() const { return VolatileWaitForCommit; }
 
 private:
+    // SamplingCtx borrows transaction pages and must be released before Execute returns.
+    void EnsureSampling(TTransactionContext& txc) {
+        if (SamplingCtx) {
+            return;
+        }
+        SamplingCtx = std::make_unique<TSamplingCtx>();
+        SamplingCtx->Subset = txc.DB.ScanSnapshot(TableInfo.LocalTid, State.ReadVersion);
+        const auto& subset = *SamplingCtx->Subset;
+        NTable::TKeyBlockIterator::TConf conf;
+        conf.MemtableStride = State.Sampling->GetMemtableStride();
+        SamplingCtx->Layout = NTable::TKeyBlockIterator::BuildLayout(subset, conf, subset.Scheme->Keys);
+        SamplingCtx->Units = std::make_unique<NTable::TKeyBlockIterator>(
+            subset, txc.DB.GetPagesEnv(), subset.Scheme->Keys, conf, SamplingCtx->Layout);
+        SamplingCtx->Selector = TSamplingSelector(
+            Self->TabletID(), TableInfo.LocalTid, SamplingCtx->Layout.LayoutId,
+            State.Sampling->GetSeed(), SamplingThreshold(State.Sampling->GetRate()));
+    }
+
+    void ReleaseSamplingIterator() {
+        if (!SamplingCtx) {
+            return;
+        }
+        const auto tele = SamplingCtx->Units->Telemetry();
+        auto& stats = SamplingStats;
+        stats.SetParts(tele.Parts);
+        stats.SetMemtables(tele.Memtables);
+        stats.SetSlices(tele.Slices);
+        stats.SetOwnerRowsPerUnitMax(Max(stats.GetOwnerRowsPerUnitMax(), tele.OwnerRowsPerUnitMax));
+        stats.SetOwnerMainGroupBytes(stats.GetOwnerMainGroupBytes() + tele.OwnerMainGroupBytes);
+        stats.SetIndexPagesTouched(stats.GetIndexPagesTouched() + tele.IndexPagesTouched);
+        SamplingCtx.reset();
+    }
+
+    NTable::EReady SeekAt(const TSamplingPos& pos) {
+        if (pos.IsPosInf()) {
+            return NTable::EReady::Gone;
+        }
+        return SamplingCtx->Units->Seek(pos.Key.GetCells(), pos.Before);
+    }
+
+    EReadStatus YieldSampled(EReadStatus status, const TSamplingPos& cursor, const TSamplingPos& rangeStart) {
+        if (CompareSamplingPos(cursor, rangeStart, TableInfo.KeyColumnTypes) == 0) {
+            LastProcessedKey.clear();
+            LastProcessedKeyErased = false;
+        } else {
+            LastProcessedKey = cursor.Key.GetBuffer();
+            LastProcessedKeyErased = cursor.Before;
+        }
+        // Restart discards this Execute; preserve progress even across empty ranges.
+        const bool commit = SamplingProgress || RowsRead > 0
+            || FirstUnprocessedQuery != State.FirstUnprocessedQuery
+            || LastProcessedKey != State.LastProcessedKey
+            || LastProcessedKeyErased != State.LastProcessedKeyErased;
+        if (status == EReadStatus::NeedData && commit) {
+            return EReadStatus::NeedContinue;
+        }
+        return status;
+    }
+
+    bool ShouldStopSampled() {
+        if (ShouldStop()) {
+            return true;
+        }
+        if (SampledWorkSinceCheck >= SampledWorkPerTimeCheck) {
+            SampledWorkSinceCheck = 0;
+            UpdateCycles();
+            return ElapsedCycles() >= MaxCyclesPerIteration;
+        }
+        return false;
+    }
+
+    EReadStatus ReadRangeSampled(TTransactionContext& txc, const TSerializedTableRange& range) {
+        ++SampledWorkSinceCheck;
+        EnsureSampling(txc);
+        const auto keyTypes = TConstArrayRef<NScheme::TTypeInfo>(TableInfo.KeyColumnTypes);
+        const TSamplingPos rangeStart = SamplingRangeStart(range);
+        const TSamplingPos rangeEnd = SamplingRangeEnd(range);
+
+        TSamplingPos cursor = LastProcessedKey
+            ? TSamplingPos{TSerializedCellVec(LastProcessedKey), LastProcessedKeyErased}
+            : rangeStart;
+        // Each range must Seek: Next would skip a unit that straddles two ranges.
+        bool positioned = false;
+        if (SamplingPending) {
+            SamplingPending = ClipSamplingBounds(
+                *SamplingPending, cursor, rangeEnd, keyTypes);
+        }
+        while (CompareSamplingPos(cursor, rangeEnd, keyTypes) < 0) {
+            NTable::TBounds bounds;
+            bool selected = SamplingPending.has_value();
+            if (selected) {
+                bounds = *SamplingPending;
+            } else {
+                const NTable::EReady ready = positioned
+                    ? SamplingCtx->Units->Next()
+                    : SeekAt(cursor);
+                if (ready == NTable::EReady::Page) {
+                    return YieldSampled(EReadStatus::NeedData, cursor, rangeStart);
+                }
+                if (ready != NTable::EReady::Data) {
+                    break;
+                }
+                positioned = true;
+                const auto& block = SamplingCtx->Units->Get();
+                bounds = block.Bounds;
+                selected = SamplingCtx->Selector.Draw(block.SelectionKey);
+                // Count each unit once per requested range.
+                SamplingProgress = true;
+                SamplingStats.SetUnitsTotal(SamplingStats.GetUnitsTotal() + 1);
+                if (block.FromMemtable) {
+                    SamplingStats.SetUnitsMemtable(SamplingStats.GetUnitsMemtable() + 1);
+                }
+                if (selected) {
+                    SamplingStats.SetUnitsSelected(SamplingStats.GetUnitsSelected() + 1);
+                    SamplingPending = bounds;
+                }
+            }
+
+            TSamplingPos unitEnd = SamplingEnd(bounds);
+            if (CompareSamplingPos(rangeEnd, unitEnd, keyTypes) < 0) {
+                unitEnd = rangeEnd;
+            }
+            if (selected) {
+                TSamplingPos subStart = SamplingStart(bounds);
+                if (CompareSamplingPos(subStart, cursor, keyTypes) < 0) {
+                    subStart = cursor;
+                }
+                if (CompareSamplingPos(subStart, unitEnd, keyTypes) < 0) {
+                    LastProcessedKey.clear();
+                    TSerializedTableRange selectedRange;
+                    selectedRange.From = subStart.Key;
+                    selectedRange.FromInclusive = subStart.Before;
+                    selectedRange.To = unitEnd.Key;
+                    // The ordinary read path represents +inf as an inclusive empty key.
+                    selectedRange.ToInclusive = !unitEnd.Before;
+                    const EReadStatus status = ReadRange(txc, selectedRange);
+                    if (LastProcessedKey) {
+                        const TSamplingPos next{TSerializedCellVec(LastProcessedKey), LastProcessedKeyErased};
+                        if (CompareSamplingPos(cursor, next, keyTypes) < 0) {
+                            cursor = next;
+                        }
+                    }
+                    if (status != EReadStatus::Done) {
+                        return YieldSampled(status, cursor, rangeStart);
+                    }
+                }
+            }
+            cursor = unitEnd;
+            SamplingPending.reset();
+            ++SampledWorkSinceCheck;
+            if (CompareSamplingPos(cursor, rangeEnd, keyTypes) >= 0 || ReachedTotalRowsLimit()) {
+                break;
+            }
+            if (ShouldStopSampled()) {
+                return YieldSampled(EReadStatus::NeedContinue, cursor, rangeStart);
+            }
+        }
+        LastProcessedKey.clear();
+        SamplingPending.reset();
+        return EReadStatus::Done;
+    }
+
     bool CanResume() const {
         if (Self->IsFollower() && State.ReadVersion.IsMax()) {
             // HEAD reads from follower cannot be resumed
@@ -1126,16 +1331,17 @@ private:
             TDbTupleRef rowValues = iter->GetValues();
 
             if (!precharging && txc.Env.MissingReferencesSize()) {
-                // Note: the current key must be returned to reader, but the
-                // previous key is lost, and we cannot safely resume. We can
-                // only restart query from the beginning, and don't want to
-                // keep track of any stats.
+                // This row still needs its blobs. Sampling resumes inclusively at
+                // this key to preserve earlier output; ordinary reads restart.
                 precharging = true;
+                if (State.Sampling) {
+                    LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                    LastProcessedKeyErased = true;
+                }
             }
 
             if (precharging) {
-                // Note: RowsProcessed, RowsSinceLastCheck and LastProcessed key are not updated,
-                // so we will restart the transaction from the exact same key we started iterating from.
+                // Precharging must not advance the saved cursor or processed-row counters.
                 prechargedCount++;
                 prechargedRowsSize += EstimateSize(rowValues.Cells());
 
@@ -1943,6 +2149,9 @@ public:
         };
 
         auto scanPossible = [&]() -> bool {
+            if (state.Sampling) {
+                return false;
+            }
             if (Self->IsFollower()) {
                 // Cannot scan on followers
                 return false;
@@ -2071,6 +2280,23 @@ public:
             }
         }
 
+        if (state.Sampling) {
+            if (state.IsHeadRead) {
+                if (auto status = upgradeToRepeatableRead()) {
+                    return *status;
+                }
+            }
+            // Wait before building the initial layout; TEvReadContinue skips this wait.
+            if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
+                // Register the parked request so TEvReadCancel can cancel its replay.
+                Self->Pipeline.RegisterWaitingReadIterator(state.ReadId, state.Ev->Get());
+                Self->VolatileTxManager.AttachWaitingSnapshotEvent(
+                    state.ReadVersion,
+                    std::unique_ptr<IEventHandle>(state.Ev.Release()));
+                return abortRescheduled();
+            }
+        }
+
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
@@ -2119,6 +2345,9 @@ public:
         }
 
         LWTRACK(ReadExecute, state.Request->Orbit);
+        if (state.Sampling) {
+            state.SamplingStats.SetExecutions(state.SamplingStats.GetExecutions() + 1);
+        }
         bool readResult = Read(txc, ctx, state);
 
         if (schedulableRead) {
@@ -2322,6 +2551,73 @@ public:
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
         }
 
+        if (record.HasSampling()) {
+            const auto& sampling = record.GetSampling();
+            const double rate = sampling.GetRate();
+            auto reject = [&](Ydb::StatusIds::StatusCode code, const TString& message) {
+                SetStatusError(Result->Record, code, TStringBuilder() << message
+                    << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
+            };
+            if (!std::isfinite(rate) || rate <= 0.0 || rate > 1.0) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling rate must be finite and in (0, 1]");
+                return;
+            }
+            if (sampling.GetMemtableStride() == 0) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling memtable stride must be positive");
+                return;
+            }
+            if (!request->Keys.empty()) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support key lookups");
+                return;
+            }
+            if (record.GetReverse()) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support reverse reads");
+                return;
+            }
+            if (record.HasVectorTopK()) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support vector top-k");
+                return;
+            }
+            if (record.GetLockTxId()) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support locks");
+                return;
+            }
+            if (Self->IsFollower()) {
+                reject(Ydb::StatusIds::UNSUPPORTED, "Sampling is not supported on followers");
+                return;
+            }
+            if (state.PathId.OwnerId == Self->TabletID()) {
+                reject(Ydb::StatusIds::BAD_REQUEST, "Sampling is not supported for system tables");
+                return;
+            }
+            for (const auto& range : request->Ranges) {
+                // These prefix forms require +inf suffix cells, which sampling
+                // boundaries cannot represent.
+                if (!range.From.GetCells().empty() && !range.FromInclusive
+                    && range.From.GetCells().size() != TableInfo.KeyColumnCount)
+                {
+                    reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support an exclusive prefix start");
+                    return;
+                }
+                if (!range.To.GetCells().empty() && range.ToInclusive
+                    && range.To.GetCells().size() != TableInfo.KeyColumnCount)
+                {
+                    reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support an inclusive prefix end");
+                    return;
+                }
+            }
+            if (sampling.HasContinuation() && sampling.GetContinuation().HasPendingSelectedUnit()) {
+                NTable::TBounds pending;
+                TString error;
+                if (!ParseSamplingBounds(sampling.GetContinuation().GetPendingSelectedUnit(), pending, error, TableInfo.KeyColumnTypes)) {
+                    reject(Ydb::StatusIds::BAD_REQUEST, error);
+                    return;
+                }
+                state.PendingSelectedUnit = std::move(pending);
+            }
+            state.Sampling = &sampling;
+        }
+
         // Make ranges in the new 'any' form compatible with the old '+inf' form
         for (size_t i = 0; i < request->Ranges.size(); ++i) {
             auto& range = request->Ranges[i];
@@ -2335,6 +2631,15 @@ public:
             if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
                 keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
             }
+        }
+
+        if (state.PendingSelectedUnit && CompareSamplingPos(
+                SamplingStart(*state.PendingSelectedUnit),
+                SamplingRangeStart(request->Ranges.front()), TableInfo.KeyColumnTypes) > 0)
+        {
+            SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST,
+                "Sampling continuation starts after the resume position");
+            return;
         }
 
         // Make prefixes in the new 'any' form compatible with the old '+inf' form
@@ -3488,6 +3793,10 @@ public:
             }
         }
 
+        if (state.Sampling) {
+            state.SamplingStats.SetExecutions(state.SamplingStats.GetExecutions() + 1);
+        }
+
         if (Reader->Read(txc)) {
             // Call before sending result, because `schedulableRead` gets deleted
             if (schedulableRead) {
@@ -3756,6 +4065,15 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             code,
             msg);
         result->Record.SetReadId(readId.ReadId);
+        if (record.HasSampling() && (code == Ydb::StatusIds::OVERLOADED || code == Ydb::StatusIds::NOT_FOUND)) {
+            // The request was rejected before creating a reader, so it has no
+            // unpublished sampling decisions. Preserve its incoming checkpoint.
+            NKikimrTxDataShard::TReadContinuationToken token;
+            token.SetFirstUnprocessedQuery(0);
+            *token.MutableSampling() = record.GetSampling().GetContinuation();
+            Y_ENSURE(token.SerializeToString(result->Record.MutableContinuationToken()));
+            result->Record.SetSeqNo(1);
+        }
         ctx.Send(ev->Sender, result.release());
 
         request->ReadSpan.EndError(msg);
@@ -4146,6 +4464,27 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
         result->Record.SetReadId(readId.ReadId);
         result->Record.SetSeqNo(state.SeqNo + 1);
 
+        if (state.Sampling && !state.IsFinished && state.SeqNo > 0
+            && state.IsExhausted() && !state.ReadContinuePending)
+        {
+            // A quota-exhausted reader has sent all its decisions and cannot
+            // execute again before an ACK. This terminal checkpoint permits a
+            // split handover; an executing reader must fail instead of redrawing
+            // a decision that only its current transaction knows about.
+            NKikimrTxDataShard::TReadContinuationToken token;
+            token.SetFirstUnprocessedQuery(state.FirstUnprocessedQuery);
+            if (state.LastProcessedKey) {
+                token.SetLastProcessedKey(state.LastProcessedKey);
+            }
+            auto* sampling = token.MutableSampling();
+            sampling->SetLastProcessedKeyInclusive(state.LastProcessedKeyErased);
+            if (state.PendingSelectedUnit) {
+                SaveSamplingBounds(*state.PendingSelectedUnit, *sampling->MutablePendingSelectedUnit());
+            }
+            Y_ENSURE(token.SerializeToString(result->Record.MutableContinuationToken()));
+            state.ReadVersion.ToProto(result->Record.MutableSnapshot());
+        }
+
         SendViaSession(state.SessionId, readId.Sender, SelfId(), result.release());
         state.Request->ReadSpan.EndError("Cancelled");
 
@@ -4261,4 +4600,3 @@ inline void Out<NKikimr::NDataShard::TReadIteratorId>(
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

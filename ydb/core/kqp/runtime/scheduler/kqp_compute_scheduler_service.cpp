@@ -241,9 +241,11 @@ public:
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
         const auto& queryId = ev->Get()->QueryId;
-        if (!Scheduler->RemoveQuery(queryId)) {
-            YDB_LOG_ERROR("Trying to remove unknown",
-                {"query", queryId});
+        const bool isForceRemove = ev->Get()->IsForceRemove;
+        if (!Scheduler->RemoveQuery(queryId, isForceRemove)) {
+            YDB_LOG_ERROR("Trying to remove unknown query",
+                {"queryId", queryId},
+                {"isForceRemove", isForceRemove});
         } else {
             YDB_LOG_DEBUG("Remove query",
                 {"txId", queryId});
@@ -282,9 +284,7 @@ private:
             }
         }
 
-        // TODO: take the guarantee from the DDL setting `total_cpu_guarantee_percent_per_node` once it is added:
-        //       attrs.CpuGuarantee = std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100;
-        attrs.CpuGuarantee = 0;
+        attrs.CpuGuarantee = static_cast<ui64>(std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100);
     }
 
     // TODO: handle invalid configuration on DDL level.
@@ -415,18 +415,22 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
-    TQueryPtr query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
-    ValidateAttributes(query ? query->MergedWith(attrs) : attrs, query.get(), pool.get());
-
-    if (query) {
-        query->Update(attrs);
-    } else {
-        bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
-        query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
-        pool->AddQuery(query);
-        Y_ENSURE(Queries.emplace(queryId, query).second);
+    if (auto it = Queries.find(queryId); it != Queries.end()) {
+        auto& state = it->second;
+        const auto fullPoolId = state.Query->GetFullPoolId();
+        Y_ENSURE(fullPoolId.DatabaseId == databaseId && fullPoolId.PoolId == poolId,
+            "Query is already registered in a different pool: " << queryId);
+        ValidateAttributes(state.Query->MergedWith(attrs), state.Query.get(), pool.get());
+        state.Query->Update(attrs);
+        ++state.AddQueryCount;
+        return state.Query;
     }
 
+    ValidateAttributes(attrs, nullptr, pool.get());
+    bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
+    auto query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
+    pool->AddQuery(query);
+    Y_ENSURE(Queries.emplace(queryId, TQueryState{1, query}).second);
     return query;
 }
 
@@ -444,12 +448,16 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
     return {};
 }
 
-bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
+bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool isForceRemove) {
     TWriteGuard lock(Mutex);
 
     if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
-        queryIt->second->GetParent()->RemoveQuery(queryId);
-        Queries.erase(queryIt);
+        auto& state = queryIt->second;
+        Y_ENSURE(state.AddQueryCount > 0, "Query has no registrations: " << queryId);
+        if (isForceRemove || --state.AddQueryCount == 0) {
+            state.Query->GetParent()->RemoveQuery(queryId);
+            Queries.erase(queryIt);
+        }
         return true;
     }
 

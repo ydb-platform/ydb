@@ -18,6 +18,7 @@
  */
 
 
+	.file   "svml_z0_log10_s_la.s"
 	.text
 .L_2__routine_start___svml_log10f16_z0_0:
 

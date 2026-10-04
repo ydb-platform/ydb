@@ -15,6 +15,7 @@ namespace NYql {
 
 namespace NDqProto {
 
+class TDqTask;
 enum ECheckpointingMode : int;
 
 } // namespace NDqProto
@@ -208,6 +209,10 @@ private:
 
     bool SlowCheckpointsMonitoringStarted = false;
 };
+
+bool IsInfiniteSourceType(const TString& sourceType);
+
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task);
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 

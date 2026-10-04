@@ -102,6 +102,38 @@ namespace {
             >= response.GetReport().GetCollectionStartedAtUnixMs());
     }
 
+    ::NMonitoring::TDynamicCounterPtr HeapAllocatorState(TTestEnv& env) {
+        auto vdisk = env.GetCounters()->FindSubgroup("subsystem", "vdisk");
+        if (!vdisk) {
+            return {};
+        }
+        auto counters = vdisk->FindSubgroup("counters", "vdisks");
+        if (!counters) {
+            return {};
+        }
+        auto pool = counters->FindSubgroup("storagePool", "static");
+        if (!pool) {
+            return {};
+        }
+        auto group = pool->FindSubgroup("group", "000000000");
+        if (!group) {
+            return {};
+        }
+        auto order = group->FindSubgroup("orderNumber", "00");
+        if (!order) {
+            return {};
+        }
+        auto pdisk = order->FindSubgroup("pdisk", "000000001");
+        if (!pdisk) {
+            return {};
+        }
+        auto media = pdisk->FindSubgroup("media", "ssd");
+        if (!media) {
+            return {};
+        }
+        return media->FindSubgroup("subsystem", "state");
+    }
+
     ::NMonitoring::TDynamicCounterPtr GetSpaceReportCounters(TTestEnv& env) {
         return env.GetCounters()
             ->GetSubgroup("subsystem", "vdisk")
@@ -377,6 +409,33 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         AssertCompletedReport(cached);
         UNIT_ASSERT_VALUES_EQUAL(
             GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 1);
+    }
+
+    Y_UNIT_TEST(HeapAllocatorModeCounters) {
+        {
+            TTestEnv sizeClass;
+            const auto state = HeapAllocatorState(sizeClass);
+            UNIT_ASSERT(state);
+            UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorSizeClass")->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorStripe")->Val(), 0);
+        }
+        TTestEnv env(nullptr, true);
+        const auto state = HeapAllocatorState(env);
+        UNIT_ASSERT(state);
+        UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorSizeClass")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorStripe")->Val(), 1);
+
+        const TActorId edge = env.GetRuntime()->AllocateEdgeActor(1);
+        env.GetRuntime()->Send(new IEventHandle(env.GetVDiskServiceId(), edge, new TEvents::TEvPoisonPill()), 1);
+        bool drained = false;
+        env.GetRuntime()->Sim([&] {
+            if (!drained) {
+                drained = true;
+                return true;
+            }
+            return env.GetRuntime()->HasImmediateEvents();
+        });
+        UNIT_ASSERT(!HeapAllocatorState(env));
     }
 
     Y_UNIT_TEST(PeriodicRefreshPopulatesCache) {

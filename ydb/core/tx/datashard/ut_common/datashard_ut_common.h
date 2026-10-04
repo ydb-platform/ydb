@@ -474,6 +474,7 @@ struct TShardedTableOptions {
         ui64 ExternalThreshold = 0;
         ui8 ExternalChannelsCount = 1;
         bool ResetDataPoolKind = false;
+        bool AllowOtherDataPoolKinds = true;
     };
 
     using TAttributes = THashMap<TString, TString>;

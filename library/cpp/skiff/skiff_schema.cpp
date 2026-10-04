@@ -33,18 +33,23 @@ bool operator!=(const TSkiffSchema& lhs, const TSkiffSchema& rhs)
 void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out)
 {
     (*out) << ToString(schema->GetWireType());
-    if (schema->GetWireType() == EWireType::StringFixed) {
-        (*out) << '(' << schema->GetSize() << ')';
-    }
-    if (!IsSimpleType(schema->GetWireType())) {
-        auto children = schema->GetChildren();
-        if (!children.empty()) {
-            (*out) << '<';
-            for (const auto& child : children) {
-                PrintShortDebugString(child, out);
-                (*out) << ';';
+    switch (GetSchemaKind(schema->GetWireType())) {
+        case ESchemaKind::Simple:
+            break;
+        case ESchemaKind::StringFixed:
+            (*out) << '(' << schema->GetSize() << ')';
+            break;
+        case ESchemaKind::Complex: {
+            auto children = schema->GetChildren();
+            if (!children.empty()) {
+                (*out) << '<';
+                for (const auto& child : children) {
+                    PrintShortDebugString(child, out);
+                    (*out) << ';';
+                }
+                (*out) << '>';
             }
-            (*out) << '>';
+            break;
         }
     }
 }
@@ -58,7 +63,7 @@ TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema)
 
 std::shared_ptr<TSimpleTypeSchema> CreateSimpleTypeSchema(EWireType type)
 {
-    if (!IsSimpleType(type)) {
+    if (GetSchemaKind(type) != ESchemaKind::Simple) {
         ythrow TSkiffException() << "WireType must be Simple, got \"" << ToString(type) << "\"";
     }
     return std::make_shared<TSimpleTypeSchema>(type);
@@ -160,7 +165,7 @@ i64 TSkiffSchema::GetSize() const
 TSimpleTypeSchema::TSimpleTypeSchema(EWireType type)
     : TSkiffSchema(type)
 {
-    Y_ABORT_UNLESS(IsSimpleType(type));
+    Y_ABORT_UNLESS(GetSchemaKind(type) == ESchemaKind::Simple);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

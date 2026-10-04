@@ -719,18 +719,30 @@ namespace NActors {
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
 
-#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
+#define YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRIO, COMP, SAMPLE_BY, T, ...) \
     do { \
         auto& ydblogActorContext = (CTX); \
         const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, SAMPLE_BY)) { \
             NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
             YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
             TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
             MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
         } \
     } while (false)
+
+#define YDB_LOG_EMERG_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_EMERG, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_ALERT_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_ALERT, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_CRIT_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_CRIT, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_ERROR, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_WARN_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_WARN, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_NOTICE, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_INFO_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_INFO, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_DEBUG, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_TRACE_CTX_COMP_SAMPLED_BY(CTX, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_TRACE, COMP, SAMPLE_BY, T, __VA_ARGS__)
+
+#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRIO, COMP, 0ull, T, ...)
 
 #define YDB_LOG_CTX_COMP_FAIL(CTX, PRIO, COMP, T, ...) \
     do { \

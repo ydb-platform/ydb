@@ -258,8 +258,11 @@ struct TLostUpdateTest : public TOutboundTest {
             return descriptor->PushBytes.load() >= Limits.RemoteChannelColdInflightBytes
                 && GetInputPopBytes(Debug1) == descriptor->PushBytes.load();
         }, TDuration::Seconds(10)), TStringBuilder() << "the producer did not fill the cold window, " << SessionDetails());
-        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->RemotePopBytes.load(), 0, "an update got through");
+        // the updates of the last pops may still be on the way: they are dropped until the pinger pings
         auto pingsBefore = CountPings(pinger);
+        UNIT_ASSERT_C(WaitFor([&]() { return CountPings(pinger) > pingsBefore; }, TDuration::Seconds(5)),
+            TStringBuilder() << "no idle ping, " << SessionDetails());
+        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->RemotePopBytes.load(), 0, "an update got through");
 
         Debug0->DropUpdateCount.store(0);
         UNIT_ASSERT_C(WaitFor([&]() { return descriptor->RemotePopBytes.load() > 0; }, TDuration::Seconds(10)),

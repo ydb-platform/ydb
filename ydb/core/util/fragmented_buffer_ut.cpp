@@ -104,6 +104,37 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
 
     }
 
+    Y_UNIT_TEST(TestOutOfOrderFragmentsAndMultiMerge) {
+        TFragmentedBuffer fb;
+
+        // Exceed the inline capacity and insert at the beginning and in the middle.
+        fb.Write(20, "UVWXYZ", 6);
+        fb.Write(0, "ABCDEF", 6);
+        fb.Write(10, "KLMNOP", 6);
+        UNIT_ASSERT_VALUES_EQUAL(fb.Print(), "{[0, 6) U [10, 16) U [20, 26)}");
+        UNIT_ASSERT_VALUES_EQUAL(fb.GetTotalSize(), 18);
+
+        // Merge all three fragments, preserving the prefix and the non-overwritten suffix.
+        fb.Write(4, "efghijklmnopqrstuv", 18);
+        UNIT_ASSERT(fb.IsMonolith());
+        UNIT_ASSERT_VALUES_EQUAL(fb.GetTotalSize(), 26);
+        UNIT_ASSERT_VALUES_EQUAL(fb.Read(0, 26).ConvertToString(), "ABCDefghijklmnopqrstuvWXYZ");
+    }
+
+    Y_UNIT_TEST(TestEmptyWriteIsNoOp) {
+        TFragmentedBuffer fb;
+
+        fb.Write(10, nullptr, 0);
+        UNIT_ASSERT(!fb);
+
+        fb.Write(10, "ABC", 3);
+        TRope empty;
+        fb.Write(20, std::move(empty));
+
+        UNIT_ASSERT_VALUES_EQUAL(fb.Print(), "{[10, 13)}");
+        UNIT_ASSERT_VALUES_EQUAL(fb.Read(10, 3).ConvertToString(), "ABC");
+    }
+
     Y_UNIT_TEST(TestIsNotMonolith) {
         const char *data2 = "234";
         const char *data3v2 = "5";

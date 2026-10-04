@@ -1,5 +1,10 @@
 ## v3.24.0
 
+* Topic: add opt-in `received.messages`, `delivered.messages`, `commit.queued`, and
+  `commit.acknowledged` counters for an explicitly named reader (`reader.name`). Queued commits
+  include transaction precommit offset requests; acknowledged commits count only
+  ordinary user-requested offsets confirmed by the Topic streaming protocol.
+
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
 
 * Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.

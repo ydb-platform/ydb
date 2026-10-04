@@ -104,6 +104,12 @@ outputs:
   success:
     value: ${{ steps.build.outputs.status }}
     description: "build success"
+  build_result:
+    value: ${{ steps.build.outputs.build_result }}
+    description: "success or failure of ya make itself"
+  test_result:
+    value: ${{ steps.build.outputs.test_result }}
+    description: "success, failure, or skipped when tests did not run"
 
 runs:
   using: "composite"
@@ -478,9 +484,36 @@ runs:
             if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
               SAVE_COMMAND="$SAVE_COMMAND --bazel-remote-username ${{ inputs.bazel_remote_username }} --bazel-remote-password-file $BAZEL_REMOTE_PASSWORD_FILE --bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs"
             fi
+            # Same phases as a test try: the graph save is a ya make, so it gets
+            # ya_make_try plus evlog splits (ya_build / ya_tests / ya_cache_*).
+            mkdir -p "$PUBLIC_DIR"
+            GRAPH_EVLOG="$PUBLIC_DIR/ya_evlog.jsonl"
+            export CI_YA_ATTEMPT=1
+            analytics start ya_make_try_1
+            set +e
             $SAVE_COMMAND -k --cache-tests \
+              --evlog-file "$GRAPH_EVLOG" \
               --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
               $YA_MAKE_TARGET
+            SAVE_RC=$?
+            set -e
+            if [ "$SAVE_RC" -eq 0 ]; then
+              analytics end ya_make_try_1
+            else
+              analytics end ya_make_try_1 --rc "$SAVE_RC" --error "ya make rc=${SAVE_RC}"
+            fi
+            if [ -f "$GRAPH_EVLOG" ]; then
+              python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
+                --evlog "$GRAPH_EVLOG" \
+                --parent ya_make_try_1 \
+                --ya-attempt 1 || true
+            fi
+            if [ "$SAVE_RC" -ne 0 ]; then
+              echo "status=failed" >> $GITHUB_OUTPUT
+              echo "build_result=failure" >> $GITHUB_OUTPUT
+              echo "test_result=skipped" >> $GITHUB_OUTPUT
+              exit "$SAVE_RC"
+            fi
           else
             $YA_MAKE_COMMAND -k --cache-tests \
               --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
@@ -528,10 +561,13 @@ runs:
           fi
           echo "Saved test graph for sharding; test loop skipped."
           echo "status=true" >> $GITHUB_OUTPUT
+          echo "build_result=success" >> $GITHUB_OUTPUT
+          echo "test_result=skipped" >> $GITHUB_OUTPUT
         else
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
+        TESTS_FAILED=0
         ORIG_GRAPH_PATH="${GRAPH_PATH:-}"
         ORIG_CONTEXT_PATH="${CONTEXT_PATH:-}"
 
@@ -787,6 +823,10 @@ runs:
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
           fi
 
+          if [ "$IS_LAST_RETRY" = 1 ] && [ "$TESTS_RESULT" != 0 ]; then
+            TESTS_FAILED=1
+          fi
+
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             # Set PR number only if it exists (for pull request events)
             PR_ARG=""
@@ -887,12 +927,22 @@ runs:
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
+          echo "build_result=success" >> $GITHUB_OUTPUT
+          if [ "$TESTS_FAILED" = 1 ]; then
+            echo "test_result=failure" >> $GITHUB_OUTPUT
+          else
+            echo "test_result=success" >> $GITHUB_OUTPUT
+          fi
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
-        elif [ "${{ inputs.publish_github_status }}" != "true" ]; then
-          # Shard jobs do not post build_* themselves. Fail the step so the
-          # shard conclusion is failure instead of a green job with no report.
+        else
+          echo "build_result=failure" >> $GITHUB_OUTPUT
+          echo "test_result=skipped" >> $GITHUB_OUTPUT
           echo "status=failed" >> $GITHUB_OUTPUT
-          exit 1
+          if [ "${{ inputs.publish_github_status }}" != "true" ]; then
+            # Shard jobs do not post build_* themselves. Fail the step so the
+            # shard conclusion is failure instead of a green job with no report.
+            exit 1
+          fi
         fi
         fi
 

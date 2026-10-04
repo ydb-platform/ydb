@@ -522,8 +522,31 @@ class ShardProgressTest(unittest.TestCase):
         self.assertEqual(narrowed["result"], ["test-b"])
         unchanged = shard_graph.narrow_graph_to_report(graph, {"results": []})
         self.assertEqual(unchanged["result"], ["test-a", "test-b"])
-        # A report we cannot read must not be treated as "drop every test".
-        self.assertEqual(shard_graph.narrow_graph_to_report(graph, {})["result"], ["test-a", "test-b"])
+        by_uid = _graph(
+            [_node("uid-only", size="small"), _node("other", size="small", path="ydb/other")],
+            result=["uid-only", "other"],
+        )
+        narrowed_uid = shard_graph.narrow_graph_to_report(
+            by_uid, {"results": [{"status": "FAILED", "uid": "uid-only"}]}
+        )
+        self.assertEqual(narrowed_uid["result"], ["uid-only"])
+
+    def test_build_failure_is_not_reported_as_a_test_failure(self) -> None:
+        build_state, test_state = shard_progress.aggregate_check_states(
+            [{"build": "failure", "tests": ""}, {"build": "success", "tests": "success"}]
+        )
+        self.assertEqual(build_state, "failure")
+        self.assertIsNone(test_state)
+        build_state, test_state = shard_progress.aggregate_check_states(
+            [{"build": "success", "tests": "failure"}]
+        )
+        self.assertEqual((build_state, test_state), ("success", "failure"))
+        rows = shard_progress.rows_for_preset(
+            [],
+            [{"name": "Test relwithdebinfo shard 3", "conclusion": "failure"}],
+            "relwithdebinfo",
+        )
+        self.assertEqual(rows, [{"build": "failure", "tests": ""}])
 
     def test_one_bad_plan_does_not_drop_the_other_preset(self) -> None:
         good = {

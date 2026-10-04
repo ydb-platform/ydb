@@ -89,6 +89,13 @@ inputs:
     type: boolean
     default: true
     description: "Post monolithic commit statuses and PR comments. False on shard jobs."
+outputs:
+  build_result:
+    value: ${{ steps.build.outputs.build_result }}
+    description: "success or failure of ya make itself"
+  test_result:
+    value: ${{ steps.build.outputs.test_result }}
+    description: "success, failure, or skipped when tests did not run"
 defaults:
   run:
     shell: bash

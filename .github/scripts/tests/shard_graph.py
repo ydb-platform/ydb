@@ -423,7 +423,11 @@ def lookup_free_runners(preset_label: str) -> int | None:
     except (OSError, urllib.error.URLError, json.JSONDecodeError, KeyError, TimeoutError) as exc:
         print(f"runner availability unknown ({exc}); not capping by pool", file=sys.stderr)
         return None
-    print(f"free runners for {preset_label}: {free} (busy={dict(demand)})", file=sys.stderr)
+    print(
+        f"free runners for {preset_label}: {free} (busy={dict(demand)}; "
+        "snapshot 2026-06-13; busy jobs in this repository only)",
+        file=sys.stderr,
+    )
     return free
 
 
@@ -634,25 +638,43 @@ def filter_graph_result(graph: dict[str, Any], allowed_uids: set[str]) -> dict[s
     return filtered
 
 
-def failed_suite_paths(report: dict[str, Any]) -> list[str]:
-    """Suite paths of FAILED/ERROR rows in a ya build-results report."""
+def failed_report_keys(report: dict[str, Any]) -> tuple[list[str], set[str]]:
+    """Suite paths and node uids of FAILED/ERROR rows.
+
+    Ya reports identify a test by ``path`` and sometimes by ``uid``. A path
+    plus test ``name`` is kept too, because the graph node often stops at the
+    suite directory.
+    """
     paths: list[str] = []
+    uids: set[str] = set()
     for result in report.get("results") or []:
         if not isinstance(result, dict) or result.get("status") not in ("FAILED", "ERROR"):
             continue
+        uid = str(result.get("uid") or "").strip()
+        if uid:
+            uids.add(uid)
         path = str(result.get("path") or "").strip().strip("/")
+        name = str(result.get("name") or "").strip().strip("/")
         if path:
             paths.append(path)
-    return paths
+        if path and name:
+            paths.append(f"{path}/{name}")
+        elif name:
+            paths.append(name)
+    return paths, uids
 
 
-def result_uids_matching_paths(graph: dict[str, Any], paths: list[str]) -> set[str]:
-    """Result UIDs whose suite path is a failed suite, or contains one."""
-    if not paths:
+def result_uids_matching_paths(graph: dict[str, Any], paths: list[str], uids: set[str] | None = None) -> set[str]:
+    """Result UIDs whose suite path or uid is one of the failed tests."""
+    failed_uids = uids or set()
+    if not paths and not failed_uids:
         return set()
     nodes = graph_nodes_by_uid(graph)
     matched: set[str] = set()
     for uid in result_uids(graph):
+        if uid in failed_uids:
+            matched.add(uid)
+            continue
         node_path = (extract_node_path(nodes.get(uid) or {}) or "").strip("/")
         if not node_path:
             continue
@@ -717,7 +739,8 @@ def narrow_graph_to_report(graph: dict[str, Any], report: dict[str, Any]) -> dic
     ``--build-custom-json`` ignores the test blacklist, so a shard retry has to
     shrink ``graph.result`` itself. Missing the failed suite must not drop the shard.
     """
-    allowed = result_uids_matching_paths(graph, failed_suite_paths(report))
+    paths, uids = failed_report_keys(report)
+    allowed = result_uids_matching_paths(graph, paths, uids)
     if not allowed or allowed == set(result_uids(graph)):
         return graph
     return filter_graph_result(graph, allowed)
@@ -767,7 +790,8 @@ def render_summary(plan: dict[str, Any]) -> str:
             f"**Hosts:** mode={policy.get('mode')}, "
             f"volume={policy.get('volume_shards')}, "
             f"free_runners={policy.get('free_runners')}, "
-            f"chosen={policy.get('chosen')}"
+            f"chosen={policy.get('chosen')}, "
+            f"capacity={policy.get('capacity')}"
         )
         lines.append("")
     lines += [
@@ -823,6 +847,9 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         "volume_shards": volume_shard_count(float(probe["total_weight"]), args.threads),
         "free_runners": free_runners,
         "chosen": chosen,
+        # Not a live org quota. The numbers are the 2026-06-13 folder snapshot,
+        # and busy jobs are counted only in this repository.
+        "capacity": "snapshot 2026-06-13; busy jobs in this repository only",
     }
     # The caller records the matrix row that produced this plan. Shard jobs
     # read it back instead of keeping a second copy of the preset list.

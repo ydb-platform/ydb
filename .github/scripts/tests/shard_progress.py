@@ -18,6 +18,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Protocol
 
 STATE_BEGIN = "<!-- shard-progress-state"
@@ -157,6 +158,8 @@ def apply_shard(
     log_prefix: str,
     failed_tests: list[str],
     run_url: str,
+    build: str = "",
+    tests: str = "",
 ) -> dict[str, Any]:
     updated = merge_states([state])
     if run_url:
@@ -169,6 +172,8 @@ def apply_shard(
         "job_url": job_url,
         "log_prefix": log_prefix,
         "failed_tests": list(failed_tests),
+        "build": build,
+        "tests": tests,
     }
     return updated
 
@@ -178,6 +183,117 @@ def elapsed_seconds(state: dict[str, Any], now: str) -> float | None:
     if not started or not now:
         return None
     return (parse_time(now) - parse_time(started)).total_seconds()
+
+
+def list_run_jobs(repository: str, token: str, run_id: str) -> list[dict[str, Any]]:
+    """Every job of one workflow run, following Link rel=next."""
+    jobs: list[dict[str, Any]] = []
+    url = f"https://api.github.com/repos/{repository}/actions/runs/{run_id}/jobs?per_page=100"
+    seen: set[str] = set()
+    while url and url not in seen:
+        seen.add(url)
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "ydb-shard-progress",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.load(response)
+            link = str(response.headers.get("Link", ""))
+        if not isinstance(payload, dict):
+            break
+        for job in payload.get("jobs") or []:
+            if isinstance(job, dict):
+                jobs.append(job)
+        url = next_link(link)
+    return jobs
+
+
+def job_url_for_shard(jobs: list[dict[str, Any]], preset: str, shard_id: int) -> str:
+    needle = f"shard {shard_id}"
+    for job in jobs:
+        name = str(job.get("name") or "")
+        if preset in name and needle in name:
+            return str(job.get("html_url") or "")
+    return ""
+
+
+def aggregate_check_states(rows: list[dict[str, str]]) -> tuple[str | None, str | None]:
+    """Commit-status pair for one preset.
+
+    Build is success only when every shard recorded a successful ya make.
+    Tests are success only when every shard ran tests and they passed.
+    Tests are failure only when a shard actually failed tests. A shard that
+    never got that far leaves tests unset so a build failure is not also
+    reported as a test failure.
+    """
+    if not rows:
+        return None, None
+    builds = [str(row.get("build") or "") for row in rows]
+    tests = [str(row.get("tests") or "") for row in rows]
+    if all(item == "success" for item in builds):
+        build_state: str | None = "success"
+    else:
+        build_state = "failure"
+    if any(item == "failure" for item in tests):
+        test_state: str | None = "failure"
+    elif all(item == "success" for item in tests):
+        test_state = "success"
+    else:
+        test_state = None
+    return build_state, test_state
+
+
+def rows_for_preset(
+    states: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    preset: str,
+) -> list[dict[str, str]]:
+    """Shard outcome rows, with a failed job standing in when its file is missing."""
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    prefix = f"Test {preset} shard "
+    for state in states:
+        if str(state.get("preset") or "") != preset:
+            continue
+        for shard_id, row in (state.get("shards") or {}).items():
+            if not isinstance(row, dict):
+                continue
+            seen.add(str(shard_id))
+            rows.append({"build": str(row.get("build") or ""), "tests": str(row.get("tests") or "")})
+    for job in jobs:
+        name = str(job.get("name") or "")
+        if not name.startswith(prefix):
+            continue
+        shard_id = name[len(prefix):].strip()
+        if shard_id in seen:
+            continue
+        if job.get("conclusion") == "success":
+            rows.append({"build": "success", "tests": "success"})
+        else:
+            rows.append({"build": "failure", "tests": ""})
+    return rows
+
+
+def load_state_files(directory: str) -> list[dict[str, Any]]:
+    states: list[dict[str, Any]] = []
+    if not directory:
+        return states
+    root = Path(directory)
+    if not root.is_dir():
+        return states
+    for path in sorted(root.glob("**/*.json")):
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict) and parsed.get("shards"):
+            states.append(parsed)
+    return states
 
 
 def received_count(state: dict[str, Any]) -> int:
@@ -493,6 +609,8 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
         log_prefix=args.log_prefix or f"shard_{args.shard_id}",
         failed_tests=_load_failed_tests(args.report),
         run_url=args.run_url,
+        build=args.build_result,
+        tests=args.test_result,
     )
 
 
@@ -503,8 +621,18 @@ def _write_summary(path: str, body: str) -> None:
         handle.write(body)
 
 
+def _write_state(path: str, state: dict[str, Any]) -> None:
+    if not path:
+        return
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(state, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     state = _event_state(args)
+    # Disk copy survives a comment API failure so finalize can still merge it.
+    _write_state(args.state_output, state)
     if not args.pr:
         body = render_comment(state, args.finished_at)
         _write_summary(args.summary_file, body)
@@ -513,17 +641,24 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     token = os.environ.get("GITHUB_TOKEN", "")
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     if not token or not repository:
-        print("GITHUB_TOKEN or GITHUB_REPOSITORY is empty; skipping the PR comment.", file=sys.stderr)
-        return 1
-    store = GithubCommentStore(token, repository, int(args.pr))
-    header = marker(args.run_id, args.preset)
-    written = sync_comment(store, header, state, args.finished_at)
+        print("GITHUB_TOKEN or GITHUB_REPOSITORY is empty; shard result is on disk.", file=sys.stderr)
+        return 0 if args.state_output else 1
+    try:
+        store = GithubCommentStore(token, repository, int(args.pr))
+        header = marker(args.run_id, args.preset)
+        written = sync_comment(store, header, state, args.finished_at)
+    except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+        print(f"warning: comment update failed ({exc}); shard result is on disk.", file=sys.stderr)
+        return 0 if args.state_output else 1
     _write_summary(args.summary_file, written)
     sys.stdout.write(written)
     return 0
 
 
 def _cmd_finalize(args: argparse.Namespace) -> int:
+    states = [
+        state for state in load_state_files(args.state_dir) if str(state.get("preset") or "") == args.preset
+    ]
     if not args.pr:
         print("No PR number; nothing to finalize.", file=sys.stderr)
         return 0
@@ -535,19 +670,48 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
     store = GithubCommentStore(token, repository, int(args.pr))
     header = marker(args.run_id, args.preset)
     matches = store.list_marker(header)
-    if not matches:
+    parsed = [parse_state(item.body) for item in matches]
+    states.extend(item for item in parsed if item)
+    if not states:
         print("No shard progress comment to finalize.", file=sys.stderr)
         return 0
-    parsed = [parse_state(item.body) for item in matches]
-    states = [item for item in parsed if item]
-    if not states:
-        print("Shard progress comments have no state.", file=sys.stderr)
-        return 1
     merged = merge_states(states)
     now = args.now or format_time(datetime.now(timezone.utc))
     # Reuse the sync path so a racing shard is merged instead of overwritten.
     written = sync_comment(store, header, merged, now)
     _write_summary(args.summary_file, written)
+    return 0
+
+
+def _cmd_job_url(args: argparse.Namespace) -> int:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if not token or not repository:
+        return 0
+    print(job_url_for_shard(list_run_jobs(repository, token, str(args.run_id)), args.preset, args.shard_id))
+    return 0
+
+
+def _cmd_list_jobs(args: argparse.Namespace) -> int:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if not token or not repository:
+        print("[]")
+        return 0
+    jobs = list_run_jobs(repository, token, str(args.run_id))
+    json.dump(jobs, sys.stdout)
+    sys.stdout.write("\n")
+    return 0
+
+
+def _cmd_aggregate_statuses(args: argparse.Namespace) -> int:
+    states = load_state_files(args.state_dir)
+    jobs = json.loads(args.jobs.read_text(encoding="utf-8"))
+    if not isinstance(jobs, list):
+        raise ValueError("jobs file must be a JSON list")
+    build_state, test_state = aggregate_check_states(rows_for_preset(states, jobs, args.preset))
+    print(f"build={build_state or ''}")
+    print(f"tests={test_state or ''}")
     return 0
 
 
@@ -570,6 +734,9 @@ def main(argv: list[str] | None = None) -> int:
     publish.add_argument("--log-prefix", default="")
     publish.add_argument("--report", default="")
     publish.add_argument("--summary-file", default="")
+    publish.add_argument("--state-output", default="")
+    publish.add_argument("--build-result", default="")
+    publish.add_argument("--test-result", default="")
     publish.set_defaults(func=_cmd_publish)
 
     finalize = sub.add_parser("finalize", help="Merge marker comments into one final summary.")
@@ -578,7 +745,24 @@ def main(argv: list[str] | None = None) -> int:
     finalize.add_argument("--preset", required=True)
     finalize.add_argument("--now", default="")
     finalize.add_argument("--summary-file", default="")
+    finalize.add_argument("--state-dir", default="")
     finalize.set_defaults(func=_cmd_finalize)
+
+    jobs_cmd = sub.add_parser("list-jobs", help="Print every job of a workflow run as JSON.")
+    jobs_cmd.add_argument("--run-id", required=True)
+    jobs_cmd.set_defaults(func=_cmd_list_jobs)
+
+    job_url = sub.add_parser("job-url", help="HTML URL of one shard job, scanning every page.")
+    job_url.add_argument("--run-id", required=True)
+    job_url.add_argument("--preset", required=True)
+    job_url.add_argument("--shard-id", type=int, required=True)
+    job_url.set_defaults(func=_cmd_job_url)
+
+    statuses = sub.add_parser("aggregate-statuses", help="Print build and test commit states for one preset.")
+    statuses.add_argument("--preset", required=True)
+    statuses.add_argument("--state-dir", required=True)
+    statuses.add_argument("--jobs", required=True, type=Path)
+    statuses.set_defaults(func=_cmd_aggregate_statuses)
 
     args = parser.parse_args(argv)
     try:

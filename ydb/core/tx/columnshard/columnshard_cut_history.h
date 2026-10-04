@@ -17,13 +17,17 @@ namespace NKikimr::NColumnShard {
 inline constexpr ui64 CutHistoryRequestLimit = 64;
 
 struct THistoryInterval {
+    enum class EState {
+        Unchecked,
+        Checked,
+        ReadyToSend,
+    };
+
     ui32 Channel = 0;
     ui32 From = 0;
     ui32 To = 0;
     ui32 Group = 0;
-    bool HasBlobs = false;
-    bool Attempted = false;
-    bool ReadyToSend = false;
+    EState State = EState::Unchecked;
 };
 
 struct TUnusedHistoryScan {
@@ -32,8 +36,7 @@ struct TUnusedHistoryScan {
     size_t Position = 0;
     size_t Pending = 0;
     NActors::TActorId PreparationActor;
-    bool SavePending = false;
-    bool RetryDelivery = false;
+    bool SavePending = false;   // Prevents releasing the scan before the request journal commits.
     bool WaitingForGC = false;
     TInstant Started;
     std::optional<TInstant> Finished;

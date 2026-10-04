@@ -620,67 +620,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!f.LiveOldBlobs().empty());
     }
 
-    Y_UNIT_TEST(UndeliveredCutRetriesOnce) {
-        TFixture f;
-        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
-        f.Restart(NewGroup);
-        const ui32 secondFrom = f.History.back().first;
-        std::map<ui32, ui32> cuts;
-        std::map<ui32, TAutoPtr<IEventHandle>> failed;
-        TAutoPtr<IEventHandle> commit;
-        bool holdCommit = false;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
-                const ui32 from = cut->Record.GetFromGeneration();
-                UNIT_ASSERT(ev->Flags & IEventHandle::FlagTrackDelivery);
-                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, from == 0 ? 1u : 2u);
-                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), from == 0 ? OldGroup : NewGroup);
-                if (++cuts[from] == 1) {
-                    failed[from].Reset(new IEventHandle(ev->Sender, ev->Recipient,
-                        new TEvents::TEvUndelivered(TEvTablet::TEvCutTabletHistory::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0,
-                        ev->Cookie));
-                }
-                ev.Reset();
-            } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
-                       holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {
-                commit = ev.Release();
-                holdCommit = false;
-            }
-        });
-        f.Restart(OldGroup);
-        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
-        f.Restart();
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(cuts[0], 1u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts[secondFrom], 1u);
-        const auto firstJournal = f.Journal();
-        UNIT_ASSERT_STRING_CONTAINS(firstJournal, "GroupID: " + ToString(OldGroup));
-        UNIT_ASSERT_STRING_CONTAINS(firstJournal, "GroupID: " + ToString(NewGroup));
-        f.Controller->DisableBackground(EBackground::GC);
-        holdCommit = true;
-        f.Runtime.Send(failed[secondFrom].Release(), 0, true);
-        f.Drive();
-        UNIT_ASSERT(commit);
-        f.Runtime.Send(failed[0].Release(), 0, true);
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(cuts[0], 1u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts[secondFrom], 1u);
-        f.Runtime.Send(commit.Release(), 0, true);
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(cuts[0], 2u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts[secondFrom], 2u);
-        const auto retriedJournal = f.Journal();
-        UNIT_ASSERT_STRING_CONTAINS(retriedJournal, firstJournal);
-        UNIT_ASSERT(retriedJournal.size() > firstJournal.size());
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(cuts[0], 2u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts[secondFrom], 2u);
-        UNIT_ASSERT_VALUES_EQUAL(f.Journal(), retriedJournal);
-    }
-
     Y_UNIT_TEST(SharingAdmittedDuringJournalCommitPreventsCut) {
         TFixture f;
         TAutoPtr<IEventHandle> continuation;

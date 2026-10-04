@@ -9,9 +9,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/random/random.h>
 
 #include <iterator>
+#include <tuple>
 #include <utility>
 
 namespace NKikimr::NColumnShard {
@@ -24,13 +26,13 @@ void ScheduleUnusedHistoryContinuation(const NKikimrConfig::TColumnShardConfig& 
     ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueUnusedHistory());
 }
 
-THistoryInterval* FindHistoryInterval(std::vector<THistoryInterval>& intervals, const TLogoBlobID& id) {
+const THistoryInterval* FindHistoryInterval(const std::vector<THistoryInterval>& intervals, const TLogoBlobID& id) {
     const auto next =
         UpperBoundBy(intervals.begin(), intervals.end(), std::pair<ui32, ui32>{ id.Channel(), id.Generation() }, [](const auto& interval) {
             return std::make_pair(interval.Channel, interval.From);
         });
     if (next != intervals.begin()) {
-        auto& interval = *std::prev(next);
+        const auto& interval = *std::prev(next);
         if (id.Channel() == interval.Channel && id.Generation() < interval.To) {
             return &interval;
         }
@@ -40,7 +42,7 @@ THistoryInterval* FindHistoryInterval(std::vector<THistoryInterval>& intervals, 
 
 bool CanCutHistoryInterval(
     const TColumnShard& owner, const THistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) {
-    if (interval.HasBlobs || interval.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
+    if (interval.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
         return false;
     }
     const auto& history = owner.Info()->Channels[interval.Channel].History;
@@ -124,7 +126,7 @@ public:
                        interval.To == request.GetToGeneration() && interval.Group == request.GetGroupID();
             });
             if (it != scan.Intervals.end()) {
-                it->ReadyToSend = true;
+                it->State = THistoryInterval::EState::ReadyToSend;
             }
         }
         Self->TryCutHistory(ctx);
@@ -284,16 +286,23 @@ void TColumnShard::FinishUnusedHistoryBatch(const NOlap::TDataAccessorsResult& r
         AbortUnusedHistoryScan();
         return;
     }
+    using TIntervalKey = std::tuple<ui32, ui32, ui32>;
+    THashSet<TIntervalKey> toDelete;
     for (const auto& [_, accessor] : result.GetPortions()) {
         for (const auto& blob : accessor->GetBlobIds()) {
             const auto& id = blob.GetLogoBlobId();
             if (id.TabletID() != TabletID()) {
                 continue;
             }
-            if (auto* interval = FindHistoryInterval(scan.Intervals, id); interval && blob.GetDsGroup() == interval->Group) {
-                interval->HasBlobs = true;
+            if (const auto* interval = FindHistoryInterval(scan.Intervals, id); interval && blob.GetDsGroup() == interval->Group) {
+                toDelete.emplace(interval->Channel, interval->From, interval->To);
             }
         }
+    }
+    if (!toDelete.empty()) {
+        EraseIf(scan.Intervals, [&toDelete](const auto& interval) {
+            return toDelete.contains(std::make_tuple(interval.Channel, interval.From, interval.To));
+        });
     }
     scan.Pending = 0;
     ScheduleUnusedHistoryContinuation(*ColumnShardConfig, TActivationContext::AsActorContext());
@@ -321,18 +330,16 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     }
     NOlap::TPendingGCBlobGenerations pendingGenerations;
     if (AnyOf(UnusedHistoryScan->Intervals, [](const auto& interval) {
-            return interval.ReadyToSend || (!interval.Attempted && !interval.HasBlobs);
+            return interval.State != THistoryInterval::EState::Checked;
         })) {
         pendingGenerations = storage->GetPendingGCBlobGenerations();
     }
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
-    for (size_t i = 0; i < UnusedHistoryScan->Intervals.size(); ++i) {
-        auto& interval = UnusedHistoryScan->Intervals[i];
-        if (interval.Attempted && !interval.ReadyToSend) {
+    for (auto& interval : UnusedHistoryScan->Intervals) {
+        if (interval.State == THistoryInterval::EState::Checked) {
             continue;
         }
-        interval.Attempted = true;
-        const bool readyToSend = std::exchange(interval.ReadyToSend, false);
+        const bool readyToSend = std::exchange(interval.State, THistoryInterval::EState::Checked) == THistoryInterval::EState::ReadyToSend;
         if (!CanCutHistoryInterval(*this, interval, pendingGenerations)) {
             continue;
         }
@@ -343,7 +350,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
             event->Record.SetFromGeneration(interval.From);
             event->Record.SetGroupID(interval.Group);
             Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *UnusedHistoryScan->Finished);
-            ctx.Send(LauncherID(), event.release(), IEventHandle::FlagTrackDelivery, i + 1);
+            ctx.Send(LauncherID(), event.release());
             continue;
         }
         auto& request = requests.emplace_back();
@@ -359,6 +366,8 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (!requests.empty()) {
         UnusedHistoryScan->SavePending = true;
         Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
+    } else {
+        UnusedHistoryScan.reset();
     }
 }
 

@@ -1323,12 +1323,6 @@ void TColumnShard::Die(const TActorContext& ctx) {
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
-        case TEvTablet::TEvCutTabletHistory::EventType:
-            if (UnusedHistoryScan && ev->Cookie && ev->Cookie <= UnusedHistoryScan->Intervals.size()) {
-                UnusedHistoryScan->Intervals[ev->Cookie - 1].Attempted = false;
-                UnusedHistoryScan->RetryDelivery = true;
-            }
-            break;
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
             YDB_LOG_WARN("",
                 {"event", "failed_to_deliver_config_subscription_request"});

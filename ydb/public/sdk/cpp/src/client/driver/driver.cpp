@@ -23,8 +23,6 @@ using NYdbGrpc::TGRpcClientConfig;
 using NYdbGrpc::TResponseCallback;
 using NYdbGrpc::TGrpcStatus;
 using NYdbGrpc::TTcpKeepAliveSettings;
-using NYdbGrpc::IsGRpcCompletionThread;
-
 using Ydb::StatusIds;
 
 using namespace NThreading;
@@ -362,14 +360,15 @@ TDriver::TDriver(const TDriverConfig& config) {
         ythrow yexception() << "Invalid config object";
     }
 
-    Impl_.reset(new TGRpcConnectionsImpl(config.Impl_), TGRpcConnectionsDeleter());
+    Impl_.reset(
+        new TGRpcConnectionsImpl(config.Impl_, TGRpcConnectionsImpl::TDeferredStartTag{}),
+        TGRpcConnectionsDeleter());
+    Impl_->Start();
 }
 
 void TDriver::Stop(bool wait) {
     auto impl = Impl_;
-    impl->DriverScope_->DeferOrRun([impl, wait]() mutable {
-        impl->Stop(wait);
-    });
+    impl->Stop(wait);
 }
 
 TDriverConfig TDriver::GetConfig() const {

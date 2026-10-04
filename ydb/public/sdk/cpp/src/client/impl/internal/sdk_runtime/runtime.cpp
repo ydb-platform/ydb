@@ -2,34 +2,74 @@
 #include "runtime.h"
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <thread>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
+
+#include <utility>
 
 namespace NYdb::inline Dev {
 
 namespace {
 
-thread_local std::uint32_t SdkResponseCallbackDepth = 0;
+thread_local const TDriverScope* CurrentDriverScope = nullptr;
+
+class TCurrentDriverScope final {
+public:
+    explicit TCurrentDriverScope(const TDriverScope& scope) noexcept
+        : Previous_(std::exchange(CurrentDriverScope, &scope))
+    {
+    }
+
+    ~TCurrentDriverScope() {
+        CurrentDriverScope = Previous_;
+    }
+
+private:
+    const TDriverScope* Previous_;
+};
 
 } // anonymous namespace
+
+class TDriverScope::TLease final {
+public:
+    explicit TLease(TDriverScope::TPtr scope)
+        : Scope_(std::move(scope))
+    {
+    }
+
+    ~TLease() {
+        if (Armed_) {
+            Scope_->Release();
+        }
+    }
+
+    void Arm() noexcept {
+        Armed_ = true;
+    }
+
+private:
+    TDriverScope::TPtr Scope_;
+    bool Armed_ = false;
+};
 
 class TScopedQueueClientContext final : public NYdbGrpc::IQueueClientContext {
 public:
     TScopedQueueClientContext(
+        TDriverScope::TPtr scope,
         NYdbGrpc::IQueueClientContextPtr underlying,
-        TDriverScope::TPtr scope)
-        : Underlying_(std::move(underlying))
+        const TDriverScope::TLeasePtr& lease)
+        : Lease_(lease)
         , Scope_(std::move(scope))
+        , Underlying_(std::move(underlying))
     {
-        Y_ABORT_UNLESS(Underlying_);
         Y_ABORT_UNLESS(Scope_);
+        Y_ABORT_UNLESS(Underlying_);
     }
 
     NYdbGrpc::IQueueClientContextPtr CreateContext() override {
-        return Scope_->CreateChildContext(*Underlying_);
-    }
-
-    NYdbGrpc::TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override {
-        return Scope_->GetCallbackGuardFactory();
+        return Scope_->CreateChildContext(*Underlying_, Lease_);
     }
 
     grpc::CompletionQueue* CompletionQueue() override {
@@ -49,8 +89,15 @@ public:
     }
 
 private:
-    NYdbGrpc::IQueueClientContextPtr Underlying_;
+    bool IsAdmittedBy(const TDriverScope* scope) const noexcept {
+        return Scope_.get() == scope && Lease_;
+    }
+
+    TDriverScope::TLeasePtr Lease_;
     TDriverScope::TPtr Scope_;
+    NYdbGrpc::IQueueClientContextPtr Underlying_;
+
+    friend class TDriverScope;
 };
 
 TDriverScope::TDriverScope(NYdbGrpc::IQueueClientContextPtr rootContext)
@@ -60,124 +107,271 @@ TDriverScope::TDriverScope(NYdbGrpc::IQueueClientContextPtr rootContext)
 }
 
 NYdbGrpc::IQueueClientContextPtr TDriverScope::CreateContext() {
-    std::lock_guard lock(ContextMutex_);
-    if (!RootContext_) {
+    if (IsClosed()) {
         return nullptr;
     }
-    return WrapContext(RootContext_->CreateContext());
+
+    auto context = RootContext_->CreateContext();
+    if (!context) {
+        return nullptr;
+    }
+
+    if (IsClosed()) {
+        context->Cancel();
+        return nullptr;
+    }
+
+    return WrapContext(std::move(context));
 }
 
-NYdbGrpc::TQueueClientCallbackGuardFactory TDriverScope::GetCallbackGuardFactory() {
-    auto scope = shared_from_this();
-    return [scope = std::move(scope)] {
-        return std::make_unique<TCallbackGuard>(scope);
-    };
+NYdbGrpc::IQueueClientContextPtr TDriverScope::TryAdmitContext(
+    NYdbGrpc::IQueueClientContextPtr context)
+{
+    if (const auto scoped = std::dynamic_pointer_cast<TScopedQueueClientContext>(context);
+        scoped && scoped->IsAdmittedBy(this)) {
+        return context;
+    }
+
+    auto lease = TryAcquire(CLOSED, 0);
+    if (!lease) {
+        return nullptr;
+    }
+
+    auto child = context ? context->CreateContext() : RootContext_->CreateContext();
+    return WrapContext(std::move(child), lease);
+}
+
+void TDriverScope::RunCallback(std::function<void()> callback) {
+    TCurrentDriverScope current(*this);
+    callback();
+}
+
+bool TDriverScope::IsCurrentThread() const noexcept {
+    return CurrentDriverScope != nullptr;
+}
+
+TDriverScope::TLeasePtr TDriverScope::TryAcquire(
+    std::uint64_t rejectFlag,
+    std::uint64_t setFlag)
+{
+    auto lease = std::make_shared<TLease>(shared_from_this());
+    auto state = State_.load(std::memory_order_acquire);
+    for (;;) {
+        if (state & rejectFlag) {
+            return {};
+        }
+        Y_ABORT_UNLESS((state & OPERATION_COUNT) != OPERATION_COUNT,
+            "YDB driver operation count overflow");
+        if (State_.compare_exchange_weak(
+                state,
+                (state | setFlag) + 1,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            lease->Arm();
+            return lease;
+        }
+    }
+}
+
+TDriverScope::TLeasePtr TDriverScope::RequestStop() {
+    return TryAcquire(STOPPING, STOPPING);
+}
+
+void TDriverScope::CloseAdmissions() {
+    const auto oldState = State_.fetch_or(CLOSED, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(oldState & STOPPING, "Cannot close a YDB driver before requesting stop");
+    Y_ABORT_UNLESS(!(oldState & CLOSED), "YDB driver admissions closed twice");
+    State_.notify_all();
 }
 
 void TDriverScope::Cancel() {
-    NYdbGrpc::IQueueClientContextPtr rootContext;
-    {
-        std::lock_guard lock(ContextMutex_);
-        rootContext = std::move(RootContext_);
-    }
-
-    if (rootContext) {
-        rootContext->Cancel();
-    }
+    RootContext_->Cancel();
 }
 
-void TDriverScope::WaitCallbacksDrained() {
-    std::unique_lock lock(CallbackMutex_);
-    CallbackDrained_.wait(lock, [this] {
-        return InFlightCallbacks_ == 0;
-    });
+void TDriverScope::Close() {
+    CloseAdmissions();
+    Cancel();
 }
 
-void TDriverScope::CloseCallbacksAndWait() {
-    std::unique_lock lock(CallbackMutex_);
-    CallbacksClosed_ = true;
-    CallbackDrained_.wait(lock, [this] {
-        return InFlightCallbacks_ == 0;
-    });
-}
-
-void TDriverScope::DeferOrRun(std::function<void()> action) {
-    if (!IsCurrentThreadInCallback() && !NYdbGrpc::IsGRpcCompletionThread()) {
-        action();
-        return;
-    }
-
-    auto scope = shared_from_this();
-    try {
-        std::thread([scope = std::move(scope), action = std::move(action)]() mutable {
-            scope->WaitCallbacksDrained();
-            action();
-        }).detach();
-    } catch (...) {
-        Y_ABORT("Failed to defer YDB driver action from SDK callback thread");
+void TDriverScope::WaitClosed() const {
+    auto state = State_.load(std::memory_order_acquire);
+    while (!(state & CLOSED)) {
+        State_.wait(state, std::memory_order_acquire);
+        state = State_.load(std::memory_order_acquire);
     }
 }
 
-bool TDriverScope::IsCurrentThreadInCallback() noexcept {
-    return SdkResponseCallbackDepth != 0;
-}
-
-bool TDriverScope::TryEnterCallback() noexcept {
-    std::unique_lock lock(CallbackMutex_);
-    if (CallbacksClosed_) {
-        return false;
+void TDriverScope::Wait() const {
+    auto state = State_.load(std::memory_order_acquire);
+    while (state & OPERATION_COUNT) {
+        State_.wait(state, std::memory_order_acquire);
+        state = State_.load(std::memory_order_acquire);
     }
-    ++InFlightCallbacks_;
-    return true;
 }
 
-void TDriverScope::LeaveCallback() noexcept {
-    std::unique_lock lock(CallbackMutex_);
-    Y_ABORT_UNLESS(InFlightCallbacks_ > 0);
-    if (--InFlightCallbacks_ == 0) {
-        CallbackDrained_.notify_all();
+bool TDriverScope::IsClosed() const noexcept {
+    return State_.load(std::memory_order_acquire) & CLOSED;
+}
+
+bool TDriverScope::IsRetired() const noexcept {
+    return State_.load(std::memory_order_acquire) & RETIRED;
+}
+
+void TDriverScope::Retire(void* object, TRetireDeleter deleter) noexcept {
+    Y_ABORT_UNLESS(object);
+    Y_ABORT_UNLESS(deleter);
+
+    auto self = shared_from_this();
+    RetiredObject_ = object;
+    RetiredDeleter_ = deleter;
+
+    const auto oldState = State_.fetch_or(RETIRED, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(!(oldState & RETIRED), "YDB driver implementation retired twice");
+    Y_ABORT_UNLESS(oldState & CLOSED, "YDB driver implementation retired before stop");
+
+    if (!(oldState & OPERATION_COUNT)) {
+        RetiredDeleter_(RetiredObject_);
     }
 }
 
 NYdbGrpc::IQueueClientContextPtr TDriverScope::CreateChildContext(
-    NYdbGrpc::IQueueClientContext& parentContext)
+    NYdbGrpc::IQueueClientContext& parentContext,
+    const TLeasePtr& lease)
 {
-    return WrapContext(parentContext.CreateContext());
+    return WrapContext(parentContext.CreateContext(), lease);
 }
 
-NYdbGrpc::IQueueClientContextPtr TDriverScope::WrapContext(NYdbGrpc::IQueueClientContextPtr context) {
+NYdbGrpc::IQueueClientContextPtr TDriverScope::WrapContext(
+    NYdbGrpc::IQueueClientContextPtr context,
+    const TLeasePtr& lease)
+{
     if (!context) {
         return nullptr;
     }
-    return std::make_shared<TScopedQueueClientContext>(std::move(context), shared_from_this());
+    return std::make_shared<TScopedQueueClientContext>(
+        shared_from_this(), std::move(context), lease);
 }
 
-TDriverScope::TCallbackGuard::TCallbackGuard(TPtr scope)
-    : Scope_(std::move(scope))
-{
-    Entered_ = Scope_ && Scope_->TryEnterCallback();
-    if (Entered_) {
-        ++SdkResponseCallbackDepth;
+void TDriverScope::Release() noexcept {
+    const auto oldState = State_.fetch_sub(1, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(oldState & OPERATION_COUNT, "Unbalanced YDB driver operation release");
+    const auto newState = oldState - 1;
+    if (!(newState & OPERATION_COUNT)) {
+        State_.notify_all();
+        if (newState & RETIRED) {
+            RetiredDeleter_(RetiredObject_);
+        }
     }
 }
 
-TDriverScope::TCallbackGuard::~TCallbackGuard() {
-    if (!Entered_) {
+TSdkRuntime::TResources::TResources(TConfig config)
+    : NetworkThreads(config.NetworkThreads)
+    , ClientThreads(config.ClientThreads)
+    , MaxQueueSize(config.MaxQueueSize)
+    , HasCustomExecutor(static_cast<bool>(config.Executor))
+    , Executor(config.Executor
+        ? std::move(config.Executor)
+        : CreateThreadPoolExecutor(ClientThreads, MaxQueueSize))
+    , Network(NetworkThreads)
+{
+    Y_ABORT_UNLESS(Executor);
+    Executor->Start();
+}
+
+TSdkRuntime::TResources& TSdkRuntime::Configure(TConfig config) {
+    return GetOrCreate(std::move(config), true);
+}
+
+TSdkRuntime::TResources& TSdkRuntime::GetOrCreateForDriver(TConfig config) {
+    return GetOrCreate(std::move(config), false);
+}
+
+TSdkRuntime::TResources& TSdkRuntime::GetOrCreate(TConfig config, bool validateConfig) {
+    auto state = InitializationState_.load(std::memory_order_acquire);
+    for (;;) {
+        if (state == EInitializationState::Ready) {
+            if (validateConfig) {
+                ValidateConfig(config, *Resources_);
+            } else {
+                ValidateDriverConfig(config, *Resources_);
+            }
+            return *Resources_;
+        }
+
+        if (state == EInitializationState::Failed) {
+            std::rethrow_exception(InitializationError_);
+        }
+
+        if (state == EInitializationState::Configuring) {
+            InitializationState_.wait(state, std::memory_order_acquire);
+            state = InitializationState_.load(std::memory_order_acquire);
+            continue;
+        }
+
+        if (InitializationState_.compare_exchange_weak(
+                state,
+                EInitializationState::Configuring,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            try {
+                Resources_ = new TResources(std::move(config));
+                InitializationState_.store(EInitializationState::Ready, std::memory_order_release);
+                InitializationState_.notify_all();
+                return *Resources_;
+            } catch (...) {
+                InitializationError_ = std::current_exception();
+                InitializationState_.store(
+                    EInitializationState::Failed,
+                    std::memory_order_release);
+                InitializationState_.notify_all();
+                throw;
+            }
+        }
+    }
+}
+
+TDriverScope::TPtr TSdkRuntime::CreateDriverScope(TResources& resources) {
+    auto rootContext = resources.Network.CreateContext();
+    Y_ABORT_UNLESS(rootContext);
+    return TDriverScope::TPtr(new TDriverScope(std::move(rootContext)));
+}
+
+void TSdkRuntime::ValidateConfig(const TConfig& config, const TResources& resources) {
+    if (config.NetworkThreads != resources.NetworkThreads) {
+        throw TContractViolation(TStringBuilder()
+            << "YDB SDK runtime network thread count is already configured as "
+            << resources.NetworkThreads << ", requested " << config.NetworkThreads);
+    }
+
+    if (resources.HasCustomExecutor) {
+        if (config.Executor && config.Executor.get() != resources.Executor.get()) {
+            throw TContractViolation(
+                "YDB SDK runtime is already configured with a different executor");
+        }
         return;
     }
 
-    --SdkResponseCallbackDepth;
-    Scope_->LeaveCallback();
+    if (config.Executor) {
+        throw TContractViolation(
+            "YDB SDK runtime is already configured with its default executor");
+    }
+    if (config.ClientThreads != resources.ClientThreads) {
+        throw TContractViolation(TStringBuilder()
+            << "YDB SDK runtime client thread count is already configured as "
+            << resources.ClientThreads << ", requested " << config.ClientThreads);
+    }
+    if (config.MaxQueueSize != resources.MaxQueueSize) {
+        throw TContractViolation(TStringBuilder()
+            << "YDB SDK runtime executor queue limit is already configured as "
+            << resources.MaxQueueSize << ", requested " << config.MaxQueueSize);
+    }
 }
 
-bool TDriverScope::TCallbackGuard::IsEntered() const noexcept {
-    return Entered_;
-}
-
-TDriverScope::TPtr TSdkRuntime::CreateDriverScope(NYdbGrpc::IQueueClientContextProvider& contextProvider) {
-    auto rootContext = contextProvider.CreateContext();
-    Y_ABORT_UNLESS(rootContext);
-    return TDriverScope::TPtr(new TDriverScope(std::move(rootContext)));
+void TSdkRuntime::ValidateDriverConfig(const TConfig& config, const TResources& resources) {
+    if (config.Executor && config.Executor.get() != resources.Executor.get()) {
+        throw TContractViolation(
+            "YDB SDK runtime is already configured with a different executor");
+    }
 }
 
 TSdkRuntime& GetSdkRuntime() {

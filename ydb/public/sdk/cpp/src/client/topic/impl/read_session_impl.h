@@ -159,9 +159,7 @@ public:
     // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
     void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
     void DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr);
-    void DeferCallback(
-        std::function<void()> callback,
-        NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory = {});
+    void DeferCallback(std::function<void()> callback);
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task);
@@ -213,12 +211,7 @@ private:
         };
 
         std::optional<TScheduledCallback> ScheduledCallback;
-        struct TCallback {
-            std::function<void()> Callback;
-            NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
-        };
-
-        std::optional<TCallback> Callback;
+        std::optional<std::function<void()>> Callback;
     } DirectReadActions;
 
     // Executor tasks.

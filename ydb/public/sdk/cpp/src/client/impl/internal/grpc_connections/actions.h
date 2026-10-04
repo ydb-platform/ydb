@@ -34,11 +34,6 @@ inline TPlainStatus MakeClientStoppedStatus() {
     return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
 }
 
-class TQueueResponse : public IObjectInQueue {
-public:
-    virtual void Cancel() = 0;
-};
-
 template<typename TCb>
 class TGenericCbHolder {
 protected:
@@ -46,14 +41,14 @@ protected:
             TCb&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context)
-        : UserResponseCb_(std::move(userCb))
+        : Context_(std::move(context))
+        , UserResponseCb_(std::move(userCb))
         , Connection_(connections)
-        , Context_(std::move(context))
     {}
 
+    std::shared_ptr<IQueueClientContext> Context_;
     TCb UserResponseCb_;
     TGRpcConnectionsImpl* Connection_;
-    std::shared_ptr<IQueueClientContext> Context_;
 };
 
 template<typename TCb>
@@ -98,16 +93,11 @@ private:
             LocalContext_.reset();
         }
 
-        auto guardFactory = this->Context_
-            ? this->Context_->GetCallbackGuardFactory()
-            : NYdbGrpc::TQueueClientCallbackGuardFactory();
-        NYdbGrpc::RunQueueClientCallback(guardFactory, [&] {
-            if (ok) {
-                OnAlarm();
-            } else {
-                OnError();
-            }
-        });
+        if (ok) {
+            OnAlarm();
+        } else {
+            OnError();
+        }
 
         return false;
     }
@@ -128,7 +118,7 @@ private:
 template<typename TResponse>
 class TGRpcErrorResponse
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public TQueueResponse
+    , public IObjectInQueue
 {
 public:
     TGRpcErrorResponse(
@@ -137,7 +127,8 @@ public:
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
             const std::string& endpoint)
-        : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
+        : TGenericCbHolder<TResponseCb<TResponse>>(
+            std::move(userCb), connections, std::move(context))
         , GRpcStatus_(std::move(status))
         , Endpoint_(endpoint)
     { }
@@ -151,14 +142,7 @@ public:
             status.Issues.AddIssue(NYdb::NIssue::TIssue(msg));
         }
 
-        this->Context_.reset();
         this->UserResponseCb_(nullptr, status);
-        delete this;
-    }
-
-    void Cancel() override {
-        this->Context_.reset();
-        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
         delete this;
     }
 
@@ -170,7 +154,7 @@ private:
 template<typename TResponse>
 class TResult
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public TQueueResponse
+    , public IObjectInQueue
 {
 public:
     TResult(
@@ -181,21 +165,15 @@ public:
             std::shared_ptr<IQueueClientContext> context,
             const std::string& endpoint,
             std::multimap<std::string, std::string>&& metadata)
-        : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
+        : TGenericCbHolder<TResponseCb<TResponse>>(
+            std::move(userCb), connections, std::move(context))
         , Response_(std::move(response))
         , GRpcStatus_(std::move(status))
         , Endpoint_(endpoint)
         , Metadata_(std::move(metadata)) {}
 
     void Process(void*) override {
-        this->Context_.reset();
         this->UserResponseCb_(&Response_, TPlainStatus{GRpcStatus_, Endpoint_, std::move(Metadata_)});
-        delete this;
-    }
-
-    void Cancel() override {
-        this->Context_.reset();
-        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
         delete this;
     }
 
@@ -209,10 +187,11 @@ private:
 class TSimpleCbResult : public IObjectInQueue
 {
 public:
-    TSimpleCbResult(TSimpleCb&& cb);
+    TSimpleCbResult(TSimpleCb&& cb, std::shared_ptr<IQueueClientContext> context);
     void Process(void*) override;
 
 private:
+    std::shared_ptr<IQueueClientContext> Context_;
     TSimpleCb UserResponseCb_;
 };
 

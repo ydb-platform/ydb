@@ -956,3 +956,6 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 ### KiKiMR {#kikimr}
 
 **KiKiMR** is the legacy name of {{ ydb-short-name }}, used before it became an [open-source product](https://github.com/ydb-platform/ydb) (open source). It may still be found in source code, old articles, videos, and so on.
+### Tablet recovery mode {#tablet-recovery-mode}
+
+**Recovery mode** is a mode in which a tablet starts and is accessible via the [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), but **does not respond to requests**, **does not perform any background activities**, and **does not read data from the distributed storage**, which allows recovery operations to be performed. Other tablets continue to operate normally, allowing the cluster to keep functioning, but operations and UI related to the tablet switched to Recovery mode will be unavailable.

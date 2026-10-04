@@ -541,46 +541,65 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
 
     auto& Log = context.Log;
 
-    const int warehouseID = context.WarehouseID;
-    const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
-    const int customerID = GetRandomCustomerID();
+    struct TInputs {
+        int WarehouseID;
+        int DistrictID;
+        int CustomerID;
+        int NumItems;
+        std::vector<int> ItemIDs;
+        std::vector<int> SupplierWarehouseIDs;
+        std::vector<int> OrderQuantities;
+        int AllLocal;
+        bool HasInvalidItem;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        TInputs generated;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
+        generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+        generated.CustomerID = GetRandomCustomerID();
+        generated.NumItems = RandomNumber(MIN_ITEMS, MAX_ITEMS);
+        generated.ItemIDs.reserve(generated.NumItems);
+        generated.SupplierWarehouseIDs.reserve(generated.NumItems);
+        generated.OrderQuantities.reserve(generated.NumItems);
+        generated.AllLocal = 1;
+
+        for (int i = 0; i < generated.NumItems; ++i) {
+            generated.ItemIDs.push_back(GetRandomItemID());
+            if (RandomNumber(1, 100) > 1) {
+                generated.SupplierWarehouseIDs.push_back(generated.WarehouseID);
+            } else {
+                int supplierID;
+                do {
+                    supplierID = RandomNumber(1, context.WarehouseCount);
+                } while (supplierID == generated.WarehouseID && context.WarehouseCount > 1);
+                generated.SupplierWarehouseIDs.push_back(supplierID);
+                generated.AllLocal = 0;
+            }
+            generated.OrderQuantities.push_back(RandomNumber(1, 10));
+        }
+
+        // we need to cause 1% of the new orders to be rolled back.
+        generated.HasInvalidItem = false;
+        if (RandomNumber(1, 100) == 1) {
+            generated.ItemIDs[generated.NumItems - 1] = INVALID_ITEM_ID;
+            generated.HasInvalidItem = true;
+        }
+        return generated;
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int districtID = in.DistrictID;
+    const int customerID = in.CustomerID;
+    const int numItems = in.NumItems;
+    const auto& itemIDs = in.ItemIDs;
+    const auto& supplierWarehouseIDs = in.SupplierWarehouseIDs;
+    const auto& orderQuantities = in.OrderQuantities;
+    const int allLocal = in.AllLocal;
+    const bool hasInvalidItem = in.HasInvalidItem;
 
     LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction in "
         << warehouseID << ", " << districtID << " for " << customerID << ", session: " << session.GetId());
-
-    // Generate order line items
-
-    const int numItems = RandomNumber(MIN_ITEMS, MAX_ITEMS);
-
-    std::vector<int> itemIDs;
-    std::vector<int> supplierWarehouseIDs;
-    std::vector<int> orderQuantities;
-    itemIDs.reserve(numItems);
-    supplierWarehouseIDs.reserve(numItems);
-    orderQuantities.reserve(numItems);
-    int allLocal = 1;
-
-    for (int i = 0; i < numItems; ++i) {
-        itemIDs.push_back(GetRandomItemID());
-        if (RandomNumber(1, 100) > 1) {
-            supplierWarehouseIDs.push_back(warehouseID);
-        } else {
-            int supplierID;
-            do {
-                supplierID = RandomNumber(1, context.WarehouseCount);
-            } while (supplierID == warehouseID && context.WarehouseCount > 1);
-            supplierWarehouseIDs.push_back(supplierID);
-            allLocal = 0;
-        }
-        orderQuantities.push_back(RandomNumber(1, 10));
-    }
-
-    // we need to cause 1% of the new orders to be rolled back.
-    bool hasInvalidItem = false;
-    if (RandomNumber(1, 100) == 1) {
-        itemIDs[numItems - 1] = INVALID_ITEM_ID;
-        hasInvalidItem = true;
-    }
 
     // Get customer info
 

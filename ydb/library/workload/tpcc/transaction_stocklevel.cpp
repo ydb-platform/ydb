@@ -112,9 +112,23 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
 
     auto& Log = context.Log;
 
-    const int warehouseID = context.WarehouseID;
-    const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
-    const int threshold = RandomNumber(10, 20);
+    struct TInputs {
+        int WarehouseID;
+        int DistrictID;
+        int Threshold;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        return TInputs{
+            .WarehouseID = static_cast<int>(context.WarehouseID),
+            .DistrictID = static_cast<int>(RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID)),
+            .Threshold = static_cast<int>(RandomNumber(10, 20)),
+        };
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int districtID = in.DistrictID;
+    const int threshold = in.Threshold;
 
     LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction in "
         << warehouseID << ", " << districtID << ", session: " << session.GetId());

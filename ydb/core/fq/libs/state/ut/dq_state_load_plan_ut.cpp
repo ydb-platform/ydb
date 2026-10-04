@@ -686,29 +686,33 @@ void CheckFederatedReplayPartitions(const TStateLoadPlan& plan) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
-    Y_UNIT_TEST(DetectsAggregationCallables) {
+    Y_UNIT_TEST(DetectsStatefulCallables) {
         for (const TStringBuf name : {
             "CombineCore", "GroupingCore", "Condense", "Condense1",
             "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
             "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
             "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
-            "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map", "Chopper", "WideChopper"
+            "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map", "Chopper", "WideChopper",
+            "MatchRecognizeCore", "TimeOrderRecover"
         }) {
             NYql::NDqProto::TDqTask task;
             SetReplayProgram(task, 0, 0, name);
             TStageStateRecoveryContext context;
             const TStageStateRecoveryInfo info(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context);
-            UNIT_ASSERT_C(info.HasAggregation, name);
+            UNIT_ASSERT_C(info.HasState, name);
         }
     }
 
-    Y_UNIT_TEST(DoesNotConfuseStateOrCallableSubstringsWithAggregation) {
-        for (const TStringBuf name : {"Map", "WideMap", "DqWatermarkGenerator", "MatchRecognizeCore", "TimeOrderRecover", "NotCombineCore", "CombineCoreSuffix"}) {
+    Y_UNIT_TEST(DoesNotConfuseStatelessCallablesOrSubstringsWithState) {
+        for (const TStringBuf name : {
+            "Map", "WideMap", "DqWatermarkGenerator", "NotCombineCore", "CombineCoreSuffix",
+            "NotMatchRecognizeCore", "MatchRecognizeCoreSuffix", "NotTimeOrderRecover", "TimeOrderRecoverSuffix"
+        }) {
             NYql::NDqProto::TDqTask task;
             SetReplayProgram(task, 0, 0, name);
             TStageStateRecoveryContext context;
             const TStageStateRecoveryInfo info(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context);
-            UNIT_ASSERT_C(!info.HasAggregation, name);
+            UNIT_ASSERT_C(!info.HasState, name);
             UNIT_ASSERT_VALUES_EQUAL(info.HasWatermarkGenerator, name == "DqWatermarkGenerator");
         }
     }
@@ -717,12 +721,13 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         NYql::NDqProto::TDqTask task;
         SetReplayProgram(task, 10, 20, "Map", false, false);
         TStageStateRecoveryContext context;
-        UNIT_ASSERT(TStageStateRecoveryInfo(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context).HasAggregation);
+        UNIT_ASSERT(TStageStateRecoveryInfo(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context).HasState);
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             TStageStateRecoveryInfo(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context, TStageStateRecoveryInfo::EMode::HistoryReplay),
             yexception, "minimum window start checking is not enabled");
         for (const TStringBuf name : {"MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}) {
             SetReplayProgram(task, 0, 0, name);
+            UNIT_ASSERT_C(TStageStateRecoveryInfo(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context).HasState, name);
             UNIT_ASSERT_EXCEPTION_CONTAINS(
                 TStageStateRecoveryInfo(task.GetProgram().GetRuntimeVersion(), task.GetProgram().GetRaw(), context, TStageStateRecoveryInfo::EMode::HistoryReplay),
                 yexception, "Unsupported checkpointed operator");

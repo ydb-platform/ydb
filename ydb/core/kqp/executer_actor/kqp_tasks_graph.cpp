@@ -28,6 +28,7 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/common/pq_partitions.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
@@ -2067,23 +2068,45 @@ void PatchQueryPhysicalGraphForRescaling(
     // Inspect the whole query before mutating any task or channel. Programs are
     // shared via prepared stages, but saved tasks can also carry inline programs.
     try {
-        const auto hasAggregation = [](const auto& program) {
+        // Offset-only foreign restore cannot finish a pending sink publication:
+        // it drops sink state, including the publication id needed for commit.
+        const auto hasDeferredPublication = [](const auto& sink) {
+            if (sink.GetType() != "PqSink") {
+                return false;
+            }
+            NYql::NPq::NProto::TDqPqTopicSink settings;
+            YQL_ENSURE(sink.GetSettings().UnpackTo(&settings), "Cannot decode PQ sink settings for rescaling");
+            return !settings.GetDeferredPublicationExtIdPrefix().empty();
+        };
+        const auto hasState = [](const auto& program) {
             NFq::TStageStateRecoveryContext context;
-            return NFq::TStageStateRecoveryInfo(program.GetRuntimeVersion(), program.GetRaw(), context).HasAggregation;
+            return NFq::TStageStateRecoveryInfo(program.GetRuntimeVersion(), program.GetRaw(), context).HasState;
         };
         for (const auto& tx : physQuery.GetTransactions()) {
             for (const auto& stage : tx.GetStages()) {
-                if (hasAggregation(stage.GetProgram())) {
-                    YDB_LOG_INFO("Skipping PQ source rescaling: query contains aggregation");
+                for (const auto& sink : stage.GetSinks()) {
+                    if (hasDeferredPublication(sink.GetExternalSink())) {
+                        YDB_LOG_INFO("Skipping PQ source rescaling: query uses deferred publication");
+                        return;
+                    }
+                }
+                if (hasState(stage.GetProgram())) {
+                    YDB_LOG_INFO("Skipping PQ source rescaling: query contains stateful operators");
                     return;
                 }
             }
         }
         for (const auto& task : graph.GetTasks()) {
             const auto& dqTask = task.GetDqTask();
+            for (const auto& output : dqTask.GetOutputs()) {
+                if (output.HasSink() && hasDeferredPublication(output.GetSink())) {
+                    YDB_LOG_INFO("Skipping PQ source rescaling: saved task uses deferred publication");
+                    return;
+                }
+            }
             if (!dqTask.GetProgram().GetRaw().empty()) {
-                if (hasAggregation(dqTask.GetProgram())) {
-                    YDB_LOG_INFO("Skipping PQ source rescaling: inline program contains aggregation");
+                if (hasState(dqTask.GetProgram())) {
+                    YDB_LOG_INFO("Skipping PQ source rescaling: inline program contains stateful operators");
                     return;
                 }
             } else {
@@ -2094,7 +2117,7 @@ void PatchQueryPhysicalGraphForRescaling(
             }
         }
     } catch (const std::exception& e) {
-        YDB_LOG_INFO("Skipping PQ source rescaling: program analysis failed", {"error", e.what()});
+        YDB_LOG_INFO("Skipping PQ source rescaling: query analysis failed", {"error", e.what()});
         return;
     }
 
@@ -2216,8 +2239,8 @@ void PatchQueryPhysicalGraphForRescaling(
 
     YDB_LOG_INFO("Computing PQ source task counts for rescaling");
 
-    // Use the default PQ partition grouping and cap parallelism by the number
-    // of usable threads across nodes, as for PQ sources without task count hints.
+    // Preserve the saved query and stage limits. As in CountReadTasksFromSource,
+    // the thread-based limit is only a fallback when there is no task count hint.
     const ui64 tasksByThreads = static_cast<ui64>(TStagePredictor::GetUsableThreads()) * resourceSnapshot.size();
     THashMap<TStageKey, ui32> newTaskCounts;
     for (const auto& sk : pqSourceStages) {
@@ -2225,15 +2248,21 @@ void PatchQueryPhysicalGraphForRescaling(
         YDB_LOG_DEBUG("Computing PQ source stage task count", {"stageId", stageKeyToStr(sk)});
 
         ui32 partitions = stagePartitionCounts.Value(sk, 0);
-        if (partitions == 0) 
+        if (partitions == 0)
         {
             YDB_LOG_INFO("Skipping PQ source stage without partitions", {"stageId", stageKeyToStr(sk)});
             continue; // No partitions → skip
         }
 
-        const ui64 tasksByPartitions = NYql::NDq::GetExpectedTopicReadTasks(
+        ui64 tasksByPartitions = NYql::NDq::GetExpectedTopicReadTasks(
             partitions, /* maxPartitions */ 0, /* groupPartitions */ true);
-        const ui32 newCount = std::min(tasksByPartitions, tasksByThreads);
+        // GetExpectedTopicReadTasks ignores maxPartitions when grouping is enabled.
+        if (const auto maxTasksPerStage = physQuery.GetMaxTasksPerStage()) {
+            tasksByPartitions = std::min<ui64>(tasksByPartitions, maxTasksPerStage);
+        }
+        const auto& stage = physQuery.GetTransactions(sk.TxId).GetStages(sk.StageId);
+        const ui32 newCount = std::min<ui64>(tasksByPartitions,
+            stage.GetTaskCount() ? stage.GetTaskCount() : tasksByThreads);
 
         // Only scale up: preserve existing tasks and their checkpoint identities.
         auto it2 = stageToTaskIndices.find(sk);
@@ -2704,14 +2733,6 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
         taskInfo->ClearProgram();
         taskInfo->ClearSecureParams();
         taskInfo->ClearParameters();    // clear parameters to avoid bloating the saved cell
-    }
-}
-
-void TKqpTasksGraph::ClearRuntimeTasks() {
-    GetTasks().clear();
-    GetChannels().clear();
-    for (auto& [_, stageInfo] : GetStagesInfo()) {
-        stageInfo.Tasks.clear();
     }
 }
 

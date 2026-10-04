@@ -82,6 +82,82 @@ class TestRescaling(StreamingTestBase):
             "Downstream task count changed during PQ source rescaling"
         )
 
+    @pytest.mark.parametrize("max_tasks_per_stage", [1, 5], ids=["max_tasks_1", "max_tasks_5"])
+    def test_pq_source_restart_preserves_max_tasks_per_stage(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        max_tasks_per_stage: int,
+    ) -> None:
+        """Restarting the saved graph must preserve the user-specified reader limit."""
+        query_name = entity_name("pq_source_restart_preserves_max_tasks_per_stage")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=100,
+        )
+        self.create_streaming_query(kikimr, query_name, f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+        ''', stop_start=False)
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
+            assert wait_for(
+                lambda: self._reader_count(kikimr) == max_tasks_per_stage,
+                timeout_seconds=60, step_seconds=1,
+            ), (
+                f"Expected {max_tasks_per_stage} readers after CREATE, got {self._reader_count(kikimr)}"
+            )
+            self._stop_query(kikimr, query_name)
+            self._resume_query(kikimr, query_name, max_tasks_per_stage, expect_growth=False)
+            readers_after = self._reader_count(kikimr)
+            assert readers_after == max_tasks_per_stage, (
+                f"Expected {max_tasks_per_stage} readers after STOP/START, got {readers_after}"
+            )
+        finally:
+            self._cleanup_query(kikimr, query_name, [])
+
+    @pytest.mark.parametrize("kikimr", [{"enable_exactly_once_topics_writing": True}], indirect=True)
+    def test_pq_source_rescaling_skips_deferred_publication(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+    ) -> None:
+        """Keep the saved graph and sink state when deferred publication is enabled."""
+        partitions_count = 100
+        query_name = entity_name("pq_source_rescaling_skips_deferred_publication")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+        )
+
+        def check_reading(phase: str) -> None:
+            expected = [f"{phase}_{partition}" for partition in range(partitions_count)]
+            for partition, message in enumerate(expected):
+                kikimr.ydb_client.topic_write(self.input_topic, [message], partition_id=partition)
+            actual = kikimr.ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected))
+            assert sorted(actual) == sorted(expected), (actual, expected)
+            self.wait_completed_checkpoints(kikimr, query_name)
+
+        added_slots = []
+        self.create_streaming_query(kikimr, query_name, f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                INSERT INTO {out} WITH (DELIVERY_GUARANTEE = "exactly_once")
+                SELECT Data FROM {inp};
+            END DO;
+        ''', stop_start=False)
+        try:
+            check_reading("before")
+            readers_before = self._wait_started(kikimr, query_name)
+            assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
+            self._stop_query(kikimr, query_name)
+            added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
+            kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            self._resume_query(kikimr, query_name, readers_before, expect_growth=False)
+            check_reading("after")
+            assert self._reader_count(kikimr) == readers_before, "Deferred-publication query was rescaled"
+        finally:
+            self._cleanup_query(kikimr, query_name, added_slots)
+
     @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
     def test_pq_source_rescaling_insert_select(
         self,
@@ -200,6 +276,58 @@ class TestRescaling(StreamingTestBase):
             assert actual == [str(3 * partitions_count)], actual
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
+
+    def test_pq_source_rescaling_twice(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+    ) -> None:
+        """Restore partition offsets across consecutive 1 -> 2 -> 4 task graphs."""
+        query_name = entity_name("pq_source_rescaling_twice")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=1,
+        )
+        client = kikimr.ydb_client
+        self.create_streaming_query(kikimr, query_name, f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+        ''', stop_start=False)
+        try:
+            for phase, (partitions_count, expected_readers) in enumerate([(1, 1), (10, 2), (20, 4)]):
+                if phase:
+                    self._stop_query(kikimr, query_name)
+                    # Default grouping is five partitions per task. Growing the
+                    # topic controls parallelism without imposing a saved task cap.
+                    client.driver.topic_client.alter_topic(
+                        self.input_topic, set_min_active_partitions=partitions_count,
+                    )
+                    self._resume_query(kikimr, query_name, expected_readers, expect_growth=False)
+                else:
+                    self._wait_started(kikimr, query_name)
+
+                assert wait_for(
+                    lambda: self._reader_count(kikimr) == expected_readers,
+                    timeout_seconds=60, step_seconds=1,
+                ), f"Phase {phase}: expected {expected_readers} readers, got {self._reader_count(kikimr)}"
+                self.wait_streaming_query_metric(
+                    kikimr, query_name, "streaming.query.tasks.count", expected_value=expected_readers,
+                )
+
+                expected = []
+                for partition_id in range(partitions_count):
+                    messages = [f"phase_{phase}_partition_{partition_id}_message_{i}" for i in range(2)]
+                    client.topic_write(self.input_topic, messages, partition_id=partition_id)
+                    expected.extend(messages)
+                actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
+                # Read with the same consumer across all phases: replayed messages
+                # from an earlier graph must not replace the new phase's output.
+                assert sorted(actual) == sorted(expected), (phase, actual, expected)
+                # The next restart must restore a checkpoint of this graph, not
+                # just the original single-task checkpoint.
+                self.wait_completed_checkpoints(kikimr, query_name)
+        finally:
+            self._cleanup_query(kikimr, query_name, [])
 
     @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
     def test_pq_source_rescaling_partition_increase(

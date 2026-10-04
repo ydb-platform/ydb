@@ -86,14 +86,14 @@ TStageStateRecoveryInfo::TStageStateRecoveryInfo(const ui32 runtimeVersion, cons
         const TStringBuf name = callable.GetType()->GetName();
         // Exact runtime callable names from mkql_factory.cpp, dq_tasks_runner.cpp
         // and kqp_compute.cpp. Universal accumulators are conservative positives:
-        // their lambdas may implement aggregation even without a combiner.
-        HasAggregation |= IsIn({
+        // their lambdas may retain state even without a combiner.
+        HasState |= IsIn({
             "CombineCore", "GroupingCore", "Condense", "Condense1",
             "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
             "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
             "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
             "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map",
-            "Chopper", "WideChopper"
+            "Chopper", "WideChopper", "TimeOrderRecover", "MatchRecognizeCore"
         }, name);
         HasWatermarkGenerator |= name == "DqWatermarkGenerator";
         if (mode != EMode::HistoryReplay) {

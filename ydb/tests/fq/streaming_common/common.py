@@ -80,6 +80,8 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
+    if param.get("enable_exactly_once_topics_writing", False):
+        extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     else:
@@ -666,7 +668,8 @@ class Kikimr:
 
 
 class StreamingTestBase(TestYdsBase):
-    def create_streaming_query(self, kikimr: Kikimr, name: str, text: str, stop_start: bool = True) -> None:
+    def create_streaming_query(self, kikimr: Kikimr, name: str, text: str, stop_start: bool = False) -> None:
+        """Create the query; restart only when explicitly requested by the test."""
         kikimr.ydb_client.query(text)
         if stop_start:
             kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")

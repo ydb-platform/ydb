@@ -41,7 +41,7 @@ struct TStageStateRecoveryInfo {
 
     TMaybe<THoppingSettings> Hopping;
     bool HasWatermarkGenerator = false;
-    bool HasAggregation = false;
+    bool HasState = false;
 
     TStageStateRecoveryInfo() = default;
 

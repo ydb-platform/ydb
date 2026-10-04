@@ -45,7 +45,8 @@ class TViewer : public TActorBootstrapped<TViewer> {
         const auto& params = ev->Get()->Request.GetParams();
         if (params.Get("format") != "json") {
             Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                ev->Get()->Request.GetPath().EndsWith("/metrics-overview") ? RenderOverviewPage() : RenderPage(),
+                ev->Get()->Request.GetPath().EndsWith("/metrics-dashboard") ? RenderDashboardPage()
+                    : ev->Get()->Request.GetPath().EndsWith("/metrics-overview") ? RenderOverviewPage() : RenderPage(),
                 ev->Get()->SubRequestId), 0, ev->Cookie);
             return;
         }

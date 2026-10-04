@@ -1,0 +1,55 @@
+# Embedding metric charts
+
+Add `ydb/core/mon/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
+setup, call `NKikimr::NMetricChart::RegisterResources(mon)` once. This publishes
+`static/metric-chart/chart.js`, `client.js` and `chart.css` from binary resources.
+No external CDN or JavaScript framework is required.
+
+Load the stylesheet and import the modules relative to the monitoring root.
+For a page under `/actors/`, the following paths also work through `/node/<id>/`:
+
+```html
+<link rel="stylesheet" href="../static/metric-chart/chart.css">
+<div id="cpu"></div>
+<script type="module">
+import {createMetricChart} from '../static/metric-chart/chart.js';
+import {createInMemoryMetricsClient, parseQuery} from '../static/metric-chart/client.js';
+
+const client = createInMemoryMetricsClient({endpoint: 'metrics'});
+const chart = createMetricChart(document.getElementById('cpu'), {
+    legend: true,
+    onRangeChange: ({from, to}) => show(from, to),
+});
+let result;
+function show(begin, end) {
+    chart.setData({series: result.series, begin, end, title: 'Pool CPU'});
+}
+result = await client.queryMany([
+    {...parseQuery('actor_system.pool.cpu_cores{"pool"=="User"}'), id: 'cpu'},
+], {seconds: 300});
+const end = result.catalog.timestamp_ms;
+show(end - 300000, end);
+// Call chart.destroy() when removing the component.
+</script>
+```
+
+The chart accepts `{series, begin, end, title, emptyText}`. Times are Unix
+milliseconds and `end > begin`. A series has a stable `key`, `display`, `color`,
+`step`, `closed`, and sorted `points: [{time, raw, value}]`. `raw` preserves exact
+text; `value` is a finite number or null for plotting. `step` distinguishes
+on-change values from sampled lines. `seriesStats(series, begin, end)` shares the
+viewer's last/min/max/average calculation. Pass `onPin` to pause live refresh when
+a tooltip is pinned. ResizeObserver follows the container width; destroy
+releases it and removes the component's DOM.
+
+The data client is optional: other sources can provide the same series format.
+`request({line, seconds, signal})` reads the viewer's existing JSON protocol;
+`queryMany(queries, {seconds, signal, catalog})` returns `{catalog, series, limited}`.
+It fetches histories sequentially and reuses each line response within the batch.
+Limits remain 8 selectors, 16 lines per selector, and 64 series per batch. Use an
+AbortController and discard stale results when switching requests. Authentication
+uses the existing same-origin monitoring session. Cross-origin access requires
+configuration of the destination server; the module does not change access rules.
+
+The in-memory dashboard at `/actors/metrics-dashboard` is a second consumer.
+It uses the same chart and JSON client without the viewer's query editor.

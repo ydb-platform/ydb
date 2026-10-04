@@ -1,4 +1,6 @@
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
+#include <ydb/core/mon/metric_chart/resources.h>
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
@@ -636,12 +638,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }));
 
     if (auto* mon = appData->Mon) {
+        NMetricChart::RegisterResources(mon);
+        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/dashboard.js",
+            "inmemory-metrics/dashboard.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
         NInMemoryMetricsMonitoring::TConfig metricsViewer;
         metricsViewer.ExecutorPool = appData->BatchPoolId;
         metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
             auto* actors = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actors, "metrics", "In-memory metric viewer", false, &system, actor, /*useAuth=*/true);
             mon->RegisterActorPage(actors, "metrics-overview", "In-memory metrics overview", false, &system, actor, /*useAuth=*/true);
+            mon->RegisterActorPage(actors, "metrics-dashboard", "In-memory metrics dashboard", false, &system, actor, /*useAuth=*/true);
         };
         setup->RegisterSubSystem(NInMemoryMetricsMonitoring::MakeInMemoryMetricsMonitoring(std::move(metricsViewer)));
     }

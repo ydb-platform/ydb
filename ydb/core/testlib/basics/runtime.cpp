@@ -30,7 +30,7 @@ namespace NActors {
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             const ui16 port = 12001 + nodeIndex;
             table->StaticNodeTable[FirstNodeId + nodeIndex] =
-                std::pair<TString, ui32>("::1", UseRealInterconnect ? GetPortManager().GetPort(port) : port);
+                std::pair<TString, ui32>("::1", UseRealInterconnect ? GetPort(port) : port);
 
             NActorsInterconnect::TNodeLocation proto;
             proto.SetDataCenter(ToString(nodeIndex % DataCenterCount + 1));

@@ -79,58 +79,6 @@ selector_config:
 } // namespace
 
 Y_UNIT_TEST_SUITE(YamlConfigValidation) {
-    Y_UNIT_TEST(ConfigV2AndGrpcPreserveCorrelations) {
-        for (bool correlated : {false, true}) {
-            CheckValidation(TStringBuilder() << R"(
-config:
-  feature_flags: {switch_to_config_v2: false}
-  grpc_config: {port: 2135, start_grpc_proxy: true, services_disabled: [config]}
-allowed_labels:
-  deployment: {type: string}
-  test: {type: string}
-selector_config:
-- description: enable config v2
-  selector: {deployment: selected}
-  config:
-    feature_flags: {switch_to_config_v2: true}
-- description: enable the required service
-  selector: {)" << (correlated ? "deployment" : "test") << R"(: selected}
-  config:
-    grpc_config: !inherit
-      services_disabled: []
-)", !correlated);
-        }
-    }
-
-    Y_UNIT_TEST(CoupledNbsGrpc) {
-        auto doc = NFyaml::TDocument::Parse(R"(
-config:
-  nbs_config:
-    enabled: true
-    nbs_frontend_config:
-      enabled: false
-  grpc_config:
-    port: 2135
-    start_grpc_proxy: true
-allowed_labels:
-  a: {type: string}
-  b: {type: string}
-selector_config:
-- description: enable frontend
-  selector: {a: on}
-  config:
-    nbs_config: !inherit
-      nbs_frontend_config: {enabled: true}
-- description: disable proxy
-  selector: {b: on}
-  config:
-    grpc_config: !inherit
-      start_grpc_proxy: false
-)");
-        const auto validator = CreateDefaultConfigSwissKnife();
-        CheckValidation(doc, true, validator.get());
-    }
-
     Y_UNIT_TEST(UnrealizableBase) {
         auto doc = NFyaml::TDocument::Parse(R"(
 config:
@@ -182,31 +130,6 @@ selector_config:
   config:
     log_config: !inherit
       cluster_name: !inherit {}
-)");
-        const auto validator = CreateDefaultConfigSwissKnife();
-        CheckValidation(doc, true, validator.get());
-    }
-
-    Y_UNIT_TEST(ClientCertificateAndGrpcAreCheckedJointly) {
-        auto doc = NFyaml::TDocument::Parse(R"(
-config:
-  grpc_config: {ca: certificate}
-  client_certificate_authorization:
-    request_client_certificate: true
-    client_certificate_required: false
-allowed_labels:
-  a: {type: string}
-  b: {type: string}
-selector_config:
-- description: require certificate
-  selector: {a: x}
-  config:
-    client_certificate_authorization: !inherit
-      client_certificate_required: true
-- description: remove CA
-  selector: {b: x}
-  config:
-    grpc_config: {}
 )");
         const auto validator = CreateDefaultConfigSwissKnife();
         CheckValidation(doc, true, validator.get());

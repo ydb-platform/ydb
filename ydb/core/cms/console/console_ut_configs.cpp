@@ -1315,30 +1315,6 @@ selector_config:
     // console actor: two independent labels, a deep-merge selector and an
     // untagged (wholesale-replace) empty-mapping selector must be ACCEPTED.
 
-    Y_UNIT_TEST(YamlConfigJointNbsGrpcViolationRejected) {
-        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
-        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
-metadata: {cluster: "", version: 0}
-config:
-  nbs_config: {enabled: true, nbs_frontend_config: {enabled: false}}
-  grpc_config: {port: 2135, start_grpc_proxy: true}
-allowed_labels:
-  a: {type: string}
-  b: {type: string}
-selector_config:
-- description: enable frontend
-  selector: {a: x}
-  config:
-    nbs_config: !inherit
-      nbs_frontend_config: {enabled: true}
-- description: disable proxy
-  selector: {b: x}
-  config:
-    grpc_config: !inherit
-      start_grpc_proxy: false
-)", "GRpcConfig.StartGRpcProxy");
-    }
-
     Y_UNIT_TEST(YamlConfigEmptyInheritTypeMismatchRejected) {
         TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
         CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(

@@ -127,7 +127,7 @@ kikimr_binaries_base_path="/Berkanavt/kikimr"
 kikimr_mbus_port="${kikimr_mbus_port:? expected not empty var}"
 kikimr_mon_address=""
 kikimr_mon_port="${kikimr_mon_port:? expected not empty var}"
-kikimr_node_broker_port="2135"
+kikimr_node_broker_port="${kikimr_node_broker_port:-2135}"
 kikimr_syslog_service_tag="${kikimr_syslog_service_tag:? expected not empty var}"
 kikimr_tenant="${kikimr_tenant:? expected not empty var}"
 kikimr_config="${kikimr_home}/cfg"
@@ -282,6 +282,16 @@ NODE_ID_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_id:+ --node ${kikim
 
 NODE_BROKER_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
 """
+
+
+NODE_BROKER_TLS_ARGUMENT = """kikimr_arg="${kikimr_arg}${kikimr_node_broker_use_tls:+ --node-broker-use-tls ${kikimr_node_broker_use_tls}}"
+"""
+
+GRPC_SSL_ARGUMENTS = """kikimr_arg="${kikimr_arg}${kikimr_grpc_ca:+ --grpc-ca ${kikimr_grpc_ca}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpc_cert:+ --grpc-cert ${kikimr_grpc_cert}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpc_key:+ --grpc-key ${kikimr_grpc_key}}"
+"""
+
 
 SYS_LOG_SERVICE_TAG = """kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
 """
@@ -484,13 +494,21 @@ def dynamic_cfg_new_style(
     extra_args="",
     use_auth_token_file=False,
     domain="",
+    node_broker_port=2135,
+    node_broker_use_tls=False,
+    grpc_client_cert_params=None,
 ):
     return "\n".join(
         [
             "kikimr_coregen=\"--core\"" if enable_cores else "",
             "kikimr_auth_token_file=${kikimr_home}/token/kikimr.token" if use_auth_token_file else "",
             f'kikimr_node_domain="{domain}"' if domain else "",
+            f'kikimr_node_broker_port="{node_broker_port}"',
+            'kikimr_node_broker_use_tls="true"' if node_broker_use_tls else "",
+            '\n'.join(['kikimr_grpc_%s="%s"' % (name, path) for name, path in zip(('ca', 'cert', 'key'), grpc_client_cert_params or []) if path]),
             NEW_STYLE_DYNAMIC_CFG,
+            NODE_BROKER_TLS_ARGUMENT,
+            GRPC_SSL_ARGUMENTS,
         ]
         + ydbd_extra_args(extra_args)
     )
@@ -706,6 +724,8 @@ def kikimr_cfg_for_dynamic_node_new_style(
     mon_address="",
     cert_params=None,
     use_auth_token_file=False,
+    node_broker_use_tls=False,
+    grpc_client_cert_params=None,
 ):
     return "\n".join(
         [
@@ -725,9 +745,13 @@ def kikimr_cfg_for_dynamic_node_new_style(
                 new_style_kikimr_cfg=True,
                 use_auth_token_file=use_auth_token_file,
             ),
+            'kikimr_node_broker_use_tls="true"' if node_broker_use_tls else "",
+            '\n'.join(['kikimr_grpc_%s="%s"' % (name, path) for name, path in zip(('ca', 'cert', 'key'), grpc_client_cert_params or []) if path]),
             CUSTOM_CONFIG_INJECTOR,
             NEW_STYLE_DYNAMIC_NODE_CONFIG,
             NODE_BROKER_ARGUMENT,
+            NODE_BROKER_TLS_ARGUMENT,
+            GRPC_SSL_ARGUMENTS,
             tenant_argument(tenant),
         ]
     )

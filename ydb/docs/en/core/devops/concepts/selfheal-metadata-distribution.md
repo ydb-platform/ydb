@@ -6,7 +6,7 @@ The configuration uses the historical name `state_storage_self_heal_config` for 
 
 {% note warning %}
 
-These instructions apply only to {{ ydb-short-name }} clusters with **V2 configuration** and **distributed configuration**. On clusters with **V1 configuration**, these steps and commands (including obtaining configuration via `ydb admin cluster config fetch`) are unavailable or will not produce the expected result. Alternatives for V1 are not provided here — see [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
+These instructions apply only to {{ ydb-short-name }} clusters with **V2 configuration**. On clusters with **V1 configuration**, these steps and commands (including obtaining configuration via `ydb admin cluster config fetch`) are unavailable or will not produce the expected result. Alternatives for V1 are not provided here — see [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
 
 {% endnote %}
 
@@ -29,7 +29,7 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
     ```yaml
     config:
         self_management_config:
-            enabled: true # Enabling distributed configuration
+            enabled: true # Enabling V2 configuration
         cms_config:
             sentinel_config:
                 enable: true # Enabling Sentinel
@@ -39,9 +39,9 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
 
     {% note info %}
 
-    For the mechanism to work, both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration) must be activated. Make sure they are enabled.
+    The mechanism requires [V2 configuration](../configuration-management/configuration-v2/index.md) and enabled [CMS Sentinel](../../concepts/glossary.md#cms).
 
-    See also: [Migration to V2 configuration and enabling distributed configuration](../configuration-management/migration/migration-to-v2.md).
+    See also: [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
 
     {% endnote %}
 

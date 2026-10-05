@@ -1122,24 +1122,27 @@ public:
             prefixCells[i] = row[Indexes[i]];
         }
         ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
-        auto text = row[Indexes[PrefixSize]].AsBuf();
         TVector<TString> tokens;
-        switch (TextTypeId) {
-            case NScheme::NTypeIds::String:
-            case NScheme::NTypeIds::Utf8:
-                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
-                break;
-            case NScheme::NTypeIds::Json: {
-                TString error;
-                tokens = NJsonIndex::TokenizeJson(text, error);
-                // Ignore errors, JSON is already validated
-                break;
+        const auto& textCell = row[Indexes[PrefixSize]];
+        if (!textCell.IsNull()) {
+            const auto text = textCell.AsBuf();
+            switch (TextTypeId) {
+                case NScheme::NTypeIds::String:
+                case NScheme::NTypeIds::Utf8:
+                    tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                    break;
+                case NScheme::NTypeIds::Json: {
+                    TString error;
+                    tokens = NJsonIndex::TokenizeJson(text, error);
+                    YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                    break;
+                }
+                case NScheme::NTypeIds::JsonDocument:
+                    tokens = NJsonIndex::TokenizeBinaryJson(text);
+                    break;
+                default:
+                    YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
             }
-            case NScheme::NTypeIds::JsonDocument:
-                tokens = NJsonIndex::TokenizeBinaryJson(text);
-                break;
-            default:
-                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
         auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;

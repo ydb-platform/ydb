@@ -7,6 +7,8 @@ namespace NKikimr::NMetricChart {
 
 void RegisterResources(NActors::TMon* mon) {
     using NMonitoring::TResourceMonPage;
+    mon->Register(new TResourceMonPage("static/metric-chart/chartkit.js", "metric-chart/chartkit.js", TResourceMonPage::JAVASCRIPT));
+    mon->Register(new TResourceMonPage("static/metric-chart/chartkit.css", "metric-chart/chartkit.css", TResourceMonPage::CSS));
     mon->Register(new TResourceMonPage("static/metric-chart/chart.js", "metric-chart/chart.js", TResourceMonPage::JAVASCRIPT));
     mon->Register(new TResourceMonPage("static/metric-chart/allocation.js", "metric-chart/allocation.js", TResourceMonPage::JAVASCRIPT));
     mon->Register(new TResourceMonPage("static/metric-chart/client.js", "metric-chart/client.js", TResourceMonPage::JAVASCRIPT));

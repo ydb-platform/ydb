@@ -187,6 +187,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningDmlMatrix-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtualRows
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionLiteralDefaultDependency
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionMissingNullableDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionMixedExistingAndNew
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionSequenceDefaultDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionStoredAndVirtualColumns

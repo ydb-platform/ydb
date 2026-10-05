@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
@@ -26,6 +27,7 @@ class ValidationCase:
     columns: str = "value Int64, other Int64"
     prelude: str = ""
     input_filter: str = ""
+    input_limit: int | None = None
     extra_write: str = ""
     error: str = ""
     error_type: type = ydb.issues.GenericError
@@ -97,6 +99,7 @@ VALIDATION_CASES = [
     ValidationCase(
         "limit_after",
         select="SELECT * FROM $agg LIMIT 1",
+        prelude="PRAGMA ydb.DisableCheckpoints = 'true';",
         error="LIMIT operator is not supported over streaming aggregation results",
     ),
     ValidationCase(
@@ -199,11 +202,10 @@ class TestStreamingAggregation(StreamingTestBase):
             )
             kikimr.ydb_client.query(f"UPSERT INTO `{names['lookup']}` (key, subkey, value) VALUES ('a', 'b', 11);")
         body = f"""
-            {"PRAGMA ydb.DisableCheckpoints = 'true';" if case.error else ""}
             {case.prelude}
             $input = SELECT * FROM {source} WITH (
                 FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, subkey String NOT NULL, value Int64 NOT NULL)
-            ) {case.input_filter};
+            ) {case.input_filter} {f'LIMIT {case.input_limit}' if case.input_limit is not None else ''};
             $agg = {case.aggregation};
             UPSERT INTO `{names['first']}` {case.select.format(**names)};
             {case.extra_write.format(**names)}
@@ -229,6 +231,34 @@ class TestStreamingAggregation(StreamingTestBase):
             assert [row["Data"] for result in results if result is not None for row in result.rows] == [b"5"]
             ast = session.last_query_stats.query_ast
             assert ast and "KqpStreamingAggregation" not in ast, (enabled, ast)
+
+    @pytest.mark.parametrize("local_topics", [False, True], ids=["external_topic", "local_topic"])
+    def test_finite_streaming_topic_uses_in_memory_by_default(self, kikimr, entity_name, local_topics):
+        source, endpoint = self.get_input_name(kikimr, "finite_aggregation", local_topics, entity_name)
+        table = entity_name("result")
+        kikimr.ydb_client.query(f"CREATE TABLE `{table}` (key String, value Int64, PRIMARY KEY (key));")
+        kikimr.ydb_client.query(f"UPSERT INTO `{table}` (key, value) VALUES ('a', 100), ('b', 200);")
+        query = f"""
+            $input = SELECT * FROM {source} WITH (
+                STREAMING = 'TRUE', FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, value Int64 NOT NULL)
+            ) LIMIT 4;
+            UPSERT INTO `{table}` SELECT key, SUM(value) AS value FROM $input GROUP BY key;
+        """
+        with kikimr.ydb_client.session_pool.checkout() as session:
+            session.explain(query)
+            ast = session.last_query_stats.query_ast
+            assert ast and "KqpStreamingAggregation" in ast, ast
+            assert "output_state_table" not in ast, ast
+            assert "state_table_path" not in ast, ast
+
+        future = kikimr.ydb_client.query_async(query, timeout=120)
+        time.sleep(1)
+        self.write_stream(
+            [json.dumps(dict(key=key, value=value)) for key, value in [("a", 2), ("b", 10), ("a", 3), ("b", -3), ("a", 1000)]],
+            endpoint=endpoint,
+        )
+        future.result(timeout=120)
+        self.check_rows(kikimr, f"SELECT key, value FROM `{table}` ORDER BY key;", [("a", 5), ("b", 7)])
 
     @pytest.mark.parametrize(
         "kikimr,enabled",
@@ -352,15 +382,20 @@ class TestStreamingAggregation(StreamingTestBase):
 
     @pytest.mark.parametrize("pragma", [None, False, True], ids=["default", "false", "true"])
     @pytest.mark.parametrize("validation", [True, False], ids=["validate", "no_validation"])
-    def test_in_memory_pragma(self, kikimr, entity_name, pragma, validation):
+    @pytest.mark.parametrize("checkpoints", [True, False], ids=["checkpoints", "no_checkpoints"])
+    def test_in_memory_pragma(self, kikimr, entity_name, pragma, validation, checkpoints):
         prelude = "" if pragma is None else f"PRAGMA ydb.UseInMemoryStreamingAggregation = '{str(pragma).lower()}';"
         if not validation:
             prelude += NO_VALIDATION
+        if not checkpoints:
+            prelude += "PRAGMA ydb.DisableCheckpoints = 'true';"
         case = ValidationCase(
             "pragma",
             select="SELECT key, subkey, value + 1 AS value FROM $agg",
             prelude=prelude,
-            error=STATE_ERROR if validation and pragma is not True else "",
+            # Without checkpoints, finish the input to flush the table sink's small writes.
+            input_limit=None if checkpoints else 2,
+            error=STATE_ERROR if checkpoints and validation and pragma is not True else "",
             state_table=None,
         )
         names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
@@ -368,10 +403,13 @@ class TestStreamingAggregation(StreamingTestBase):
             with pytest.raises(ydb.issues.GenericError, match=STATE_ERROR):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{names['query']}` AS DO BEGIN {body} END DO;")
             return
-        with self.running_query(kikimr, names["query"], body) as ast:
+        kikimr.ydb_client.query(f"UPSERT INTO `{names['first']}` (key, subkey, value) VALUES ('a', 'b', 100);")
+        with self.running_query(kikimr, names["query"], body, wait_checkpoint=checkpoints) as ast:
             assert "output_state_table" not in ast
-            for value, expected in [(2, 3), (3, 6)]:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value))], endpoint=endpoint)
+            assert "state_table_path" not in ast
+            batches = [([2], 3), ([3], 6)] if checkpoints else [([2, 3], 6)]
+            for values, expected in batches:
+                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value)) for value in values], endpoint=endpoint)
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(expected,)])
 
     @pytest.mark.parametrize("modify_first", [False, True])
@@ -402,7 +440,8 @@ class TestStreamingAggregation(StreamingTestBase):
             $finish = ($state) -> ($state + 1l);
             $save = ($saved) -> ($saved + {1 if kind == 'matching_udaf' else 2}l);
             $load = ($saved) -> ($saved - 1l);
-            $factory = AggregationFactory('UDAF', $init, $update, NULL, $finish, $save, $load);
+            $merge = ($left, $right) -> ($left + $right);
+            $factory = AggregationFactory('UDAF', $init, $update, $merge, $finish, $save, $load);
         """
         )
         aggregate = "AVG(value)" if kind == "average" else "AGGREGATE_BY(value, $factory)"
@@ -570,6 +609,46 @@ class TestStreamingAggregation(StreamingTestBase):
                 for row in kikimr.ydb_client.query(f"SELECT key, some_value FROM `{table}`;")[0].rows:
                     choices = some[row["key"].decode()]
                     assert row["some_value"] in choices if choices else row["some_value"] is None
+                # Ensure the next batch exercises merging with the durable table baseline.
+                self.wait_completed_checkpoints(kikimr, query)
+
+    @pytest.mark.parametrize("local_topic", [False, True], ids=["external_topic", "local_topic"])
+    @pytest.mark.parametrize("manual_restart", [False, True], ids=["node_restart", "manual_restart"])
+    def test_checkpoint_batches_and_idle_recovery(self, kikimr, entity_name, local_topic, manual_restart):
+        source, endpoint = self.get_input_name(kikimr, "batches", local_topic, entity_name)
+        table, query = entity_name("result"), entity_name("query")
+        kikimr.ydb_client.query(
+            f"CREATE TABLE `{table}` (key String NOT NULL, count Uint64, total Int64, PRIMARY KEY (key));"
+        )
+        body = f"""
+            UPSERT INTO `{table}` SELECT key, COUNT(*) AS count, SUM(value) AS total
+            FROM {source} WITH (FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, value Int64 NOT NULL))
+            GROUP BY key;
+        """
+        keys = [f"key{i:03}" for i in range(64)]
+        result = f"SELECT key, count, total FROM `{table}` ORDER BY key;"
+        with self.running_query(kikimr, query, body) as ast:
+            assert "output_state_table" in ast
+            self.write_stream(
+                [json.dumps(dict(key=key, value=value)) for value in [1, 2, 3] for key in keys], endpoint=endpoint
+            )
+            self.check_rows(kikimr, result, [(key, 3, 6) for key in keys])
+            self.wait_completed_checkpoints(kikimr, query)
+            if manual_restart:
+                kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query}` SET (RUN = FALSE);")
+                self.check_rows(
+                    kikimr,
+                    f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '{kikimr.get_database_name()}/{query}';",
+                    [("STOPPED",)],
+                )
+                kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query}` SET (RUN = TRUE);")
+            else:
+                self.restart_streaming_node(kikimr)
+            # Completed-checkpoint restoration must progress without another input row.
+            self.wait_completed_checkpoints(kikimr, query)
+            self.check_rows(kikimr, result, [(key, 3, 6) for key in keys])
+            self.write_stream([json.dumps(dict(key=key, value=5)) for key in keys], endpoint=endpoint)
+            self.check_rows(kikimr, result, [(key, 4, 11) for key in keys])
 
     @pytest.mark.parametrize("valid_load", [False, True], ids=["invalid_load", "checkpoint_recovery"])
     def test_udaf_serialization_use_defaults(self, kikimr, entity_name, valid_load):
@@ -584,8 +663,9 @@ class TestStreamingAggregation(StreamingTestBase):
             $update = ($state, $item) -> ($state + $item);
             $save = ($state) -> (CAST($state AS String));
             $load = ($saved) -> ({load});
-            $raw = AggregationFactory('UDAF', ($item) -> (1l), ($state, $item) -> ($state + 1l), NULL, ($state) -> ($state), $save, $load);
-            $serialized = AggregationFactory('UDAF', $init, $update, NULL, ($state) -> (CAST($state AS String)), $save, $load);
+            $merge = ($left, $right) -> ($left + $right);
+            $raw = AggregationFactory('UDAF', ($item) -> (1l), ($state, $item) -> ($state + 1l), $merge, ($state) -> ($state), $save, $load);
+            $serialized = AggregationFactory('UDAF', $init, $update, $merge, ($state) -> (CAST($state AS String)), $save, $load);
             UPSERT INTO `{table}` SELECT key, AGGREGATE_BY(value, $raw) AS raw_count, AGGREGATE_BY(value, $serialized) AS serialized_value
             FROM {source} WITH (FORMAT = 'json_each_row', SCHEMA (key String NOT NULL, value Int64 NOT NULL)) GROUP BY key;
         """

@@ -2054,11 +2054,10 @@ FROM `{table_name}`"""
 
         query_name = f"test_variant_json_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out, comment_for_pushdown='--'))
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         # Check that streaming.query.tasks.count metric exists for both queries
-        self.wait_streaming_query_metric(kikimr, path, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
@@ -2139,11 +2138,10 @@ FROM `{table_name}`"""
                 FROM $i
             END DO;'''
         kikimr.ydb_client.query(sql)
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         # Check that streaming.query.tasks.count metric exists for both queries
-        self.wait_streaming_query_metric(kikimr, path, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [
             R'{"foo":"bar","bar":["1stringstringstring"],"baz":["2stringstringstring"]}',

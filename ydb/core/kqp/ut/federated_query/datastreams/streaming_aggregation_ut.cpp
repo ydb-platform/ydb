@@ -1,11 +1,13 @@
 #include "common.h"
 
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/kqp/common/events/query.h>
-#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -13,6 +15,8 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <fmt/format.h>
+
+#include <util/generic/hash_set.h>
 
 #include <algorithm>
 #include <array>
@@ -106,6 +110,145 @@ private:
     TActorSystem& ActorSystem;
     const TActorId ServiceId;
     const TActorId OriginalProxy;
+    const TActorId Proxy;
+};
+
+class TPendingCommitCheckpointProxy final : public TActorBootstrapped<TPendingCommitCheckpointProxy> {
+public:
+    struct TState {
+        std::atomic<ui64> Generation = 0;
+        std::atomic<ui64> SeqNo = 0;
+        std::atomic<ui32> Stored = 0;
+        std::atomic<ui32> Restored = 0;
+        std::atomic<bool> Recommitted = false;
+        std::atomic<bool> Failed = false;
+    };
+
+    TPendingCommitCheckpointProxy(const TActorId& storage, std::shared_ptr<TState> state)
+        : Storage(storage)
+        , State(std::move(state))
+    {}
+
+    void Bootstrap() {
+        Become(&TPendingCommitCheckpointProxy::StateWork);
+    }
+
+private:
+    STFUNC(StateWork) {
+        using TEvents = NFq::TEvCheckpointStorage;
+        if (ev->GetTypeRewrite() == NActors::TEvents::TEvPoison::EventType) {
+            PassAway();
+            return;
+        }
+        if (ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+            if (ev->Get<NActors::TEvents::TEvWakeup>()->Tag == 0) {
+                BlockCreation = false;
+                for (auto& pending : PendingCreation) {
+                    Send(pending->Forward(Storage));
+                }
+                PendingCreation.clear();
+            } else {
+                BlockCommit = false;
+                for (auto& pending : PendingCommit) {
+                    Send(pending.Release());
+                }
+                PendingCommit.clear();
+            }
+            return;
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvCreateCheckpointRequest::EventType && Target && BlockCreation) {
+            PendingCreation.emplace_back(ev.Release());
+            return;
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvSetCheckpointPendingCommitStatusRequest::EventType && BlockCommit) {
+            const auto& request = *ev->Get<TEvents::TEvSetCheckpointPendingCommitStatusRequest>();
+            // Let the initial empty checkpoint finish so the query can start.
+            if (request.CheckpointId.SeqNo > 1) {
+                if (!Target) {
+                    Target = request.CheckpointId;
+                    State->Generation.store(Target->CoordinatorGeneration);
+                    State->SeqNo.store(Target->SeqNo);
+                }
+                const auto cookie = ++NextCookie;
+                Replies.emplace(cookie, std::pair(ev->Sender, ev->Cookie));
+                // Store PendingCommit durably, but hold the reply which enables commit notifications.
+                Send(Storage, new TEvents::TEvSetCheckpointPendingCommitStatusRequest(
+                    request.CoordinatorId, request.CheckpointId, request.StateSizeBytes), 0, cookie);
+                return;
+            }
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvSetCheckpointPendingCommitStatusResponse::EventType) {
+            const auto& response = *ev->Get<TEvents::TEvSetCheckpointPendingCommitStatusResponse>();
+            if (response.Issues) {
+                State->Failed.store(true);
+            }
+            const auto [recipient, cookie] = Replies.at(ev->Cookie);
+            Replies.erase(ev->Cookie);
+            auto reply = MakeHolder<IEventHandle>(recipient, ev->Sender, ev->ReleaseBase().Release(), 0, cookie);
+            if (BlockCommit) {
+                PendingCommit.emplace_back(std::move(reply));
+            } else {
+                Send(reply.Release());
+            }
+            State->Stored.fetch_add(1);
+            return;
+        }
+        if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvGetTaskState::EventType && Target) {
+            const auto& request = *ev->Get<NYql::NDq::TEvDqCompute::TEvGetTaskState>();
+            if (NFq::TCheckpointId(request.Checkpoint.GetGeneration(), request.Checkpoint.GetId()) == *Target) {
+                State->Restored.fetch_add(1);
+            }
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvCompleteCheckpointRequest::EventType && Target) {
+            const auto& request = *ev->Get<TEvents::TEvCompleteCheckpointRequest>();
+            if (request.CheckpointId == *Target && request.CoordinatorId.Generation > Target->CoordinatorGeneration) {
+                State->Recommitted.store(true);
+            }
+        }
+        Send(ev->Forward(Storage));
+    }
+
+    const TActorId Storage;
+    const std::shared_ptr<TState> State;
+    TMaybe<NFq::TCheckpointId> Target;
+    bool BlockCreation = true;
+    bool BlockCommit = true;
+    ui64 NextCookie = 0;
+    THashMap<ui64, std::pair<TActorId, ui64>> Replies;
+    TVector<THolder<IEventHandle>> PendingCreation;
+    TVector<THolder<IEventHandle>> PendingCommit;
+};
+
+class TScopedPendingCommitCheckpointProxy {
+public:
+    explicit TScopedPendingCommitCheckpointProxy(TTestActorRuntime& runtime)
+        : ActorSystem(*runtime.GetActorSystem(0))
+        , ServiceId(NYql::NDq::MakeCheckpointStorageID())
+        , OriginalStorage(ActorSystem.LookupLocalService(ServiceId))
+        , Proxy(ActorSystem.Register(new TPendingCommitCheckpointProxy(OriginalStorage, State)))
+    {
+        ActorSystem.RegisterLocalService(ServiceId, Proxy);
+    }
+
+    ~TScopedPendingCommitCheckpointProxy() {
+        ActorSystem.RegisterLocalService(ServiceId, OriginalStorage);
+        ActorSystem.Send(Proxy, new TEvents::TEvPoison());
+    }
+
+    void ResumeCreation() {
+        ActorSystem.Send(Proxy, new TEvents::TEvWakeup(0));
+    }
+
+    void ResumeCommit() {
+        ActorSystem.Send(Proxy, new TEvents::TEvWakeup(1));
+    }
+
+    const std::shared_ptr<TPendingCommitCheckpointProxy::TState> State = std::make_shared<TPendingCommitCheckpointProxy::TState>();
+
+private:
+    TActorSystem& ActorSystem;
+    const TActorId ServiceId;
+    const TActorId OriginalStorage;
     const TActorId Proxy;
 };
 
@@ -2202,21 +2345,9 @@ class TOutputTableAggregationTestFixture : public TStreamingAggregationTestFixtu
 public:
     TOutputTableAggregationTestFixture()
         : TStreamingAggregationTestFixture(true, false)
-        , OriginalWriteSettings(GetWriteActorSettings())
-    {
-        // Flush each output batch without requiring a checkpoint to flush the table sink.
-        auto& config = *AggregationAppConfig.MutableTableServiceConfig();
-        config.SetEnableStreamWrite(true);
-        config.MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(1);
-    }
-
-    ~TOutputTableAggregationTestFixture() override {
-        SetWriteActorSettings(MakeIntrusive<TWriteActorSettings>(OriginalWriteSettings));
-    }
+    {}
 
     void FinishOutputAggregation() {
-        // Metadata cleanup uses non-streaming writes and needs the normal buffer limit.
-        SetWriteActorSettings(MakeIntrusive<TWriteActorSettings>(OriginalWriteSettings));
         FinishAggregation();
     }
 
@@ -2228,17 +2359,18 @@ public:
         ExecQuery(ddl);
     }
 
-    void StartOutputAggregation(const TString& body) {
+    void StartOutputAggregation(const TString& body, bool disableCheckpoints = false) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY aggregation AS DO BEGIN
-                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.MaxTasksPerStage = "1";
-                {}
+                {body}
             END DO;
-        )", body));
+        )", "disable_checkpoints"_a = disableCheckpoints ? "TRUE" : "FALSE", "body"_a = body));
         WaitStreamingQueryStatus("aggregation");
-        ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
-            UNIT_ASSERT_STRING_CONTAINS(ast, "output_state_table");
+        ValidateStreamingQueryAst("aggregation", [disableCheckpoints](const TString& ast) {
+            UNIT_ASSERT_STRING_CONTAINS(ast, "KqpStreamingAggregation");
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("output_state_table"), !disableCheckpoints, ast);
             UNIT_ASSERT_STRING_CONTAINS(ast, "/Root/aggregateResult");
         });
     }
@@ -2256,14 +2388,39 @@ public:
             return actual == expected;
         });
     }
-
-private:
-    const TWriteActorSettings OriginalWriteSettings;
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
+    Y_UNIT_TEST_F(DisabledCheckpointsUseInMemoryState, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, total Int64, PRIMARY KEY (key));
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key, total) VALUES ("a", 100l);)");
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads](const auto&, auto&) {
+            ++*reads;
+            return false;
+        }, "/Root/aggregateResult");
+        StartOutputAggregation(fmt::format(R"(
+            $input = SELECT * FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) LIMIT 2;
+            UPSERT INTO aggregateResult SELECT key, SUM(value) AS total
+            FROM $input GROUP BY key;
+        )", "input"_a = InputTopic), /* disableCheckpoints */ true);
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":5})", {}},
+            {1, R"({"key":"a","value":7})", {}},
+        });
+        WaitOutputRows(R"(SELECT Unwrap(CAST(total AS String)) AS Data FROM aggregateResult;)", {"12"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 0);
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
     Y_UNIT_TEST_F(RestoresRowsAndCachesInterleavedKeys, TOutputTableAggregationTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
         PrepareOutputTable(R"(
@@ -2306,7 +2463,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
             SELECT Unwrap(Coalesce(renamed_key, "null") || ":" || CAST(count AS String)) AS Data
             FROM aggregateResult ORDER BY subkey, renamed_key;
         )", {"a:10", "null:20"});
-        // The pending lookup must block consumption and output until its response wakes the computation.
+        // Checkpoint capture must reach the barrier despite the held lookup.
+        WaitAggregationCheckpoint();
         UNIT_ASSERT_VALUES_EQUAL(reads->load(), 1);
         proxy.Resume();
         const TString resultQuery = R"(
@@ -2316,9 +2474,167 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
         )";
         WaitOutputRows(resultQuery, {"a:12:107", "b:2:11", "null:22:9"});
         UNIT_ASSERT_VALUES_EQUAL(reads->load(), 3);
+        WaitAggregationCheckpoint();
         readSession->AddDataReceivedEvent(6, R"({"key":"a","part":1,"value":1})");
         WaitOutputRows(resultQuery, {"a:13:108", "b:2:11", "null:22:9"});
-        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 3);
+        // The later committed checkpoint permits eviction and a fresh table lookup.
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 4);
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_QUAD_F(CheckpointsPendingLookup, ExistingRow, ModernChannels, TOutputTableAggregationTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, count Uint64, total Int64, PRIMARY KEY (key));
+        )");
+        if constexpr (ExistingRow) {
+            ExecQuery(R"(UPSERT INTO aggregateResult (key, count, total) VALUES ("a", 10u, 100l);)");
+        }
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        const auto validReads = std::make_shared<std::atomic<bool>>(true);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads, validReads, pendingKeys = THashSet<TStringBuf>{"a", "b", "c", "d"}](const auto& request, auto&) mutable {
+            const auto index = reads->fetch_add(1);
+            const auto key = request.GetYdbParameters().at("$key0").value().bytes_value();
+            // Recovery may read pending keys in any order, once each.
+            const bool valid = index == 0 || index == 5 ? key == "a" : index < 5 && pendingKeys.erase(key) == 1;
+            if (!valid) {
+                validReads->store(false);
+            }
+            return false;
+        }, "/Root/aggregateResult", /* holdRequests */ true);
+        StartOutputAggregation(fmt::format(R"(
+            UPSERT INTO aggregateResult SELECT key, COUNT(*) AS count, SUM(value) AS total
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic));
+        auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":5})", {}},
+            {1, R"({"key":"b","value":11})", {}},
+            {2, R"({"key":"a","value":7})", {}},
+            {3, R"({"key":"c","value":13})", {}},
+            {4, R"({"key":"b","value":17})", {}},
+        });
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "pending output state lookup", [&](TString&) {
+            return reads->load() == 1;
+        });
+        // Capture all buffered rows while the first SELECT is unresolved.
+        WaitAggregationCheckpoint();
+        readSession->AddDataReceivedEvent({
+            {5, R"({"key":"a","value":3})", {}},
+            {6, R"({"key":"c","value":19})", {}},
+            {7, R"({"key":"d","value":23})", {}},
+            {8, R"({"key":"b","value":2})", {}},
+        });
+        WaitAggregationCheckpoint();
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 1);
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Pending aggregation lookup recovery")});
+        readSession->ExpectSessionClosed();
+        readSession = pqGateway->WaitReadSession(InputTopic);
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "restored output state lookup", [&](TString&) {
+            return reads->load() == 2;
+        });
+        WaitAggregationCheckpoint();
+        const TString resultQuery = R"(
+            SELECT Unwrap(key || ":" || CAST(count AS String) || ":" || CAST(total AS String)) AS Data
+            FROM aggregateResult ORDER BY key;
+        )";
+        WaitOutputRows(resultQuery, ExistingRow ? std::vector<std::string>{"a:10:100"} : std::vector<std::string>{});
+        // Also releases the old request after restoration; its late response must have no effect.
+        proxy.Resume();
+        WaitOutputRows(resultQuery, {ExistingRow ? "a:13:115" : "a:3:15", "b:3:30", "c:2:32", "d:1:23"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 5);
+        UNIT_ASSERT(validReads->load());
+        WaitAggregationCheckpoint();
+        readSession->AddDataReceivedEvent(9, R"({"key":"a","value":7})");
+        WaitOutputRows(resultQuery, {ExistingRow ? "a:14:122" : "a:4:22", "b:3:30", "c:2:32", "d:1:23"});
+        UNIT_ASSERT_VALUES_EQUAL(reads->load(), 6);
+        UNIT_ASSERT(validReads->load());
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_QUAD_F(RestoresPendingCommitCheckpoint, ManualRestart, ModernChannels, TOutputTableAggregationTestFixture) {
+        DqChannelsVersion = ModernChannels ? 2 : 1;
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, count Uint64, total Int64, PRIMARY KEY (key));
+        )");
+        ExecQuery(R"(UPSERT INTO aggregateResult (key, count, total) VALUES ("a", 10u, 100l), ("b", 20u, 200l);)");
+        const auto resumeCheckpoints = BlockCheckpointCreation();
+        TScopedPendingCommitCheckpointProxy checkpoints(GetRuntime());
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy lookups(GetRuntime(), [reads](const auto&, auto&) {
+            reads->fetch_add(1);
+            return false;
+        }, "/Root/aggregateResult");
+        StartOutputAggregation(fmt::format(R"(
+            UPSERT INTO aggregateResult SELECT key, COUNT(*) AS count, SUM(value) AS total
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Int64 NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic));
+        auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":5})", {}},
+            {1, R"({"key":"a","value":7})", {}},
+            {2, R"({"key":"b","value":11})", {}},
+        });
+        // Starting b's lookup proves a's table baseline has been merged into Live.
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "resolved aggregation state before checkpoint", [&](TString&) {
+            return reads->load() == 2;
+        });
+        resumeCheckpoints();
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "persisted PendingCommit checkpoint", [&](TString&) {
+            return checkpoints.State->Stored.load() == 1;
+        });
+        UNIT_ASSERT(!checkpoints.State->Failed.load());
+        const auto generation = checkpoints.State->Generation.load();
+        const auto seqNo = checkpoints.State->SeqNo.load();
+        const TString checkpointQuery = fmt::format(R"(
+            SELECT Unwrap(CAST(status AS String)) AS Data FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+            WHERE graph_id LIKE "%/Root/aggregation" AND coordinator_generation = {}ul AND seq_no = {}ul;
+        )", generation, seqNo);
+        WaitOutputRows(checkpointQuery, {ToString(static_cast<ui8>(NFq::ECheckpointStatus::PendingCommit))});
+        const TString resultQuery = R"(
+            SELECT Unwrap(key || ":" || CAST(count AS String) || ":" || CAST(total AS String)) AS Data
+            FROM aggregateResult ORDER BY key;
+        )";
+        WaitOutputRows(resultQuery, {"a:10:100", "b:20:200"});
+
+        if constexpr (ManualRestart) {
+            ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = FALSE);");
+            readSession->ExpectSessionClosed();
+            ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = TRUE);");
+        } else {
+            readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Pending commit aggregation recovery")});
+            readSession->ExpectSessionClosed();
+        }
+        readSession = pqGateway->WaitReadSession(InputTopic);
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "restored checkpoint recommitted by new coordinator", [&](TString&) {
+            return checkpoints.State->Restored.load() && checkpoints.State->Recommitted.load();
+        });
+        // No newer checkpoint can hide a fallback to older state or replace the restored commit.
+        WaitOutputRows(checkpointQuery, {ToString(static_cast<ui8>(NFq::ECheckpointStatus::Completed))});
+        checkpoints.ResumeCreation();
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "next snapshot saved without commit notification", [&](TString&) {
+            return checkpoints.State->Stored.load() == 2;
+        });
+        UNIT_ASSERT(!checkpoints.State->Failed.load());
+        // This barrier flushes rows emitted by the restored commit. Its own commit is still held.
+        WaitOutputRows(R"(
+            SELECT Unwrap(key || ":" || CAST(count AS String) || ":" || CAST(total AS String)) AS Data
+            FROM aggregateResult WHERE key = "a";
+        )", {"a:12:112"});
+        checkpoints.ResumeCommit();
+        WaitOutputRows(resultQuery, {"a:12:112", "b:21:211"});
+        WaitAggregationCheckpoint();
+        readSession->AddDataReceivedEvent({
+            {3, R"({"key":"a","value":3})", {}},
+            {4, R"({"key":"b","value":4})", {}},
+        });
+        WaitOutputRows(resultQuery, {"a:13:115", "b:22:215"});
         FinishOutputAggregation();
         readSession->ExpectSessionClosed();
     }
@@ -2334,10 +2650,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
         StartOutputAggregation(fmt::format(R"(
             $save = ($state) -> (CAST($state AS String));
             $load = ($saved) -> (Unwrap(CAST($saved AS Int64)));
+            $merge = ($left, $right) -> ($left + $right);
             $raw = AggregationFactory("UDAF", ($item) -> (1l), ($state, $item) -> ($state + 1l),
-                NULL, ($state) -> ($state), $save, $load);
+                $merge, ($state) -> ($state), $save, $load);
             $serialized = AggregationFactory("UDAF", ($item) -> ($item), ($state, $item) -> ($state + $item),
-                NULL, $save, $save, $load);
+                $merge, $save, $save, $load);
             UPSERT INTO aggregateResult
             SELECT key, AGGREGATE_BY(value, $raw) AS raw_count,
                 AGGREGATE_BY(value, $serialized) AS serialized_value
@@ -2355,6 +2672,49 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationOutputState) {
             SELECT Unwrap(key || ":" || CAST(raw_count AS String) || ":" || serialized_value) AS Data
             FROM aggregateResult ORDER BY key;
         )", {"a:12:110", "b:1:5"});
+        FinishOutputAggregation();
+        readSession->ExpectSessionClosed();
+    }
+
+    Y_UNIT_TEST_F(ResourceStateSurvivesCheckpointAndEviction, TOutputTableAggregationTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        PrepareOutputTable(R"(
+            CREATE TABLE aggregateResult (key String NOT NULL, state String, PRIMARY KEY (key));
+        )");
+        const auto reads = std::make_shared<std::atomic<ui32>>(0);
+        TScopedStateTableQueryProxy proxy(GetRuntime(), [reads](const auto&, auto&) {
+            ++*reads;
+            return false;
+        }, "/Root/aggregateResult", /* holdRequests */ true);
+        StartOutputAggregation(fmt::format(R"(
+            $init = ($item) -> (Stat::TDigest_Create($item));
+            $update = ($state, $item) -> (Stat::TDigest_AddValue($state, $item));
+            $save = ($state) -> (Stat::TDigest_Serialize($state));
+            $load = ($saved) -> (Stat::TDigest_Deserialize($saved));
+            $merge = ($left, $right) -> (Stat::TDigest_Merge($left, $right));
+            $factory = AggregationFactory("UDAF", $init, $update, $merge, $save, $save, $load);
+            UPSERT INTO aggregateResult SELECT key, AGGREGATE_BY(value, $factory) AS state
+            FROM `source`.`{input}` WITH (FORMAT = "json_each_row",
+                SCHEMA (key String NOT NULL, value Double NOT NULL)) GROUP BY key;
+        )", "input"_a = InputTopic));
+        const auto readSession = pqGateway->WaitReadSession(InputTopic);
+        readSession->AddDataReceivedEvent({
+            {0, R"({"key":"a","value":10})", {}},
+            {1, R"({"key":"a","value":30})", {}},
+        });
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "pending resource state lookup", [&](TString&) {
+            return reads->load() == 1;
+        });
+        WaitAggregationCheckpoint();
+        proxy.Resume();
+        const TString resultQuery = R"(
+            SELECT CAST(Stat::TDigest_GetPercentile(Stat::TDigest_Deserialize(Unwrap(state)), 0.5) AS String) AS Data
+            FROM aggregateResult;
+        )";
+        WaitOutputRows(resultQuery, {"20"});
+        WaitAggregationCheckpoint();
+        readSession->AddDataReceivedEvent(2, R"({"key":"a","value":50})");
+        WaitOutputRows(resultQuery, {"30"});
         FinishOutputAggregation();
         readSession->ExpectSessionClosed();
     }

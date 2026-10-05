@@ -12,9 +12,10 @@ PEERDIR(
     ydb/library/services
     ydb/library/signals
     ydb/library/yql/dq/common
+    ydb/library/yql/providers/abstract
     ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yverify_stream
-    ydb/public/sdk/cpp/src/client/topic
 )
 
 END()

@@ -1,6 +1,6 @@
 # Validating a backup
 
-The `tools validate` command validates the integrity of a backup created by [`export s3`](./export-s3.md) or [`export nfs`](./export-nfs.md), including its file set, metadata, and checksums. The command reads the backup files directly from S3 or the file system. It does not load anything into the database and does not require a connection to {{ ydb-short-name }}.
+The `tools validate` command validates the integrity of a backup created by [`export s3`](./export-s3.md) or [`export nfs`](./export-nfs.md). The check covers the set of files, the metadata, and the checksums. The command reads the backup files directly from S3 or the file system. It does not load anything into the database and does not require a connection to {{ ydb-short-name }}.
 
 ```bash
 {{ ydb-cli }} tools validate s3 [options]
@@ -17,23 +17,23 @@ Successful validation means that the backup files are intact and mutually consis
 
 ## What can be validated {#layouts}
 
-The command supports three input types.
+The command supports three input types, depending on how the backup being validated was created and on the parameters passed to the command.
 
-**A full backup** is produced when `export s3` is run with `--destination-prefix` or `export nfs` is run with `--fs-path`, and `--item` is not used. Its root contains a `metadata.json` file with `"kind": "SimpleExportV0"` and a `SchemaMapping` directory that lists the exported objects. The command checks every object from that list. Schema files that are present in the backup but not listed in `SchemaMapping` are reported as errors.
+**A full backup** is the result of running `export s3` with `--destination-prefix` or `export nfs` with `--fs-path`, without the `--item` parameter. Such a backup stores a list of the exported objects, and the command checks every object from that list. Extra files present in the backup but not included in the list are reported as errors.
 
-**An item export** is produced by an export command that uses `--item src=...,dst=...`. It has no top-level `metadata.json` or `SchemaMapping`. The specified path or prefix contains directories for the exported objects. The command identifies these directories by schema files such as `scheme.pb` and `create_view.sql`. It checks every object it finds, including index tables within a table directory even if they are not listed in the table metadata. Without [`--expected-objects`](#expected-objects), the command cannot determine whether the backup is complete or detect an object omitted from the backup. It prints a warning, and successful validation means only that the objects it found are intact.
+**A selective backup** is the result of an export that uses `--item src=...,dst=...`. Such a backup does not store a separate list of exported objects. The prefix that holds the selective backup contains directories of exported objects, which the integrity check finds by their metadata files (`scheme.pb` and others). The command checks every object it finds, including index tables, even when they are not listed in the table metadata. Because the list of exported objects is not stored in a selective backup, by default the command cannot check that such a backup is complete: for example, it will not detect an object deleted from the backup by mistake. To check completeness, pass the list of expected object names with the [`--expected-objects`](#expected-objects) parameter.
 
 **A single object** is a path to a directory containing one exported object, such as a table, view, or topic. For a table, the command also checks the indexes and changefeeds listed in its `metadata.json`, as well as the index tables found in its directory.
 
-The command automatically detects the input type. It treats a path as a full backup if its `metadata.json` contains `"kind": "SimpleExportV0"` or if a `SchemaMapping` directory is present. Otherwise, it treats the path as an item export or a single object, depending on its contents. If `metadata.json` exists but has a different `kind`, the command reports an error. The `--format` parameter sets the input type explicitly:
+The command detects the input type automatically. A path is treated as a full backup when it contains the files that hold the object list. Otherwise, the command checks the path as a selective backup or as a single object, depending on its contents. The `--format` parameter sets the input type explicitly:
 
-- `auto` (default) — detect the input type automatically as described above;
-- `full` — treat the path as a full backup. The command reports an error if `metadata.json` is missing or unreadable, or if its `kind` differs;
-- `item` — treat the path as an item export without using `SchemaMapping` to check completeness. If the path appears to be a full backup, the command prints a warning.
+- `auto` (default) — detect the input type automatically, as described above;
+- `full` — check the path as a full backup;
+- `item` — check the path as a selective backup. If the contents look like a full backup, the command prints a warning.
 
 ## List of expected objects {#expected-objects}
 
-To check whether an item export is complete, use `--expected-objects` to specify a text file containing the list of expected objects. Each nonempty line must contain an object name relative to the path being validated, such as `dir1/table1`. The command reports a warning for an object that is present in the backup but absent from the file. It reports an error for an object that is listed in the file but missing from the backup. Index tables inside the directory of a listed object count as part of that object and do not need to be listed separately. For a full backup, `--expected-objects` has no effect because the object list comes from `SchemaMapping`.
+To check whether a selective backup is complete, use `--expected-objects` to specify a text file containing the list of expected objects. Each nonempty line must contain an object name relative to the path being validated, such as `dir1/table1`. The command reports a warning for an object that is present in the backup but absent from the file. It reports an error for an object that is listed in the file but missing from the backup. Index tables inside the directory of a listed object count as part of that object and do not need to be listed separately. For a full backup, `--expected-objects` has no effect because the object list is stored in the backup itself.
 
 Use the `tools list-objects` command to generate this list. It prints the names of the schema objects under the specified database path: tables, column-oriented tables, views, and topics. Each name is printed on its own line, in the format accepted by `--expected-objects`:
 
@@ -53,15 +53,15 @@ Names are printed relative to `--path`. If `--path` points to a single table, th
 
 ## What is checked {#checks}
 
-Metadata files, including `scheme.pb`, `permissions.pb`, `metadata.json`, changefeed and topic descriptions, SQL and protobuf schema files, and files in `SchemaMapping`, must be readable and contain the required fields that describe the object. For a table, this means a non-empty column list, a type for every column, and a primary key made up of columns from that list.
+Metadata files, including `scheme.pb`, `permissions.pb`, `metadata.json`, changefeed and topic descriptions, SQL and protobuf schema files, and files in `SchemaMapping`, must be readable and contain the required minimum set of fields that describe the object. For a table, this means a non-empty column list, a type for every column, and a primary key made up of columns from that list.
 
 The number of `data_...` files must match the partition count set in `scheme.pb`. `uniform_partitions` specifies the partition count directly. With `partition_at_keys`, the partition count is the number of `split_points` plus one. If neither field is set, the table has one partition and must contain a single data file, `data_00`. File numbers must run from `0` to `N-1` with no gaps, duplicates, or extra files. File names use forms such as `data_00.csv` and `data_01.parquet`. The sequence number must contain at least two digits, and compressed files have an additional `.zst` suffix.
 
-Each checksum file is stored next to the file it covers. For both `data_00.csv` and its compressed form, `data_00.csv.zst`, the checksum file is named `data_00.csv.sha256`. It holds the SHA-256 checksum of the uncompressed contents. Checksums of metadata and schema files are always verified. Unless `--scheme-only` is set, the command also verifies data checksums. It reads each data file as a stream, decompresses Zstandard-compressed data when necessary, and computes the hash incrementally, so the entire file is never loaded into memory. With `--scheme-only`, data files are not read; the command checks only that each file has a checksum file containing a SHA-256 checksum encoded in hexadecimal.
+Each checksum file is stored next to the file it covers. For both `data_00.csv` and its compressed form, `data_00.csv.zst`, the checksum file is named `data_00.csv.sha256`. It holds the SHA-256 checksum of the uncompressed contents. Checksums of metadata and schema files are always verified. Unless `--scheme-only` is set, the command also verifies data checksums. It reads each data file as a stream, decompresses Zstandard-compressed data when necessary, and computes the hash incrementally. With `--scheme-only`, data files are not read; the command checks only that each file has a checksum file containing a SHA-256 checksum encoded in hexadecimal.
 
 Data checksums can be verified only for backups whose checksums were computed during export. Starting with version 25.3, checksums are computed by default. Such backups have `"checksum": "sha256"` in the backup `metadata.json` and `"version": 1` in the object metadata. If the checksum files are absent, validation without `--scheme-only` fails.
 
-The command does not validate encrypted backups. It reports `.enc` files and the `encryption` field in the backup's `metadata.json` as errors. The command does not decrypt files. `--encryption-key-file` is accepted only for compatibility with the import commands; `tools validate` does not use the key. If a key is provided but the backup contains no encrypted files, the command prints a warning.
+The command does not validate encrypted backups. It reports `.enc` files and the `encryption` field in the backup's `metadata.json` as errors. `--encryption-key-file` is accepted only for compatibility with the import commands; `tools validate` does not use the key. If a key is provided but the backup contains no encrypted files, the command prints a warning.
 
 After an I/O error, the command retries the read, gradually increasing the delay between attempts from 100 ms to 2 s. The number of attempts is set by `--retries`.
 
@@ -78,11 +78,11 @@ By default, the command continues after an error and reports every problem it fi
 | `--format FORMAT` | Expected [input type](#layouts): `auto`, `full`, or `item`. Default: `auto`. |
 | `--scheme-only` | Check only the set of files, the metadata structure, and the presence of checksum files. Data files are not read. |
 | `--fail-fast` | Stop at the first error. By default, every error is reported. |
-| `--threads NUM` | Maximum number of threads. Different objects, as well as the data files of a single object, are checked in parallel. Default: one less than the number of available processors, with a minimum of one. This is the same default used by [`import file csv`](./import-file.md). |
+| `--threads NUM` | Maximum number of threads. Different objects, as well as the data files of a single object, are checked in parallel. Default: one less than the number of available processors, with a minimum of one. |
 | `--retries NUM` | Number of attempts to read a backup file on I/O errors. Default: `10`. |
 | `--encryption-key-file PATH` | Accepted for compatibility with [`import s3`](./import-s3.md) and [`import nfs`](./import-nfs.md); the key is not used. As with those commands, the key can be passed as a hexadecimal string in the `YDB_ENCRYPTION_KEY` environment variable, or as a file path in `YDB_ENCRYPTION_KEY_FILE`. Encrypted files are reported as errors regardless. |
 | `--item PROPERTY=VALUE,...` | Object to check; repeat this parameter to check multiple objects. The `source` property (aliases: `src`, `s`) specifies the path to the backup or object. The `destination` property (aliases: `dst`, `d`) is accepted for compatibility with the import commands and is ignored. |
-| `--expected-objects PATH` | File with the [list of expected objects](#expected-objects) for an item export. |
+| `--expected-objects PATH` | File with the [list of expected objects](#expected-objects) for a selective backup. |
 
 ### S3 parameters {#s3}
 

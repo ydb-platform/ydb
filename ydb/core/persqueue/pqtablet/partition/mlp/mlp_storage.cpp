@@ -256,20 +256,12 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
     if (KeepMessageOrder || policy == EReadSelectionPolicy::ByMessageGroupFairness) {
         TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
         if (nextMessage.Message) {
+            // rotate
+            // move skipped & chosen message groups to the end of queue, so they won't be rechecked on the next iteration
             auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
-            // In FIFO, DoLock removes the served group from the unlocked list, so the rotation only needs
-            // to push the skipped prefix to the back. In STD the group stays eligible while it still has
-            // unprocessed messages, so the served group itself must also be rotated to the back for fairness.
-            auto rotateEnd = nextMessage.OrderIterator;
-            if (!KeepMessageOrder) {
-                ++rotateEnd;
-            }
-            if (unlockedList.begin() != rotateEnd) [[unlikely]] {
-                // move skipped (and, for STD, the served) groups to the end so they are not rechecked first next time
-                TIntrusiveList<TOrderedMessageGroupIdHash> cut;
-                unlockedList.Cut(unlockedList.begin(), rotateEnd, cut.end());
-                unlockedList.Append(std::move(cut));
-            }
+            TIntrusiveList<TOrderedMessageGroupIdHash> cut;
+            unlockedList.Cut(unlockedList.begin(), std::next(nextMessage.OrderIterator), cut.end());
+            unlockedList.Append(std::move(cut));
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
         }

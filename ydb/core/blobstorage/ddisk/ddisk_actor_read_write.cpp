@@ -816,6 +816,10 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
         switch (ev->Get()->Tag) {
+            case EWakeupTag::WakeupCollectMemoryMetrics: {
+                CollectMemoryMetrics();
+                break;
+            }
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
                 break;

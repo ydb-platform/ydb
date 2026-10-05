@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 
@@ -86,10 +87,18 @@ public:
     std::set<TActorId> PDiskServiceIds;
     std::unique_ptr<TEventHandle<NPDisk::TEvChunkReserve>> HeldBootstrapRefill;
 
-    TTestContext()
+    explicit TTestContext(bool memoryMetrics = false)
         : Runtime(1)
         , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     {
+        if (memoryMetrics) {
+            Runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
+                    .MemoryBytes = 128ull << 10, .MaxLines = 8,
+                    .AllowedMetricPrefixes = {"ddisk."},
+                }));
+            };
+        }
         Runtime.Start();
         Edge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
     }
@@ -4296,6 +4305,96 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A', BlockSize)));
             AssertStatus(DoWrite(ctx, disk, std::move(write)), TReplyStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(unalignedPayloads->Val(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(ChecksumCacheMemoryHistory) {
+        for (bool checksums : {false, true}) {
+            TTestContext ctx(true);
+            ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
+            const auto disk = ctx.CreateDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
+            const auto creds = Connect(ctx, disk.ServiceId, 229, 1);
+            auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+            const auto snapshot = [&] {
+                UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+                return WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            };
+            const auto tick = [&] {
+                ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                    new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+                WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            };
+            // Flush registration; use the actual periodic timer rather than injecting samples.
+            snapshot();
+            tick();
+            size_t initialSamples = 0;
+            ui32 lineId = 0;
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.Name, "ddisk.memory.checksum_cache_estimated_bytes");
+                UNIT_ASSERT(!line.Closed);
+                lineId = line.LineId;
+                const auto values = line.ReadValuesAs<ui64>();
+                initialSamples = values.size();
+                UNIT_ASSERT(initialSamples);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), 0);
+            });
+            auto write = DoWriteWithChunkAllocation(ctx, disk,
+                MakeWrite(creds, 0, 0, MakeData('A', BlockSize)),
+                disk.FirstChunkId + PersistentBufferInitChunks, 0, MakeData('A', BlockSize), true, true);
+            AssertStatus(write.WriteResult, TReplyStatus::OK);
+            tick();
+            size_t samples = 0;
+            const ui64 expected = checksums ? NDDisk::TIntegrityManager::BlockStateApproxBytes : 0;
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.LineId, lineId);
+                const auto values = line.ReadValuesAs<ui64>();
+                samples = values.size();
+                UNIT_ASSERT_VALUES_EQUAL(samples, initialSamples + 1);
+                UNIT_ASSERT_VALUES_EQUAL(values.front(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), expected);
+            });
+            SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+            WaitFromDDisk<TEvents::TEvGone>(ctx);
+            tick();
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.LineId, lineId);
+                UNIT_ASSERT(line.Closed);
+                const auto values = line.ReadValuesAs<ui64>();
+                UNIT_ASSERT_VALUES_EQUAL(values.size(), samples);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), expected);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(ChecksumCacheMemoryHistoryDuringInitialization) {
+        for (bool checksums : {false, true}) {
+            TTestContext ctx(true);
+            const auto disk = ctx.RegisterDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
+            // Hold PDisk initialization: no IntegrityManager exists yet.
+            ctx.WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
+            auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+            UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+            WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+            WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+            const auto snapshot = WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            snapshot->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                // Empty lines are omitted by the registry's snapshot API.
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), checksums ? 0 : 1);
+                if (!checksums) {
+                    const auto values = view.GetLine(0).ReadValuesAs<ui64>();
+                    UNIT_ASSERT(!values.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(values.back(), 0);
+                }
+            });
         }
     }
 

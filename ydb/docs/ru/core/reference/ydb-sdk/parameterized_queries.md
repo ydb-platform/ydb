@@ -33,5 +33,5 @@ WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId
 
 ## Смотрите также
 
-- [Параметризованные запросы и повторная компиляция](../../dev/query-execution-optimization/parameterized-queries.md)
+- [Параметризованные запросы и повторная компиляция](../../dev/optimization/parameterized-queries.md)
 - [{#T}](../../dev/example-app/index.md#param-queries)

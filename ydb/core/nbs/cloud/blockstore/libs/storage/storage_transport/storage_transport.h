@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -96,17 +97,27 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) = 0;
 
+    // Writes data to one persistent buffer.
+    //
+    // checksums are the DDisk-format checksums of data: one XXH3-64 per
+    // ChecksumUnitSize bytes, in payload order. A non-empty vector is attached
+    // to the request exactly as given and is never recomputed; it must have
+    // SgListGetSize(data) / ChecksumUnitSize entries. An empty vector is a
+    // temporary fallback: when this transport was created with checksums
+    // enabled, it computes them after copying the payload.
     virtual NThreading::TFuture<TEvWritePersistentBufferResult> WriteToPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) = 0;
 
     // Sends a write request to many persistent buffers.
     // The callback is invoked once per response received from the transport
     // layer (may be called more than once for the same request).
+    // checksums has the same meaning as in WriteToPBuffer.
     virtual void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
@@ -115,14 +126,18 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) = 0;
 
+    // Writes data to one DDisk. checksums has the same meaning as in
+    // WriteToPBuffer.
     virtual NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(

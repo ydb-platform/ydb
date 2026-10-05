@@ -4,6 +4,7 @@
 #include <ydb/core/protos/counters.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -66,6 +67,9 @@ struct TDetailedMetricsDescriptor {
     TVector<TMetricSpec> Gauges;
     TVector<TMetricSpec> Rates;
     TVector<TMetricSpec> Histograms;
+    // The low level counters the debug tree aggregates: every source as written, plus x of SUM(x) and MAX(x)
+    THashSet<TString> ExecutorCounterNames;
+    THashSet<TString> AppCounterNames;
 };
 
 // A static descriptor, nullptr if the tablet type has no detailed metrics

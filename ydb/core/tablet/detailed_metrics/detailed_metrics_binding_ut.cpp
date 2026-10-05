@@ -274,6 +274,37 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsBindingTest) {
         UNIT_ASSERT(!GetDetailedMetricsDescriptor(TTabletTypes::TypeInvalid));
     }
 
+    Y_UNIT_TEST(DataShardCounterNamesAreTheSourcesWithTheirSumMaxBases) {
+        const auto& descriptor = GetDataShardDescriptor();
+
+        // Every source of counters_detailed_datashard.proto as written, plus x of SUM(x) and MAX(x), but not of HIST(x).
+        // ConsumedCPU is there as the source of the consumed_cpu_us rate.
+        UNIT_ASSERT_EQUAL(descriptor.ExecutorCounterNames, THashSet<TString>({
+            "SUM(DbUniqueRowsTotal)",
+            "DbUniqueRowsTotal",
+            "SUM(DbUniqueDataBytes)",
+            "DbUniqueDataBytes",
+            "TxCachedBytes",
+            "TxReadBytes",
+            "ConsumedCPU",
+            "HIST(ConsumedCPU)",
+        }));
+        UNIT_ASSERT_EQUAL(descriptor.AppCounterNames, THashSet<TString>({
+            "DataShard/EngineHostRowUpdates",
+            "DataShard/EngineHostRowUpdateBytes",
+            "DataShard/EngineHostRowReads",
+            "DataShard/EngineHostRangeReadRows",
+            "DataShard/EngineHostRowReadBytes",
+            "DataShard/EngineHostRangeReadBytes",
+            "DataShard/EngineHostRowErases",
+            "DataShard/EngineHostRowEraseBytes",
+            "DataShard/UploadRows",
+            "DataShard/UploadRowsBytes",
+            "DataShard/ScannedRows",
+            "DataShard/ScannedBytes",
+        }));
+    }
+
     Y_UNIT_TEST(DataShardTemplateLayoutBindsEverySource) {
         const auto& descriptor = GetDataShardDescriptor();
         TExecutorCounters executorCounters;

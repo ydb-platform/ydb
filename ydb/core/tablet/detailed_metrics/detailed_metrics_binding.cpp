@@ -51,16 +51,37 @@ TVector<TMetricSpec> BuildMetricSpecs(EMetricKind kind) {
     return specs;
 }
 
+void AddCounterNames(TDetailedMetricsDescriptor& descriptor, const TSourceRef& source) {
+    auto& names = source.Category == ESourceCounterCategory::SCC_TABLET
+        ? descriptor.AppCounterNames
+        : descriptor.ExecutorCounterNames;
+
+    names.insert(source.Text);
+    if (source.Wrapper == ESourceWrapper::Sum || source.Wrapper == ESourceWrapper::Max) {
+        names.insert(source.Name);
+    }
+}
+
 template <const NProtoBuf::EnumDescriptor* SimpleDesc(),
           const NProtoBuf::EnumDescriptor* CumulativeDesc(),
           const NProtoBuf::EnumDescriptor* PercentileDesc()>
 TDetailedMetricsDescriptor BuildDescriptor(TTabletTypes::EType type) {
-    return TDetailedMetricsDescriptor{
+    TDetailedMetricsDescriptor descriptor{
         .Type = type,
         .Gauges = BuildMetricSpecs<SimpleDesc>(EMetricKind::Gauge),
         .Rates = BuildMetricSpecs<CumulativeDesc>(EMetricKind::Rate),
         .Histograms = BuildMetricSpecs<PercentileDesc>(EMetricKind::Histogram),
     };
+
+    for (const auto* specs : {&descriptor.Gauges, &descriptor.Rates, &descriptor.Histograms}) {
+        for (const auto& spec : *specs) {
+            for (const auto& source : spec.Sources) {
+                AddCounterNames(descriptor, source);
+            }
+        }
+    }
+
+    return descriptor;
 }
 
 enum class ECounterArray {

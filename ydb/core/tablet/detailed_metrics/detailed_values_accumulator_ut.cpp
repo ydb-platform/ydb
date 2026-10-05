@@ -1,5 +1,4 @@
 #include "detailed_metrics_binding.h"
-#include "detailed_metrics_counter_set.h"
 #include "detailed_values_accumulator.h"
 #include "ut_helpers.h"
 
@@ -340,12 +339,12 @@ void AssertTestShape(const NKikimrSysView::TDbCounters& packed) {
 
 class TOracleBucket {
 public:
-    TOracleBucket(const TDetailedMetricsCounterNames& names, TTabletTypes::EType tabletType)
+    TOracleBucket(const TDetailedMetricsDescriptor& descriptor, TTabletTypes::EType tabletType)
         : ExecutorGroup(MakeIntrusive<NMonitoring::TDynamicCounters>())
         , AppGroup(MakeIntrusive<NMonitoring::TDynamicCounters>())
         , ExecutorCounters(ExecutorGroup)
         , AppCounters(AppGroup)
-        , Names(names)
+        , Descriptor(descriptor)
         , TabletType(tabletType)
     {
     }
@@ -362,10 +361,10 @@ public:
         }
 
         if (!ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Initialize(&executorCounters, &Names.ExecutorNames);
+            ExecutorCounters.Initialize(&executorCounters, &Descriptor.ExecutorCounterNames);
         }
         if (!AppCounters.IsInitialized) {
-            AppCounters.Initialize(&appCounters, &Names.AppNames);
+            AppCounters.Initialize(&appCounters, &Descriptor.AppCounterNames);
         }
 
         ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
@@ -428,7 +427,7 @@ private:
     NMonitoring::TDynamicCounterPtr AppGroup;
     NKikimr::NPrivate::TAggregatedTabletCounters ExecutorCounters;
     NKikimr::NPrivate::TAggregatedTabletCounters AppCounters;
-    const TDetailedMetricsCounterNames& Names;
+    const TDetailedMetricsDescriptor& Descriptor;
     const TTabletTypes::EType TabletType;
 
     THashMap<TTabletKey, ui64> SourceIds;
@@ -566,9 +565,7 @@ void RunDifferential(ui64 seed, bool skipLeaderOnly) {
         keys.emplace_back(72075186224037888ull + i, skipLeaderOnly ? 1 + rng.Uniform(2) : 0);
     }
 
-    const auto* names = GetDetailedMetricsCounterNames(TTabletTypes::DataShard);
-    UNIT_ASSERT(names);
-    TOracleBucket oracle(*names, TTabletTypes::DataShard);
+    TOracleBucket oracle(*descriptor, TTabletTypes::DataShard);
     TDetailedValuesAccumulator accumulator(binding.Get(), skipLeaderOnly);
     TVector<ui64> drainedRates(descriptor->Rates.size(), 0);
 

@@ -1,7 +1,6 @@
 #include "node_database_metrics_aggregator.h"
 
 #include "detailed_metrics_binding.h"
-#include "detailed_metrics_counter_set.h"
 #include "detailed_metrics_tree.h"
 #include "detailed_values_accumulator.h"
 #include "memory_tags.h"
@@ -56,14 +55,13 @@ namespace NKikimr {
             TCountersBucket(
                 NMonitoring::TDynamicCounterPtr bucketGroup,
                 TTabletTypes::EType tabletType,
-                const TDetailedMetricsCounterNames& counterNames,
                 NMonitoring::TCountableBase::EVisibility visibility,
                 const TDetailedMetricsBinding& binding)
                 : TabletType(tabletType)
                 , TypeGroup(GetOrCreateTypeGroup(bucketGroup, tabletType))
                 , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
                 , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
-                , CounterNames(&counterNames)
+                , Descriptor(binding.Descriptor)
                 , Values(&binding, false /* skipLeaderOnly */)
             {
             }
@@ -81,10 +79,10 @@ namespace NKikimr {
                 }
 
                 if (!ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
+                    ExecutorCounters.Initialize(&executorCounters, &Descriptor->ExecutorCounterNames);
                 }
                 if (!AppCounters.IsInitialized) {
-                    AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
+                    AppCounters.Initialize(&appCounters, &Descriptor->AppCounterNames);
                 }
 
                 ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
@@ -140,7 +138,8 @@ namespace NKikimr {
             NPrivate::TAggregatedTabletCounters ExecutorCounters;
             NPrivate::TAggregatedTabletCounters AppCounters;
 
-            const TDetailedMetricsCounterNames* CounterNames;
+            // Static: its counter names select the counters the aggregates publish
+            const TDetailedMetricsDescriptor* Descriptor;
 
             THashMap<TTabletKey, ui64> SourceIds;
             ui64 NextSourceId = 0;
@@ -209,8 +208,7 @@ namespace NKikimr {
 
                 // The published set is a property of the tablet type: a type without one publishes nothing
                 const TDetailedMetricsDescriptor* descriptor = GetDetailedMetricsDescriptor(tabletType);
-                const TDetailedMetricsCounterNames* counterNames = GetDetailedMetricsCounterNames(tabletType);
-                if (!descriptor || !counterNames) {
+                if (!descriptor) {
                     return;
                 }
 
@@ -270,7 +268,7 @@ namespace NKikimr {
 
                 if (IsTableLevel(metricsLevel)) {
                     if (!entry->TableBucket) {
-                        CreateTableBucket(*entry, relativePath, tabletType, *counterNames, *binding);
+                        CreateTableBucket(*entry, relativePath, tabletType, *binding);
                     }
                     entry->TableBucket->Apply(tablet, executorCounters, appCounters, now);
                 } else {
@@ -472,13 +470,12 @@ namespace NKikimr {
                 TTableEntry& entry,
                 const TStringBuf relativePath,
                 TTabletTypes::EType tabletType,
-                const TDetailedMetricsCounterNames& counterNames,
                 const TDetailedMetricsBinding& binding)
             {
                 entry.TableGroup = TargetCounterGroup
                     ->GetSubgroup(DATABASE_LABEL, DatabasePath)
                     ->GetSubgroup(TABLE_LABEL, TString(relativePath));
-                entry.TableBucket = MakeHolder<TCountersBucket>(entry.TableGroup, tabletType, counterNames, CounterVisibility, binding);
+                entry.TableBucket = MakeHolder<TCountersBucket>(entry.TableGroup, tabletType, CounterVisibility, binding);
             }
 
             /**

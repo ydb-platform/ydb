@@ -56,8 +56,6 @@ SRCS(
     tablet_tracing_signals.h
     detailed_metrics/detailed_metrics_binding.cpp
     detailed_metrics/detailed_metrics_binding.h
-    detailed_metrics/detailed_metrics_counter_set.cpp
-    detailed_metrics/detailed_metrics_counter_set.h
     detailed_metrics/detailed_metrics_tree.cpp
     detailed_metrics/detailed_metrics_tree.h
     detailed_metrics/detailed_values_accumulator.cpp

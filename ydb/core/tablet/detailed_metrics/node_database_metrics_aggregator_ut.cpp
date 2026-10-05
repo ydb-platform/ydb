@@ -1,6 +1,5 @@
 #include "node_database_metrics_aggregator.h"
 #include "detailed_metrics_binding.h"
-#include "detailed_metrics_counter_set.h"
 #include "detailed_values_accumulator.h"
 #include "ut_helpers.h"
 
@@ -2268,7 +2267,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * Verify that a tablet type with no detailed metrics allow-list publishes nothing.
      *
      * @note This is the production path: the aggregator falls back to
-     *       GetDetailedMetricsCounterNames(tabletType), which returns nullptr for
+     *       GetDetailedMetricsDescriptor(tabletType), which returns nullptr for
      *       ColumnShard.
      */
     Y_UNIT_TEST(UnsupportedTabletTypePublishesNothing) {
@@ -3106,11 +3105,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // Of the published executor histograms only HIST(ConsumedCPU) is non-derivative
         // (the current state rather than increments), so it alone travels as its full value
         NTabletFlatExecutor::TExecutorCounters executorCounters;
-        const auto* names = GetDetailedMetricsCounterNames(TTabletTypes::DataShard);
-        UNIT_ASSERT(names);
+        const auto* descriptor = GetDetailedMetricsDescriptor(TTabletTypes::DataShard);
+        UNIT_ASSERT(descriptor);
 
         ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        aggregated.Initialize(&executorCounters, &names->ExecutorNames);
+        aggregated.Initialize(&executorCounters, &descriptor->ExecutorCounterNames);
         const auto& indices = aggregated.GetNonDerivativeHistogramIndices();
         UNIT_ASSERT_VALUES_EQUAL(indices.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(indices[0], (ui32)NTabletFlatExecutor::TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);

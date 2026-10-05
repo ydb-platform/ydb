@@ -249,6 +249,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           sparse-checkout: .github/scripts/tests
+          # Root checkout deletes graphs/ downloaded above.
+          path: _planner
       - name: Build shard matrix from plans
         id: matrix
         if: steps.gate.outputs.should_gate == 'true'
@@ -258,7 +260,7 @@ jobs:
           import json
           import sys
           from pathlib import Path
-          sys.path.insert(0, ".github/scripts/tests")
+          sys.path.insert(0, "_planner/.github/scripts/tests")
           import shard_graph
           plans = []
           for plan_path in sorted(Path("graphs").glob("*/shard_plan.json")):

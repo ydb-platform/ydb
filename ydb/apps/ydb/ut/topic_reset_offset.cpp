@@ -60,7 +60,7 @@ namespace NYdbCliTests {
             TList<TString> cmd = {
                 "topic",
                 "consumer",
-                "offsets",
+                "offset",
                 "reset",
                 consumerOpt,
                 consumerName,
@@ -250,7 +250,7 @@ namespace NYdbCliTests {
 
         Y_UNIT_TEST_F(ResetOffsetMissingTopicFails, TSupportedCodecsFixture) {
             ExpectExecFails({
-                "topic", "consumer", "offsets", "reset",
+                "topic", "consumer", "offset", "reset",
                 "--consumer", GetConsumerName(),
                 "--position", "earliest",
                 "no-such-topic-for-reset-offset",
@@ -264,7 +264,7 @@ namespace NYdbCliTests {
             YdbTopicConsumerAdd(topicName, consumerName);
 
             ExpectExecFails({
-                "topic", "consumer", "offsets", "reset",
+                "topic", "consumer", "offset", "reset",
                 "--consumer", consumerName,
                 topicName,
             });
@@ -275,7 +275,7 @@ namespace NYdbCliTests {
             YdbTopicCreate(topicName);
 
             ExpectExecFails({
-                "topic", "consumer", "offsets", "reset",
+                "topic", "consumer", "offset", "reset",
                 "--position", "earliest",
                 topicName,
             });
@@ -283,7 +283,7 @@ namespace NYdbCliTests {
 
         Y_UNIT_TEST_F(ResetOffsetMissingTopicArgFails, TSupportedCodecsFixture) {
             ExpectExecFails({
-                "topic", "consumer", "offsets", "reset",
+                "topic", "consumer", "offset", "reset",
                 "--consumer", "c",
                 "--position", "earliest",
             });

@@ -686,16 +686,11 @@ namespace NYdb::NConsoleClient {
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
         AddCommand(std::make_unique<TCommandTopicConsumerDescribe>());
         AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
-        AddCommand(std::make_unique<TCommandTopicConsumerOffsets>());
     }
 
     TCommandTopicConsumerOffset::TCommandTopicConsumerOffset()
         : TClientCommandTree("offset", {}, "Consumer offset operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerCommitOffset>());
-    }
-
-    TCommandTopicConsumerOffsets::TCommandTopicConsumerOffsets()
-        : TClientCommandTree("offsets", {}, "Consumer offsets operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerResetOffset>());
     }
 

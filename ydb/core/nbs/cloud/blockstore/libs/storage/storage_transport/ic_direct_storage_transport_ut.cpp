@@ -112,7 +112,7 @@ void CheckDirectWriteChecksums(
     ui32 writeRequests = 0;
     TString observedPayload;
     TVector<ui64> observedChecksums;
-    fixture.Runtime->SetObserverFunc(
+    const auto previousObserver = fixture.Runtime->SetObserverFunc(
         [&](TAutoPtr<NActors::IEventHandle>& ev)
         {
             if (ev->GetTypeRewrite() == NDDisk::TEvWrite::EventType) {
@@ -126,6 +126,11 @@ void CheckDirectWriteChecksums(
             }
             return NActors::TTestActorRuntime::EEventAction::PROCESS;
         });
+    // Fixture TearDown drains the runtime after this function returns.
+    Y_DEFER
+    {
+        fixture.Runtime->SetObserverFunc(previousObserver);
+    };
 
     auto future = transport->WriteToDDisk(
         connection,
@@ -217,7 +222,7 @@ void CheckSuppliedPBufferChecksums(
 
     ui32 writeRequests = 0;
     TVector<ui64> observedChecksums;
-    fixture.Runtime->SetObserverFunc(
+    const auto previousObserver = fixture.Runtime->SetObserverFunc(
         [&](TAutoPtr<NActors::IEventHandle>& ev)
         {
             if (ev->GetTypeRewrite() != eventType) {
@@ -237,6 +242,11 @@ void CheckSuppliedPBufferChecksums(
             }
             return NActors::TTestActorRuntime::EEventAction::PROCESS;
         });
+    // Fixture TearDown drains the runtime after this function returns.
+    Y_DEFER
+    {
+        fixture.Runtime->SetObserverFunc(previousObserver);
+    };
 
     if (write == EBufferWrite::OneBuffer) {
         auto future = transport->WriteToPBuffer(

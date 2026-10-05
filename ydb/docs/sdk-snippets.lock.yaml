@@ -88,7 +88,7 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 3de6803d5b8ea3f0e3e390695a9bd6a866654174
+    resolved-commit: 6c790d30842a8a7b6e07dc2bd5653a2b923ab8c5
     include:
     - ydb_tech/topic/main.cpp
     files:

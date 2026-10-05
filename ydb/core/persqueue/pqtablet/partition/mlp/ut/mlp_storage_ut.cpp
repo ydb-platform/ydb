@@ -3610,7 +3610,7 @@ static TSet<ui64> ProbeCandidates(TStorage& storage, const absl::flat_hash_set<u
 
 Y_UNIT_TEST(StdFairnessCycleIgnoresInitialInsertionOrder) {
     // One pass visits every eligible group once, in whatever order the fairness list was built.
-    // The next pass repeats that same cycle. The first visit of a group returns its smaller offset.
+    // The next pass repeats that same cycle. Which offset of a group comes first is not fixed.
     // The test does not assert which group is first: a not-yet-read group may be inserted anywhere.
     TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
     const ui32 groupByOffset[] = {1, 2, 3, 1, 2, 3};
@@ -3626,22 +3626,44 @@ Y_UNIT_TEST(StdFairnessCycleIgnoresInitialInsertionOrder) {
     };
 
     std::vector<ui32> firstRound;
+    std::vector<ui64> firstOffsets;
     TSet<ui32> seen;
     for (int i = 0; i < 3; ++i) {
         ui64 offset = nextOffset();
-        UNIT_ASSERT_C(offset < 3, "first visit must return the smaller offset of the group");
         ui32 group = groupByOffset[offset];
         UNIT_ASSERT_C(!seen.contains(group), "a group must not be served twice before the other eligible groups");
         seen.insert(group);
         firstRound.push_back(group);
+        firstOffsets.push_back(offset);
     }
     UNIT_ASSERT_VALUES_EQUAL(seen.size(), 3);
 
-    for (ui32 group : firstRound) {
+    for (size_t i = 0; i < firstRound.size(); ++i) {
         ui64 offset = nextOffset();
-        UNIT_ASSERT_VALUES_EQUAL(groupByOffset[offset], group);
-        UNIT_ASSERT_C(offset >= 3, "second visit must return the remaining offset of the same group");
+        UNIT_ASSERT_VALUES_EQUAL(groupByOffset[offset], firstRound[i]);
+        UNIT_ASSERT_VALUES_UNEQUAL(offset, firstOffsets[i]);
     }
+}
+
+Y_UNIT_TEST(StdFairnessOneGroupManyMessages) {
+    constexpr ui64 MessageCount = 99'000;
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    for (ui64 offset = 0; offset < MessageCount; ++offset) {
+        UNIT_ASSERT(storage.AddMessage(offset, true, 1, TInstant::Now()));
+    }
+
+    std::vector<char> seen(MessageCount);
+    const TInstant deadline = TInstant::Now() + TDuration::Hours(1);
+    for (ui64 i = 0; i < MessageCount; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(deadline, position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT(result->Offset < MessageCount);
+        UNIT_ASSERT(!seen[result->Offset]);
+        seen[result->Offset] = true;
+    }
+    TStorage::TPosition position;
+    UNIT_ASSERT(!storage.Next(deadline, position).has_value());
 }
 
 Y_UNIT_TEST(StdFairnessGroupsBeforeGroupless) {

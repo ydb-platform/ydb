@@ -464,6 +464,8 @@ private:
 
     void PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup);
     void UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group);
+    // STD: move the prefix through the message just returned to the tail, so the next search starts at its successor.
+    void RotateStdMessageGroupPastReturned(ui64 offset, TMessage& returned);
 
     class TMessageGroups {
     public:

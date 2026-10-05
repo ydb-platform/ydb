@@ -256,6 +256,9 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
         if (nextMessage.Message) {
             MessageGroups.RotateGroupsOrder(nextMessage.OrderIterator);
+            if (!KeepMessageOrder) {
+                RotateStdMessageGroupPastReturned(nextMessage.Offset, *nextMessage.Message);
+            }
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
         }
@@ -906,6 +909,30 @@ void TStorage::PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingl
     }
     message.RelinkNextMessageGroupIdOffset(Nothing());
     group.LastOffset = offset;
+}
+
+void TStorage::RotateStdMessageGroupPastReturned(ui64 offset, TMessage& returned) {
+    const auto nextOffset = returned.NextMessageGroupIdOffset();
+    if (nextOffset.Empty()) {
+        return;
+    }
+    auto* group = MapFindPtr(MessageGroups.Groups, returned.MessageGroupIdHash);
+    AFL_ENSURE(group != nullptr)("offset", offset);
+    TMessage* next = GetMessageInt(*nextOffset).first;
+    AFL_ENSURE(next != nullptr)("offset", offset)("next", *nextOffset);
+    TMessage* head = GetMessageInt(group->FirstOffset).first;
+    AFL_ENSURE(head != nullptr)("offset", offset)("first", group->FirstOffset);
+    TMessage* tail = GetMessageInt(group->LastOffset).first;
+    AFL_ENSURE(tail != nullptr)("offset", offset)("last", group->LastOffset);
+
+    const ui64 oldFirst = group->FirstOffset;
+    const ui64 oldLast = group->LastOffset;
+    tail->RelinkNextMessageGroupIdOffset(oldFirst);
+    head->RelinkPrevMessageGroupIdOffset(oldLast);
+    returned.RelinkNextMessageGroupIdOffset(Nothing());
+    next->RelinkPrevMessageGroupIdOffset(Nothing());
+    group->LastOffset = offset;
+    group->FirstOffset = *nextOffset;
 }
 
 void TStorage::UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group) {

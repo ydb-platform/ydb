@@ -126,6 +126,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
+        /*checksums=*/{},
         Bundle->GetSpan().GetTraceId(),
         [self = shared_from_this()]   //
         (const TDBGWriteBlocksToManyPBuffersResponse& response)
@@ -289,6 +290,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
         Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
+        /*checksums=*/{},
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(

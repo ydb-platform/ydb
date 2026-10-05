@@ -19,6 +19,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
+#include <util/string/printf.h>
 #include <util/string/strip.h>
 
 #include <algorithm>
@@ -90,7 +91,8 @@ bool IsHex(TStringBuf value) {
 }
 
 TString ChecksumToken(const TString& body) {
-    TStringBuf token(StripString(body));
+    const TString stripped = StripString(body);
+    TStringBuf token(stripped);
     const auto space = token.find_first_of(" \t\r\n");
     if (space != TStringBuf::npos) {
         token = token.substr(0, space);

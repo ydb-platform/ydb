@@ -6,6 +6,7 @@
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 
 namespace NYdb::NConsoleClient {
 namespace {

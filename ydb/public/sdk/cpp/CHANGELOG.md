@@ -1,5 +1,7 @@
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
 
+* Fixed a thread leak in topic and PersQueue write sessions: asynchronous compression no longer keeps the client thread pool alive until process exit.
+
 ## v3.24.0
 
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.

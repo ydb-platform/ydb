@@ -2,10 +2,16 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/future.h>
 
+#include <atomic>
+#include <fstream>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <thread>
 
 namespace NYdb::inline Dev::NTopic::NTests {
@@ -23,6 +29,59 @@ void StopDriverOrFail(TDriver& driver, TDuration timeout = TDuration::Seconds(15
     }
     stopper.join();
 }
+
+size_t CountOsThreads() {
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+        constexpr std::string_view prefix = "Threads:";
+        if (line.starts_with(prefix)) {
+            return std::stoul(line.substr(prefix.size()));
+        }
+    }
+    UNIT_FAIL("Threads field is missing from /proc/self/status");
+    return 0;
+}
+
+// Blocks inside CompressWriteBlock so the test can destroy the client while the
+// compression task is still running on the default executor.
+class TBlockingGzipCodec final : public ICodec {
+public:
+    TBlockingGzipCodec(std::atomic<bool>* entered, std::atomic<bool>* release)
+        : Entered(entered)
+        , Release(release)
+    {
+    }
+
+    std::string Decompress(const std::string& data) const override {
+        return AsCodec().Decompress(data);
+    }
+
+    std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override {
+        return AsCodec().CreateCoder(result, quality);
+    }
+
+    void CompressWriteBlock(TWriteBlockCompression& ctx) const override {
+        Entered->store(true);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!Release->load()) {
+            if (TInstant::Now() > deadline) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        AsCodec().CompressWriteBlock(ctx);
+    }
+
+private:
+    const ICodec& AsCodec() const {
+        return Inner;
+    }
+
+    std::atomic<bool>* Entered;
+    std::atomic<bool>* Release;
+    TGzipCodec Inner;
+};
 
 TContinuationToken WaitForWriteToken(IWriteSession& session) {
     while (true) {
@@ -90,6 +149,109 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
 
         StopDriverOrFail(driver);
         session.reset();
+    }
+
+    // Compression used to capture the topic client. The client owns the default
+    // compression executor, so the task kept that pool alive and the pool was
+    // destroyed from one of its own threads. The sibling worker then finished
+    // without a join and ThreadSanitizer reported a thread leak (YDBBUGS-957).
+    Y_UNIT_TEST(CompressionDoesNotLeakClientExecutorThreads) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TDriver driver(setup.MakeDriverConfig());
+
+        {
+            TTopicClient warmup(driver);
+            auto session = warmup.CreateWriteSession(
+                TWriteSessionSettings()
+                    .Path(setup.GetTopicPath())
+                    .MessageGroupId("warmup-raw")
+                    .Codec(ECodec::RAW));
+            auto token = WaitForWriteToken(*session);
+            session->Write(std::move(token), "warmup");
+            session.reset();
+        }
+        size_t baseline = CountOsThreads();
+        size_t stableReads = 0;
+        for (int attempt = 0; attempt < 30 && stableReads < 3; ++attempt) {
+            Sleep(TDuration::MilliSeconds(100));
+            const size_t now = CountOsThreads();
+            if (now == baseline) {
+                ++stableReads;
+            } else {
+                baseline = now;
+                stableReads = 0;
+            }
+        }
+
+        std::atomic<bool> entered{false};
+        std::atomic<bool> release{false};
+        struct TRestoreGzipCodec {
+            ~TRestoreGzipCodec() {
+                TCodecMap::GetTheCodecMap().Set(
+                    static_cast<ui32>(ECodec::GZIP),
+                    std::make_unique<TGzipCodec>());
+            }
+        } restoreGzipCodec;
+        Y_UNUSED(restoreGzipCodec);
+        TCodecMap::GetTheCodecMap().Set(
+            static_cast<ui32>(ECodec::GZIP),
+            std::make_unique<TBlockingGzipCodec>(&entered, &release));
+
+        auto client = std::make_shared<TTopicClient>(driver);
+        auto session = client->CreateWriteSession(
+            TWriteSessionSettings()
+                .Path(setup.GetTopicPath())
+                .MessageGroupId("compress-leak")
+                .Codec(ECodec::GZIP)
+                .BatchFlushInterval(TDuration::Zero())
+                .BatchFlushMessageCount(1));
+        auto token = WaitForWriteToken(*session);
+        session->Write(std::move(token), "payload");
+
+        const auto enteredDeadline = TInstant::Now() + TDuration::Seconds(15);
+        while (!entered.load() && TInstant::Now() < enteredDeadline) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(entered.load(), "compression did not start on the default executor");
+
+        std::atomic<bool> destroyStarted{false};
+        auto destroyDone = NThreading::NewPromise<void>();
+        std::thread releaser([&] {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+            while (!destroyStarted.load() && TInstant::Now() < deadline) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            // Give the client destructor time to block in executor Stop before the
+            // compression task is allowed to finish.
+            Sleep(TDuration::MilliSeconds(200));
+            release.store(true);
+        });
+        std::thread destroyer([&] {
+            destroyStarted.store(true);
+            session.reset();
+            client.reset();
+            destroyDone.SetValue();
+        });
+
+        const bool destroyed = destroyDone.GetFuture().Wait(TDuration::Seconds(20));
+        if (!destroyed) {
+            release.store(true);
+        }
+        destroyer.join();
+        releaser.join();
+        UNIT_ASSERT_C(destroyed, "write session destroy did not finish; executor Stop is stuck");
+
+        const auto quietDeadline = TInstant::Now() + TDuration::Seconds(5);
+        size_t left = CountOsThreads();
+        while (left > baseline && TInstant::Now() < quietDeadline) {
+            Sleep(TDuration::MilliSeconds(50));
+            left = CountOsThreads();
+        }
+        UNIT_ASSERT_C(left <= baseline,
+            "client executor threads are still alive after write session shutdown: baseline "
+            << baseline << ", now " << left);
+
+        StopDriverOrFail(driver);
     }
 }
 

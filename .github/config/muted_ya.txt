@@ -36,7 +36,6 @@ ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.StatelessOutp
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.StatelessOutputReplaysEarlyArrivingEvents-KeepWatermarks
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.StatelessQueryContinuesWithoutForce+NewDeduplication
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.StatelessQueryContinuesWithoutForce-NewDeduplication
-ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
@@ -55,9 +54,7 @@ ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplay
 ydb/core/tx/schemeshard/ut_index_build_reboots FulltextIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_reboots IntermediateDirsReboots.CreateTableAndRejectInTable[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
-ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E]

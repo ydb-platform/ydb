@@ -32,7 +32,7 @@ void TStaticProvider::RunTokens() {
     }
     Publish(current, true);
     if (current.AccessToken.ExpiresAt.has_value()) {
-        Fail(std::make_exception_ptr(TError("static credentials have expired", false, {})));
+        Fail(std::make_exception_ptr(TError("static credentials have expired", false, {})), true);
     }
 }
 

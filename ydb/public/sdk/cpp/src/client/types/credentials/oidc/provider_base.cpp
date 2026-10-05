@@ -78,11 +78,16 @@ TCredentialsProviderPtr TProviderBase::CreateProvider(std::weak_ptr<ICoreFacilit
     return provider;
 }
 
+std::thread TProviderBase::CreateWorker() {
+    return std::thread([this] { Run(); });
+}
+
 void TProviderBase::Start() {
     try {
-        Worker = std::thread([this] { Run(); });
+        Worker = CreateWorker();
     } catch (...) {
-        Fail(std::current_exception());
+        // No worker can detect discarded response-queue deliveries after startup fails.
+        Fail(std::current_exception(), false);
     }
 }
 
@@ -152,7 +157,7 @@ void TProviderBase::Run() {
         }
         RunTokens();
     } catch (...) {
-        Fail(std::current_exception());
+        Fail(std::current_exception(), true);
     }
     while (CompleteDiscardedDeliveries()) {
         if (!Wait(TDuration::MilliSeconds(100))) {
@@ -197,7 +202,7 @@ void TRefreshingProviderBase::RunTokens() {
             }
             // Settle existing waiters while retrying in the background. GetAuthInfoAsync()
             // keeps serving a still-valid token; Publish() clears the error on recovery.
-            Fail(std::current_exception());
+            Fail(std::current_exception(), true);
             if (!Wait(retryDelay)) {
                 return;
             }
@@ -290,7 +295,7 @@ void TProviderBase::Publish(const TTokenCache& current, bool writeCache) {
     }
 }
 
-void TProviderBase::Fail(std::exception_ptr error) {
+void TProviderBase::Fail(std::exception_ptr error, bool useResponseQueue) {
     std::vector<std::pair<std::shared_ptr<TProviderContext>, NThreading::TPromise<std::string>>> pending;
     with_lock (Mutex) {
         Error = error;
@@ -301,7 +306,11 @@ void TProviderBase::Fail(std::exception_ptr error) {
         }
     }
     for (auto& [context, promise] : pending) {
-        context->Complete(promise, std::nullopt, error);
+        if (useResponseQueue) {
+            context->Complete(promise, std::nullopt, error);
+        } else {
+            SetExceptionAsync(promise, error);
+        }
     }
 }
 

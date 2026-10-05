@@ -37,9 +37,10 @@ public:
 
 protected:
     virtual void RunTokens() = 0;
+    virtual std::thread CreateWorker();
 
     bool Wait(TDuration delay);
-    void Fail(std::exception_ptr error);
+    void Fail(std::exception_ptr error, bool useResponseQueue);
     void Publish(const TTokenCache& current, bool writeCache);
     bool IsStopped() const;
     void RequestStop();

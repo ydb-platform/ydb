@@ -35,7 +35,7 @@ namespace {
 
 class TFactory final: public ICredentialsProviderFactory {
 public:
-    explicit TFactory(TOidcConfig config);
+    explicit TFactory(const TOidcConfig& config);
 
     TCredentialsProviderPtr CreateProvider() const override;
 
@@ -44,7 +44,6 @@ public:
     std::string GetClientIdentity() const override;
 
 private:
-    TOidcConfig Config;
     std::string Identity;
     mutable TMutex Mutex;
     mutable TCredentialsProviderPtr Provider;
@@ -67,18 +66,17 @@ std::shared_ptr<TProviderBase> CreateState(const TOidcConfig& config) {
     }, config.FlowConfig);
 }
 
-TFactory::TFactory(TOidcConfig config)
-    : Config(std::move(config))
-    , Identity(GetOidcClientIdentity(Config))
-    , State(CreateState(Config))
+TFactory::TFactory(const TOidcConfig& config)
+    : Identity(GetOidcClientIdentity(config))
+    , State(CreateState(config))
 {
     // The factory is identified before authorization, so a token's sub claim
     // is not available for client/device grants. Keep the credential fingerprint
     // stable and distinguish custom hooks by their process-local instance identity.
-    if (Config.Cacher_ != nullptr || Config.Acceptor_ != nullptr) {
+    if (config.Cacher_ != nullptr || config.Acceptor_ != nullptr) {
         Identity = HashIdentity(Identity + ":" +
-            std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
-            std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
+            std::to_string(reinterpret_cast<uintptr_t>(config.Cacher_.get())) + ":" +
+            std::to_string(reinterpret_cast<uintptr_t>(config.Acceptor_.get())));
     }
 }
 

@@ -112,8 +112,8 @@ struct TOidcConfig {
 // bound individual socket operations, not the total duration of a streaming response.
 // Keep provider/factory owners alive until their hooks and callbacks on a driver's
 // response queue return; synchronous destruction from those callbacks is not supported.
-// Cancellation and failed delivery detected by the authentication worker use a
-// shared fallback executor; those callbacks may release the last provider/factory owner.
+// Worker startup errors, cancellation and failed delivery detected by the authentication
+// worker use a shared fallback executor; those callbacks may release the last provider/factory owner.
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config);
 
 } // namespace NYdb::inline Dev::NOidc

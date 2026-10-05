@@ -1,22 +1,60 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 
 #include <ydb/public/sdk/cpp/tests/unit/client/oidc/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider_base.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/scope.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
 
 #include <future>
+#include <memory>
+#include <stdexcept>
+#include <thread>
+#include <utility>
+#include <vector>
 
 using namespace NYdb;
 using namespace NYdb::NOidc;
 using NYdb::NOidc::NPrivate::GetOidcClientIdentity;
 
 namespace {
+
+// Observe the adapters created by real drivers without replacing their facilities.
+class TRecordingOidcFactory: public ICredentialsProviderFactory {
+public:
+    explicit TRecordingOidcFactory(TCredentialsProviderFactoryPtr factory);
+
+    TCredentialsProviderPtr CreateProvider() const override;
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override;
+    std::string GetClientIdentity() const override;
+    std::vector<TCredentialsProviderPtr> GetProviders() const;
+
+private:
+    const TCredentialsProviderFactoryPtr Factory;
+    mutable TMutex Mutex;
+    mutable std::vector<TCredentialsProviderPtr> Providers;
+};
+
+class TFailingWorkerSource: public NYdb::NOidc::NPrivate::TProviderBase {
+public:
+    explicit TFailingWorkerSource(TOidcConfig config);
+
+    NThreading::TPromise<void> Entered = NThreading::NewPromise<void>();
+    NThreading::TPromise<void> Release = NThreading::NewPromise<void>();
+
+private:
+    std::thread CreateWorker() override;
+    void RunTokens() override;
+};
 
 class TThrowingOidcFacility: public TQueuedOidcFacility {
 public:
@@ -42,6 +80,48 @@ public:
     NThreading::TPromise<void> Release = NThreading::NewPromise<void>();
     NThreading::TPromise<void> Finished = NThreading::NewPromise<void>();
 };
+
+TRecordingOidcFactory::TRecordingOidcFactory(TCredentialsProviderFactoryPtr factory)
+    : Factory(std::move(factory))
+{
+}
+
+TCredentialsProviderPtr TRecordingOidcFactory::CreateProvider() const {
+    return Factory->CreateProvider();
+}
+
+TCredentialsProviderPtr TRecordingOidcFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
+    auto provider = Factory->CreateProvider(std::move(facility));
+    with_lock (Mutex) {
+        Providers.push_back(provider);
+    }
+    return provider;
+}
+
+std::string TRecordingOidcFactory::GetClientIdentity() const {
+    return Factory->GetClientIdentity();
+}
+
+std::vector<TCredentialsProviderPtr> TRecordingOidcFactory::GetProviders() const {
+    with_lock (Mutex) {
+        return Providers;
+    }
+}
+
+TFailingWorkerSource::TFailingWorkerSource(TOidcConfig config)
+    : TProviderBase(std::move(config))
+{
+}
+
+std::thread TFailingWorkerSource::CreateWorker() {
+    Entered.TrySetValue();
+    Release.GetFuture().Wait();
+    throw std::runtime_error("worker start failed");
+}
+
+void TFailingWorkerSource::RunTokens() {
+    UNIT_FAIL("The failed worker must not run");
+}
 
 void TThrowingOidcFacility::PostToResponseQueue(TPostTaskCb&&) {
     throw std::runtime_error("response queue unavailable");
@@ -76,6 +156,30 @@ void TGatedOidcAcceptor::Accept(const TDeviceAuthInfo& info) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCredentials) {
+Y_UNIT_TEST(WorkerStartFailureCompletesPendingFutureWithoutResponseQueue) {
+    TOidcConfig config;
+    auto source = std::make_shared<TFailingWorkerSource>(config);
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto starting = std::async(std::launch::async, [&] {
+        return source->CreateProvider(firstFacility);
+    });
+    Y_DEFER { source->Release.TrySetValue(); };
+    UNIT_ASSERT(source->Entered.GetFuture().Wait(TDuration::Seconds(5)));
+    auto second = source->CreateProvider(secondFacility);
+    auto pending = second->GetAuthInfoAsync();
+    UNIT_ASSERT(!pending.IsReady());
+
+    source->Release.TrySetValue();
+    auto first = starting.get();
+    secondFacility->DiscardTasks();
+    UNIT_ASSERT_C(pending.Wait(TDuration::Seconds(5)), "Worker startup failure left credentials pending");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(pending.GetValueSync(), std::exception, "worker start failed");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(first->GetAuthInfo(), std::exception, "worker start failed");
+    auto later = source->CreateProvider(firstFacility);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(later->GetAuthInfo(), std::exception, "worker start failed");
+}
+
 Y_UNIT_TEST(FactoryCreatesWorkingProvidersForEveryFlow) {
     for (const TFlowConfig& flow : {
              TFlowConfig{TStaticOidcConfig{.AccessToken = "opaque"}},
@@ -705,6 +809,79 @@ Y_UNIT_TEST(SharedFactoryReusesDeviceAuthorizationAfterFacilityDestruction) {
     UNIT_ASSERT_VALUES_EQUAL(requests[0].Path, "/realm/device");
     UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
     UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+}
+
+Y_UNIT_TEST(SharedFactoryScheduledRefreshWithTwoLiveDrivers) {
+    for (const bool deviceFlow : {false, true}) {
+        TOidcTestServer server;
+        if (deviceFlow) {
+            server.Enqueue(TString("{\"device_code\":\"private-device\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
+                server.Issuer() + "/verify\",\"expires_in\":60,\"interval\":1}", HTTP_OK);
+        }
+        server.Enqueue(R"({"access_token":"initial","token_type":"Bearer","expires_in":4,"refresh_token":"initial-refresh"})", HTTP_OK);
+        server.Enqueue(R"({"access_token":"refreshed","token_type":"Bearer","expires_in":4,"refresh_token":"rotated-refresh"})", HTTP_OK);
+        server.Enqueue(R"({"access_token":"next","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        auto initialGate = NThreading::NewPromise<void>();
+        auto refreshGate = NThreading::NewPromise<void>();
+        auto nextRefreshGate = NThreading::NewPromise<void>();
+        server.BlockTokenRepliesUntil(initialGate.GetFuture());
+        auto cache = std::make_shared<TMemoryTokenCacher>();
+        auto config = server.ClientConfig().Cacher(cache).Acceptor(std::make_shared<TTestAcceptor>());
+        if (deviceFlow) {
+            config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
+        }
+        auto factory = std::make_shared<TRecordingOidcFactory>(CreateOidcProviderFactory(config));
+        Y_DEFER {
+            initialGate.TrySetValue();
+            refreshGate.TrySetValue();
+            nextRefreshGate.TrySetValue();
+        };
+        const auto driverConfig = TDriverConfig()
+            .SetEndpoint("localhost:1")
+            .SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetCredentialsProviderFactory(factory);
+        TDriver firstDriver(driverConfig);
+        TDriver secondDriver(driverConfig);
+        NDiscovery::TDiscoveryClient firstClient(firstDriver);
+        NDiscovery::TDiscoveryClient secondClient(secondDriver);
+        const auto providers = factory->GetProviders();
+        UNIT_ASSERT_VALUES_EQUAL(providers.size(), 2);
+        UNIT_ASSERT(providers[0] != providers[1]);
+        auto firstPending = providers[0]->GetAuthInfoAsync();
+        auto secondPending = providers[1]->GetAuthInfoAsync();
+        const size_t initialRequests = deviceFlow ? 2 : 1;
+        UNIT_ASSERT(server.WaitRequests(initialRequests));
+        // Each request captures its own gate: hold each subsequent refresh separately.
+        server.BlockTokenRepliesUntil(refreshGate.GetFuture());
+        initialGate.TrySetValue();
+        UNIT_ASSERT(firstPending.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(firstPending.GetValueSync(), "Bearer initial");
+        UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer initial");
+
+        UNIT_ASSERT(server.WaitRequests(initialRequests + 1));
+        server.BlockTokenRepliesUntil(nextRefreshGate.GetFuture());
+        refreshGate.TrySetValue();
+        // The next scheduled refresh proves the previous response was published.
+        UNIT_ASSERT(server.WaitRequests(initialRequests + 2));
+        UNIT_ASSERT_VALUES_EQUAL(providers[0]->GetAuthInfo(), "Bearer refreshed");
+        UNIT_ASSERT_VALUES_EQUAL(providers[1]->GetAuthInfo(), "Bearer refreshed");
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), initialRequests + 2);
+        UNIT_ASSERT_VALUES_EQUAL(requests[initialRequests - 1].Form.Get("grant_type"),
+            deviceFlow ? "urn:ietf:params:oauth:grant-type:device_code" : "client_credentials");
+        UNIT_ASSERT_VALUES_EQUAL(requests[initialRequests].Form.Get("grant_type"), "refresh_token");
+        UNIT_ASSERT_VALUES_EQUAL(requests[initialRequests].Form.Get("refresh_token"), "initial-refresh");
+        UNIT_ASSERT_VALUES_EQUAL(requests[initialRequests + 1].Form.Get("grant_type"), "refresh_token");
+        UNIT_ASSERT_VALUES_EQUAL(requests[initialRequests + 1].Form.Get("refresh_token"), "rotated-refresh");
+        UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+        const auto stored = cache->Read();
+        UNIT_ASSERT(stored.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(stored->AccessToken.Token, "refreshed");
+        UNIT_ASSERT(stored->RefreshToken.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(stored->RefreshToken->Token, "rotated-refresh");
+    }
 }
 
 Y_UNIT_TEST(SharedFactoryProvidersShareRefresh) {

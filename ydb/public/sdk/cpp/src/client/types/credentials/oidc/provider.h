@@ -60,5 +60,6 @@ private:
 };
 
 std::exception_ptr StoppedError();
+void SetExceptionAsync(NThreading::TPromise<std::string> promise, std::exception_ptr error);
 
 } // namespace NYdb::inline Dev::NOidc::NPrivate

@@ -25,7 +25,6 @@ namespace {
 
 IThreadPool& ErrorExecutor();
 void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept;
-void SetExceptionAsync(NThreading::TPromise<std::string> promise, std::exception_ptr error);
 
 IThreadPool& ErrorExecutor() {
     // A shared executor outlives providers. Error subscribers may release the
@@ -34,6 +33,7 @@ IThreadPool& ErrorExecutor() {
     static const auto executor = [] {
         auto pool = std::make_unique<TAdaptiveThreadPool>(TThreadPoolParams().SetThreadName("OidcErrors"));
         pool->Start(0, 0);
+        pool->SetMaxIdleTime(TDuration::Seconds(30));
         return pool;
     }();
     return *executor;
@@ -48,13 +48,13 @@ void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr 
     }
 }
 
+} // namespace
+
 void SetExceptionAsync(NThreading::TPromise<std::string> promise, std::exception_ptr error) {
     ErrorExecutor().SafeAddFunc([promise = std::move(promise), error = std::move(error)] {
         SetException(promise, error);
     });
 }
-
-} // namespace
 
 std::exception_ptr StoppedError() {
     return std::make_exception_ptr(TError("provider stopped", false, {}));

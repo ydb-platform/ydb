@@ -4,11 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(21)
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ELSE()
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_decorrelation_ut.cpp

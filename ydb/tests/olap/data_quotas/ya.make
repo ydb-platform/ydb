@@ -9,11 +9,7 @@ TEST_SRCS(
     test_quota_exhaustion.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ELSE()
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

@@ -6,11 +6,7 @@ TEST_SRCS(
     test_leader_start_inflight.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:4)
-ELSE()
-    REQUIREMENTS(cpu:4)
-ENDIF()
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

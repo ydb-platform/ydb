@@ -1,11 +1,7 @@
 GTEST()
 
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
-    IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
-ELSE()
-    REQUIREMENTS(cpu:2)
-ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

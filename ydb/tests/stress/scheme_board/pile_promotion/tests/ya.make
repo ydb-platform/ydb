@@ -7,11 +7,7 @@ TEST_SRCS(
     test_scheme_board_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:4)
-ELSE()
-    REQUIREMENTS(ram:32 cpu:4)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

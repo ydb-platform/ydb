@@ -1,6 +1,6 @@
 ## Parameterized queries
 
-{{ ydb-short-name }} supports and recommends the use of so-called [parameterized queries](https://en.wikipedia.org/wiki/Prepared_statement). In such queries, the data is transmitted separately from the request body itself, and in the SQL query, special parameters are used to indicate the location of the data.
+{{ ydb-short-name }} supports and recommends the use of so-called [parameterized queries](../../yql/reference/syntax/lexer.md#query-params). In such queries, the data is transmitted separately from the request body itself, and in the SQL query, special parameters are used to indicate the location of the data.
 
 Request with data in the request body:
 

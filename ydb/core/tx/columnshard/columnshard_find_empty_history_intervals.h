@@ -2,6 +2,8 @@
 
 #include "common/path_id.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
+
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
@@ -26,24 +28,17 @@ struct THistoryIntervalKey {
 };
 
 struct THistoryInterval {
-    enum class EState {
-        Unchecked,
-        Checked,
-        ReadyToSend,
-    };
-
     ui32 To = 0;
     ui32 Group = 0;
-    EState State = EState::Unchecked;
 };
 
 struct TEmptyHistoryIntervalsScan {
     std::map<THistoryIntervalKey, THistoryInterval> Intervals;
+    std::vector<NKikimrTxColumnShard::TCutHistoryRequest> Journaled;
     std::vector<std::pair<TInternalPathId, ui64>> Portions;
     size_t Position = 0;
     size_t Pending = 0;
     NActors::TActorId PreparationActor;
-    bool SavePending = false;   // Prevents releasing the scan before the request journal commits.
     bool WaitingForGC = false;
     TInstant Started;
     std::optional<TInstant> Finished;

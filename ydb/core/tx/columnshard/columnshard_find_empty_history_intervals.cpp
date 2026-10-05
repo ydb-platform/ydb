@@ -9,7 +9,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h>
 #include <util/random/random.h>
 
 #include <iterator>
@@ -69,7 +68,7 @@ public:
 }   // namespace
 
 class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
-    const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
+    std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
 
 public:
     TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<NKikimrTxColumnShard::TCutHistoryRequest>&& requests)
@@ -96,21 +95,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (!Self->EmptyHistoryIntervalsScan || !Self->EmptyHistoryIntervalsScan->Finished) {
-            return;
-        }
-        Self->EmptyHistoryIntervalsScan->SavePending = false;
-        if (!Self->SharingSessionsManager->CanCutHistory()) {
-            Self->EmptyHistoryIntervalsScan.reset();
-            return;
-        }
-        auto& scan = *Self->EmptyHistoryIntervalsScan;
-        for (const auto& request : ReadyToSendRequests) {
-            auto* interval = MapFindPtr(scan.Intervals, THistoryIntervalKey{ request.GetChannel(), request.GetFromGeneration() });
-            if (interval && interval->To == request.GetToGeneration() && interval->Group == request.GetGroupID()) {
-                interval->State = THistoryInterval::EState::ReadyToSend;
-            }
-        }
+        Self->EmptyHistoryIntervalsScan->Journaled = std::move(ReadyToSendRequests);
         Self->TryCutHistory(ctx);
     }
 };
@@ -303,7 +288,7 @@ void TColumnShard::ResumePostponedCutHistory(const TActorContext& ctx) {
 }
 
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
-    if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->Finished || EmptyHistoryIntervalsScan->SavePending) {
+    if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->Finished) {
         return;
     }
     if (!SharingSessionsManager->CanCutHistory()) {
@@ -316,29 +301,23 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (EmptyHistoryIntervalsScan->WaitingForGC) {
         return;
     }
-    NOlap::TPendingGCBlobGenerations pendingGenerations;
-    if (AnyOf(EmptyHistoryIntervalsScan->Intervals, [](const auto& entry) {
-            return entry.second.State != THistoryInterval::EState::Checked;
-        })) {
-        pendingGenerations = storage->GetPendingGCBlobGenerations();
+    const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
+    for (const auto& request : EmptyHistoryIntervalsScan->Journaled) {
+        if (!CanCutHistoryInterval(*this, { request.GetChannel(), request.GetFromGeneration() },
+                { request.GetToGeneration(), request.GetGroupID() }, pendingGenerations)) {
+            continue;
+        }
+        auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+        event->Record.SetTabletID(TabletID());
+        event->Record.SetChannel(request.GetChannel());
+        event->Record.SetFromGeneration(request.GetFromGeneration());
+        event->Record.SetGroupID(request.GetGroupID());
+        Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *EmptyHistoryIntervalsScan->Finished);
+        ctx.Send(LauncherID(), event.release());
     }
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
-    for (auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
-        if (interval.State == THistoryInterval::EState::Checked) {
-            continue;
-        }
-        const bool readyToSend = std::exchange(interval.State, THistoryInterval::EState::Checked) == THistoryInterval::EState::ReadyToSend;
+    for (const auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
         if (!CanCutHistoryInterval(*this, key, interval, pendingGenerations)) {
-            continue;
-        }
-        if (readyToSend) {
-            auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-            event->Record.SetTabletID(TabletID());
-            event->Record.SetChannel(key.Channel);
-            event->Record.SetFromGeneration(key.From);
-            event->Record.SetGroupID(interval.Group);
-            Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *EmptyHistoryIntervalsScan->Finished);
-            ctx.Send(LauncherID(), event.release());
             continue;
         }
         auto& request = requests.emplace_back();
@@ -351,9 +330,9 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         request.SetToGeneration(interval.To);
         request.SetSendingGeneration(Generation());
     }
+    EmptyHistoryIntervalsScan->Intervals.clear();
     if (!requests.empty()) {
         Counters.GetCSCounters().OnCuttableHistoryIntervalsFound(requests.size());
-        EmptyHistoryIntervalsScan->SavePending = true;
         Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
     } else {
         EmptyHistoryIntervalsScan.reset();

@@ -11,7 +11,15 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrRunner KikimrWithAllExperimentalIndexes() {
-    auto settings = TKikimrSettings();
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     // Compact indexes are maintained through stream writes. BackportMode=All makes the test cluster
     // expose the same write path as a current production configuration; neither is a feature under test.
     settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);

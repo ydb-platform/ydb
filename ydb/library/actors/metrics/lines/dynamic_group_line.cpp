@@ -184,7 +184,12 @@ void TDynamicGroupFrontend::ReadNumericRange(const TLineSnapshot& snapshot, TIns
     ReadRecords(snapshot, schema, [&](TInstant timestamp, std::span<const TLineNumericValue> values) {
         if (timestamp > end) return;
         if (timestamp < begin) {
-            std::copy(values.begin(), values.end(), previous.begin()); havePrevious = true; return;
+            // Older records must not replace the last emitted value used for the range tail.
+            if (!emitted) {
+                std::copy(values.begin(), values.end(), previous.begin());
+                havePrevious = true;
+            }
+            return;
         }
         if (onChange && !emitted && havePrevious && begin < timestamp) invoke(opaque, begin, {previous.data(), values.size()});
         invoke(opaque, timestamp, values);

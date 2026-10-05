@@ -98,6 +98,21 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
         std::shared_ptr<const parquet::LogicalType> logicalType = column->logical_type();
         parquet::Type::type physicalType = column->physical_type();
         switch (logicalType->type()) {
+            case parquet::LogicalType::Type::type::UUID: {
+                if (physicalType != parquet::Type::type::FIXED_LEN_BYTE_ARRAY || column->type_length() != 16) {
+                    break;
+                }
+                const auto* typedStatistics = static_cast<const parquet::FLBAStatistics*>(columnChunkMetadata->statistics().get());
+                const TString columnName{column->name()};
+                NYql::NGenericPushDown::TColumnStatistics columnStatistics;
+                columnStatistics.ColumnName = columnName;
+                columnStatistics.ColumnType.set_type_id(::Ydb::Type::UUID);
+                columnStatistics.UuidStats.ConstructInPlace();
+                columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
+                columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+                columns[columnName] = columnStatistics;
+            }
+            break;
             case parquet::LogicalType::Type::type::DATE: {
                 auto statistics = GetDateStatistics(physicalType, columnChunkMetadata->statistics());
                 if (statistics) {
@@ -127,9 +142,23 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
             case parquet::LogicalType::Type::type::NIL:
             case parquet::LogicalType::Type::type::JSON:
             case parquet::LogicalType::Type::type::BSON:
-            case parquet::LogicalType::Type::type::UUID:
             case parquet::LogicalType::Type::type::NONE:
             break;
+        }
+        // FLBA(16) without UUID logical type: treat as UUID (pyarrow 5 compatibility).
+        // FLBA has SortOrder::UNSIGNED by default, so this check is independent of sort_order.
+        if (physicalType == parquet::Type::type::FIXED_LEN_BYTE_ARRAY
+            && column->type_length() == 16
+            && logicalType->type() == parquet::LogicalType::Type::type::NONE) {
+            const auto* typedStatistics = static_cast<const parquet::FLBAStatistics*>(columnChunkMetadata->statistics().get());
+            const TString columnName{column->name()};
+            NYql::NGenericPushDown::TColumnStatistics columnStatistics;
+            columnStatistics.ColumnName = columnName;
+            columnStatistics.ColumnType.set_type_id(::Ydb::Type::UUID);
+            columnStatistics.UuidStats.ConstructInPlace();
+            columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
+            columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+            columns[columnName] = columnStatistics;
         }
     }
     return NYql::NGenericPushDown::MatchPredicate(columns, predicate);

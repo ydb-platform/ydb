@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datetime.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yql/essentials/minikql/computation
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

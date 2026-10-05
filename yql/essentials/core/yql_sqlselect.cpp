@@ -191,16 +191,47 @@ TExprNode::TPtr ExpandSqlWindowCall(
             YQL_ENSURE(false, "unexpected " << name);
         }
 
+        if (isYql && argsCount == 1) {
+            // Unlike SQL rank(), YqlSelect Rank(expr) uses expr as the rank key,
+            // which may differ from the window ORDER BY key in keyExtractor.
+            // Build a fresh lambda so rewrite() can bind expr to its own row argument.
+            // clang-format off
+            keyExtractor = ctxExpr.Builder(call->Pos())
+                .Lambda()
+                    .Param("row")
+                    .Callable("Void")
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+
+            keyExtractor = ctxExpr.ChangeChild(
+                *keyExtractor,
+                1,
+                rewrite(argAt(0), keyExtractor->Head().HeadPtr()));
+        }
+
+        TExprNode::TPtr options;
+        if (isYql) {
+            options = call->ChildPtr(2);
+        } else {
+            // clang-format off
+            options = ctxExpr.Builder(call->Pos())
+                .List()
+                    .List(0)
+                        .Atom(0, "ansi")
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+        }
+
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable(callable)
                 .Add(0, std::move(listType))
                 .Add(1, keyExtractor)
-                .List(2)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
+                .Add(2, std::move(options))
             .Seal()
             .Build();
         // clang-format on

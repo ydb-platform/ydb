@@ -40,6 +40,12 @@ struct TEvKqp {
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,
         NKikimrKqp::TEvCloseSessionRequest, TKqpEvents::EvCloseSessionRequest> {};
 
+    struct TEvKillSessionRequest : public TEventPB<TEvKillSessionRequest,
+        NKikimrKqp::TEvKillSessionRequest, TKqpEvents::EvKillSessionRequest> {};
+
+    struct TEvKillSessionResponse : public TEventPB<TEvKillSessionResponse,
+        NKikimrKqp::TEvKillSessionResponse, TKqpEvents::EvKillSessionResponse> {};
+
     struct TEvCreateSessionRequest : public TEventPB<TEvCreateSessionRequest,
         NKikimrKqp::TEvCreateSessionRequest, TKqpEvents::EvCreateSessionRequest> {};
 

@@ -37,8 +37,9 @@ namespace NKikimr {
 
         // A TABLE partial and a PARTITION leaf have the same publication pipeline.
         // Cumulative and derivative histogram history survives removal of a node while
-        // the bucket remains live. Live histogram totals are recomputed from the live
-        // per-node snapshots on each publish
+        // the bucket remains live. Non-derivative histograms (the current state, not
+        // increments) arrive per node as their full current values, which every report
+        // replaces, and their totals are recomputed from the per-node values on each publish.
         // Simple/MAX are recomputed from live snapshots; overlapping owners of a leaf
         // use MAX for Simple, retaining the existing partition-move behavior.
         class TPublishedBucket {
@@ -62,8 +63,6 @@ namespace NKikimr {
             {
                 ExecutorCounters.Initialize(executorTemplate, &names.ExecutorNames);
                 AppCounters.Initialize(appTemplate, &names.AppNames);
-                ExecutorLiveHistogramIndices = FindLiveHistogramIndices(*executorTemplate, names.ExecutorNames);
-                AppLiveHistogramIndices = FindLiveHistogramIndices(*appTemplate, names.AppNames);
                 Total.SetType(type);
             }
 
@@ -72,10 +71,12 @@ namespace NKikimr {
                 NSysView::TAggregateCumulative<false>::Apply(Total.MutableAppCounters(), diff.GetAppCounters());
                 auto& snapshot = PerNode[nodeId];
                 snapshot.Counters = diff;
-                ApplyLiveHistogramDeltas(snapshot.ExecutorHistogramBucketCounts, ExecutorLiveHistogramIndices,
-                                         diff.GetExecutorCounters(), nodeId);
-                ApplyLiveHistogramDeltas(snapshot.AppHistogramBucketCounts, AppLiveHistogramIndices,
-                                         diff.GetAppCounters(), nodeId);
+                ApplyNonDerivativeHistograms(snapshot.ExecutorNonDerivativeBucketCounts,
+                                             ExecutorCounters.GetNonDerivativeHistogramIndices(),
+                                             diff.GetExecutorCounters(), nodeId);
+                ApplyNonDerivativeHistograms(snapshot.AppNonDerivativeBucketCounts,
+                                             AppCounters.GetNonDerivativeHistogramIndices(),
+                                             diff.GetAppCounters(), nodeId);
             }
 
             bool DropNode(ui32 nodeId) {
@@ -88,18 +89,22 @@ namespace NKikimr {
                 NSysView::ResetSimpleCounters(Total.MutableAppCounters());
                 NSysView::ResetMaxCounters(Total.MutableMaxExecutorCounters());
                 NSysView::ResetMaxCounters(Total.MutableMaxAppCounters());
-                NSysView::ResetHistogramBuckets(Total.MutableExecutorCounters(), ExecutorLiveHistogramIndices);
-                NSysView::ResetHistogramBuckets(Total.MutableAppCounters(), AppLiveHistogramIndices);
+                NSysView::ResetHistogramBuckets(Total.MutableExecutorCounters(),
+                                                ExecutorCounters.GetNonDerivativeHistogramIndices());
+                NSysView::ResetHistogramBuckets(Total.MutableAppCounters(),
+                                                AppCounters.GetNonDerivativeHistogramIndices());
                 for (const auto& [_, node] : PerNode) {
                     const auto& snapshot = node.Counters;
                     AggregateSimple(Total.MutableExecutorCounters(), snapshot.GetExecutorCounters());
                     AggregateSimple(Total.MutableAppCounters(), snapshot.GetAppCounters());
                     AggregateMax(Total.MutableMaxExecutorCounters(), snapshot.GetMaxExecutorCounters());
                     AggregateMax(Total.MutableMaxAppCounters(), snapshot.GetMaxAppCounters());
-                    AddLiveHistogramBucketCounts(*Total.MutableExecutorCounters(), ExecutorLiveHistogramIndices,
-                                                 node.ExecutorHistogramBucketCounts);
-                    AddLiveHistogramBucketCounts(*Total.MutableAppCounters(), AppLiveHistogramIndices,
-                                                 node.AppHistogramBucketCounts);
+                    AddNonDerivativeBucketCounts(*Total.MutableExecutorCounters(),
+                                                 ExecutorCounters.GetNonDerivativeHistogramIndices(),
+                                                 node.ExecutorNonDerivativeBucketCounts);
+                    AddNonDerivativeBucketCounts(*Total.MutableAppCounters(),
+                                                 AppCounters.GetNonDerivativeHistogramIndices(),
+                                                 node.AppNonDerivativeBucketCounts);
                 }
                 ExecutorCounters.FromProto(*Total.MutableExecutorCounters(), *Total.MutableMaxExecutorCounters());
                 AppCounters.FromProto(*Total.MutableAppCounters(), *Total.MutableMaxAppCounters());
@@ -107,74 +112,54 @@ namespace NKikimr {
             }
 
         private:
-            // Decoded per-node bucket counts, retained to subtract its contribution on removal.
-            // The outer index follows the corresponding live histogram indices; the inner
-            // index identifies a bucket within that histogram.
-            using TLiveHistogramBucketCounts = TVector<TVector<ui64>>;
+            // Decoded bucket counts of the latest non-derivative histograms of the node.
+            // The outer index follows the corresponding non-derivative histogram indices;
+            // the inner index identifies a bucket within that histogram.
+            using TNonDerivativeBucketCounts = TVector<TVector<ui64>>;
 
             struct TNodeSnapshot {
                 NKikimrSysView::TDbTabletCounters Counters;
-                TLiveHistogramBucketCounts ExecutorHistogramBucketCounts;
-                TLiveHistogramBucketCounts AppHistogramBucketCounts;
+                TNonDerivativeBucketCounts ExecutorNonDerivativeBucketCounts;
+                TNonDerivativeBucketCounts AppNonDerivativeBucketCounts;
             };
 
-            static TVector<ui32> FindLiveHistogramIndices(
-                const TTabletCountersBase& counters, const THashSet<TString>& names)
-            {
-                TVector<ui32> indices;
-                for (ui32 i = 0; i < counters.Percentile().Size(); ++i) {
-                    const char* name = counters.PercentileCounterName(i);
-                    if (name && (names.empty() || names.contains(name)) && (counters.Percentile()[i].GetIntegral() || !GetHistogramAggregateSimpleName(name).empty()))
-                    {
-                        indices.push_back(i);
-                    }
-                }
-                return indices;
-            }
-
-            static void ApplyLiveHistogramDeltas(
-                TLiveHistogramBucketCounts& bucketCounts, const TVector<ui32>& indices, const NKikimrSysView::TDbCounters& diff,
+            // A report holds the whole state of the node's non-derivative histograms, so it
+            // replaces the previous one: nothing depends on the receiver having seen the earlier reports
+            void ApplyNonDerivativeHistograms(
+                TNonDerivativeBucketCounts& bucketCounts, const TVector<ui32>& indices, const NKikimrSysView::TDbCounters& diff,
                 ui32 nodeId)
             {
                 bucketCounts.resize(indices.size());
                 for (size_t i = 0; i < indices.size(); ++i) {
+                    auto& values = bucketCounts[i];
+                    values.clear();
                     if (indices[i] >= diff.HistogramSize()) {
                         continue;
                     }
                     const auto& histogram = diff.GetHistogram(indices[i]);
-                    auto& values = bucketCounts[i];
-                    if (values.size() < histogram.GetBucketsCount()) {
-                        values.resize(histogram.GetBucketsCount(), 0);
+                    if (!histogram.GetNonDerivative()) {
+                        // A delta cannot be applied without the baseline it was taken against
+                        if (!WarnedAboutUnmarkedNonDerivative) {
+                            WarnedAboutUnmarkedNonDerivative = true;
+                            YDB_LOG_WARN("Ignored a non-derivative histogram not marked NonDerivative",
+                                {"nodeId", nodeId},
+                                {"histogramIndex", indices[i]});
+                        }
+                        continue;
                     }
+                    values.resize(histogram.GetBucketsCount(), 0);
                     const auto& encoded = histogram.GetBuckets();
                     for (int b = 0; b + 1 < encoded.size(); b += 2) {
-                        if (encoded[b] < histogram.GetBucketsCount()) {
-                            const ui64 delta = encoded[b + 1];
-                            // Histogram decreases are encoded modulo 2^64; treat large values
-                            // as decrements
-                            const bool isDecrement = delta > (Max<ui64>() >> 1);
-                            if (isDecrement) {
-                                const ui64 magnitude = 0 - delta;
-                                if (magnitude > values[encoded[b]]) {
-                                    YDB_LOG_WARN("Clamped live histogram bucket to 0 to avoid underflow",
-                                        {"nodeId", nodeId},
-                                        {"histogramIndex", indices[i]},
-                                        {"bucketIndex", encoded[b]},
-                                        {"magnitude", magnitude});
-                                    values[encoded[b]] = 0;
-                                } else {
-                                    values[encoded[b]] -= magnitude;
-                                }
-                            } else {
-                                values[encoded[b]] += delta;
-                            }
+                        if (encoded[b] < values.size()) {
+                            values[encoded[b]] = encoded[b + 1];
                         }
                     }
                 }
             }
 
-            static void AddLiveHistogramBucketCounts(
-                NKikimrSysView::TDbCounters& total, const TVector<ui32>& indices, const TLiveHistogramBucketCounts& bucketCounts)
+            static void AddNonDerivativeBucketCounts(
+                NKikimrSysView::TDbCounters& total, const TVector<ui32>& indices,
+                const TNonDerivativeBucketCounts& bucketCounts)
             {
                 for (size_t i = 0; i < bucketCounts.size(); ++i) {
                     if (bucketCounts[i].empty()) {
@@ -210,9 +195,8 @@ namespace NKikimr {
             NPrivate::TAggregatedTabletCounters AppCounters;
             TYdbMetricsMapperPtr Mapper;
             NKikimrSysView::TDbTabletCounters Total;
-            TVector<ui32> ExecutorLiveHistogramIndices;
-            TVector<ui32> AppLiveHistogramIndices;
             THashMap<ui32, TNodeSnapshot> PerNode;
+            bool WarnedAboutUnmarkedNonDerivative = false;
         };
 
         struct TTableEntry {

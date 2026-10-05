@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     generated_column.cpp
@@ -81,8 +81,6 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCDIR(yql/essentials/core/expr_nodes_gen)
 

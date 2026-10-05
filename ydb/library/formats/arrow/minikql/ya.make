@@ -2,7 +2,7 @@ RECURSE_FOR_TESTS(
     ut
 )
 
-LIBRARY(library-formats-arrow-minikql)
+YQL_LIBRARY(library-formats-arrow-minikql)
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -19,7 +19,5 @@ PEERDIR(
 SRCS(
     minikql.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

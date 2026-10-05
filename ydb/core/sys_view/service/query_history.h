@@ -15,6 +15,15 @@ constexpr ui64 ONE_MINUTE_BUCKET_COUNT = 6 * 60; // 6 hours
 constexpr TDuration ONE_HOUR_BUCKET_SIZE = TDuration::Hours(1);
 constexpr ui64 ONE_HOUR_BUCKET_COUNT = 24 * 7 * 2; // 2 weeks
 
+inline TInstant EndOfQueryMetricsHourInterval(TInstant intervalEnd) {
+    const ui64 hourUs = ONE_HOUR_BUCKET_SIZE.MicroSeconds();
+    ui64 hourEndUs = intervalEnd.MicroSeconds() / hourUs * hourUs;
+    if (hourEndUs != intervalEnd.MicroSeconds()) {
+        hourEndUs += hourUs;
+    }
+    return TInstant::MicroSeconds(hourEndUs);
+}
+
 constexpr size_t TOP_QUERIES_COUNT = 5;
 
 using TNodeId = ui32;

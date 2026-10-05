@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     utils.cpp
@@ -13,7 +13,5 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/sql/v1/translation
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

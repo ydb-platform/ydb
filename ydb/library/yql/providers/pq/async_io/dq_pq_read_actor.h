@@ -22,7 +22,7 @@ namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
 constexpr i64 PQReadDefaultFreeSpace = 16_MB;
-constexpr TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(60);
+constexpr TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(10);
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -45,7 +45,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     i64 bufferSize = PQReadDefaultFreeSpace,
     NActors::TActorId infoAggregator = {},
     TDuration checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod,
-    NActors::TActorId controlPlaneActorId = {}
+    NActors::TActorId controlPlaneActorId = {},
+    bool enableStreamingQueryTopicAutopartitioning = false
 );
 
 void RegisterDqPqReadActorFactory(
@@ -55,6 +56,7 @@ void RegisterDqPqReadActorFactory(
     const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
     const TString& reconnectPeriod = {},
-    bool enableStreamingQueriesCounters = true);
+    bool enableStreamingQueriesCounters = true,
+    bool enableStreamingQueryTopicAutopartitioning = false);
 
 } // namespace NYql::NDq

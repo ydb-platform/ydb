@@ -245,8 +245,7 @@ private:
     }
 
     bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) const {
-        const bool useStateTable = Config->EnableStreamingAggregation.Get().GetOrElse(false)
-            && !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
+        const bool useStateTable = !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
         // TODO: Avoid lambda analysis here, use sources/sinks for table interaction.
         return std::all_of(stages.begin(), stages.end(), [useStateTable](const auto& stage) {
             if (!IsKqpPureLambda(stage.Program()) || !IsKqpPureInputs(stage.Inputs())) {

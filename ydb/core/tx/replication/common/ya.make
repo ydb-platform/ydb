@@ -9,10 +9,10 @@ PEERDIR(
 SRCS(
     family_settings.cpp
     family_settings.h
+    schema_change.cpp
+    schema_change.h
     sensitive_event_pb.h
     worker_id.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

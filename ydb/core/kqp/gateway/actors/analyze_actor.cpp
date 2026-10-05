@@ -131,14 +131,6 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
-    if (SampleRate != 1.0 && !entry.ColumnTableInfo) {
-        Promise.SetValue(NYql::NCommon::ResultFromIssues<NYql::IKikimrGateway::TGenericResult>(
-            NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
-            "ANALYZE SAMPLE is supported only for column tables", {}));
-        this->Die(ctx);
-        return;
-    }
-
     PathId = entry.TableId.PathId;
 
     if (!BuildAnalyzeRequest(entry, ctx)) {

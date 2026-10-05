@@ -1,4 +1,5 @@
 #include "actorsystem.h"
+#include "thread_context.h"
 #include "executor_pool_basic.h"
 #include "scheduler_basic.h"
 #include "subsystems/stats.h"
@@ -10,6 +11,31 @@
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TSubSystemTest) {
+
+    template<int Id>
+    class TWorkerSubSystem : public ISubSystem {
+    public:
+        TWorkerSubSystem(TVector<int>* lifecycle, bool* valid)
+            : Lifecycle(lifecycle), Valid(valid)
+        {}
+        TSubSystemDependencies GetDependencies() const override {
+            if constexpr (Id == 2) {
+                return DependsOn<TWorkerSubSystem<1>>();
+            }
+            return {};
+        }
+        void OnExecutorThreadStart(TThreadContext* context) override {
+            *Valid &= TlsThreadContext == context;
+            Lifecycle->push_back(Id);
+        }
+        void OnExecutorThreadStop(TThreadContext* context) override {
+            *Valid &= TlsThreadContext == context;
+            Lifecycle->push_back(-Id);
+        }
+    private:
+        TVector<int>* Lifecycle;
+        bool* Valid;
+    };
 
     class TRootSubSystem : public ISubSystem {
     public:
@@ -277,6 +303,24 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
 
     TSubSystemDependencies TAlternativeCycleASubSystem::GetDependencies() const {
         return DependsOn<TAlternativeCycleBSubSystem>() || DependsOn<TRootSubSystem>();
+    }
+
+    Y_UNIT_TEST(ExecutorThreadHooksFollowDependencyOrderAndKeepTlsUntilCleanup) {
+        TVector<int> lifecycle;
+        bool valid = true;
+        auto setup = MakeActorSystemSetup();
+        setup->RegisterSubSystem(std::make_unique<TWorkerSubSystem<2>>(&lifecycle, &valid));
+        setup->RegisterSubSystem(std::make_unique<TWorkerSubSystem<1>>(&lifecycle, &valid));
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+        UNIT_ASSERT(valid);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[2], -2);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[3], -1);
     }
 
     Y_UNIT_TEST(ResolvesSubSystemsInTopologicalOrder) {

@@ -9,6 +9,7 @@ from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
+from ydb.tests.library.wardens.pq import PersQueueHasNoStuckTransactions
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 from ydb.tests.stability.nemesis.internal.orchestrator.unified_agent_verify_failed_aggregated import (
     UnifiedAgentVerifyFailedAggregated,
@@ -81,32 +82,37 @@ ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS: Tuple[OrchestratorAggregatedSafetyCheck, 
 
 @dataclass(frozen=True)
 class OrchestratorLivenessCheck:
-    """Orchestrator-side liveness check; build(cluster) -> warden with list_of_liveness_violations (property)."""
+    """build(cluster, counters=None) -> warden. No counters means the warden downloads itself."""
 
     name: str
     description: str
-    build: Callable[[ExternalKiKiMRCluster], Any]
+    build: Callable[..., Any]
 
 
 ORCHESTRATOR_LIVENESS_CHECKS: Tuple[OrchestratorLivenessCheck, ...] = (
     OrchestratorLivenessCheck(
         name="AllTabletsAlive",
         description="Check that all tablets are alive",
-        build=lambda c: AllTabletsAliveLivenessWarden(c),
+        build=lambda c, counters=None: AllTabletsAliveLivenessWarden(c, counters=counters),
     ),
     OrchestratorLivenessCheck(
         name="BootQueueSize",
         description="Check boot queue size is acceptable",
-        build=lambda c: BootQueueSizeWarden(c),
+        build=lambda c, counters=None: BootQueueSizeWarden(c, counters=counters),
     ),
     OrchestratorLivenessCheck(
         name="SchemeShardNoInFlightTx",
         description="Check SchemeShard has no stuck in-flight transactions",
-        build=lambda c: SchemeShardHasNoInFlightTransactions(c),
+        build=lambda c, counters=None: SchemeShardHasNoInFlightTransactions(c, counters=counters),
     ),
     OrchestratorLivenessCheck(
         name="TxCompleteLag",
         description="Check transaction completion lag",
-        build=lambda c: TxCompleteLagLivenessWarden(c),
+        build=lambda c, counters=None: TxCompleteLagLivenessWarden(c, counters=counters),
+    ),
+    OrchestratorLivenessCheck(
+        name="PersQueueNoStuckTx",
+        description="Check PersQueue has no stuck transactions (PQ/TxCompleteLag, PQ/TxInFly)",
+        build=lambda c, counters=None: PersQueueHasNoStuckTransactions(c, counters=counters),
     ),
 )

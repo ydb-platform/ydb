@@ -96,12 +96,12 @@ private:
     const NKikimr::TKeyDesc& KeyDesc;
 };
 
-IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode) {
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode, const NKikimrReplication::TLocalTableWriterSettings* settings) {
     auto createResolverFn = [](const NKikimr::TKeyDesc& keyDesc) {
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode);
+    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode, settings);
 }
 
 } // namespace NKikimr::NReplication::NService

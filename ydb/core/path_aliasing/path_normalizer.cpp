@@ -1,5 +1,6 @@
 #include "path_normalizer.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/yexception.h>
@@ -41,6 +42,25 @@ namespace NKikimr::NPathAliasing {
             impl->Rules.push_back({std::move(src), TString(dst)});
         }
 
+        std::vector<TImpl::TRule> prefixes;
+        prefixes.reserve(impl->Rules.size());
+        for (const auto& rule : impl->Rules) {
+            prefixes.push_back({CanonizePath(rule.Src), CanonizePath(rule.Dst)});
+        }
+        const auto isPrefix = [](TStringBuf prefix, TStringBuf path) {
+            return path.StartsWith(prefix)
+                && (path.size() == prefix.size() || path[prefix.size()] == '/');
+        };
+        for (size_t i = 0; i < prefixes.size(); ++i) {
+            for (size_t j = 0; j < prefixes.size(); ++j) {
+                Y_ENSURE(!isPrefix(prefixes[j].Src, prefixes[i].Dst)
+                    && !isPrefix(prefixes[i].Dst, prefixes[j].Src),
+                    "resource_path_prefix_mapping rule " << i + 1 << ": dst '" << impl->Rules[i].Dst
+                    << "' overlaps src '" << impl->Rules[j].Src << "' of rule " << j + 1
+                    << "; alias chains and cycles are not allowed");
+            }
+        }
+
         Impl = std::move(impl);
     }
 
@@ -49,14 +69,19 @@ namespace NKikimr::NPathAliasing {
             return TString(path);
         }
 
+        TStringBuf normalizedPath = path;
+        while (normalizedPath.StartsWith("//")) {
+            normalizedPath = normalizedPath.SubStr(1);
+        }
+
         for (const auto& rule : Impl->Rules) {
-            if (path.StartsWith(rule.Src)
-                && (rule.Src.EndsWith("/") || path.size() == rule.Src.size() || path[rule.Src.size()] == '/')) {
+            if (normalizedPath.StartsWith(rule.Src)
+                && (rule.Src.EndsWith("/") || normalizedPath.size() == rule.Src.size() || normalizedPath[rule.Src.size()] == '/')) {
                 TString result(rule.Dst);
-                if (path.size() > rule.Src.size() && result.back() != '/' && path[rule.Src.size()] != '/') {
+                if (normalizedPath.size() > rule.Src.size() && result.back() != '/' && normalizedPath[rule.Src.size()] != '/') {
                     result.push_back('/');
                 }
-                result.append(path.data() + rule.Src.size(), path.size() - rule.Src.size());
+                result.append(normalizedPath.data() + rule.Src.size(), normalizedPath.size() - rule.Src.size());
                 size_t write = 0;
                 for (size_t read = 0; read < result.size(); ++read) {
                     const char c = result[read];

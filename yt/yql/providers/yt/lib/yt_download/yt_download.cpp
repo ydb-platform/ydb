@@ -3,6 +3,7 @@
 #include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <yt/yql/providers/yt/lib/init_yt_api/init.h>
 #include <yql/essentials/core/file_storage/defs/provider.h>
+#include <yql/essentials/core/file_storage/download/download_output_file_stream.h>
 
 #include <yql/essentials/utils/md5_stream.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -14,7 +15,7 @@
 
 #include <util/string/cast.h>
 #include <util/stream/input.h>
-#include <util/stream/file.h>
+#include <util/system/file.h>
 #include <util/system/fstat.h>
 
 namespace NYql {
@@ -36,7 +37,7 @@ public:
         return NUri::EqualNoCase(rawScheme, "yt");
     }
 
-    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& oauthToken, const TString& oldEtag, const TString& /*oldLastModified*/) final {
+    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& oauthToken, const TString& oldEtag, const TString& /*oldLastModified*/, TDownloadLimiter limiter) final {
         InitYtApiOnce();
 
         TCgiParameters params(url.GetField(NUri::TField::FieldQuery));
@@ -88,11 +89,11 @@ public:
             return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
         }
 
-        auto puller = [tx = std::move(tx), path = std::move(path)](const TFsPath& dstFile) -> std::pair<ui64, TString> {
+        auto puller = [tx = std::move(tx), path = std::move(path), limiter](const TFsPath& dstFile) -> std::pair<ui64, TString> {
             auto reader = tx->CreateFileReader(path);
 
             TFile outFile(dstFile, CreateAlways | ARW | AX);
-            TUnbufferedFileOutput out(outFile);
+            TDownloadOutputFileStream out(outFile, limiter);
             TMd5OutputStream md5Out(out);
 
             const ui64 size = TransferData(reader.Get(), &md5Out);

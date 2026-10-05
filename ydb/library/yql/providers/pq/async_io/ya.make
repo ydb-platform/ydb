@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_pq_control_plane_actor.cpp
@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/disjoint_interval_tree
     library/cpp/protobuf/interop
     library/cpp/retry
     ydb/core/fq/libs/graph_params/proto
@@ -22,9 +23,11 @@ PEERDIR(
     ydb/library/services
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/abstract
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/gateway/clients/composite
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/proto
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
@@ -36,7 +39,5 @@ PEERDIR(
     yql/essentials/public/types
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

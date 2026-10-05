@@ -178,6 +178,7 @@ public:
     bool UseUnordered(const TTableRef& table) const;
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+    void SetRelativePathPrefix(const TString& value);
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
@@ -443,6 +444,7 @@ public:
     bool DebugPositions = false;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
+    bool RuntimeUserAttrs = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

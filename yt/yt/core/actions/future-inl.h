@@ -1670,6 +1670,12 @@ TPromiseBase<T>::operator TFuture<T>() const
 }
 
 template <class T>
+TPromiseBase<T>::operator TUniqueFuture<T>() const
+{
+    return TFuture<T>(Impl_).AsUnique();
+}
+
+template <class T>
 TPromiseBase<T>::TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl)
     : Impl_(std::move(impl))
 { }
@@ -1773,8 +1779,9 @@ template <class R, class... TArgs>
 struct TAsyncViaHelper<R(TArgs...)>
 {
     using TUnderlying = typename TFutureTraits<R>::TUnderlying;
+    using TWrapped = typename TFutureTraits<R>::TWrapped;
     using TSourceCallback = TExtendedCallback<R(TArgs...)>;
-    using TTargetCallback = TExtendedCallback<TFuture<TUnderlying>(TArgs...)>;
+    using TTargetCallback = TExtendedCallback<TWrapped(TArgs...)>;
 
     static void Inner(
         const TSourceCallback& this_,
@@ -1796,7 +1803,7 @@ struct TAsyncViaHelper<R(TArgs...)>
         NYT::NDetail::TPromiseSetter<TUnderlying, R(TArgs...)>::Do(promise, this_, std::forward<TArgs>(args)...);
     }
 
-    static TFuture<TUnderlying> Outer(
+    static TWrapped Outer(
         TSourceCallback this_,
         const IInvokerPtr& invoker,
         TArgs... args)
@@ -1824,10 +1831,10 @@ struct TAsyncViaHelper<R(TArgs...)>
             BIND_NO_PROPAGATE([promise] {
                 promise.Set(TryExtractCancelationError());
             })));
-        return promise;
+        return TWrapped(promise);
     }
 
-    static TFuture<TUnderlying> OuterGuarded(
+    static TWrapped OuterGuarded(
         TSourceCallback this_,
         const IInvokerPtr& invoker,
         TError cancellationError,
@@ -1853,7 +1860,7 @@ struct TAsyncViaHelper<R(TArgs...)>
             BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
             })));
-        return promise;
+        return TWrapped(promise);
     }
 
     static TTargetCallback Do(

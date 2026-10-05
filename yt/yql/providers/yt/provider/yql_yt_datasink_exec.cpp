@@ -109,7 +109,7 @@ public:
         AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
-        AddHandler({TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
+        AddHandler({TYtCreateSymlink::CallableName(), TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropSymlink::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleIsolatedOp));
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleCommit));
         AddHandler({TYtEquiJoin::CallableName()}, RequireSequenceOf({TYtEquiJoin::idx_World, TYtEquiJoin::idx_Input}),
@@ -550,6 +550,12 @@ private:
         TYtTableDescription& nextDescription = State_->TablesData->GetModifTable(cluster, path, commitEpoch);
 
         auto config = State_->Configuration->GetSettingsForNode(*input);
+
+        TExprNode::TListType needCalc = GetNodesToCalculate(input);
+        if (!needCalc.empty()) {
+            YQL_CLOG(DEBUG, ProviderYt) << "Calculating nodes for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+            return CalculateNodes(State_, input, cluster, needCalc, ctx);
+        }
 
         const auto mode = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode);
         const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);

@@ -74,6 +74,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateObject::CallableName());
         DataSinkNames.insert(TKiAlterObject::CallableName());
         DataSinkNames.insert(TKiDropObject::CallableName());
+        DataSinkNames.insert(TKiKillSession::CallableName());
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
         DataSinkNames.insert(TKiRenameGroup::CallableName());

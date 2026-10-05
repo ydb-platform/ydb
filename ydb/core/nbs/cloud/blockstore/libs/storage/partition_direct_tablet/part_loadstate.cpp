@@ -81,6 +81,8 @@ TDirtyMapStateProto MakeCompactedDirtyMapState(
             *result.AddDDiskStates() = state.GetDDiskStates(slot);
         }
     }
+    // The restore barrier is not per slot: it survives the compaction.
+    *result.MutableRestoreBarrier() = state.GetRestoreBarrier();
     return result;
 }
 
@@ -187,6 +189,7 @@ void TPartitionActor::CompleteLoadState(
 {
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
+        ReportDiskId(ctx);
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;

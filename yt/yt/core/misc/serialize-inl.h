@@ -32,15 +32,18 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+[[noreturn]] void ThrowPrematureEndOfStream(size_t bytesLoaded, size_t bytesExpected);
+
+} // namespace NDetail
+
 template <class TInput>
-void ReadRef(TInput& input, TMutableRef ref)
+Y_FORCE_INLINE void ReadRef(TInput& input, TMutableRef ref)
 {
     auto bytesLoaded = input.Load(ref.Begin(), ref.Size());
-    if (bytesLoaded != ref.Size()) {
-        TCrashOnDeserializationErrorGuard::OnError();
-        THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            .With("bytes_loaded", bytesLoaded)
-            .With("bytes_expected", ref.Size());
+    if (bytesLoaded != ref.Size()) [[unlikely]] {
+        NDetail::ThrowPrematureEndOfStream(bytesLoaded, ref.Size());
     }
 }
 
@@ -665,9 +668,7 @@ struct TPodSerializer
     template <class T, class C>
     Y_FORCE_INLINE static void Load(C& context, T& value)
     {
-        SERIALIZATION_DUMP_SUSPEND(context) {
-            TRangeSerializer::Load(context, TMutableRef::FromPod(value));
-        }
+        ReadRef(*context.GetInput(), TMutableRef::FromPod(value));
         TSerializationDumpPodWriter<T>::Do(context, value);
     }
 };
@@ -803,6 +804,17 @@ struct TStringSerializer
     static void Load(C& context, T& value)
     {
         size_t size = TSizeSerializer::LoadSuspended(context);
+
+        if (!context.Dumper().IsContentDumpActive()) [[likely]] {
+            if constexpr (requires { ResizeUninitialized(value, size); }) {
+                ResizeUninitialized(value, size);
+            } else {
+                value.resize(size);
+            }
+            ReadRef(*context.GetInput(), TMutableRef::FromString(value));
+            return;
+        }
+
         value.resize(size);
 
         SERIALIZATION_DUMP_SUSPEND(context) {
@@ -1195,22 +1207,44 @@ template <
 >
 struct TVectorSerializer
 {
-    template <class TVectorType, class C>
-    static void Save(C& context, const TVectorType& objects)
+    //! Items are raw bytes laid out back-to-back, both in memory and on the wire.
+    template <class TVector, class C>
+    static constexpr bool IsPodRange =
+        std::ranges::contiguous_range<TVector> &&
+        std::same_as<TItemSerializer, TDefaultSerializer> &&
+        std::same_as<typename TSerializerTraits<typename TVector::value_type, C>::TSerializer, TPodSerializer>;
+
+    template <class TVector, class C>
+    static void Save(C& context, const TVector& objects)
     {
         TSizeSerializer::Save(context, objects.size());
 
-        typename TSorterSelector<TVectorType, C, TSortTag>::TSorter sorter(objects);
-        for (const auto& object : sorter) {
-            TItemSerializer::Save(context, object);
+        if constexpr (IsPodRange<TVector, C> && std::same_as<TSortTag, TUnsortedTag>) {
+            TRangeSerializer::Save(context, TRef(objects.data(), objects.size() * sizeof(typename TVector::value_type)));
+        } else {
+            typename TSorterSelector<TVector, C, TSortTag>::TSorter sorter(objects);
+            for (const auto& object : sorter) {
+                TItemSerializer::Save(context, object);
+            }
         }
     }
 
-    template <class TVectorType, class C>
-    static void Load(C& context, TVectorType& objects)
+    template <class TVector, class C>
+    static void Load(C& context, TVector& objects)
     {
         size_t size = TSizeSerializer::LoadSuspended(context);
         objects.resize(size);
+
+        if (!context.Dumper().IsContentDumpActive()) [[likely]] {
+            if constexpr (IsPodRange<TVector, C>) {
+                ReadRef(*context.GetInput(), TMutableRef(objects.data(), size * sizeof(typename TVector::value_type)));
+            } else {
+                for (size_t index = 0; index != size; ++index) {
+                    TItemSerializer::Load(context, objects[index]);
+                }
+            }
+            return;
+        }
 
         SERIALIZATION_DUMP_WRITE(context, "vector[%v]", size);
         SERIALIZATION_DUMP_INDENT(context) {
@@ -1230,8 +1264,8 @@ template <
 >
 struct TOptionalVectorSerializer
 {
-    template <class TVectorType, class C>
-    static void Save(C& context, const std::unique_ptr<TVectorType>& objects)
+    template <class TVector, class C>
+    static void Save(C& context, const std::unique_ptr<TVector>& objects)
     {
         if (objects) {
             TVectorSerializer<TItemSerializer, TSortTag>::Save(context, *objects);
@@ -1240,8 +1274,8 @@ struct TOptionalVectorSerializer
         }
     }
 
-    template <class TVectorType, class C>
-    static void Load(C& context, std::unique_ptr<TVectorType>& objects)
+    template <class TVector, class C>
+    static void Load(C& context, std::unique_ptr<TVector>& objects)
     {
         size_t size = TSizeSerializer::LoadSuspended(context);
         if (size == 0) {
@@ -1249,7 +1283,7 @@ struct TOptionalVectorSerializer
             return;
         }
 
-        objects.reset(new TVectorType());
+        objects.reset(new TVector());
         objects->resize(size);
 
         SERIALIZATION_DUMP_WRITE(context, "vector[%v]", size);

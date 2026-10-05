@@ -13,6 +13,12 @@ TRawTableReaderPtr CreateTablePartitionReader(
     const TFormat& format,
     const TTablePartitionReaderOptions& options);
 
+IFileReaderPtr CreateFilePartitionReader(
+    const IRawClientPtr& rawClient,
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

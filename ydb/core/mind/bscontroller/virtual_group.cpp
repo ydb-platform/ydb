@@ -85,6 +85,9 @@ namespace NKikimr::NBsController {
         ++pool.NumGroups;
         StoragePoolGroups.Unshare().emplace(storagePoolId, group->ID);
 
+        auto& index = IndexGroupSpeciesToGroup.Unshare();
+        index[group->GetGroupSpecies()].push_back(group->ID);
+
         group->VirtualGroupName = cmd.GetName();
         group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
         group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
@@ -384,18 +387,19 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 TGroupInfo *group = State->Groups.FindForUpdate(GroupId);
                 Y_ABORT_UNLESS(group);
-                if (!Callback(*group, *State)) {
-                    State->DeleteExistingGroup(group->ID);
+                if (Callback(*group, *State)) {
+                    group->CalculateGroupStatus();
+                    group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                        const auto& pools = State->StoragePools.Get();
+                        if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
+                            return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                        }
+                        Y_DEBUG_ABORT();
+                        return TGroupGeometryInfo();
+                    });
+                } else {
+                    State->DeleteExistingGroup(GroupId); // group is freed here
                 }
-                group->CalculateGroupStatus();
-                group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                    const auto& pools = State->StoragePools.Get();
-                    if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
-                    }
-                    Y_DEBUG_ABORT();
-                    return TGroupGeometryInfo();
-                });
                 if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
                     YDB_LOG_ERROR("Failed to commit update",
                         {"marker", "BSCVG08"},

@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
@@ -59,17 +60,17 @@ class TControlPlaneInteractor final : public NActors::TActorBootstrapped<TContro
     using TComplete = std::function<void(TIssues)>;
 
     struct TEvRewindFinished : NActors::TEventLocal<TEvRewindFinished, TPqControlPlaneEvents::EvEnd> {
-        TEvRewindFinished(ui64 partitionId, NYdb::TAsyncStatus result)
+        TEvRewindFinished(ui64 partitionId, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> result)
             : PartitionId(partitionId)
             , Result(std::move(result))
         {}
 
         const ui64 PartitionId;
-        const NYdb::TAsyncStatus Result;
+        const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> Result;
     };
 
 public:
-    TControlPlaneInteractor(NActors::TActorId readerId, NActors::TActorId controlPlaneActorId, TConnection connection, ITopicClient::TPtr topicClient,
+    TControlPlaneInteractor(NActors::TActorId readerId, NActors::TActorId controlPlaneActorId, TConnection connection, std::shared_ptr<NFq::IMessageStreamClient> topicClient,
         THashSet<ui64> partitions, TString logPrefix, TComplete complete)
         : ReaderId(readerId)
         , ControlPlaneActorId(controlPlaneActorId)
@@ -163,7 +164,7 @@ private:
             SRC_LOG_I("Rewind consumer \"" << Connection.GetConsumerName() << "\", topic \"" << Connection.GetTopicPath() << "\", partition " << partition.GetPartitionId() << " from " << partition.GetCommittedOffset() << " to " << offset);
             ++PendingRequests;
 
-            TopicClient->CommitOffset(Connection.GetTopicPath(), partition.GetPartitionId(), Connection.GetConsumerName(), offset)
+            TopicClient->CommitPosition(NFq::TMessageStreamPartitionId{partition.GetPartitionId()}, Connection.GetConsumerName(), offset)
                 .Subscribe([partitionId = partition.GetPartitionId(), actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const auto& future) {
                     actorSystem->Send(selfId, new TEvRewindFinished(partitionId, future));
                 });
@@ -175,7 +176,8 @@ private:
 
     void Handle(TEvRewindFinished::TPtr& ev) {
         if (const auto& result = ev->Get()->Result.GetValue(); !result.IsSuccess()) {
-            Fail(TStringBuilder() << "Failed to rewind consumer \"" << Connection.GetConsumerName() << "\" for topic \"" << Connection.GetTopicPath() << "\", partition " << ev->Get()->PartitionId, result);
+            Fail(TStringBuilder() << "Failed to rewind consumer \"" << Connection.GetConsumerName() << "\" for topic \"" << Connection.GetTopicPath() << "\", partition " << ev->Get()->PartitionId,
+                ToSdkStatus(result.Status, result.Issues));
             return;
         }
 
@@ -222,7 +224,7 @@ private:
     const NActors::TActorId ReaderId;
     const NActors::TActorId ControlPlaneActorId;
     const TConnection Connection;
-    const ITopicClient::TPtr TopicClient;
+    const std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
     THashSet<ui64> PartitionsToRead;
     const TString LogPrefix;
     TComplete Complete;
@@ -257,7 +259,7 @@ TDqPqReadActorBase::TDqPqReadActorBase(
 void TDqPqReadActorBase::InitConsumerOffsets(
     const NActors::TActorId& selfId,
     const NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo& cluster,
-    ITopicClient::TPtr topicClient,
+    std::shared_ptr<NFq::IMessageStreamClient> topicClient,
     ui32 partitionsCount)
 {
     if (!TControlPlaneInteractor::NeedsRewind(SourceParams, StartingMessageTimestamp)) {

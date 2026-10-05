@@ -50,6 +50,10 @@ namespace NTabletFlatExecutor {
                 NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
                 const TLargeGlobId &largeGlobId,
                 const NPageCollection::TPageCollection *pack);
+        void Bundle(
+                NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
+                const TLargeGlobId &largeGlobId,
+                const TSharedData &rawMeta);
 
     private:
         const bool PutMeta = false;     /* Save page collection metablob in bundle  */

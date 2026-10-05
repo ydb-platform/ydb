@@ -185,7 +185,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -1990,14 +1989,14 @@ void TWriteSessionImpl::SendStandardBlock(
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
+    // Split ready blocks into requests bounded by the driver's outbound limit.
     while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
 
         ui32 prevCodec = 0;
 
-        NGrpc::TRequestSizeLimiter sizeLimiter(2);
+        NGrpc::TRequestSizeLimiter sizeLimiter(2, NGrpc::GetMaxGrpcMessageSize(*Connections));
 
         // Send blocks while we can without messages reordering.
         while (IsReadyToSendNextImpl()) {

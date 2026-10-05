@@ -262,6 +262,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
     });
+    opts.AddLongOption("static-gateways-cfg", "Static gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        StaticGatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TStaticGatewaysConfig>(file);
+    });
     opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         FsConfig = MakeHolder<TFileStorageConfig>();
         LoadFsConfigFromFile(file, *FsConfig);
@@ -510,7 +513,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    if (!StaticGatewaysConfig) {
+        StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    }
     SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
 
     {
@@ -719,11 +724,13 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
+        auto mounts = GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker);
+        if (mounts.empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
         }
+        RunOptions_.DataTable.insert(mounts.begin(), mounts.end());
     }
 
     TExprContext::TFreezeGuard freezeGuard(ctx);

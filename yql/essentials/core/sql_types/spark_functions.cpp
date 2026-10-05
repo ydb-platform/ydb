@@ -3,14 +3,27 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/string/cast.h>
+#include <util/system/yassert.h>
 
 namespace NYql::NSpark {
 namespace {
 
 class TFunctionRegistry {
 public:
-    const TSparkFunction* Find(const TString& name) const {
+    const TFunction* Find(const TString& name) const {
         return Functions_.FindPtr(name);
+    }
+
+    const TAggregateFunction& GetAggregate(TStringBuf name) const {
+        const auto function = AggregateFunctions_.find(name);
+        Y_ENSURE(function != AggregateFunctions_.end(), "Missing Spark aggregate implementation: " << name);
+        Y_ENSURE(function->second.Arity > 0 && function->second.YqlNames.size() == function->second.Arity,
+                 "Invalid Spark aggregate arity: " << name);
+        Y_ENSURE(function->second.Arity == 1 || !function->second.PreprocessorBinding.empty(),
+                 "Spark aggregate with multiple inputs requires a preprocessor: " << name);
+        Y_ENSURE(function->second.Arity == 1 || !function->second.PostprocessorBinding.empty(),
+                 "Spark aggregate with multiple results requires a postprocessor: " << name);
+        return function->second;
     }
 
     void Enumerate(const std::function<void(const TString& name, const TString& bindingName)>& callback) const {
@@ -20,13 +33,29 @@ public:
     }
 
 private:
-    const THashMap<TString, TSparkFunction> Functions_ = {
+    const THashMap<TStringBuf, TAggregateFunction> AggregateFunctions_ = {
+        {"count", {.YqlNames = {"count"}, .PostprocessorBinding = "aggregate_count_post"}},
+        {"min", {.YqlNames = {"min"}, .PreprocessorBinding = "aggregate_minmax_pre"}},
+        {"max", {.YqlNames = {"max"}, .PreprocessorBinding = "aggregate_minmax_pre"}},
+        {"avg", {.YqlNames = {"avg"}, .PreprocessorBinding = "aggregate_numeric_pre"}},
+        {"sum", {.Arity = 2, .YqlNames = {"checked_sum", "count"}, .PreprocessorBinding = "aggregate_sum_pre", .PostprocessorBinding = "aggregate_sum_post"}},
+    };
+
+    const THashMap<TString, TFunction> Functions_ = {
+        {"count", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"min", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"max", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"avg", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"sum", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
         {"concat", {.BindingName = "", .MinArgs = 2, .MaxArgs = Max<ui32>()}},
         {"raise_error", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1}},
         {"nullif", {.BindingName = "nullif", .MinArgs = 2, .MaxArgs = 2}},
+        {"nullifzero", {.BindingName = "nullifzero", .MinArgs = 1, .MaxArgs = 1}},
+        {"equal_null", {.BindingName = "equal_null", .MinArgs = 2, .MaxArgs = 2}},
         {"isnull", {.BindingName = "isnull", .MinArgs = 1, .MaxArgs = 1}},
         {"isnotnull", {.BindingName = "isnotnull", .MinArgs = 1, .MaxArgs = 1}},
         {"ifnull", {.BindingName = "ifnull", .MinArgs = 2, .MaxArgs = 2}},
+        {"if", {.BindingName = "if", .MinArgs = 3, .MaxArgs = 3}},
         {"nvl", {.BindingName = "ifnull", .MinArgs = 2, .MaxArgs = 2}}, // ifnull
         {"nvl2", {.BindingName = "nvl2", .MinArgs = 3, .MaxArgs = 3}},
         {"startswith", {.BindingName = "startswith", .MinArgs = 2, .MaxArgs = 2}},
@@ -34,15 +63,23 @@ private:
         {"contains", {.BindingName = "contains", .MinArgs = 2, .MaxArgs = 2}},
         {"instr", {.BindingName = "instr", .MinArgs = 2, .MaxArgs = 2}},
         {"locate", {.BindingName = "locate", .MinArgs = 2, .MaxArgs = 3}},
+        {"position", {.BindingName = "locate", .MinArgs = 2, .MaxArgs = 3}}, // locate
         {"levenshtein", {.BindingName = "levenshtein", .MinArgs = 2, .MaxArgs = 3}},
         {"base64", {.BindingName = "base64", .MinArgs = 1, .MaxArgs = 1}},
         {"hex", {.BindingName = "hex", .MinArgs = 1, .MaxArgs = 1}},
         {"bin", {.BindingName = "bin", .MinArgs = 1, .MaxArgs = 1}},
         {"chr", {.BindingName = "chr", .MinArgs = 1, .MaxArgs = 1}},
+        {"char", {.BindingName = "chr", .MinArgs = 1, .MaxArgs = 1}}, // chr
         {"unhex", {.BindingName = "unhex", .MinArgs = 1, .MaxArgs = 1}},
         {"md5", {.BindingName = "md5", .MinArgs = 1, .MaxArgs = 1}},
+        {"crc32", {.BindingName = "crc32", .MinArgs = 1, .MaxArgs = 1}},
         {"sha1", {.BindingName = "sha1", .MinArgs = 1, .MaxArgs = 1}},
+        {"sha", {.BindingName = "sha1", .MinArgs = 1, .MaxArgs = 1}}, // sha1
+        {"sha2", {.BindingName = "sha2", .MinArgs = 2, .MaxArgs = 2}},
         {"unbase64", {.BindingName = "unbase64", .MinArgs = 1, .MaxArgs = 1}},
+        {"quote", {.BindingName = "quote", .MinArgs = 1, .MaxArgs = 1}},
+        {"soundex", {.BindingName = "soundex", .MinArgs = 1, .MaxArgs = 1}},
+        {"overlay", {.BindingName = "overlay", .MinArgs = 4, .MaxArgs = 4}},
         {"reverse", {.BindingName = "reverse", .MinArgs = 1, .MaxArgs = 1}},
         {"substring", {.BindingName = "substring", .MinArgs = 2, .MaxArgs = 3}},
         {"left", {.BindingName = "left", .MinArgs = 2, .MaxArgs = 2}},
@@ -53,6 +90,7 @@ private:
         {"replace", {.BindingName = "replace", .MinArgs = 2, .MaxArgs = 3}},
         {"translate", {.BindingName = "translate", .MinArgs = 3, .MaxArgs = 3}},
         {"trim", {.BindingName = "trim", .MinArgs = 1, .MaxArgs = 2}},
+        {"btrim", {.BindingName = "btrim", .MinArgs = 1, .MaxArgs = 2}},
         {"ltrim", {.BindingName = "ltrim", .MinArgs = 1, .MaxArgs = 2}},
         {"rtrim", {.BindingName = "rtrim", .MinArgs = 1, .MaxArgs = 2}},
         {"repeat", {.BindingName = "repeat", .MinArgs = 2, .MaxArgs = 2}},
@@ -71,15 +109,26 @@ private:
         {"bit_length", {.BindingName = "bit_length", .MinArgs = 1, .MaxArgs = 1}},
         {"abs", {.BindingName = "abs", .MinArgs = 1, .MaxArgs = 1}},
         {"isnan", {.BindingName = "isnan", .MinArgs = 1, .MaxArgs = 1}},
+        {"is_valid_utf8", {.BindingName = "is_valid_utf8", .MinArgs = 1, .MaxArgs = 1}},
+        {"try_validate_utf8", {.BindingName = "try_validate_utf8", .MinArgs = 1, .MaxArgs = 1}},
+        {"validate_utf8", {.BindingName = "validate_utf8", .MinArgs = 1, .MaxArgs = 1}},
         {"nanvl", {.BindingName = "nanvl", .MinArgs = 2, .MaxArgs = 2}},
+        {"shiftleft", {.BindingName = "shiftleft", .MinArgs = 2, .MaxArgs = 2}},
+        {"shiftright", {.BindingName = "shiftright", .MinArgs = 2, .MaxArgs = 2}},
+        {"shiftrightunsigned", {.BindingName = "shiftrightunsigned", .MinArgs = 2, .MaxArgs = 2}},
         {"bit_count", {.BindingName = "bit_count", .MinArgs = 1, .MaxArgs = 1}},
         {"bit_get", {.BindingName = "bit_get", .MinArgs = 2, .MaxArgs = 2}},
         {"getbit", {.BindingName = "bit_get", .MinArgs = 2, .MaxArgs = 2}}, // bit_get
         {"factorial", {.BindingName = "factorial", .MinArgs = 1, .MaxArgs = 1}},
         {"positive", {.BindingName = "positive", .MinArgs = 1, .MaxArgs = 1}},
         {"negative", {.BindingName = "negative", .MinArgs = 1, .MaxArgs = 1}},
+        {"try_add", {.BindingName = "try_add", .MinArgs = 2, .MaxArgs = 2}},
+        {"try_subtract", {.BindingName = "try_subtract", .MinArgs = 2, .MaxArgs = 2}},
+        {"try_multiply", {.BindingName = "try_multiply", .MinArgs = 2, .MaxArgs = 2}},
+        {"try_divide", {.BindingName = "try_divide", .MinArgs = 2, .MaxArgs = 2}},
         {"try_mod", {.BindingName = "try_mod", .MinArgs = 2, .MaxArgs = 2}},
         {"mod", {.BindingName = "mod", .MinArgs = 2, .MaxArgs = 2}},
+        {"div", {.BindingName = "div", .MinArgs = 2, .MaxArgs = 2}},
         {"sqrt", {.BindingName = "sqrt", .MinArgs = 1, .MaxArgs = 1}},
         {"ceil", {.BindingName = "ceil", .MinArgs = 1, .MaxArgs = 1}},
         {"ceiling", {.BindingName = "ceil", .MinArgs = 1, .MaxArgs = 1}}, // ceil
@@ -125,11 +174,15 @@ private:
 
 } // namespace
 
-const TSparkFunction* FindFunction(const TString& name) {
+const TFunction* FindFunction(const TString& name) {
     return Singleton<TFunctionRegistry>()->Find(name);
 }
 
-TString TSparkFunction::GetBindingName(ui32 argumentCount) const {
+const TAggregateFunction& GetAggregateFunction(TStringBuf name) {
+    return Singleton<TFunctionRegistry>()->GetAggregate(name);
+}
+
+TString TFunction::GetBindingName(ui32 argumentCount) const {
     TString bindingName = BindingName;
     if (MinArgs != MaxArgs) {
         bindingName += '_';

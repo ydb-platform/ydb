@@ -79,9 +79,11 @@ namespace {
         }
     }
 
-    void SendSpaceReportRequest(TTestEnv& env, const TActorId& edge) {
+    void SendSpaceReportRequest(TTestEnv& env, const TActorId& edge, bool forceRecalculation = false) {
+        auto request = std::make_unique<TEvGetVDiskSpaceReportRequest>();
+        request->Record.SetForceRecalculation(forceRecalculation);
         env.GetRuntime()->Send(new IEventHandle(
-            env.GetVDiskServiceId(), edge, new TEvGetVDiskSpaceReportRequest), 1);
+            env.GetVDiskServiceId(), edge, request.release()), 1);
     }
 
     const NKikimrVDisk::TGetVDiskSpaceReportResponse& WaitForSpaceReport(
@@ -100,29 +102,49 @@ namespace {
             >= response.GetReport().GetCollectionStartedAtUnixMs());
     }
 
+    ::NMonitoring::TDynamicCounterPtr FindVDiskCounters(TTestEnv& env, const TString& service) {
+        auto vdisk = env.GetCounters()->FindSubgroup("subsystem", "vdisk");
+        if (!vdisk) {
+            return {};
+        }
+        auto counters = vdisk->FindSubgroup("counters", service);
+        if (!counters) {
+            return {};
+        }
+        auto pool = counters->FindSubgroup("storagePool", "static");
+        if (!pool) {
+            return {};
+        }
+        auto group = pool->FindSubgroup("group", "000000000");
+        if (!group) {
+            return {};
+        }
+        auto order = group->FindSubgroup("orderNumber", "00");
+        if (!order) {
+            return {};
+        }
+        auto pdisk = order->FindSubgroup("pdisk", "000000001");
+        if (!pdisk) {
+            return {};
+        }
+        return pdisk->FindSubgroup("media", "ssd");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr HeapAllocatorState(TTestEnv& env) {
+        auto counters = FindVDiskCounters(env, "vdisks");
+        return counters ? counters->FindSubgroup("subsystem", "state") : nullptr;
+    }
+
     ::NMonitoring::TDynamicCounterPtr GetSpaceReportCounters(TTestEnv& env) {
-        return env.GetCounters()
-            ->GetSubgroup("subsystem", "vdisk")
-            ->GetSubgroup("counters", "vdisks")
-            ->GetSubgroup("storagePool", "static")
-            ->GetSubgroup("group", "000000000")
-            ->GetSubgroup("orderNumber", "00")
-            ->GetSubgroup("pdisk", "000000001")
-            ->GetSubgroup("media", "ssd")
-            ->GetSubgroup("subsystem", "vdisk_space_report");
+        auto counters = FindVDiskCounters(env, "vdisk_space_report");
+        UNIT_ASSERT(counters);
+        return counters;
     }
 
     void WaitForSuccessfulRefresh(TTestEnv& env, ui64 previousSuccesses = 0) {
         const auto counter = GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true);
         env.GetRuntime()->Sim([&] {
             return static_cast<ui64>(counter->Val()) <= previousSuccesses;
-        });
-    }
-
-    void WaitForFailedRefresh(TTestEnv& env, ui64 previousFailures = 0) {
-        const auto counter = GetSpaceReportCounters(env)->GetCounter("RefreshFailures", true);
-        env.GetRuntime()->Sim([&] {
-            return static_cast<ui64>(counter->Val()) <= previousFailures;
         });
     }
 
@@ -171,16 +193,18 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         const auto& cold = WaitForSpaceReport(env, edge, coldHandle);
         UNIT_ASSERT_VALUES_EQUAL(cold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
         UNIT_ASSERT(!cold.HasReport());
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSpaceReportCounters(env)->GetCounter("RefreshInProgress")->Val(), 0);
 
-        WaitForSuccessfulRefresh(env);
         const TActorId reportEdge = env.GetRuntime()->AllocateEdgeActor(1);
-        SendSpaceReportRequest(env, reportEdge);
+        SendSpaceReportRequest(env, reportEdge, true);
 
         std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> reportHandle;
         const auto& response = WaitForSpaceReport(env, reportEdge, reportHandle);
         AssertCompletedReport(response);
         UNIT_ASSERT(response.GetReport().GetLogoBlobs().GetBreakdown().GetUsefulBlobDataBytes() > 0);
         AssertReportCounters(env, response.GetReport());
+        UNIT_ASSERT(!FindVDiskCounters(env, "vdisks")->FindSubgroup("subsystem", "vdisk_space_report"));
 
         const ui64 completedAt = response.GetReport().GetCollectionCompletedAtUnixMs();
         const TActorId cachedEdge = env.GetRuntime()->AllocateEdgeActor(1);
@@ -208,10 +232,11 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> coldHandle;
         const auto& cold = WaitForSpaceReport(env, edge, coldHandle);
         UNIT_ASSERT_VALUES_EQUAL(cold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSpaceReportCounters(env)->GetCounter("RefreshInProgress")->Val(), 0);
 
-        WaitForSuccessfulRefresh(env);
         const TActorId reportEdge = env.GetRuntime()->AllocateEdgeActor(1);
-        SendSpaceReportRequest(env, reportEdge);
+        SendSpaceReportRequest(env, reportEdge, true);
         std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> reportHandle;
         const auto& response = WaitForSpaceReport(env, reportEdge, reportHandle);
         AssertCompletedReport(response);
@@ -229,6 +254,44 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
                 + report.GetHuge().GetTotal().GetStripedBytes(),
             report.GetStripeHeap().GetAllocatedBytes());
         UNIT_ASSERT_VALUES_EQUAL(report.GetReconciliationDeltaBytes(), 0);
+    }
+
+    Y_UNIT_TEST(ForcedRequestRefreshesCachedReport) {
+        TTestEnv env;
+
+        const TActorId coldEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, coldEdge);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> coldHandle;
+        const auto& cold = WaitForSpaceReport(env, coldEdge, coldHandle);
+        UNIT_ASSERT_VALUES_EQUAL(
+            cold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
+
+        const TActorId initialReportEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, initialReportEdge, true);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> initialReportHandle;
+        const auto& initialReport = WaitForSpaceReport(env, initialReportEdge, initialReportHandle);
+        AssertCompletedReport(initialReport);
+
+        const TActorId cachedEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, cachedEdge);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> cachedHandle;
+        const auto& cached = WaitForSpaceReport(env, cachedEdge, cachedHandle);
+        AssertCompletedReport(cached);
+        const ui64 oldUsefulBytes = cached.GetReport().GetTotal().GetUsefulBlobDataBytes();
+
+        const TString data(100, 'x');
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Put(id, data).GetStatus(), NKikimrProto::OK);
+        env.Compact();
+
+        const TActorId forcedEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, forcedEdge, true);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> forcedHandle;
+        const auto& forced = WaitForSpaceReport(env, forcedEdge, forcedHandle);
+        AssertCompletedReport(forced);
+        UNIT_ASSERT(forced.GetReport().GetTotal().GetUsefulBlobDataBytes() > oldUsefulBytes);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 2);
     }
 
     Y_UNIT_TEST(ReportsHugeStatsTimeoutOnColdCache) {
@@ -254,7 +317,13 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         const auto& cold = WaitForSpaceReport(env, edge, coldHandle);
         UNIT_ASSERT_VALUES_EQUAL(cold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
 
-        WaitForFailedRefresh(env);
+        const TActorId forcedEdge = runtime->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, forcedEdge, true);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> forcedHandle;
+        const auto& forced = WaitForSpaceReport(env, forcedEdge, forcedHandle);
+        UNIT_ASSERT_VALUES_EQUAL(forced.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
+        UNIT_ASSERT_STRING_CONTAINS(forced.GetErrorReason(), "HugeKeeper space counters timed out");
+
         runtime->FilterFunction = {};
 
         const TActorId retryEdge = runtime->AllocateEdgeActor(1);
@@ -266,12 +335,18 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         UNIT_ASSERT(!retry.HasReport());
     }
 
-    Y_UNIT_TEST(CoalescesConcurrentColdRequests) {
+    Y_UNIT_TEST(ColdRequestsDoNotRefreshAndForcedRequestsCoalesce) {
         TTestEnv env;
         TTestActorSystem* const runtime = env.GetRuntime();
         std::unique_ptr<IEventHandle> detainedHugeStat;
         ui32 detainedNodeId = 0;
+        TActorId secondForcedEdge;
+        bool secondForcedRequestObserved = false;
         runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvGetVDiskSpaceReportRequest::EventType
+                    && ev->Sender == secondForcedEdge) {
+                secondForcedRequestObserved = true;
+            }
             if (!detainedHugeStat && ev->GetTypeRewrite() == TEvHugeSpaceStatResult::EventType) {
                 detainedNodeId = nodeId;
                 detainedHugeStat = std::move(ev);
@@ -286,8 +361,6 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         const auto& firstCold = WaitForSpaceReport(env, firstEdge, firstColdHandle);
         UNIT_ASSERT_VALUES_EQUAL(
             firstCold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
-        runtime->Sim([&] { return !detainedHugeStat; });
-        UNIT_ASSERT(detainedHugeStat);
 
         const TActorId secondEdge = runtime->AllocateEdgeActor(1);
         SendSpaceReportRequest(env, secondEdge);
@@ -296,13 +369,34 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         UNIT_ASSERT_VALUES_EQUAL(second.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
         UNIT_ASSERT(!second.HasReport());
         UNIT_ASSERT_VALUES_EQUAL(
-            GetSpaceReportCounters(env)->GetCounter("RefreshInProgress")->Val(), 1);
+            GetSpaceReportCounters(env)->GetCounter("RefreshInProgress")->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(
             GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 0);
+        UNIT_ASSERT(!detainedHugeStat);
+
+        const TActorId firstForcedEdge = runtime->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, firstForcedEdge, true);
+        runtime->Sim([&] { return !detainedHugeStat; });
+        UNIT_ASSERT(detainedHugeStat);
+
+        secondForcedEdge = runtime->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, secondForcedEdge, true);
+        runtime->Sim([&] { return !secondForcedRequestObserved; });
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSpaceReportCounters(env)->GetCounter("RefreshInProgress")->Val(), 1);
 
         runtime->FilterFunction = {};
         runtime->Send(detainedHugeStat.release(), detainedNodeId);
-        WaitForSuccessfulRefresh(env);
+
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> firstForcedHandle;
+        const auto& firstForced = WaitForSpaceReport(env, firstForcedEdge, firstForcedHandle);
+        AssertCompletedReport(firstForced);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> secondForcedHandle;
+        const auto& secondForced = WaitForSpaceReport(env, secondForcedEdge, secondForcedHandle);
+        AssertCompletedReport(secondForced);
+        UNIT_ASSERT_VALUES_EQUAL(
+            firstForced.GetReport().GetCollectionCompletedAtUnixMs(),
+            secondForced.GetReport().GetCollectionCompletedAtUnixMs());
 
         const TActorId cachedEdge = runtime->AllocateEdgeActor(1);
         SendSpaceReportRequest(env, cachedEdge);
@@ -311,6 +405,35 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         AssertCompletedReport(cached);
         UNIT_ASSERT_VALUES_EQUAL(
             GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 1);
+    }
+
+    Y_UNIT_TEST(HeapAllocatorModeCounters) {
+        {
+            TTestEnv sizeClass;
+            const auto state = HeapAllocatorState(sizeClass);
+            UNIT_ASSERT(state);
+            UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorSizeClass")->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorStripe")->Val(), 0);
+        }
+        TTestEnv env(nullptr, true);
+        const auto state = HeapAllocatorState(env);
+        UNIT_ASSERT(state);
+        UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorSizeClass")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(state->FindCounter("HeapAllocatorStripe")->Val(), 1);
+        UNIT_ASSERT(GetSpaceReportCounters(env));
+
+        const TActorId edge = env.GetRuntime()->AllocateEdgeActor(1);
+        env.GetRuntime()->Send(new IEventHandle(env.GetVDiskServiceId(), edge, new TEvents::TEvPoisonPill()), 1);
+        bool drained = false;
+        env.GetRuntime()->Sim([&] {
+            if (!drained) {
+                drained = true;
+                return true;
+            }
+            return env.GetRuntime()->HasImmediateEvents();
+        });
+        UNIT_ASSERT(!HeapAllocatorState(env));
+        UNIT_ASSERT(!FindVDiskCounters(env, "vdisk_space_report"));
     }
 
     Y_UNIT_TEST(PeriodicRefreshPopulatesCache) {

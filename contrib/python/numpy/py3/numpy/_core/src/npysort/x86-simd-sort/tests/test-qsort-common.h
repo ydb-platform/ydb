@@ -20,9 +20,16 @@
     ASSERT_TRUE(false) << msg << ". arr size = " << size \
                        << ", type = " << type << ", k = " << k;
 
+inline bool is_nan_test(std::string type)
+{
+    // Currently, determine whether the test uses nan just be checking if nan is in its name
+    return type.find("nan") != std::string::npos;
+}
+
 template <typename T>
 void IS_SORTED(std::vector<T> sorted, std::vector<T> arr, std::string type)
 {
+    if (arr.size() == 0) return;
     if (memcmp(arr.data(), sorted.data(), arr.size() * sizeof(T)) != 0) {
         REPORT_FAIL("Array not sorted", arr.size(), type, -1);
     }

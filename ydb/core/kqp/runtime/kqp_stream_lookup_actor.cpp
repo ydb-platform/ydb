@@ -1055,7 +1055,7 @@ private:
                     .AutoConnect = needToCreatePipe,
                     .Subscribe = needToCreatePipe,
                 }),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
 
         Reads.SetPipeCreated(shardId);
         auto lockState = TLockState(requestId, shardId);
@@ -1414,7 +1414,7 @@ private:
         LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
             "Locate shards", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, LookupActorStateSpan.GetTraceId());
 
         SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));

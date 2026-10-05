@@ -63,12 +63,16 @@ public:
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
-        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight, ui32 groupSizeInUnits = 0) {
+        ChunkTracker.AddOwner(owner, vdiskId, weight, groupSizeInUnits);
     }
 
     void SetOwnerWeight(TOwner owner, ui32 weight) {
         ChunkTracker.SetOwnerWeight(owner, weight);
+    }
+
+    void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
+        ChunkTracker.SetOwnerSettings(owner, weight, groupSizeInUnits);
     }
 
     void RemoveOwner(TOwner owner) {
@@ -172,6 +176,26 @@ public:
         i64 totalUsed = ChunkTracker.GetTotalUsed();
         i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetSharedPoolColor() const {
+        return ChunkTracker.GetSharedPoolColor();
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetCompactionPressureColor() const {
+        return ChunkTracker.GetCompactionPressureColor();
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        ChunkTracker.SetAllocationReserves(system, maintenance);
+    }
+
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        return ChunkTracker.GetAllocationHeadroom(owner, purpose);
+    }
+
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        return ChunkTracker.GetWorstAllocationHeadroom(purpose);
     }
 
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {

@@ -5,4 +5,5 @@ RECURSE(
     partition_direct_tablet
     storage_transport
     testlib
+    volume
 )

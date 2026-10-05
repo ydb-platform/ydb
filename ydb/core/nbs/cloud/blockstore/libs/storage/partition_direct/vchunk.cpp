@@ -507,7 +507,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetPBufferKey());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
-    StartPersist();
+    MaybeStartPersist();
     ScheduleCleaningUp();
 }
 
@@ -559,7 +559,7 @@ void TVChunk::OnCopyProgress(ui64 totalBytes)
         LogTitle.GetWithTime().c_str(),
         totalBytes);
 
-    StartPersist();
+    MaybeStartPersist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -580,7 +580,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::DoStart()
@@ -879,7 +879,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
     ScheduleCleaningUp();
 }
 
@@ -966,6 +966,11 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    DoErase(
+        false,   // force
+        TBlocksDirtyMap::EEraseType::Standard);
+    // EraseFinished may have raised the restore barrier target.
+    MaybeStartPersist();
     ScheduleCleaningUp();
 }
 
@@ -985,7 +990,7 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::StartPersist()
+void TVChunk::MaybeStartPersist()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1013,6 +1018,8 @@ void TVChunk::DoPersistDirtyMap()
     auto state = BlocksDirtyMap->GetStateForPersist();
     const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
     const THostMask freshDDisks = BlocksDirtyMap->GetOutdatedDDisks();
+    const TPBufferKey restoreBarrier =
+        BlocksDirtyMap->GetTargetRestoreBarrier();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -1027,23 +1034,33 @@ void TVChunk::DoPersistDirtyMap()
         [weakSelf = weak_from_this(),
          executor = Executor,
          stateGeneration,
-         freshDDisks]   //
+         freshDDisks,
+         restoreBarrier]   //
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
                 return;
             }
             executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf), stateGeneration, freshDDisks]()
+                [weakSelf = std::move(weakSelf),
+                 stateGeneration,
+                 freshDDisks,
+                 restoreBarrier]()
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnDirtyMapPersisted(stateGeneration, freshDDisks);
+                        self->OnDirtyMapPersisted(
+                            stateGeneration,
+                            freshDDisks,
+                            restoreBarrier);
                     }
                 });
         });
 }
 
-void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
+void TVChunk::OnDirtyMapPersisted(
+    ui32 stateGeneration,
+    THostMask freshDDisks,
+    TPBufferKey restoreBarrier)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1056,9 +1073,13 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
 
     Y_ABORT_UNLESS(Persisting);
     Persisting = false;
-    BlocksDirtyMap->StatePersisted(stateGeneration);
+    BlocksDirtyMap->StatePersisted(stateGeneration, restoreBarrier);
     PersistedFreshDDisks = freshDDisks;
-    StartPersist();
+    // Covered records left the map and no longer block newer overlapping ones.
+    DoErase(
+        false,   // force
+        TBlocksDirtyMap::EEraseType::Standard);
+    MaybeStartPersist();
     DemoteIfNeeded();
     ScheduleCleaningUp();
 }
@@ -1169,7 +1190,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -1201,7 +1222,7 @@ void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
         .PrepareConfig = std::move(prepareConfig),
         .Message = std::move(message)});
 
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::PersistNextPendingConfig()
@@ -1225,7 +1246,7 @@ void TVChunk::PersistNextPendingConfig()
             message.Quote().c_str(),
             config.DebugPrint().c_str());
 
-        StartPersist();
+        MaybeStartPersist();
         return;
     }
 
@@ -1239,6 +1260,8 @@ void TVChunk::PersistNextPendingConfig()
     // GetOutdatedDDisks() only sees current DDisks and would miss a newly
     // promoted DDisk. Use the state that will be persisted with the config.
     const THostMask freshDDisks = GetFreshDDisks(dirtyMapState);
+    const TPBufferKey restoreBarrier =
+        BlocksDirtyMap->GetTargetRestoreBarrier();
     auto onPersisted = PartitionDirectService->UpdateVChunkState(
         config,
         std::move(dirtyMapState));
@@ -1248,7 +1271,8 @@ void TVChunk::PersistNextPendingConfig()
          config,
          message = std::move(message),
          stateGeneration,
-         freshDDisks]   //
+         freshDDisks,
+         restoreBarrier]   //
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
@@ -1260,14 +1284,16 @@ void TVChunk::PersistNextPendingConfig()
                  config,
                  message = std::move(message),
                  stateGeneration,
-                 freshDDisks]() mutable
+                 freshDDisks,
+                 restoreBarrier]() mutable
                 {
                     if (auto self = weakSelf.lock()) {
                         self->OnConfigPersisted(
                             config,
                             message,
                             stateGeneration,
-                            freshDDisks);
+                            freshDDisks,
+                            restoreBarrier);
                     }
                 });
         });
@@ -1277,18 +1303,22 @@ void TVChunk::OnConfigPersisted(
     const TVChunkConfig& config,
     const TString& message,
     ui32 stateGeneration,
-    THostMask freshDDisks)
+    THostMask freshDDisks,
+    TPBufferKey restoreBarrier)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(Persisting);
 
     Persisting = false;
 
-    BlocksDirtyMap->StatePersisted(stateGeneration);
+    BlocksDirtyMap->StatePersisted(stateGeneration, restoreBarrier);
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
     DirectBlockGroup->CommitDDiskPromotion(config);
-    StartPersist();
+    DoErase(
+        false,   // force
+        TBlocksDirtyMap::EEraseType::Standard);
+    MaybeStartPersist();
     DemoteIfNeeded();
 }
 
@@ -1459,7 +1489,7 @@ void TVChunk::OnCopyComplete(
     }
 
     Copiers.erase(hostIndex);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::DemoteIfNeeded()

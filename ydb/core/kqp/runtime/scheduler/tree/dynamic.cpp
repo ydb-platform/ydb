@@ -28,14 +28,7 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMi
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
-    // Take the average of the number of tasks and the peak of wanting ones, but keep at least 1 if there are any tasks.
-    const auto tasks = CpuMaxDemand.load();
-    newQuery->Tasks = tasks;
-    newQuery->CpuMaxDemand = (tasks + CpuPeakDemand.load()) >> 1;
-    if (newQuery->CpuMaxDemand == 0 && tasks > 0) {
-        newQuery->CpuMaxDemand = 1;
-    }
-    CpuPeakDemand = 0;
+    newQuery->CpuMaxDemand = CpuMaxDemand.load();
 
     // The actual demand is smoothed with the one of the previous snapshot.
     if (const auto prevQuery = GetSnapshot()) {
@@ -112,12 +105,6 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     return run;
 }
 
-void TQuery::UpdatePeakDemand() {
-    auto demand = CpuUsage + CpuThrottle + 1;
-    auto peakDemand = CpuPeakDemand.load();
-    while (peakDemand < demand && !CpuPeakDemand.compare_exchange_weak(peakDemand, demand)) {}
-}
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // TPool
@@ -138,6 +125,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters = TPoolCounters();
     Counters->Limit        = group->GetCounter("Limit",        false);
+    Counters->Guarantee    = group->GetCounter("Guarantee",    false);
+    Counters->EffectiveGuarantee = group->GetCounter("EffectiveGuarantee", true); // snapshot
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->ActualDemand = group->GetCounter("ActualDemand", true);  // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
@@ -160,6 +149,7 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
+        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
         Counters->InFlight->Set(CpuUsage * 1'000'000);
         Counters->Waiting->Set(CpuThrottle * 1'000'000);
         Counters->Usage->Set(CpuBurstUsage);
@@ -230,9 +220,11 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    Counters.TotalLimit->Set(TotalLimit * 1'000'000);
+    const ui64 totalLimit = TotalLimit.load();
 
-    newRoot->TotalLimit = TotalLimit;
+    Counters.TotalLimit->Set(totalLimit * 1'000'000);
+
+    newRoot->TotalLimit = totalLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

@@ -1833,14 +1833,14 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
-        if self.build.target.is_freertos or self.build.target.is_zephyr:
+        if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd or self.build.target.is_zephyr:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -2843,7 +2843,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0', '9.20.0')
 
     def auto_cudnn_version(self):
         return '9.12.0'

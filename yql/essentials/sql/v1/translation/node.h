@@ -25,6 +25,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -1308,6 +1309,7 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
+        GlobalHnsw,
         GlobalFulltextPlain,
         GlobalFulltextRelevance,
         LocalBloomFilter,
@@ -1403,7 +1405,9 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
-struct TTruncateTableParameters {};
+struct TTruncateTableParameters {
+    THashMap<TString, TNodePtr> Settings;
+};
 
 struct TTableRef;
 struct TAnalyzeParams {
@@ -1460,24 +1464,6 @@ struct TAlterTableParameters {
     }
 };
 
-struct TRoleParameters {
-protected:
-    TRoleParameters() = default;
-
-public:
-    TVector<TDeferredAtom> Roles;
-};
-
-struct TUserParameters: TRoleParameters {
-    TMaybe<TDeferredAtom> Password;
-    bool IsPasswordNull = false;
-    bool IsPasswordEncrypted = false;
-    std::optional<bool> CanLogin;
-    TMaybe<TDeferredAtom> Hash;
-};
-
-struct TCreateGroupParameters: TRoleParameters {};
-
 struct TSequenceParameters {
     bool MissingOk = false;
     TMaybe<TDeferredAtom> StartValue;
@@ -1496,6 +1482,11 @@ public:
     TMaybe<std::variant<TDeferredAtom, TNodePtr>> Value;
 
     TMaybe<TDeferredAtom> InheritPermissions;
+
+    // SOURCE="IAM_DELEGATION" makes an external secret (no SOURCE: the value is stored); parameters of IAM delegation secrets:
+    TMaybe<TDeferredAtom> Source;
+    TMaybe<TDeferredAtom> ServiceAccountId;
+    TMaybe<TDeferredAtom> CloudId;
 
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
@@ -1629,7 +1620,7 @@ TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TSt
 TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
 TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
 TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
-TNodePtr BuildYqlColumnRef(TPosition pos);
+TNodePtr BuildYqlColumnRef(TPosition pos, bool maybeType);
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
@@ -1696,16 +1687,6 @@ TNodeResult BuildBuiltinFunc(
     bool warnOnYqlNameSpace = true);
 
 // Implemented in query.cpp
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
-TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
-                          const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
-TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
-                         TScopedStatePtr scoped);
-TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
-TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
@@ -1779,7 +1760,15 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
+struct TFuncInfo {
+    TString Kind;
+    TMaybe<size_t> ArgCount;
+    TMaybe<size_t> OptionalArgCount;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
+};
+
+void EnumerateBuiltins(const std::function<void(std::string_view name, const TFuncInfo& info)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

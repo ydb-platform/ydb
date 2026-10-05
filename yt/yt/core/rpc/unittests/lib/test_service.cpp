@@ -113,6 +113,8 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(ServerNotWriting)
             .SetStreamingEnabled(true)
             .SetCancelable(true));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingStatistics)
+            .SetStreamingEnabled(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetTraceBaggage));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(CustomMetadata));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetChannelFailureError));
@@ -386,6 +388,23 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, StreamingStatistics)
+    {
+        int remainingBlockCount = request->block_count();
+        HandleInputStreamingRequest(
+            context,
+            [&] {
+                if (remainingBlockCount == 0) {
+                    return TSharedRef();
+                }
+                --remainingBlockCount;
+                return TSharedRef::FromString(std::string("abacaba"));
+            },
+            [&] {
+                StreamingStatistics_.Set(*context->GetResponseAttachmentsStreamStatistics());
+            });
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, FlakyCall)
     {
         static std::atomic<int> callCount;
@@ -456,12 +475,18 @@ public:
         return ServerStreamsAborted_.ToFuture();
     }
 
+    TFuture<TAttachmentsOutputStreamStatistics> GetStreamingStatistics() const override
+    {
+        return StreamingStatistics_.ToFuture();
+    }
+
 private:
     const bool Secure_;
     const TTestCreateChannelCallback CreateChannel_;
 
     TPromise<void> SlowCallCanceled_ = NewPromise<void>();
     TPromise<void> ServerStreamsAborted_ = NewPromise<void>();
+    TPromise<TAttachmentsOutputStreamStatistics> StreamingStatistics_ = NewPromise<TAttachmentsOutputStreamStatistics>();
 
 
     void BeforeInvoke(IServiceContext* context) override

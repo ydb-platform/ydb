@@ -153,6 +153,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
+    TMaybe<ui64> LockTxId;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -219,6 +220,12 @@ public:
         UseArrowFormat = useArrowFormat;
     }
 
+    // Reading under the transaction lock makes uncommitted writes of the same transaction
+    // visible, which is required for read-your-own-write inside an interactive transaction.
+    void SetLockTxId(TMaybe<ui64> lockTxId) {
+        LockTxId = lockTxId;
+    }
+
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
         return KeyColumnTypes;
     }
@@ -275,6 +282,10 @@ public:
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetStep(Snapshot.Step);
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
+        }
+
+        if (LockTxId) {
+            record.SetLockTxId(*LockTxId);
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
@@ -2523,14 +2534,15 @@ private:
     // Parse the search query string and tokenize it using the analyzer
     // configured on the fulltext index (same analyzer used at index build time).
     // Each resulting token becomes a TWordReadState entry in Words[].
-    // Returns false if no tokens were extracted (reports BAD_REQUEST error).
+    // Returns false if no tokens were extracted. JSON sources finish with an empty
+    // result; full-text sources report a BAD_REQUEST error.
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
+        const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
 
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson ||
-            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+        if (isJsonIndex) {
             // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
             YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
 
             size_t wordIndex = 0;
@@ -2569,7 +2581,11 @@ private:
         }
 
         if (Words.empty()) {
-            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            if (isJsonIndex) {
+                NotifyCA();
+            } else {
+                RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            }
             return false;
         }
 
@@ -2854,7 +2870,7 @@ private:
 
     void ResolveTablePartitioning(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>&& request) {
         auto resolveRequest = std::make_unique<TEvTxProxySchemeCache::TEvResolveKeySet>(request.release());
-        this->Send(MakeSchemeCacheID(), resolveRequest.release());
+        this->Send(MakeSchemeCacheID(), resolveRequest.release(), 0, 0, ReadSpan.GetTraceId());
     }
 
 
@@ -2907,6 +2923,25 @@ public:
             Snapshot = IKqpGateway::TKqpSnapshot(
                 Settings->GetSnapshot().GetStep(),
                 Settings->GetSnapshot().GetTxId());
+        }
+
+        if (Settings->HasLockTxId()) {
+            const TMaybe<ui64> lockTxId = Settings->GetLockTxId();
+            if (MainTableReader) {
+                MainTableReader->SetLockTxId(lockTxId);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetLockTxId(lockTxId);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetLockTxId(lockTxId);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetLockTxId(lockTxId);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetLockTxId(lockTxId);
+            }
         }
     }
 
@@ -3739,4 +3774,3 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
-

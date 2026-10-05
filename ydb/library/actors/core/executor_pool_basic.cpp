@@ -991,6 +991,7 @@ namespace NActors {
                     actorSystem,
                     this,
                     PoolName));
+            Threads[i].Thread->Prepare();
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 

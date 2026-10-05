@@ -168,6 +168,18 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
     }
 }
 
+TString SerializeToTextFormatString(const NProtoBuf::Message& m, const ESerializeToTextFormatOptions options) {
+    google::protobuf::TextFormat::Printer printer;
+    printer.SetHideUnknownFields(!options.HasFlag(ESerializeToTextFormatOption::PrintUnknownFields));
+    printer.SetExpandAny(options.HasFlag(ESerializeToTextFormatOption::ExpandAny));
+
+    TString result;
+    if (!printer.PrintToString(m, &result)) {
+        ythrow yexception() << "SerializeToTextFormatString failed on Print";
+    }
+    return result;
+}
+
 static void ConfigureParser(const EParseFromTextFormatOptions options,
                             NProtoBuf::TextFormat::Parser& p) {
     if (options & EParseFromTextFormatOption::AllowUnknownField) {

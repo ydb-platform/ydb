@@ -1,10 +1,10 @@
 #include <ydb/library/yql/providers/native/read_stream.h>
-#include <ydb/library/yql/providers/native/actors/callback_mailbox.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <arrow/api.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <util/generic/scope.h>
 
 #include <atomic>
 #include <mutex>
@@ -69,39 +69,44 @@ private:
     std::optional<NThreading::TPromise<TReadResult>> Pending;
 };
 
+void Init(TFakeActor& actor, TReadStreamFactory factory,
+          TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false, ui64 maxRowBytes = 0) {
+    NDqProto::TTaskInput input;
+    THashMap<TString, TString> params;
+    TVector<TString> ranges;
+    auto [asyncInput, readActor] = CreateNativeReadActor(std::move(factory),
+        {.Timeout = timeout, .MaxBatchBytes = 1024, .MaxRowBytes = maxRowBytes, .MaxRetries = 2, .Columns = {"value"}},
+        IDqAsyncIoFactory::TSourceArguments{
+            .InputDesc = input,
+            .InputIndex = 0,
+            .StatsLevel = {},
+            .TxId = {},
+            .TaskId = 1,
+            .SecureParams = params,
+            .TaskParams = params,
+            .ReadRanges = ranges,
+            .ComputeActorId = actor.SelfId(),
+            .TypeEnv = actor.TypeEnv,
+            .HolderFactory = actor.HolderFactory,
+            .ProgramBuilder = actor.ProgramBuilder,
+        });
+    actor.InitAsyncInput(asyncInput, readActor);
+    if (pollBeforeBootstrap) {
+        // Reproduce the CA's synchronous initial poll. The child shares this
+        // mailbox, so its Bootstrap event cannot run until this callback returns.
+        NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+        TMaybe<TInstant> watermark;
+        bool finished = false;
+        UNIT_ASSERT_VALUES_EQUAL(asyncInput->GetAsyncInputData(batch, watermark, finished, 1024), 0);
+        UNIT_ASSERT_VALUES_EQUAL(batch.RowCount(), 0);
+        UNIT_ASSERT(!finished);
+    }
+}
+
 void Init(TFakeCASetup& setup, TReadStreamFactory factory,
           TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false, ui64 maxRowBytes = 0) {
     setup.Execute([&](TFakeActor& actor) {
-        NDqProto::TTaskInput input;
-        THashMap<TString, TString> params;
-        TVector<TString> ranges;
-        auto [asyncInput, readActor] = CreateNativeReadActor(std::move(factory),
-            {.Timeout = timeout, .MaxBatchBytes = 1024, .MaxRowBytes = maxRowBytes, .MaxRetries = 2, .Columns = {"value"}},
-            IDqAsyncIoFactory::TSourceArguments{
-                .InputDesc = input,
-                .InputIndex = 0,
-                .StatsLevel = {},
-                .TxId = {},
-                .TaskId = 1,
-                .SecureParams = params,
-                .TaskParams = params,
-                .ReadRanges = ranges,
-                .ComputeActorId = actor.SelfId(),
-                .TypeEnv = actor.TypeEnv,
-                .HolderFactory = actor.HolderFactory,
-                .ProgramBuilder = actor.ProgramBuilder,
-            });
-        actor.InitAsyncInput(asyncInput, readActor);
-        if (pollBeforeBootstrap) {
-            // Reproduce the CA's synchronous initial poll. The child shares this
-            // mailbox, so its Bootstrap event cannot run until this callback returns.
-            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
-            TMaybe<TInstant> watermark;
-            bool finished = false;
-            UNIT_ASSERT_VALUES_EQUAL(asyncInput->GetAsyncInputData(batch, watermark, finished, 1024), 0);
-            UNIT_ASSERT_VALUES_EQUAL(batch.RowCount(), 0);
-            UNIT_ASSERT(!finished);
-        }
+        Init(actor, std::move(factory), timeout, pollBeforeBootstrap, maxRowBytes);
     });
     setup.Execute([](TFakeActor&) {}); // Drain bootstrap before capturing notification promises.
 }
@@ -135,25 +140,69 @@ TReadResult Batch(ui64 value) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(NativeReadActor) {
-    Y_UNIT_TEST(UndeliverableEventMayReleasePayloadReentrantly) {
-        struct TEvOwnPayload : NActors::TEventLocal<TEvOwnPayload, EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 100> {
-            explicit TEvOwnPayload(std::shared_ptr<void> payload) : Payload(std::move(payload)) {}
-            std::shared_ptr<void> Payload;
+    Y_UNIT_TEST(DiscardedReadMayReleasePayloadReentrantly) {
+        NActors::TTestActorRuntimeBase runtime;
+        const NActors::TActorId fakeActorId(0, "FakeActor");
+        runtime.AddLocalService(fakeActorId, NActors::TActorSetupCmd(
+            new TFakeActor(std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()),
+            NActors::TMailboxType::Simple, 0));
+        runtime.Initialize();
+        auto execute = [&](TCallback callback) {
+            auto promise = NThreading::NewPromise();
+            std::exception_ptr error;
+            runtime.Send(new NActors::IEventHandle(fakeActorId, {},
+                new NDq::TEvPrivate::TEvExecute(promise, std::move(callback), error)));
+            NActors::TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return promise.GetFuture().HasValue(); };
+            runtime.DispatchEvents(options, WaitTimeout);
+            UNIT_ASSERT(promise.GetFuture().HasValue());
+            if (error) {
+                std::rethrow_exception(error);
+            }
         };
-        TFakeCASetup setup;
-        bool released = false;
-        setup.Execute([&](TFakeActor& actor) {
-            auto mailbox = std::make_shared<TCallbackMailbox>(NActors::TActivationContext::ActorSystem(),
-                NActors::TActorId(actor.SelfId().NodeId(), "missing"));
-            auto payload = std::shared_ptr<void>(new int, [mailbox, &released](void* value) {
-                released = true;
-                mailbox->Send(new NActors::TEvents::TEvWakeup());
-                delete static_cast<int*>(value);
-            });
-            mailbox->Send(new TEvOwnPayload(std::move(payload)));
-            mailbox->Detach();
+        auto stream = std::make_shared<TStream>();
+        NActors::TActorId readActorId;
+        execute([&](TFakeActor& actor) {
+            Init(actor, [stream](const auto&) { return stream; });
+            readActorId = *actor.DqAsyncInputActorId;
         });
+        execute([&](TFakeActor& actor) {
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+            TMaybe<TInstant> watermark;
+            bool finished = false;
+            actor.DqAsyncInput->GetAsyncInputData(batch, watermark, finished, 1024);
+        });
+        bool discarded = false;
+        bool released = false;
+        bool releasedWhileSending = false;
+        auto previousFilter = runtime.SetEventFilter([&](auto&, TAutoPtr<NActors::IEventHandle>& event) {
+            if (event->GetRecipientRewrite() != readActorId ||
+                event->GetTypeRewrite() != EventSpaceBegin(NActors::TEvents::ES_PRIVATE)) {
+                return false;
+            }
+            event.Destroy(); // Discard synchronously inside TActorSystem::Send.
+            discarded = true;
+            releasedWhileSending = released;
+            return true;
+        });
+        Y_DEFER {
+            // The filter borrows local state that is destroyed before runtime.
+            runtime.SetEventFilter(std::move(previousFilter));
+        };
+        auto result = Batch(42);
+        auto* batch = result.Batch.get();
+        result.Batch = std::shared_ptr<arrow::RecordBatch>(batch, [owner = std::move(result.Batch), &execute, &released](auto*) {
+            Y_UNUSED(owner);
+            // Native actor destruction calls Detach on the same callback state.
+            // Releasing the final batch under its mutex would deadlock here.
+            execute([](TFakeActor& actor) { actor.Terminate(); });
+            released = true;
+        });
+        stream->Resolve(std::move(result));
+        UNIT_ASSERT(discarded);
+        UNIT_ASSERT(!releasedWhileSending);
         UNIT_ASSERT(released);
+        UNIT_ASSERT(stream->Cancelled);
     }
 
     Y_UNIT_TEST(InitialPollBeforeBootstrapWaitsForInitialization) {

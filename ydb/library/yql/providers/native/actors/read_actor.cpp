@@ -1,5 +1,4 @@
 #include <ydb/library/yql/providers/native/read_stream.h>
-#include "callback_mailbox.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -14,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <optional>
 
 namespace NYql::NNative {
@@ -45,12 +45,40 @@ std::shared_ptr<arrow::ArrayData> CopyToTaskAllocator(const std::shared_ptr<arro
     return copy;
 }
 
-class TNativeReadActor final : public TActorBootstrapped<TNativeReadActor>, public IDqComputeActorAsyncInput {
-    struct TEvRead : TEventLocal<TEvRead, EventSpaceBegin(TEvents::ES_PRIVATE)> {
-        explicit TEvRead(TReadResult result) : Result(std::move(result)) {}
-        TReadResult Result;
-    };
+struct TEvRead : TEventLocal<TEvRead, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+    explicit TEvRead(TReadResult result) : Result(std::move(result)) {}
+    TReadResult Result;
+};
 
+// Cancel completes Next locally, but its subscribers may still be running.
+// Actor destruction detaches this shared destination before releasing the stream;
+// callbacks can then outlive both the actor and its actor system.
+class TReadCallback {
+public:
+    TReadCallback(TActorSystem* system, TActorId actor)
+        : System_(system), Actor_(actor) {}
+
+    void Send(TReadResult result) {
+        std::lock_guard lock(Mutex_);
+        if (System_) {
+            // Keep our copy until after lock is released. Send can synchronously
+            // discard the event, and the final batch deleter may reenter cleanup.
+            System_->Send(Actor_, new TEvRead(result));
+        }
+    }
+
+    void Detach() {
+        std::lock_guard lock(Mutex_);
+        System_ = nullptr;
+    }
+
+private:
+    std::mutex Mutex_;
+    TActorSystem* System_;
+    const TActorId Actor_;
+};
+
+class TNativeReadActor final : public TActorBootstrapped<TNativeReadActor>, public IDqComputeActorAsyncInput {
 public:
     TNativeReadActor(TReadStreamFactory factory, TReadActorSettings settings, IDqAsyncIoFactory::TSourceArguments&& args)
         : Factory_(std::move(factory))
@@ -72,7 +100,7 @@ public:
 
     void Bootstrap() {
         Become(&TNativeReadActor::StateFunc);
-        Mailbox_ = std::make_shared<TCallbackMailbox>(TActivationContext::ActorSystem(), SelfId());
+        ReadCallback_ = std::make_shared<TReadCallback>(TActivationContext::ActorSystem(), SelfId());
         Context_.Deadline = TActivationContext::Now() + Settings_.Timeout;
         Context_.MaxBatchBytes = Settings_.MaxBatchBytes;
         Context_.Cancellation = Cancellation_.Token();
@@ -88,8 +116,8 @@ public:
     }
 
     ~TNativeReadActor() override {
-        if (Mailbox_) {
-            Mailbox_->Detach();
+        if (ReadCallback_) {
+            ReadCallback_->Detach();
         }
         CloseOperation();
     }
@@ -145,8 +173,6 @@ public:
     void PassAway() override {
         Stopping_ = true;
         CloseOperation();
-        // Future callbacks own only the shared mailbox; Detach prevents access
-        // to the actor system after this actor is destroyed.
         TActorBootstrapped::PassAway();
     }
 
@@ -205,14 +231,14 @@ private:
             }
             InFlight_ = true;
             IngressStats_.TryPause();
-            Stream_->Next().Subscribe([mailbox = Mailbox_](const auto& future) {
+            Stream_->Next().Subscribe([callback = ReadCallback_](const auto& future) {
                 TReadResult result;
                 try {
                     result = future.GetValue();
                 } catch (...) {
                     result.Error = "Native source read failed unexpectedly";
                 }
-                mailbox->Send(new TEvRead(std::move(result)));
+                callback->Send(std::move(result));
             });
         } catch (...) {
             InFlight_ = false;
@@ -289,7 +315,7 @@ private:
     TVector<size_t> ColumnPositions_;
     size_t LengthPosition_ = 0;
     TDqAsyncStats IngressStats_;
-    std::shared_ptr<TCallbackMailbox> Mailbox_;
+    std::shared_ptr<TReadCallback> ReadCallback_;
     std::shared_ptr<IReadStream> Stream_;
     std::optional<TReadResult> Ready_;
     TSchedulerCookieHolder DeadlineTimer_;

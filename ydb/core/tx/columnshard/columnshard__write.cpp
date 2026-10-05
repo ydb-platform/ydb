@@ -292,6 +292,23 @@ private:
     ui64 ArbiterColumnShard = 0;
 };
 
+std::optional<TUnifiedPathId> FindMissingCommitPath(const TTablesManager& tablesManager, const TLockFeatures& lockInfo) {
+    const auto isMissing = [&](const TUnifiedPathId& pathId) {
+        return !tablesManager.ResolveInternalPathId(pathId.GetSchemeShardLocalPathId(), false);
+    };
+    for (const auto& op : lockInfo.GetWriteOperations()) {
+        if (isMissing(op->GetPathId())) {
+            return op->GetPathId();
+        }
+    }
+    for (const auto& ev : lockInfo.GetEvents()) {
+        if (isMissing(ev->GetPathId())) {
+            return ev->GetPathId();
+        }
+    }
+    return std::nullopt;
+}
+
 class TProposeWriteTransaction: public TExtendedTransactionBase {
 private:
     using TBase = TExtendedTransactionBase;
@@ -318,15 +335,58 @@ public:
         } else {
             kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE;
         }
+        const auto existing = Self->GetProgressTxController().GetTxOperator(WriteCommit->GetTxId(), ETxOperatorStatus::Any, true);
+        if (existing) {
+            const auto* commit = dynamic_cast<const TBaseEvWriteTransactionOperator*>(existing.get());
+            if (!commit || existing->GetTxInfo().TxKind != kind || commit->GetLockId() != WriteCommit->GetLockId()) {
+                ErrorStatus = NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+                ErrorMessage = "transaction id belongs to another commit";
+                return true;
+            }
+            // A durable proposal survives reboot even though recovered locks are marked broken.
+            // Let the controller validate retries (source/cookie and transaction phase).
+        } else {
+            auto* lockInfo = Self->GetOperationsManager().GetLockOptional(WriteCommit->GetLockId());
+            if (!lockInfo) {
+                ErrorStatus = NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
+                ErrorMessage = "missing lock for commit: " + ::ToString(WriteCommit->GetLockId());
+                return true;
+            }
+            if (const auto missingPath = FindMissingCommitPath(Self->GetTablesManager(), *lockInfo)) {
+                ErrorStatus = NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
+                ErrorMessage = "unknown table: " + ::ToString(missingPath->GetSchemeShardLocalPathId());
+                return true;
+            }
+            if (lockInfo->NeedsAborting() || lockInfo->IsBroken()) {
+                ErrorStatus = NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
+                ErrorMessage = "lock is broken or being aborted: " + ::ToString(WriteCommit->GetLockId());
+                return true;
+            }
+            AFL_VERIFY(lockInfo->TryProposeTransaction(WriteCommit->GetTxId()));
+        }
+
         proto.SetLockId(WriteCommit->GetLockId());
-        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(
-            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Self->GetProgressTxController().GetAllowedStep(), Cookie, {}),
-            proto.SerializeAsString(), txc);
+        TTxController::TTxInfo txInfo(kind, WriteCommit->GetTxId(), Source, Self->GetProgressTxController().GetAllowedStep(), Cookie, {});
+        if (existing) {
+            // A retry must preserve the advertised planning interval and the deadline queue entry.
+            txInfo.MinStep = existing->GetTxInfo().MinStep;
+            txInfo.MaxStep = existing->GetTxInfo().MaxStep;
+        }
+        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(txInfo, proto.SerializeAsString(), txc);
         return true;
     }
 
     virtual void DoComplete(const TActorContext& ctx) override {
-        Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
+        if (ErrorStatus) {
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), WriteCommit->GetTxId(), *ErrorStatus, ErrorMessage);
+            ctx.Send(Source, result.release(), 0, Cookie);
+            return;
+        }
+        if (TxOperator->IsFail()) {
+            TxOperator->SendReply(*Self, ctx);
+            return;
+        }
+        Self->GetProgressTxController().FinishProposeOnComplete(*TxOperator, ctx);
     }
 
     TTxType GetTxType() const override {
@@ -338,14 +398,12 @@ private:
     TActorId Source;
     ui64 Cookie;
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
+    std::optional<NKikimrDataEvents::TEvWriteResult::EStatus> ErrorStatus;
+    TString ErrorMessage;
 };
 
-bool TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
-    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock && !lock->TryProposeTransaction(op->GetTxId())) {
-        return false;
-    }
+void TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
     Execute(new TProposeWriteTransaction(this, op, source, cookie));
-    return true;
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -449,46 +507,39 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
             sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, 0, 0, "CommitWriteLock", true);
-            return;
-        }
-        auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
-        if (!lockInfo) {
-            sendError("missing lock for commit: " + ::ToString(commitOperation->GetLockId()),
-                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
-            return;
-        }
-        THashSet<TSchemeShardLocalPathId> schemeShardLocalPathIds;
-        for (const auto& op : lockInfo->GetWriteOperations()) {
-            schemeShardLocalPathIds.insert(op->GetPathId().GetSchemeShardLocalPathId());
-        }
-        for (const auto& ev : lockInfo->GetEvents()) {
-            schemeShardLocalPathIds.insert(ev->GetPathId().GetSchemeShardLocalPathId());
-        }
-        for (const auto& p : schemeShardLocalPathIds) {
-            if (!TablesManager.ResolveInternalPathId(p, false)) {
-                //Table is renamed or dropped
-                sendError(
-                    "unknown table: " + ::ToString(p), NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "CommitWriteLock", true);
+        } else {
+            if (GetProgressTxController().GetTxInfo(commitOperation->GetTxId(), ETxOperatorStatus::Any)) {
+                // Deduplicate prepared commits before checking current path/lock fences.
+                ProposeTransaction(commitOperation, source, cookie);
                 return;
             }
-        }
-        if (commitOperation->NeedSyncLocks()) {
-            if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
-                              " != " + ::ToString(commitOperation->GetGeneration()), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0,
-                    0, "CommitWriteLock", true);
-                return;
-            }
-            if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
-                sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
-                              " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
+            auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
+            if (!lockInfo) {
+                sendError("missing lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
-                return;
+            } else {
+                if (const auto missingPath = FindMissingCommitPath(TablesManager, *lockInfo)) {
+                    sendError("unknown table: " + ::ToString(missingPath->GetSchemeShardLocalPathId()),
+                        NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "CommitWriteLock", true);
+                    return;
+                }
+                if (commitOperation->NeedSyncLocks()) {
+                    if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
+                                      " != " + ::ToString(commitOperation->GetGeneration()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
+                    } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
+                        sendError(
+                            "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
+                                " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
+                    } else {
+                        ProposeTransaction(commitOperation, source, cookie);
+                    }
+                } else {
+                    ProposeTransaction(commitOperation, source, cookie);
+                }
             }
-        }
-        if (!ProposeTransaction(commitOperation, source, cookie)) {
-            sendError("lock is being aborted: " + ::ToString(commitOperation->GetLockId()),
-                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
         }
         return;
     }

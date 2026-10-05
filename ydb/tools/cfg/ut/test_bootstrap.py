@@ -57,9 +57,7 @@ def generate_bootstrap(fixed_tablet_types, system_tablets):
         pq_shared_cache_size=None,
     )
     with mock.patch("ydb.tools.cfg.static.base.ClusterDetailsProvider", return_value=details):
-        return StaticConfigGenerator(
-            {"system_tablets": system_tablets}, binary_path="", output_dir=""
-        ).boot_txt
+        return StaticConfigGenerator({"system_tablets": system_tablets}, binary_path="", output_dir="").boot_txt
 
 
 @pytest.mark.parametrize(

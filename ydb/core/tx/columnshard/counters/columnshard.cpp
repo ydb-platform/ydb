@@ -36,6 +36,7 @@ TCSCounters::TCSCounters()
     CutHistoryRequestsSent = TBase::GetDeriviative("CutHistory/RequestsSent/Count");
     CutHistoryCuttableIntervals = TBase::GetDeriviative("CutHistory/CuttableIntervals/Count");
     CutHistoryScansAborted = TBase::GetDeriviative("CutHistory/ScansAborted/Count");
+    CutHistoryBlobGroupMismatches = TBase::GetDeriviative("CutHistory/BlobGroupMismatches/Count");
     CutHistoryScanDurationMs = TBase::GetHistogram("CutHistory/Scan/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
     CutHistoryWaitDurationMs = TBase::GetHistogram("CutHistory/ScanToSend/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
     IndexMetadataLimitBytes = TBase::GetValue("IndexMetadata/Limit/Bytes");

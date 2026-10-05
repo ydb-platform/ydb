@@ -105,6 +105,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryCuttableIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryBlobGroupMismatches;
     NMonitoring::THistogramPtr CutHistoryScanDurationMs;
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
@@ -269,6 +270,10 @@ public:
 
     void OnCutHistoryScanAborted() const {
         CutHistoryScansAborted->Inc();
+    }
+
+    void OnCutHistoryBlobGroupMismatch() const {
+        CutHistoryBlobGroupMismatches->Inc();
     }
 
     void OnCutHistoryScanFinished(const TDuration duration) const {

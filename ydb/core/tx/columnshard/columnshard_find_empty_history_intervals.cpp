@@ -267,6 +267,7 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
         AbortFindEmptyHistoryIntervals();
         return;
     }
+    const auto& ctx = TActivationContext::AsActorContext();
     for (const auto& [_, accessor] : result.GetPortions()) {
         for (const auto& blob : accessor->GetBlobIds()) {
             const auto& id = blob.GetLogoBlobId();
@@ -277,17 +278,19 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
             if (it != scan.Intervals.begin()) {
                 --it;
                 const auto [key, interval] = *it;
-                if (key.Channel == id.Channel() && id.Generation() < interval.To && blob.GetDsGroup() == interval.Group) {
+                if (key.Channel == id.Channel() && id.Generation() < interval.To) {
+                    if (blob.GetDsGroup() != interval.Group) {
+                        Counters.GetCSCounters().OnCutHistoryBlobGroupMismatch();
+                    }
                     scan.Intervals.erase(it);
+                    if (scan.Intervals.empty()) {
+                        Counters.GetCSCounters().OnCutHistoryScanFinished(ctx.Now() - scan.Started);
+                        EmptyHistoryIntervalsScan.reset();
+                        return;
+                    }
                 }
             }
         }
-    }
-    const auto& ctx = TActivationContext::AsActorContext();
-    if (scan.Intervals.empty()) {
-        Counters.GetCSCounters().OnCutHistoryScanFinished(ctx.Now() - scan.Started);
-        EmptyHistoryIntervalsScan.reset();
-        return;
     }
     scan.Pending = 0;
     ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);

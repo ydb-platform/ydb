@@ -2,7 +2,7 @@
 
 ## Обзор
 
-{{ ydb-short-name }} CLI поддерживает исполнение [параметризованных YQL-запросов](https://en.wikipedia.org/wiki/Prepared_statement). Для работы с параметрами в тексте YQL-запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
+{{ ydb-short-name }} CLI поддерживает исполнение [параметризованных YQL-запросов](../../yql/reference/syntax/lexer.md#query-params). Для работы с параметрами в тексте YQL-запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
 
 Для выполнения параметризованных YQL-запросов вы можете использовать команды {{ ydb-short-name }} CLI:
 

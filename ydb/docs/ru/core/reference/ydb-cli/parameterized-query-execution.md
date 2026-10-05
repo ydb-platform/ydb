@@ -2,11 +2,7 @@
 
 ## Обзор
 
-<<<<<<< HEAD
-{{ ydb-short-name }} CLI поддерживает исполнение [параметризованных запросов](https://en.wikipedia.org/wiki/Prepared_statement). Для работы с параметрами в тексте запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
-=======
 {{ ydb-short-name }} CLI поддерживает исполнение [параметризованных запросов](../../yql/reference/syntax/lexer.md#query-params). Для работы с параметрами в тексте запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
->>>>>>> e78cf9d117c ([YDBDOCS-2857] Document query parameterization limitations and link related pages (#52765))
 
 Основной инструмент для выполнения параметризованных запросов в {{ ydb-short-name }} CLI — это команда [{{ ydb-cli }} sql](sql.md).
 

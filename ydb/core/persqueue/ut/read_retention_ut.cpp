@@ -1,5 +1,4 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
-#include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -48,9 +47,8 @@ void WriteAroundRetention(TTestContext& tc) {
     WriteMsg(tc, 2, false);
 }
 
-TVector<ui64> ReadOffsets(TTestContext& tc, const TString& user = "user", ui64 readTimestampMs = 0, ui32 partNo = 0) {
+TVector<ui64> ReadOffsets(TTestContext& tc, const TString& user = "user", ui64 readTimestampMs = 0) {
     TPQCmdReadSettings settings("", 0, 0, 10, Max<i32>(), 0, false, {}, 0, readTimestampMs, user);
-    settings.PartNo = partNo;
     const auto result = CmdReadAndGetResult(settings, tc);
     TVector<ui64> offsets;
     offsets.reserve(result.ResultSize());
@@ -130,7 +128,7 @@ Y_UNIT_TEST(ExplicitReadFromIsRaisedToRetention) {
     ExpectOnlyFresh(ReadOffsets(env.Tc, "user", /*readTimestampMs=*/1));
 }
 
-Y_UNIT_TEST(PartNoContinuationReturnsOldMessage) {
+Y_UNIT_TEST(MultipartMessagePastRetentionIsDropped) {
     TReadEnv env;
     PreparePartition(env.Tc, RetentionTopic(), {TConsumerPreparationParameters{.Name = "user"}});
 
@@ -151,17 +149,10 @@ Y_UNIT_TEST(PartNoContinuationReturnsOldMessage) {
     }
 
     env.Tc.Runtime->UpdateCurrentTime(env.Tc.Runtime->GetCurrentTime() + TDuration::Seconds(LifetimeSec + 2));
+    WriteMsg(env.Tc, 2, false);
 
-    // Same shape as a read-proxy follow-up: PartNo > 0 bypasses the proxy and must not
-    // recompute the retention floor, so the rest of an already-started message is returned.
-    TPQCmdReadSettings settings("", 0, 0, 1, Max<i32>(), 0, false, {}, 0, 0, "user");
-    settings.PartNo = 1;
-    settings.RequestId = TMP_REQUEST_MARKER;
-    const auto result = CmdReadAndGetResult(settings, env.Tc);
-    UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetOffset(), 0u);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetData(), "bbbbbbbb");
-    UNIT_ASSERT_VALUES_EQUAL(result.GetReadFromTimestampMs(), 0u);
+    // The whole message is past retention, including a tail that a follow-up would read with PartNo > 0.
+    ExpectOnlyFresh(ReadOffsets(env.Tc));
 }
 
 Y_UNIT_TEST(DirectReadPastRetentionReturnsEmpty) {

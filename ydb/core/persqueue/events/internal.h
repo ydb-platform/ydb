@@ -394,8 +394,8 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
-        // Client CmdRead with PartNo == 0 while EnableTopicReadPriorRetention is off.
-        // Internal reads leave this false and are not cut by retention.
+        // Client CmdRead and ReadTimestampForOffset, while EnableTopicReadPriorRetention is off.
+        // Compaction leaves this false and is not cut by retention.
         bool LimitReadToRetention = false;
 
         bool IsInternal() {

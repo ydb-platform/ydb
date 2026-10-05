@@ -1422,12 +1422,6 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     read->SetBytes(settings.Size);
     read->SetReadToBlobEnd(settings.ReadToBlobEnd);
     read->SetCanReadBatches(settings.CanReadBatches);
-    if (settings.PartNo > 0) {
-        read->SetPartNo(settings.PartNo);
-    }
-    if (settings.RequestId) {
-        request->Record.SetRequestId(settings.RequestId);
-    }
     if (settings.MaxTimeLagMs > 0) {
         read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
     }

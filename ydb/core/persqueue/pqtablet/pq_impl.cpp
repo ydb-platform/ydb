@@ -2079,7 +2079,7 @@ void TPersQueue::HandleReadRequest(
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
-        event->LimitReadToRetention = partNo == 0 && !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
+        event->LimitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

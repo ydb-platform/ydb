@@ -530,9 +530,6 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     TVector<i32> Offsets;
     ui32 MaxTimeLagMs = 0;
     ui32 ReadTimestampMs = 0;
-    ui32 PartNo = 0;
-    // Read-proxy follow-up marker. A non-empty value is sent as RequestId and skips read proxy.
-    TString RequestId;
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;

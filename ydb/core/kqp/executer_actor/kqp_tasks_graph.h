@@ -553,15 +553,5 @@ private:
     const bool UseKqpTasksGraphV2;
 };
 
-// Patches a saved physical graph to rescale PQ source stages.
-// Computes source task counts by grouping partitions, capped by the saved MaxTasksPerStage
-// and the explicit stage task count, or by available cluster threads when no stage count is set.
-// Only increases task counts; queries with program state or deferred publication are skipped.
-// Cascades through downstream Map-connected stages. Rebuilds channels and redistributes
-// ReadRanges (PQ partition params) among the new source tasks round-robin.
-// Must be called before RestoreTasksGraphInfo().
-void PatchQueryPhysicalGraphForRescaling(
-    NKikimrKqp::TQueryPhysicalGraph& graph,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
 
 } // namespace NKikimr::NKqp

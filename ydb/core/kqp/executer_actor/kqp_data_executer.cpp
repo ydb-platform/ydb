@@ -663,7 +663,8 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        const bool graphRestored = PatchAndRestoreTasksGraph(RescalingChangedTaskCount);
+        // TODO: move graph restoration outside of executer
+        const bool graphRestored = RestoreTasksGraph(RescalingChangedTaskCount);
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {

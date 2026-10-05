@@ -13,42 +13,58 @@ class TestRescaling(StreamingTestBase):
 
     def _reader_count(self, kikimr: Kikimr) -> int:
         return sum(
-            self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            for node_id in counter_nodes(kikimr.cluster)
+            self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR") for node_id in counter_nodes(kikimr.cluster)
         )
 
-    def _wait_started(self, kikimr: Kikimr, query_name: str) -> int:
+    def _wait_started(self, kikimr: Kikimr, query_name: str):
         self.wait_completed_checkpoints(kikimr, query_name)
-        assert wait_for(lambda: self._reader_count(kikimr) > 0, timeout_seconds=60, step_seconds=1), (
-            "PQ readers did not appear after CREATE"
-        )
-        return self._reader_count(kikimr)
+
+    def _wait_reader_count(self, kikimr: Kikimr, query_name: str, expected_readers=6) -> int:
+        assert wait_for(
+            lambda: self._reader_count(kikimr) == expected_readers,
+            timeout_seconds=60,
+            step_seconds=1,
+        ), f"Expected {expected_readers} PQ readers after CREATE, got {self._reader_count(kikimr)}"
 
     def _stop_query(self, kikimr: Kikimr, query_name: str) -> None:
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
-        assert wait_for(lambda: self._reader_count(kikimr) == 0, timeout_seconds=120, step_seconds=1), (
-            "PQ readers did not stop"
-        )
+        assert wait_for(
+            lambda: self._reader_count(kikimr) == 0, timeout_seconds=120, step_seconds=1
+        ), "PQ readers did not stop"
 
     def _resume_query(
-        self, kikimr: Kikimr, query_name: str, readers_before: int, expect_growth: bool,
+        self,
+        kikimr: Kikimr,
+        query_name: str,
+        readers_before: int,
+        expect_growth: bool,
     ) -> None:
         # Resume the saved graph without recompiling the query.
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
         assert wait_for(
-            lambda: self._reader_count(kikimr) > readers_before
-            if expect_growth else self._reader_count(kikimr) == readers_before,
-            timeout_seconds=120, step_seconds=1,
+            lambda: (
+                self._reader_count(kikimr) > readers_before
+                if expect_growth
+                else self._reader_count(kikimr) == readers_before
+            ),
+            timeout_seconds=120,
+            step_seconds=1,
         ), f"Unexpected reader count: before={readers_before}, after={self._reader_count(kikimr)}"
         self.wait_completed_checkpoints(kikimr, query_name)
 
     def _restart_query(
-        self, kikimr: Kikimr, query_name: str, readers_before: int, scale_up: bool, added_slots: list,
+        self,
+        kikimr: Kikimr,
+        query_name: str,
+        readers_before: int,
+        scale_up: bool,
+        added_slots: list,
     ) -> None:
         self._stop_query(kikimr, query_name)
         if scale_up:
             added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
             kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            time.sleep(1)
         self._resume_query(kikimr, query_name, readers_before, expect_growth=scale_up)
 
     def _cleanup_query(self, kikimr: Kikimr, query_name: str, added_slots: list) -> None:
@@ -63,26 +79,38 @@ class TestRescaling(StreamingTestBase):
         for partition_id, messages in batches.items():
             kikimr.ydb_client.topic_write(self.input_topic, messages, partition_id=partition_id)
         self.wait_streaming_query_metric(
-            kikimr, query_name, "streaming.query.input.bytes",
+            kikimr,
+            query_name,
+            "streaming.query.input.bytes",
             expected_value=before + sum(len(message.encode()) for messages in batches.values() for message in messages),
         )
         # A full-graph barrier after ingestion includes operator state, not just offsets.
         self.wait_completed_checkpoints(kikimr, query_name)
 
     def _check_downstream_tasks(
-        self, kikimr: Kikimr, query_name: str, readers_before: int, tasks_before: int,
+        self,
+        kikimr: Kikimr,
+        query_name: str,
+        readers_before: int,
+        tasks_before: int,
     ) -> None:
         readers_after = self._reader_count(kikimr)
         self.wait_streaming_query_metric(
-            kikimr, query_name, "streaming.query.tasks.count",
+            kikimr,
+            query_name,
+            "streaming.query.tasks.count",
             expected_value=tasks_before - readers_before + readers_after,
         )
         tasks_after = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count")
-        assert tasks_after - readers_after == tasks_before - readers_before, (
-            "Downstream task count changed during PQ source rescaling"
-        )
+        assert (
+            tasks_after - readers_after == tasks_before - readers_before
+        ), "Downstream task count changed during PQ source rescaling"
 
-    @pytest.mark.parametrize("max_tasks_per_stage", [1, 5], ids=["max_tasks_1", "max_tasks_5"])
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage",
+        [1, 5, 30],
+        ids=["max_tasks_1", "max_tasks_5", "max_tasks_30"],
+    )
     def test_pq_source_restart_preserves_max_tasks_per_stage(
         self,
         kikimr: Kikimr,
@@ -92,7 +120,11 @@ class TestRescaling(StreamingTestBase):
         """Restarting the saved graph must preserve the user-specified reader limit."""
         query_name = entity_name("pq_source_restart_preserves_max_tasks_per_stage")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=100,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=100,
         )
         kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
@@ -101,19 +133,15 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            self.wait_completed_checkpoints(kikimr, query_name)
-            assert wait_for(
-                lambda: self._reader_count(kikimr) == max_tasks_per_stage,
-                timeout_seconds=60, step_seconds=1,
-            ), (
-                f"Expected {max_tasks_per_stage} readers after CREATE, got {self._reader_count(kikimr)}"
-            )
+            expected_tasks = min(max_tasks_per_stage, 6)
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name, expected_tasks)
             self._stop_query(kikimr, query_name)
-            self._resume_query(kikimr, query_name, max_tasks_per_stage, expect_growth=False)
+            self._resume_query(kikimr, query_name, expected_tasks, expect_growth=False)
             readers_after = self._reader_count(kikimr)
-            assert readers_after == max_tasks_per_stage, (
-                f"Expected {max_tasks_per_stage} readers after STOP/START, got {readers_after}"
-            )
+            assert (
+                readers_after == expected_tasks
+            ), f"Expected {expected_tasks} readers after STOP/START, got {readers_after}"
         finally:
             self._cleanup_query(kikimr, query_name, [])
 
@@ -127,7 +155,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_skips_deferred_publication")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
         )
 
         def check_reading(phase: str) -> None:
@@ -146,8 +178,9 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
+            self._wait_started(kikimr, query_name)
+            readers_before = self._reader_count(kikimr)
             check_reading("before")
-            readers_before = self._wait_started(kikimr, query_name)
             assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
             self._stop_query(kikimr, query_name)
             added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
@@ -169,7 +202,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_insert_select")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = kikimr.ydb_client
 
@@ -192,17 +229,26 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            readers_before = self._wait_started(kikimr, query_name)
+            expected_readers_before = 6
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name, expected_readers_before)
             # Enough partitions for genuine scale-up despite default grouping.
-            assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
+            assert 0 < expected_readers_before < (partitions_count + 4) // 5, expected_readers_before
             check_reading("before")
 
-            self._restart_query(kikimr, query_name, readers_before, scale_up, added_slots)
+            self._restart_query(kikimr, query_name, expected_readers_before, scale_up, added_slots)
             check_reading("after")
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
-    @pytest.mark.parametrize("scale_up", [False, pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported"))], ids=["restart", "scale_up"])
+    @pytest.mark.parametrize(
+        "scale_up",
+        [
+            False,
+            pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported")),
+        ],
+        ids=["restart", "scale_up"],
+    )
     def test_pq_source_rescaling_hopping_closed_window(
         self,
         kikimr: Kikimr,
@@ -213,7 +259,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_hopping_closed_window")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = kikimr.ydb_client
         # Stay ahead of write-time watermarks but within the five-minute
@@ -221,7 +271,11 @@ class TestRescaling(StreamingTestBase):
         base = (int(time.time()) // 20) * 20 + 120
 
         def timestamp(seconds: int) -> str:
-            return datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            return (
+                datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
         def event(seconds: int, value: int = 0, key: str = "clock") -> str:
             return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
@@ -245,37 +299,49 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            readers_before = self._wait_started(kikimr, query_name)
-            assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
+            expected_readers_before = 6
+            self._wait_started(kikimr, query_name)
+            assert 0 < expected_readers_before < (partitions_count + 4) // 5, expected_readers_before
             self.wait_streaming_query_metric(
-                kikimr, query_name, "streaming.query.tasks.count", expected_value=readers_before + 1,
+                kikimr,
+                query_name,
+                "streaming.query.tasks.count",
+                expected_value=expected_readers_before + 1,
             )
             tasks_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count")
-            assert tasks_before > readers_before
+            assert tasks_before > expected_readers_before
 
             batches = {partition_id: [event(1)] for partition_id in range(partitions_count)}
             batches[0].extend([event(2, 10, "target"), event(3, 20, "target")])
             self._write_and_checkpoint(kikimr, query_name, batches)
             # Advance all partitions beyond both overlapping windows and save
             # their offsets before stopping. The target window is already closed.
-            self._write_and_checkpoint(kikimr, query_name, {partition_id: [event(40)] for partition_id in range(partitions_count)})
+            self._write_and_checkpoint(
+                kikimr, query_name, {partition_id: [event(40)] for partition_id in range(partitions_count)}
+            )
             assert client.topic_read(self.output_topic, self.consumer_name, 1) == ["30"]
             self.wait_completed_checkpoints(kikimr, query_name)
 
-            self._restart_query(kikimr, query_name, readers_before, scale_up, added_slots)
-            self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
+            self._restart_query(kikimr, query_name, expected_readers_before, scale_up, added_slots)
+            self._check_downstream_tasks(kikimr, query_name, expected_readers_before, tasks_before)
 
             # Exercise every partition, including those moved to new readers,
             # in a disjoint window after recovery.
-            self._write_and_checkpoint(kikimr, query_name, {
-                partition_id: [event(62, 1, "target"), event(63, 2, "target")]
-                for partition_id in range(partitions_count)
-            })
-            self._write_and_checkpoint(kikimr, query_name, {partition_id: [event(100)] for partition_id in range(partitions_count)})
+            self._write_and_checkpoint(
+                kikimr,
+                query_name,
+                {
+                    partition_id: [event(62, 1, "target"), event(63, 2, "target")]
+                    for partition_id in range(partitions_count)
+                },
+            )
+            self._write_and_checkpoint(
+                kikimr, query_name, {partition_id: [event(100)] for partition_id in range(partitions_count)}
+            )
             actual = client.topic_read(self.output_topic, self.consumer_name, 1)
             assert actual == [str(3 * partitions_count)], actual
             self.wait_completed_checkpoints(kikimr, query_name)
-            self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
+            self._check_downstream_tasks(kikimr, query_name, expected_readers_before, tasks_before)
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
@@ -287,7 +353,11 @@ class TestRescaling(StreamingTestBase):
         """Restore partition offsets across consecutive 1 -> 2 -> 4 task graphs."""
         query_name = entity_name("pq_source_rescaling_twice")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=1,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=1,
         )
         client = kikimr.ydb_client
         kikimr.ydb_client.query(f'''
@@ -302,18 +372,24 @@ class TestRescaling(StreamingTestBase):
                     # Default grouping is five partitions per task. Growing the
                     # topic controls parallelism without imposing a saved task cap.
                     client.driver.topic_client.alter_topic(
-                        self.input_topic, set_min_active_partitions=partitions_count,
+                        self.input_topic,
+                        set_min_active_partitions=partitions_count,
                     )
                     self._resume_query(kikimr, query_name, expected_readers, expect_growth=False)
                 else:
                     self._wait_started(kikimr, query_name)
+                    self._wait_reader_count(kikimr, query_name, expected_readers)
 
                 assert wait_for(
                     lambda: self._reader_count(kikimr) == expected_readers,
-                    timeout_seconds=60, step_seconds=1,
+                    timeout_seconds=60,
+                    step_seconds=1,
                 ), f"Phase {phase}: expected {expected_readers} readers, got {self._reader_count(kikimr)}"
                 self.wait_streaming_query_metric(
-                    kikimr, query_name, "streaming.query.tasks.count", expected_value=expected_readers,
+                    kikimr,
+                    query_name,
+                    "streaming.query.tasks.count",
+                    expected_value=expected_readers,
                 )
 
                 expected = []
@@ -342,7 +418,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 20
         query_name = entity_name("pq_source_rescaling_partition_increase")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, local_topics, entity_name, partitions_count=1,
+            kikimr,
+            query_name,
+            local_topics,
+            entity_name,
+            partitions_count=1,
         )
         client = self.get_ydb_client(kikimr, local_topics)
         added_slots = []
@@ -357,18 +437,23 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            readers_before = self._wait_started(kikimr, query_name)
-            assert readers_before == 1, readers_before
+            expected_readers_before = 1
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name, expected_readers_before)
+            assert expected_readers_before == 1, expected_readers_before
             self._stop_query(kikimr, query_name)
             client.driver.topic_client.alter_topic(
-                self.input_topic, set_min_active_partitions=partitions_count,
+                self.input_topic,
+                set_min_active_partitions=partitions_count,
             )
-            self._resume_query(kikimr, query_name, readers_before, expect_growth=True)
+            self._resume_query(kikimr, query_name, expected_readers_before, expect_growth=True)
 
             expected = [f"data_{partition_id}" for partition_id in range(partitions_count)]
             for partition_id, value in enumerate(expected):
                 client.topic_write(
-                    self.input_topic, [json.dumps({"value": value})], partition_id=partition_id,
+                    self.input_topic,
+                    [json.dumps({"value": value})],
+                    partition_id=partition_id,
                 )
             actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
             assert sorted(actual) == sorted(expected), (actual, expected)
@@ -390,7 +475,11 @@ class TestRescaling(StreamingTestBase):
         selected = list(range(7, 207, 2))
         query_name = entity_name("pq_source_rescaling_partition_predicate")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = kikimr.ydb_client
 
@@ -403,7 +492,9 @@ class TestRescaling(StreamingTestBase):
             expected = [f"{phase}_{partition_id}" for partition_id in selected]
             for partition_id, value in zip(selected, expected):
                 client.topic_write(
-                    self.input_topic, [json.dumps({"value": value})], partition_id=partition_id,
+                    self.input_topic,
+                    [json.dumps({"value": value})],
+                    partition_id=partition_id,
                 )
             actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
             assert sorted(actual) == sorted(expected), (actual, expected)
@@ -421,16 +512,25 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            readers_before = self._wait_started(kikimr, query_name)
-            assert 0 < readers_before < (len(selected) + 4) // 5, readers_before
+            expected_readers_before = 6
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name, expected_readers_before)
+            assert 0 < expected_readers_before < (len(selected) + 4) // 5, expected_readers_before
             check_reading("before")
 
-            self._restart_query(kikimr, query_name, readers_before, scale_up, added_slots)
+            self._restart_query(kikimr, query_name, expected_readers_before, scale_up, added_slots)
             check_reading("after")
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
-    @pytest.mark.parametrize("scale_up", [False, pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported"))], ids=["restart", "scale_up"])
+    @pytest.mark.parametrize(
+        "scale_up",
+        [
+            False,
+            pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported")),
+        ],
+        ids=["restart", "scale_up"],
+    )
     def test_pq_source_rescaling_hopping_open_window(
         self,
         kikimr: Kikimr,
@@ -441,7 +541,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_hopping_open_window")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = kikimr.ydb_client
 
@@ -451,7 +555,11 @@ class TestRescaling(StreamingTestBase):
         base = (int(time.time()) // 20) * 20 + 120
 
         def timestamp(seconds: int) -> str:
-            return datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            return (
+                datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
         def event(seconds: int, value: int = 0, key: str = "clock") -> str:
             return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
@@ -478,9 +586,13 @@ class TestRescaling(StreamingTestBase):
             END DO;
         ''')
         try:
-            readers_before = self._wait_started(kikimr, query_name)
+            self._wait_started(kikimr, query_name)
+            readers_before = self._reader_count(kikimr)
             self.wait_streaming_query_metric(
-                kikimr, query_name, "streaming.query.tasks.count", expected_value=readers_before + 1,
+                kikimr,
+                query_name,
+                "streaming.query.tasks.count",
+                expected_value=readers_before + 1,
             )
             tasks_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count")
             assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
@@ -491,16 +603,18 @@ class TestRescaling(StreamingTestBase):
             batches = {partition_id: [event(1)] for partition_id in range(partitions_count)}
             batches[0].extend([event(2, 10, "target"), event(3, 20, "target")])
             self._write_and_checkpoint(kikimr, query_name, batches)
-            assert self.get_streaming_query_metric(kikimr, query_name, "streaming.query.output.bytes") == 0, (
-                "The target window closed before the restart"
-            )
+            assert (
+                self.get_streaming_query_metric(kikimr, query_name, "streaming.query.output.bytes") == 0
+            ), "The target window closed before the restart"
 
             self._restart_query(kikimr, query_name, readers_before, scale_up, added_slots)
             # Only the reader count should change, not downstream parallelism.
             self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
 
             self._write_and_checkpoint(kikimr, query_name, {0: [event(4, 5, "target")]})
-            self._write_and_checkpoint(kikimr, query_name, {partition_id: [event(40)] for partition_id in range(partitions_count)})
+            self._write_and_checkpoint(
+                kikimr, query_name, {partition_id: [event(40)] for partition_id in range(partitions_count)}
+            )
             actual = client.topic_read(self.output_topic, self.consumer_name, 1)
             assert actual == ["35"], (
                 f"Expected checkpointed sum 30 plus new value 5, got {actual}; "

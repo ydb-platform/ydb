@@ -522,6 +522,31 @@ void TReadSessionActor<Protocol>::ProcessDirectReads(TPartitionsMap::iterator it
 
         ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
     }
+
+    // All in-flight direct reads are acked: flush the deferred window-exhausted
+    // end_partition_session (if any) so the client stops the partition session
+    // only after it has received every data batch.
+    SendWindowExhaustedIfNeeded(it, ctx);
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx) {
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.WindowExhausted || !partitionInfo.DirectReads.empty()) {
+        return;
+    }
+
+    partitionInfo.WindowExhausted = false;
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto* r = result.mutable_end_partition_session();
+        r->set_partition_session_id(partitionInfo.Partition.AssignId);
+
+        LOG_I("Sending to client end partition stream event (max_offset reached, direct reads drained)");
+        SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
+    }
 }
 
 template <EProtocol Protocol>
@@ -2556,10 +2581,13 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
     }
     auto& partitionInfo = partitionIt->second;
 
-    // Keep EndOffset for diagnostics only. Do NOT mark the partition as
-    // ReadingFinished: window exhaustion is not a split/merge close, and
-    // ReadingFinished feeds IsLastOffsetCommitted()/NotifyChildren().
-    partitionInfo.EndOffset = msg->EndOffset;
+    // Cross-check the topic of the partition found by AssignId: the AssignId is
+    // session-unique, so a mismatch means a stale/inconsistent event - drop it.
+    if (partitionInfo.Topic->GetInternalName() != msg->Topic) {
+        return;
+    }
+
+    // Do NOT update EndOffset and do NOT mark the partition as ReadingFinished.
 
     // The partition is still alive: the client's read window (max_offset) is
     // exhausted, not the partition itself. The read balancer is deliberately
@@ -2572,13 +2600,13 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
         // sent unconditionally: it reflects the client's own max_offset window and
         // is independent of auto-partitioning support, so it must reach every
         // Topic-protocol client that set max_offset.
-        TServerMessage result;
-        result.set_status(Ydb::StatusIds::SUCCESS);
-        auto* r = result.mutable_end_partition_session();
-        r->set_partition_session_id(partitionInfo.Partition.AssignId);
-
-        LOG_I("Sending to client end partition stream event (max_offset reached)");
-        SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
+        //
+        // For direct read the last data batch goes to StreamDirectRead while
+        // this EOF goes to the control StreamRead, so the client could receive
+        // the EOF first, stop the partition session and drop the batch. Defer
+        // the EOF until all in-flight direct reads are acked.
+        partitionInfo.WindowExhausted = true;
+        SendWindowExhaustedIfNeeded(partitionIt, ctx);
     }
 }
 

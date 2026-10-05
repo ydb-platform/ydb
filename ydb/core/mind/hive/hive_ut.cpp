@@ -3412,7 +3412,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
 
-        TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> block(runtime);
+        // In this branch the storage balancer reassigns synchronously, and with a single group per pool
+        // every reassign ends with TEvRestartCancelled. Hold that reply back so the balancer still has
+        // a reassign in flight while the tablets are deleted; it then has to step over deleted tablets.
+        TBlockEvents<NHive::TEvPrivate::TEvRestartCancelled> block(runtime);
 
         runtime.SendToPipe(hiveTablet, sender, new NHive::TEvPrivate::TEvStartStorageBalancer({.NumReassigns = NUM_TABLETS, .MaxInFlight = 1}), 0, GetPipeConfigWithRetries());
 

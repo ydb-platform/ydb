@@ -13,7 +13,9 @@ The `tools validate` command checks integrity of a backup created by [`export s3
 
 The path is a full backup when its `metadata.json` has `"kind": "SimpleExportV0"`. The command then checks `SchemaMapping` and every object listed there. This metadata is written when the export uses `--destination-prefix` or `--fs-path`.
 
-Exports created with `--item src=...,dst=...` do not write that file or `SchemaMapping`. The destination prefix is a directory of exported objects (`scheme.pb`, `create_view.sql`, and the other schema files). The command finds those objects and checks each of them, including index implementation tables stored under a table even when the table metadata does not list indexes. There is no manifest of objects that were never exported.
+Exports created with `--item src=...,dst=...` do not write that file or `SchemaMapping`. The destination prefix is a directory of exported objects (`scheme.pb`, `create_view.sql`, and the other schema files). The command finds those objects and checks each of them, including index implementation tables stored under a table even when the table metadata does not list indexes.
+
+`--expected-objects FILE` supplies the missing manifest for this layout. Each line is an object name relative to the validated path. An object found in the backup and absent from the file is printed as a warning and does not fail the command. An object listed in the file and absent from the backup is an error and the command exits with code 1. An index implementation table stored under a listed object is treated as part of that object.
 
 Any other path is one exported object (a table, a view, a topic, and so on). A path to one table checks that table, including indexes and changefeeds recorded in its `metadata.json` and index tables found under it. A path to a full backup checks the whole backup.
 
@@ -37,6 +39,7 @@ Encrypted backups (`.enc` objects or an `encryption` field in the backup metadat
 | `--retries NUM` | Attempts to read a backup file after an I/O error. Default: `10`. |
 | `--encryption-key-file PATH` | Path to the encryption key file, same encoding as [`import s3`](./import-s3.md) / [`import nfs`](./import-nfs.md). The key can also be passed in `YDB_ENCRYPTION_KEY` as a hexadecimal string, or the file path in `YDB_ENCRYPTION_KEY_FILE`. Encrypted files are still rejected. |
 | `--item PROPERTY=VALUE,...` | Object to validate. Can be repeated. Properties: `source` (`src`, `s`) is the backup path; `destination` (`dst`, `d`) is accepted for compatibility with `import` and ignored. |
+| `--expected-objects PATH` | Text file with expected object names for a backup created with `--item`, one name per line, relative to the validated path. Empty lines are ignored. Extra objects in the backup are warnings. Names missing from the backup are errors. |
 
 ### S3 parameters {#s3}
 
@@ -96,4 +99,12 @@ Validate one table under that directory:
 {{ ydb-cli }} tools validate nfs \
   --fs-path /mnt/backup/2026-10-01 \
   --item source=dir1/table1
+```
+
+Validate an `--item` export and require a known set of objects. `objects.txt` contains one relative name per line, for example `dir1/table1`:
+
+```bash
+{{ ydb-cli }} tools validate nfs \
+  --fs-path /mnt/backup/2026-10-01 \
+  --expected-objects objects.txt
 ```

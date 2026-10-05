@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -24,6 +25,9 @@ struct TValidateSettings {
     bool SchemeOnly = false;
     // Raw encryption key bytes, same encoding as `ydb import`.
     TString EncryptionKey;
+    // Object names relative to the validated path. Used for backups created with --item,
+    // which have no SchemaMapping. Unset means the list was not provided.
+    TMaybe<TVector<TString>> ExpectedObjects;
 };
 
 struct TValidationIssue {
@@ -34,11 +38,16 @@ struct TValidationIssue {
 struct TValidationReport {
     TVector<TString> Checked;
     TVector<TValidationIssue> Issues;
+    // Present in the backup, absent from ExpectedObjects. Does not fail Ok().
+    TVector<TValidationIssue> Warnings;
 
     bool Ok() const {
         return Issues.empty();
     }
 };
+
+// One object name per line. Empty lines are skipped. Names are not normalized here.
+TVector<TString> ParseExpectedObjects(TStringBuf text);
 
 // `path` is a full backup (metadata.json kind SimpleExportV0), a directory of exported
 // objects without that metadata (export --item), or one schema object.

@@ -78,6 +78,40 @@ TString ParentKey(const TString& key) {
     return pos == TString::npos ? TString() : key.substr(0, pos);
 }
 
+TString CanonicalObjectName(TString name) {
+    name = NormalizeKey(name);
+    while (name.StartsWith("./")) {
+        name = name.substr(2);
+    }
+    return name ? name : TString(".");
+}
+
+TString ObjectName(const TString& root, const TString& dir) {
+    if (dir == root) {
+        return ".";
+    }
+    if (!root) {
+        return dir;
+    }
+    if (dir.StartsWith(root + "/")) {
+        return dir.substr(root.size() + 1);
+    }
+    return dir;
+}
+
+bool CoveredByExpected(const TString& name, const THashSet<TString>& expected) {
+    if (expected.contains(name)) {
+        return true;
+    }
+    for (const TString& item : expected) {
+        // "." is the object at the validated path, not a prefix of every child.
+        if (item != "." && name.StartsWith(item + "/")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool IsSchemaObjectFileName(const TString& name) {
     static constexpr TStringBuf Names[] = {
         "scheme.pb",
@@ -244,6 +278,9 @@ public:
             if (!NJson::ReadJsonTree(*metadata, &json) || !json.IsMap()) {
                 Error(metadataKey, "metadata.json is not a JSON object");
             } else if (json["kind"].GetStringRobust() == "SimpleExportV0") {
+                if (Settings.ExpectedObjects.Defined()) {
+                    Error(metadataKey, "--expected-objects applies only to backups created without SchemaMapping");
+                }
                 ValidateFullBackup(root, metadataKey, *metadata, json);
                 return Report;
             }
@@ -258,6 +295,9 @@ public:
         } else if (!self) {
             Checked(root.empty() ? "backup" : root);
         }
+        if (Settings.ExpectedObjects.Defined()) {
+            CheckExpectedObjects(root);
+        }
         return Report;
     }
 
@@ -270,6 +310,10 @@ private:
 
     void Error(const TString& path, const TString& message) {
         Report.Issues.push_back({path, message});
+    }
+
+    void Warning(const TString& path, const TString& message) {
+        Report.Warnings.push_back({path, message});
     }
 
     void Checked(const TString& path) {
@@ -844,6 +888,40 @@ private:
         Checked(root.empty() ? "backup" : root);
     }
 
+    void CheckExpectedObjects(const TString& root) {
+        THashSet<TString> expected;
+        for (const TString& name : *Settings.ExpectedObjects) {
+            expected.insert(CanonicalObjectName(name));
+        }
+        THashSet<TString> found;
+        for (const auto& key : Storage.List(root)) {
+            if (!IsSchemaObjectFileName(FileName(key))) {
+                continue;
+            }
+            found.insert(ObjectName(root, ParentKey(key)));
+        }
+        TVector<TString> extras;
+        for (const TString& name : found) {
+            if (!CoveredByExpected(name, expected)) {
+                extras.push_back(name);
+            }
+        }
+        std::sort(extras.begin(), extras.end());
+        for (const TString& name : extras) {
+            Warning(name, "object is not listed in --expected-objects");
+        }
+        TVector<TString> missing;
+        for (const TString& name : expected) {
+            if (!found.contains(name)) {
+                missing.push_back(name);
+            }
+        }
+        std::sort(missing.begin(), missing.end());
+        for (const TString& name : missing) {
+            Error(name, "object listed in --expected-objects was not found in the backup");
+        }
+    }
+
     bool ValidateDiscoveredObjects(const TString& root) {
         TVector<TString> dirs;
         for (const auto& key : Storage.List(root)) {
@@ -882,6 +960,18 @@ private:
 };
 
 } // namespace
+
+TVector<TString> ParseExpectedObjects(TStringBuf text) {
+    TVector<TString> names;
+    while (text) {
+        const TStringBuf line = text.NextTok('\n');
+        TString name = StripString(TString(line));
+        if (name) {
+            names.push_back(std::move(name));
+        }
+    }
+    return names;
+}
 
 TString Sha256Hex(TStringBuf data) {
     SHA256_CTX ctx;

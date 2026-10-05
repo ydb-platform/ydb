@@ -1,5 +1,5 @@
 
-* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check integrity of a full backup or a single exported table without restoring it. Backups created with `--item` (no `SchemaMapping`) are checked by scanning exported objects. `--scheme-only` checks file composition and metadata; without it, data file contents are checked as well.
+* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check integrity of a full backup or a single exported table without restoring it. Backups created with `--item` (no `SchemaMapping`) are checked by scanning exported objects. `--expected-objects` compares that scan with a text file: missing names fail validation, extra objects are warnings. `--scheme-only` checks file composition and metadata; without it, data file contents are checked as well.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.

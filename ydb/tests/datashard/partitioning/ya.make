@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(23)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS(
     test_partitioning.py

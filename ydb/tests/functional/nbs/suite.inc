@@ -5,7 +5,7 @@ ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
 SIZE(LARGE)
 TIMEOUT(600)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 REQUIREMENTS(ram:16)
 
 DEPENDS(

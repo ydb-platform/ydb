@@ -18,7 +18,7 @@ PEERDIR(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:8
     ram_disk:1
 )

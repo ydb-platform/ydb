@@ -19,7 +19,7 @@ After stopping the process, check the **Nodes** tab on the [cluster monitoring p
 
 Static nodes serve the storage system and are listed in the [`hosts`](../../../reference/configuration/hosts.md) section. A static node can contain [VDisks](../../../concepts/glossary.md#vdisk) of [dynamic](../../../concepts/glossary.md#dynamic-group) and [static](../../../concepts/glossary.md#static-group) groups, as well as [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), and [SchemeBoard](../../../concepts/glossary.md#scheme-board) replicas. These resources must be moved before the node is removed from the configuration.
 
-Before starting the procedure, use the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page) to check that the affected storage groups are healthy, that is, all VDisks of these groups are shown in the `Ok` state (highlighted in green), with none in `Error` or `Degraded` state.
+Before starting the procedure, use the [{{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page) to check that the affected storage groups are healthy, that is, all VDisks of these groups are shown in the `Ok` state (highlighted in green), with none in `Error` or `Degraded` state.
 
 The remaining nodes must have enough free [PDisk](../../../concepts/glossary.md#pdisk) space and slots for all VDisks from the node being removed. VDisk placement across [failure domains](../../../concepts/glossary.md#fail-domain) and [failure realms](../../../concepts/glossary.md#fail-realm) must comply with the configured [erasure coding scheme](../../../concepts/glossary.md#erasure-coding) to preserve group fault tolerance after node removal. For details on calculating the required capacity margin, see [{#T}](../../concepts/capacity-planning.md#hardware-estimation).
 
@@ -52,7 +52,7 @@ To remove a static node:
 
     The command runs in the foreground. Wait for it to complete successfully, then verify that data relocation is complete in the next step. For details, see [Move VDisks from a broken/missing block store volume](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).
 
-1. In the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../concepts/selfheal-metadata-distribution.md#verify-result).
+1. In the [{{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../concepts/selfheal-metadata-distribution.md#verify-result).
 1. Fetch the current cluster configuration using the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash
@@ -106,7 +106,7 @@ To remove a static node:
     failed to remove PDisk# 1:1 as it has active VSlots
     ```
 
-    In this case, wait for SelfHeal to move the remaining VDisks. Relocation time depends on the amount of data and disk performance. Monitor the relocation on the **Storage** tab of the node being removed in the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page). When no VDisks remain on the node, rerun the `config replace` command with the same file.
+    In this case, wait for SelfHeal to move the remaining VDisks. Relocation time depends on the amount of data and disk performance. Monitor the relocation on the **Storage** tab of the node being removed in the [{{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page). When no VDisks remain on the node, rerun the `config replace` command with the same file.
 
     If the VDisk list is not shrinking and replication is not in progress, [move the remaining VDisks manually](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).
 

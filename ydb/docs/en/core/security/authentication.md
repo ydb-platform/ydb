@@ -12,10 +12,10 @@ The following authentication types are supported:
 
 * [Anonymous](#anonymous) authentication.
 * Authentication by [login and password](#static-credentials).
-* Authentication using [LDAP directory](#ldap).
-* Authentication using [an external identity provider via the OpenID Connect protocol](#external-idp).
+* Authentication using an [LDAP directory](#ldap).
+* Authentication using an [external identity provider via the OpenID Connect protocol](#external-idp).
 * Authentication by [client certificate](#client-certificate).
-* [Authentication using a third-party IAM provider](#iam), for example [Yandex Identity and Access Management](https://yandex.cloud/en/docs/iam/).
+* [Authentication using a third-party IAM provider](#iam), for example [Yandex Identity and Access Management](https://yandex.cloud/docs/iam/).
 
 ## Anonymous authentication {#anonymous}
 
@@ -27,7 +27,7 @@ Anonymous authentication should be used only for evaluation purposes for local d
 
 {% endnote %}
 
-The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/auth_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
 
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
@@ -42,9 +42,7 @@ Depending on the [access level settings](../reference/configuration/security_con
 
 Authentication by login and password via the {{ ydb-short-name }} server is available only for [local users](../concepts/glossary.md#access-user). External user authentication involves servers of external systems.
 
-This type of access implies that each database user has a login and password.
-A user's login may contain only lowercase Latin letters, digits, and the `@` character.
-Various [criteria](#password-complexity) for password complexity may be established.
+This type of access implies that each database user has a login and password. A user's login may contain only lowercase Latin letters, digits, and the `@` character. Various [criteria](#password-complexity) for password complexity may be established.
 
 User login and password hash are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
@@ -155,7 +153,6 @@ In the current implementation, the group names that {{ ydb-short-name }} will op
 
 Example:
 
-
 ```text
 cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 ```
@@ -216,7 +213,13 @@ For {{ ydb-short-name }} to automatically establish an encrypted connection to t
 
 {{ ydb-short-name }} can authenticate users by [JWT tokens](https://www.rfc-editor.org/rfc/rfc7519) issued by an external [identity provider](https://csrc.nist.gov/glossary/term/identity_provider) (Identity Provider, IdP) that supports the [OpenID Connect](https://openid.net/developers/how-connect-works/) (OIDC) protocol. The provider is responsible for authenticating the user and issuing the token, while {{ ydb-short-name }} verifies the signature and claims about the subject and token validity conditions and forms the user's SID and their groups.
 
-Obtaining and refreshing the JWT token is performed on the client and IdP side. {{ ydb-short-name }} does not redirect the user to the IdP login page and does not exchange `authorization code` for tokens. The client passes the already obtained JWT token as a Bearer token with each request.
+Obtaining and refreshing the JWT token is performed on the client and IdP side. The {{ ydb-short-name }} server does not redirect the user to the IdP login page and does not exchange `authorization code` for tokens. The client passes the already obtained JWT token as a Bearer token with each request.
+
+{% note info %}
+
+Single Sign-On (SSO) through an external IdP for the web interface is available via [{{ ydb-short-name }} Enterprise Manager](../devops/enterprise-manager/index.md). For configuration details, see the article [{#T}](../devops/enterprise-manager/sso.md).
+
+{% endnote %}
 
 ### How it works
 
@@ -233,31 +236,31 @@ The Discovery URL, `issuer`, and `jwks_uri` must use the `https://` scheme. If t
 
 The JWT token must have a valid compact serialization format and contain the `alg` and `kid` fields in its header. Only asymmetric signature algorithms are supported:
 
-- RSA PKCS#1: `RS256`, `RS384`, `RS512`.
-- RSA-PSS: `PS256`, `PS384`, `PS512`.
+- RSA PKCS#1: `RS256`, `RS384`, `RS512`;
+- RSA-PSS: `PS256`, `PS384`, `PS512`;
 - ECDSA: `ES256`, `ES384`, `ES512`.
 
 Symmetric algorithms of the `HS*` family are not supported. The public key in JWKS must have matching `kty` (key type) and `kid` and contain `x5c` (X.509 certificate chain). The public key is extracted from the first certificate `x5c`; JWKs containing only RSA or EC parameters without `x5c` are skipped.
 
 The following fields are required for successful authentication:
 
-- `alg` and `kid` in the JWT header.
-- The `iss` claim (issuer) matching the value of `issuer` in the configuration.
+- `alg` and `kid` in the JWT header;
+- The `iss` claim (issuer) matching the value of `issuer` in the configuration;
 - A non-empty string user identifier. To obtain it, the claim specified by the `subject_claim_name` parameter is used. If this claim is missing or has a different type, the standard `sub` claim (subject) is used.
 
 The remaining checked fields are optional:
 
-- The `aud` claim (audience) is checked if the `audience` parameter is set in the configuration. It is recommended to always set the expected audience so that tokens issued for other services are not accepted.
-- When checking time-related claims such as `exp` (expiration time), `nbf` (not before), and `iat` (issued at), the allowed clock skew specified by [the `allowed_clock_skew` parameter](../reference/configuration/auth_config.md#external-idp-auth-config) is taken into account. If `exp` is missing, {{ ydb-short-name }} sets the authentication result expiration to 10 minutes.
+- The `aud` claim (audience) is checked if the `audience` parameter is set in the configuration; it is recommended to always set the expected audience so that tokens issued for other services are not accepted;
+- When checking time-related claims such as `exp` (expiration time), `nbf` (not before), and `iat` (issued at), the allowed clock skew specified by [the `allowed_clock_skew` parameter](../reference/configuration/auth_config.md#external-idp-auth-config) is taken into account. If `exp` is missing, {{ ydb-short-name }} sets the authentication result expiration to 10 minutes;
 - The claim specified by the `groups_claim_name` parameter contains the list of user groups. It must be an array; only string elements are extracted from the array. If the claim is missing or has a different type, the group list is considered empty.
 
 ### Forming the SID
 
-The suffix `@<auth-domain>` is added to the user identifier and each group from the JWT. The value of `<auth-domain>` is set by the `external_idp_authentication_domain` parameter. By default, the value `sso` is used.
+The suffix `@<auth-domain>` is added to the user identifier and each group from the JWT. The value of `<auth-domain>` is set by the `external_idp_authentication_domain` parameter; by default, the value `sso` is used.
 
 For example, with `sub: user1`, `groups: [admins, developers]`, and the default domain, the following SIDs are formed:
 
-- user `user1@sso`.
+- user `user1@sso`;
 - groups `admins@sso` and `developers@sso`.
 
 {{ ydb-short-name }} uses the group list from the token without additional calls to the IdP and without expanding nested groups. You cannot manage users and groups of an external IdP using the `CREATE USER`, `ALTER USER`, `CREATE GROUP`, and `ALTER GROUP` commands. Rights are assigned to the formed SIDs using the methods described in the section [{#T}](./authorization.md).
@@ -289,13 +292,11 @@ Client certificate verification for [device authentication](#device-auth) and us
 
 {% endnote %}
 
-Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#certificate-auth-config) `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Имя=Значение,...@<domain>` notation. The attribute order matches the order of fields in the certificate. Example:
-
+Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#certificate-auth-config) `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The attribute order matches the order of fields in the certificate. Example:
 
 ```text
 C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 ```
-
 
 ### Getting groups
 
@@ -334,8 +335,8 @@ After device authentication, [authentication](./authentication.md) of a user or 
 Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
 
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
-- **Kafka API** — when mTLS is enabled, it requires a client certificate. Only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
-- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section. YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
+- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section; YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
 
 ## Authentication using a third-party IAM provider {#iam}
 

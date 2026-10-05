@@ -547,12 +547,16 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
         NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
-            TMockPqGatewaySettings::TTopicInfo settings;
+            auto settings = Gateway->Settings.DefaultTopicSettings;
             if (const auto it = Gateway->Settings.Topics.find(Stream); it != Gateway->Settings.Topics.end()) {
                 settings = it->second;
             }
 
             NFq::TMessageStreamDescription description;
+            description.Consumers.emplace();
+            for (const auto& consumer : settings.Consumers) {
+                description.Consumers->push_back({.Name = consumer});
+            }
             for (ui64 id = 0; id < settings.PartitionCount; ++id) {
                 description.Partitions.push_back({.PartitionId = {id}});
             }
@@ -922,13 +926,14 @@ public:
     }
 
     IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) final {
-        TMockPqGatewaySettings::TTopicInfo topicSettings;
+        auto topicSettings = Settings.DefaultTopicSettings;
         if (const auto it = Settings.Topics.find(path); it != Settings.Topics.end()) {
             topicSettings = it->second;
         }
 
         return NThreading::MakeFuture<TDescribeFederatedTopicResult>(IPqGateway::TDescribeFederatedTopicResult{{
             .PartitionsCount = topicSettings.PartitionCount,
+            .Consumers = {topicSettings.Consumers.begin(), topicSettings.Consumers.end()},
         }});
     }
 

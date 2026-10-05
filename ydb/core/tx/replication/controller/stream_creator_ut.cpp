@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
             UNIT_ASSERT(ev->Get()->IsSuccess());
+            UNIT_ASSERT(!ev->Get()->SchemaChanges);
         }
 
         auto desc = env.GetDescription("/Root/Table");
@@ -157,7 +158,9 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             true, true, true));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
-        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender())->Get()->IsSuccess());
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT(result->Get()->SchemaChanges);
 
         const auto table = env.GetDescription("/Root/Table");
         const auto& stream = table.GetPathDescription().GetTable().GetCdcStreams().at(0);
@@ -166,6 +169,28 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
         const auto& strategy = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
         UNIT_ASSERT_EQUAL(strategy.GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
+    }
+
+    Y_UNIT_TEST(ExistingStreamKeepsActualSchemaChangeCapability) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        for (const bool schemaChanges : {false, true}) {
+            env.GetRuntime().Register(CreateStreamCreator(
+                env.GetSender(), env.GetYdbProxy(), 1, 1,
+                std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+                "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+                false, true, schemaChanges));
+            const auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+            env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+            UNIT_ASSERT(!result->Get()->SchemaChanges);
+        }
     }
 }
 

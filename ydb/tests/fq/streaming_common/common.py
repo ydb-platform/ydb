@@ -79,7 +79,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_updating_partitions_on_streaming_query_restart",
     }
     disabled_feature_flags = []
-    for flag in ("enable_streaming_aggregation", "enable_streaming_aggregation_advanced"):
+    for flag in (
+        "enable_streaming_aggregation",
+        "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_state_recompute",
+    ):
         if flag in param:
             if param[flag]:
                 extra_feature_flags.add(flag)

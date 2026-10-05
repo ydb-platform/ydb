@@ -3368,7 +3368,7 @@ private:
         const auto queryTextValue = queryText.DetachResult();
         const bool stateRecomputeEnabled = AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute();
         if (queryTextValue && force.GetResult() != "true" && !stateRecomputeEnabled) {
-            return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
+            return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint.");
         }
 
         const auto streamingDispositionValue = streamingDisposition.DetachResult();

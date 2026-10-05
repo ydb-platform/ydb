@@ -3510,6 +3510,198 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeMetricsBeforeInitialization) {
+        TTestActorRuntime runtime;
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+        const auto recipient = runtime.AllocateEdgeActor();
+        auto context = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto config = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        config->ExpectedSlotSize = 100_MB;
+        auto disk = MakeHolder<NPDisk::TPDisk>(context, config, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto* report = new NPDisk::TEvWhiteboardReportResult;
+        report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+        auto request = std::unique_ptr<NPDisk::TWhiteboardReport>(
+            disk->ReqCreator.CreateFromArgs<NPDisk::TWhiteboardReport>(recipient, report));
+        disk->WhiteboardReport(*request);
+        const auto result = runtime.GrabEdgeEvent<NPDisk::TEvWhiteboardReportResult>(recipient);
+        const auto& metrics = result->Get()->DiskMetrics->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT(metrics.HasUserChunkPoolSize());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetUserChunkPoolSize(), 0);
+        const auto& state = result->Get()->PDiskState->Record;
+        UNIT_ASSERT(state.HasUserChunkPoolSize());
+        UNIT_ASSERT_VALUES_EQUAL(state.GetUserChunkPoolSize(), 0);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeRestoresOwnerQuotasWhenDisabled) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+        TVDiskMock otherDisk(&testCtx, true);
+        otherDisk.InitFull(2);
+        const ui32 poolSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Keeper.GetUserChunkPoolSize();
+        });
+
+        auto checkOwner = [&](const TVDiskMock& owner, ui32 weight, ui32 quota) {
+            const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(owner.PDiskParams->Owner, owner.PDiskParams->OwnerRound), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->TotalChunks, quota);
+            testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Keeper.GetOwnerWeight(owner.PDiskParams->Owner), weight);
+            });
+        };
+        auto changeSettings = [&](ui32 slotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(slotCount, slotSizeInUnits, expectedSlotSize), NKikimrProto::OK);
+        };
+        auto checkReportedSlotSize = [&](ui64 expectedSlotSize) {
+            testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+                auto* report = new NPDisk::TEvWhiteboardReportResult;
+                report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TWhiteboardReport>(testCtx.Sender, report));
+            });
+            const auto report = testCtx.Recv<NPDisk::TEvWhiteboardReportResult>();
+            const auto& metrics = report->DiskMetrics->Record.GetPDisksMetrics(0);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetUserChunkPoolSize(), ui64(poolSize) * chunkSize);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetEnforcedDynamicSlotSize(), expectedSlotSize);
+            UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicSlotSize(), expectedSlotSize);
+        };
+
+        changeSettings(8, 2, 0);
+        checkOwner(disk, 2, poolSize / 8 * 2);
+        checkOwner(otherDisk, 1, poolSize / 8);
+        changeSettings(8, 2, 100ull * chunkSize);
+        checkOwner(disk, 2, 300);
+        checkOwner(otherDisk, 1, 200);
+        checkReportedSlotSize(100ull * chunkSize);
+        // Resizing beyond the physical pool caps the owner's quota without affecting its neighbour.
+        UNIT_ASSERT(poolSize < 900);
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound, 9), NKikimrProto::OK);
+        checkOwner(disk, 5, poolSize);
+        checkOwner(otherDisk, 1, 200);
+        checkReportedSlotSize(100ull * chunkSize);
+
+        // Use the resized group and the new slot settings. Active weights now exceed the expected count.
+        changeSettings(2, 4, 0);
+        checkOwner(disk, 3, poolSize / 4 * 3);
+        checkOwner(otherDisk, 1, poolSize / 4);
+        changeSettings(2, 4, 100ull * chunkSize);
+        checkOwner(disk, 3, poolSize);
+        checkOwner(otherDisk, 1, 200);
+        checkReportedSlotSize(100ull * chunkSize);
+        changeSettings(2, 4, Max<ui64>());
+        checkOwner(disk, 3, poolSize);
+        checkOwner(otherDisk, 1, poolSize);
+        checkReportedSlotSize(Max<ui64>() / chunkSize * chunkSize);
+        changeSettings(8, 2, 0);
+        checkOwner(disk, 5, poolSize / 8 * 5);
+        checkOwner(otherDisk, 1, poolSize / 8);
+        checkReportedSlotSize(ui64(poolSize / 8) * chunkSize);
+    }
+
+    void CheckFairShareMetricsWithSubChunkSlotSize(TActorTestContext& testCtx, ui64 expectedSlotSize) {
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            auto* report = new NPDisk::TEvWhiteboardReportResult;
+            report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+            pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TWhiteboardReport>(testCtx.Sender, report));
+        });
+        const auto report = testCtx.Recv<NPDisk::TEvWhiteboardReportResult>();
+        const auto& metrics = report->DiskMetrics->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT(metrics.HasExpectedSlotSize());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetEnforcedDynamicSlotSize(), expectedSlotSize);
+        const auto& state = report->PDiskState->Record;
+        UNIT_ASSERT(state.HasExpectedSlotSize());
+        UNIT_ASSERT_VALUES_EQUAL(state.GetExpectedSlotSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetEnforcedDynamicSlotSize(), expectedSlotSize);
+        testCtx.SafeRunOnPDisk([&](const NPDisk::TPDisk* pdisk) {
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlotSizeBytes->Val(), expectedSlotSize);
+        });
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeBelowChunkFallsBackOnStartup) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        auto config = testCtx.GetPDiskConfig();
+        config->ExpectedSlotCount = 8;
+        config->SlotSizeInUnits = 2;
+        config->ExpectedSlotSize = chunkSize - 1;
+        testCtx.UpdateConfigRecreatePDisk(config);
+
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+        const ui32 poolSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Keeper.GetUserChunkPoolSize();
+        });
+        const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->TotalChunks, poolSize / 8 * 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->ExpectedSlotCount, 8);
+        UNIT_ASSERT_VALUES_EQUAL(result->NumActiveSlots, 2);
+        CheckFairShareMetricsWithSubChunkSlotSize(testCtx, ui64(poolSize / 8) * chunkSize);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeBelowChunkFallsBackAtRuntime) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+        disk.ReserveChunk(1);
+        disk.CommitReservedChunks();
+        const ui32 poolSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Keeper.GetUserChunkPoolSize();
+        });
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+        };
+
+        for (ui64 expectedSlotSize : {ui64{0}, ui64{100} * chunkSize}) {
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(8, 2, expectedSlotSize), NKikimrProto::OK);
+            const auto before = checkSpace();
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(4, 4, chunkSize - 1), NKikimrProto::OK);
+            const auto after = checkSpace();
+            UNIT_ASSERT_VALUES_EQUAL(after->TotalChunks, poolSize / 4);
+            UNIT_ASSERT_VALUES_EQUAL(after->UsedChunks, before->UsedChunks);
+            UNIT_ASSERT_VALUES_EQUAL(after->NumActiveSlots, 1);
+            UNIT_ASSERT_VALUES_EQUAL(after->ExpectedSlotCount, 4);
+            CheckFairShareMetricsWithSubChunkSlotSize(testCtx, ui64(poolSize / 4) * chunkSize);
+            testCtx.SafeRunOnPDisk([&](const NPDisk::TPDisk* pdisk) {
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->ExpectedSlotSize, chunkSize - 1);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->ExpectedSlotCount, 4);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Cfg->SlotSizeInUnits, 4);
+            });
+        }
+
+        testCtx.GracefulPDiskRestart();
+        disk.InitFull(3);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace()->TotalChunks, poolSize / 4);
+        CheckFairShareMetricsWithSubChunkSlotSize(testCtx, ui64(poolSize / 4) * chunkSize);
+
+        // Exactly one physical chunk is valid; zero still disables fixed-size quotas.
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 0, chunkSize), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace()->TotalChunks, 3);
+        testCtx.GracefulPDiskRestart();
+        disk.InitFull(3);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace()->TotalChunks, 3);
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 2, 0), NKikimrProto::OK);
+        UNIT_ASSERT_GT(checkSpace()->TotalChunks, 3);
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
         TActorTestContext testCtx({
             .DiskSize = 1_GB,
@@ -3537,6 +3729,94 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
         UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeGroupSizeSurvivesRestartAndRuntimeChange) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        auto config = testCtx.GetPDiskConfig();
+        config->ExpectedSlotCount = 8;
+        config->SlotSizeInUnits = 2;
+        config->ExpectedSlotSize = 100ull * chunkSize + chunkSize - 1;
+        testCtx.UpdateConfigRecreatePDisk(config);
+        TVDiskMock single(&testCtx, true);
+        TVDiskMock twice(&testCtx, true);
+        single.InitFull(1);
+        twice.InitFull(2);
+        single.ReserveChunk(10);
+        single.CommitReservedChunks();
+        twice.ReserveChunk(10);
+        twice.CommitReservedChunks();
+        single.SendEvLogSync();
+        twice.SendEvLogSync();
+
+        auto check = [&](TVDiskMock& disk, ui32 quota, ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui32 numActiveSlots) {
+            const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->TotalChunks, quota);
+            UNIT_ASSERT_VALUES_EQUAL(result->NumActiveSlots, numActiveSlots);
+            UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDiskConfig()->SlotSizeInUnits, slotSizeInUnits);
+            testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+                const auto owner = disk.PDiskParams->Owner;
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Keeper.GetOwnerWeight(owner), TPDiskConfig::GetOwnerWeight(groupSizeInUnits, slotSizeInUnits));
+                auto* report = new NPDisk::TEvWhiteboardReportResult;
+                report->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TWhiteboardReport>(testCtx.Sender, report));
+            });
+            const auto report = testCtx.Recv<NPDisk::TEvWhiteboardReportResult>();
+            const ui64 roundedSlotSize = ui64(quota / groupSizeInUnits) * chunkSize;
+            UNIT_ASSERT_VALUES_EQUAL(report->PDiskState->Record.GetEnforcedDynamicSlotSize(), roundedSlotSize);
+            UNIT_ASSERT_VALUES_EQUAL(report->DiskMetrics->Record.GetPDisksMetrics(0).GetEnforcedDynamicSlotSize(),
+                roundedSlotSize);
+            bool found = false;
+            for (size_t i = 0; i < report->VDiskStateVect.size(); ++i) {
+                const auto& state = std::get<1>(report->VDiskStateVect[i]);
+                if (state.GetGroupSizeInUnits() != groupSizeInUnits) {
+                    continue;
+                }
+                found = true;
+                const auto& metrics = report->DiskMetrics->Record.GetVDisksMetrics(i);
+                UNIT_ASSERT_VALUES_EQUAL(state.GetAllocatedSize(), 10ull * chunkSize);
+                UNIT_ASSERT_VALUES_EQUAL(state.GetAllocatedSize() + state.GetAvailableSize(), ui64(quota) * chunkSize);
+                UNIT_ASSERT_VALUES_EQUAL(metrics.GetAllocatedSize(), state.GetAllocatedSize());
+                UNIT_ASSERT_VALUES_EQUAL(metrics.GetAvailableSize(), state.GetAvailableSize());
+                UNIT_ASSERT_DOUBLES_EQUAL(metrics.GetVDiskRawUsage(), 100.0 * 10 / quota, 1e-6);
+                UNIT_ASSERT_DOUBLES_EQUAL(state.GetVDiskRawUsage(), metrics.GetVDiskRawUsage(), 1e-6);
+            }
+            UNIT_ASSERT(found);
+        };
+        check(single, 100, 1, 2, 2);
+        check(twice, 200, 2, 2, 2);
+        testCtx.GracefulPDiskRestart();
+        single.InitFull(1);
+        twice.InitFull(2);
+        check(single, 100, 1, 2, 2);
+        check(twice, 200, 2, 2, 2);
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 0, 50ull * chunkSize + chunkSize - 1), NKikimrProto::OK);
+        check(single, 50, 1, 0, 3);
+        check(twice, 100, 2, 0, 3);
+
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(twice.PDiskParams->Owner, twice.PDiskParams->OwnerRound, 3), NKikimrProto::OK);
+        check(twice, 150, 3, 0, 4);
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 2, 0), NKikimrProto::OK);
+        const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(twice.PDiskParams->Owner, twice.PDiskParams->OwnerRound), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->NumActiveSlots, 3);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->Keeper.GetOwnerWeight(single.PDiskParams->Owner), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->Keeper.GetOwnerWeight(twice.PDiskParams->Owner), 2);
+        });
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(8, 0, 50ull * chunkSize + chunkSize - 1), NKikimrProto::OK);
+        check(single, 50, 1, 0, 4);
+        check(twice, 150, 3, 0, 4);
     }
 
     static std::pair<ui32, ui32> GetFormatChunkSizes(TActorTestContext& testCtx) {
@@ -3776,7 +4056,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         });
         UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), formulaSlotSizeBytes);
 
-        const ui64 expectedSlotSize = 3ull * testCtx.GetPDiskConfig()->ChunkSize + 1;
+        const ui32 chunkSize = GetFormatChunkSizes(testCtx).first;
+        const ui64 expectedSlotSize = 3ull * chunkSize + 1;
         UNIT_ASSERT_VALUES_UNEQUAL(expectedSlotSize, formulaSlotSizeBytes);
 
         testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
@@ -3785,7 +4066,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.Send(new TEvents::TEvWakeup());
         waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
 
-        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), expectedSlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), 3ull * chunkSize);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

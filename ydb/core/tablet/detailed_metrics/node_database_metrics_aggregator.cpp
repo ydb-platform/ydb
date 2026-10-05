@@ -1,15 +1,19 @@
 #include "node_database_metrics_aggregator.h"
 
-#include "detailed_metrics_counter_set.h"
+#include "detailed_metrics_binding.h"
 #include "detailed_metrics_tree.h"
+#include "detailed_values_accumulator.h"
 #include "memory_tags.h"
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/system/mutex.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_AGGREGATOR
 
 namespace NKikimr {
 
@@ -34,26 +38,31 @@ namespace NKikimr {
         };
 
         /**
-         * A single bucket of the detailed metrics counter tree: the low level counters
-         * of one or more tablets of the same type.
+         * The final public metric values of a retired bucket.
+         */
+        struct TRetiredBucket {
+            TTabletTypes::EType Type = TTabletTypes::TypeInvalid;
+            NKikimrSysView::TDbCounters Final;
+        };
+
+        /**
+         * The TABLE bucket.
          *
-         * @note The bucket of a table level table holds many tablets, while a leaf group
-         *       of a partition level table holds exactly one. Both cases are handled by
-         *       the very same code: aggregating a single tablet is a passthrough
-         *       (SUM(x) == MAX(x) == x).
+         * @note A PARTITION leaf is a bare TDetailedValuesAccumulator (see TTableEntry::Leaves).
          */
         class TCountersBucket {
         public:
             TCountersBucket(
                 NMonitoring::TDynamicCounterPtr bucketGroup,
                 TTabletTypes::EType tabletType,
-                const TDetailedMetricsCounterNames& counterNames,
-                NMonitoring::TCountableBase::EVisibility visibility)
+                NMonitoring::TCountableBase::EVisibility visibility,
+                const TDetailedMetricsBinding& binding)
                 : TabletType(tabletType)
                 , TypeGroup(GetOrCreateTypeGroup(bucketGroup, tabletType))
                 , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
                 , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
-                , CounterNames(&counterNames)
+                , Descriptor(binding.Descriptor)
+                , Values(&binding, false /* skipLeaderOnly */)
             {
             }
 
@@ -70,14 +79,16 @@ namespace NKikimr {
                 }
 
                 if (!ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
+                    ExecutorCounters.Initialize(&executorCounters, &Descriptor->ExecutorCounterNames);
                 }
                 if (!AppCounters.IsInitialized) {
-                    AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
+                    AppCounters.Initialize(&appCounters, &Descriptor->AppCounterNames);
                 }
 
                 ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
                 AppCounters.Apply(it->second, &appCounters, TabletType, now);
+
+                Values.Apply(tablet, executorCounters, appCounters, now);
             }
 
             void Forget(const TTabletKey& tablet) {
@@ -94,6 +105,8 @@ namespace NKikimr {
                 }
 
                 SourceIds.erase(it);
+
+                Values.Forget(tablet);
             }
 
             bool IsEmpty() const {
@@ -109,32 +122,12 @@ namespace NKikimr {
                 }
             }
 
-            void Pack(NKikimrSysView::TDbTabletCounters& out) {
-                // The full current values become the retained delta baseline below.
-                NProfiling::TMemoryTagScope memoryScope(NodeMemoryTag());
-                RecalcAll();
+            TDetailedValuesAccumulator& GetValues() {
+                return Values;
+            }
 
-                // Non-derivative histograms (the current state rather than increments) travel
-                // as their full current values: the receiver replaces them, so a receiver
-                // that lost its state recovers with the very next report
-                NKikimrSysView::TDbTabletCounters current;
-                current.SetType(TabletType);
-                if (ExecutorCounters.IsInitialized) {
-                    ExecutorCounters.ToProto(*current.MutableExecutorCounters(), *current.MutableMaxExecutorCounters());
-                    NSysView::MarkHistogramsNonDerivative(current.MutableExecutorCounters(),
-                        ExecutorCounters.GetNonDerivativeHistogramIndices());
-                }
-                if (AppCounters.IsInitialized) {
-                    AppCounters.ToProto(*current.MutableAppCounters(), *current.MutableMaxAppCounters());
-                    NSysView::MarkHistogramsNonDerivative(current.MutableAppCounters(),
-                        AppCounters.GetNonDerivativeHistogramIndices());
-                }
-
-                {
-                    NProfiling::TMemoryTagScope payloadMemoryScope(PayloadMemoryTag());
-                    NSysView::CalculateCountersDiff(&out, current, &Previous);
-                }
-                Previous.Swap(&current);
+            TTabletTypes::EType GetTabletType() const {
+                return TabletType;
             }
 
         private:
@@ -145,12 +138,13 @@ namespace NKikimr {
             NPrivate::TAggregatedTabletCounters ExecutorCounters;
             NPrivate::TAggregatedTabletCounters AppCounters;
 
-            const TDetailedMetricsCounterNames* CounterNames;
+            // Static: its counter names select the counters the aggregates publish
+            const TDetailedMetricsDescriptor* Descriptor;
 
             THashMap<TTabletKey, ui64> SourceIds;
             ui64 NextSourceId = 0;
 
-            NKikimrSysView::TDbTabletCounters Previous;
+            TDetailedValuesAccumulator Values;
         };
 
         /**
@@ -171,14 +165,13 @@ namespace NKikimr {
             TTabletTypes::EType RegisteredTabletType = TTabletTypes::TypeInvalid;
 
             /**
-             * Table level, created on demand: all same-node tablets of the table collapsed
+             * Table level, created on demand: all same-node leaders of the table collapsed
              * into a single bucket, which lives directly in the table group.
              */
             THolder<TCountersBucket> TableBucket;
 
             // Partition level, created on demand
-            NMonitoring::TDynamicCounterPtr PerPartitionGroup;
-            THashMap<TTabletKey, THolder<TCountersBucket>> Leaves;
+            THashMap<TTabletKey, TDetailedValuesAccumulator> Leaves;
 
             bool IsEmpty() const {
                 return !TableBucket && Leaves.empty();
@@ -214,8 +207,13 @@ namespace NKikimr {
                 CheckSingleRole(followerId);
 
                 // The published set is a property of the tablet type: a type without one publishes nothing
-                const TDetailedMetricsCounterNames* counterNames = GetDetailedMetricsCounterNames(tabletType);
-                if (!counterNames) {
+                const TDetailedMetricsDescriptor* descriptor = GetDetailedMetricsDescriptor(tabletType);
+                if (!descriptor) {
+                    return;
+                }
+
+                const TDetailedMetricsBinding* binding = GetOrBind(*descriptor, executorCounters, appCounters);
+                if (!binding) {
                     return;
                 }
 
@@ -269,25 +267,13 @@ namespace NKikimr {
                 }
 
                 if (IsTableLevel(metricsLevel)) {
-                    auto& bucket = entry->TableBucket;
-                    if (!bucket) {
-                        bucket = MakeHolder<TCountersBucket>(
-                            entry->TableGroup,
-                            tabletType,
-                            *counterNames,
-                            CounterVisibility);
+                    if (!entry->TableBucket) {
+                        CreateTableBucket(*entry, relativePath, tabletType, *binding);
                     }
-                    bucket->Apply(tablet, executorCounters, appCounters, now);
+                    entry->TableBucket->Apply(tablet, executorCounters, appCounters, now);
                 } else {
-                    auto& leaf = entry->Leaves[tablet];
-                    if (!leaf) {
-                        leaf = MakeHolder<TCountersBucket>(
-                            GetOrCreateTabletGroup(GetOrCreatePerPartitionGroup(*entry), tablet),
-                            tabletType,
-                            *counterNames,
-                            CounterVisibility);
-                    }
-                    leaf->Apply(tablet, executorCounters, appCounters, now);
+                    auto [leaf, _] = entry->Leaves.try_emplace(tablet, binding, followerId != 0);
+                    leaf->second.Apply(tablet, executorCounters, appCounters, now);
                 }
             }
 
@@ -326,9 +312,6 @@ namespace NKikimr {
                     if (entry.TableBucket) {
                         entry.TableBucket->RecalcAll();
                     }
-                    for (auto& [_, leaf] : entry.Leaves) {
-                        leaf->RecalcAll();
-                    }
                 }
             }
 
@@ -342,19 +325,21 @@ namespace NKikimr {
                         auto* tableCounters = out.Add();
                         tableCounters->SetTablePath(entry.TablePath);
                         tableCounters->SetLevel(TDetailedMetricsSettings::MetricsLevelTable);
-                        entry.TableBucket->Pack(*tableCounters->MutableTableCounters());
+                        tableCounters->SetTabletType(entry.RegisteredTabletType);
+                        entry.TableBucket->GetValues().Pack(*tableCounters->MutableTableMetrics());
                     }
 
                     if (!entry.Leaves.empty()) {
                         auto* tableCounters = out.Add();
                         tableCounters->SetTablePath(entry.TablePath);
                         tableCounters->SetLevel(TDetailedMetricsSettings::MetricsLevelPartition);
+                        tableCounters->SetTabletType(entry.RegisteredTabletType);
 
                         for (auto& [tablet, leaf] : entry.Leaves) {
                             auto* leafOut = tableCounters->AddLeaves();
                             leafOut->SetTabletId(tablet.first);
                             leafOut->SetFollowerId(tablet.second);
-                            leaf->Pack(*leafOut->MutableCounters());
+                            leaf.Pack(*leafOut->MutableMetrics());
                         }
                     }
                 }
@@ -365,18 +350,20 @@ namespace NKikimr {
             }
 
         private:
-            void RetireBucket(const TString& tablePath, const TBucketKey& key, TCountersBucket& bucket) {
+            void RetireBucket(
+                const TString& tablePath, const TBucketKey& key, TTabletTypes::EType type, TDetailedValuesAccumulator& values)
+            {
                 NProfiling::TMemoryTagScope memoryScope(NodeMemoryTag());
-                // Forget has removed the last source. Pack retains unsent cumulative history
-                // and reports the non-derivative histograms empty before the bucket is destroyed.
-                NKikimrSysView::TDbTabletCounters final;
-                bucket.Pack(final);
+                // Forget has removed the last source.
+                NKikimrSysView::TDbCounters final;
+                values.Pack(final);
                 auto [it, inserted] = PendingCounters.try_emplace(TContributionKey{tablePath, key});
                 if (!inserted) {
                     NProfiling::TMemoryTagScope payloadMemoryScope(PayloadMemoryTag());
-                    NSysView::MergeCounterDeltas(final, it->second);
+                    NSysView::MergeCounterDeltas(final, it->second.Final);
                 }
-                it->second.Swap(&final);
+                it->second.Type = type;
+                it->second.Final.Swap(&final);
             }
 
             void AppendPendingCounters(
@@ -384,23 +371,23 @@ namespace NKikimr {
             {
                 using TTableKey = std::pair<TString, EDetailedMetricsLevel>;
                 THashMap<TTableKey, NKikimrSysView::TDetailedTableCounters*> tables;
-                THashMap<TContributionKey, NKikimrSysView::TDbTabletCounters*> buckets;
+                THashMap<TContributionKey, NKikimrSysView::TDbCounters*> buckets;
                 // Index only this call's output: Pack appends to a caller-owned report.
                 for (int i = firstAppendedTableIndex; i < out.size(); ++i) {
                     auto* table = out.Mutable(i);
                     tables.emplace(TTableKey{table->GetTablePath(), table->GetLevel()}, table);
-                    if (table->HasTableCounters()) {
-                        buckets.emplace(TContributionKey{table->GetTablePath(), Nothing()}, table->MutableTableCounters());
+                    if (table->HasTableMetrics()) {
+                        buckets.emplace(TContributionKey{table->GetTablePath(), Nothing()}, table->MutableTableMetrics());
                     }
                     for (auto& leaf : *table->MutableLeaves()) {
                         buckets.emplace(TContributionKey{table->GetTablePath(), TTabletKey{leaf.GetTabletId(), leaf.GetFollowerId()}},
-                                        leaf.MutableCounters());
+                                        leaf.MutableMetrics());
                     }
                 }
 
-                for (auto& [contribution, pending] : PendingCounters) {
+                for (auto& [contribution, retired] : PendingCounters) {
                     if (auto it = buckets.find(contribution); it != buckets.end()) {
-                        NSysView::MergeCounterDeltas(*it->second, pending);
+                        NSysView::MergeCounterDeltas(*it->second, retired.Final);
                         continue;
                     }
                     const auto& [path, key] = contribution;
@@ -410,14 +397,15 @@ namespace NKikimr {
                         table = out.Add();
                         table->SetTablePath(path);
                         table->SetLevel(level);
+                        table->SetTabletType(retired.Type);
                     }
                     if (key) {
                         auto* leaf = table->AddLeaves();
                         leaf->SetTabletId(key->first);
                         leaf->SetFollowerId(key->second);
-                        leaf->MutableCounters()->Swap(&pending);
+                        leaf->MutableMetrics()->Swap(&retired.Final);
                     } else {
-                        table->MutableTableCounters()->Swap(&pending);
+                        table->MutableTableMetrics()->Swap(&retired.Final);
                     }
                 }
                 PendingCounters.clear();
@@ -441,6 +429,35 @@ namespace NKikimr {
                     followerId);
             }
 
+            /**
+             * @return The binding made by the first report of the tablet type, or nullptr for another layout
+             */
+            const TDetailedMetricsBinding* GetOrBind(
+                const TDetailedMetricsDescriptor& descriptor,
+                const TTabletCountersBase& executorCounters,
+                const TTabletCountersBase& appCounters)
+            {
+                auto& binding = Bindings[descriptor.Type];
+                if (!binding) {
+                    binding = BindDetailedMetrics(descriptor, executorCounters, appCounters);
+                    for (const auto& problem : binding->Problems) {
+                        YDB_LOG_WARN("Problem with the detailed metrics binding of the tablet counters",
+                            {"database", DatabasePath},
+                            {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)},
+                            {"problem", problem});
+                    }
+                } else if (binding->LayoutSizes != TDetailedMetricsBinding::GetLayoutSizes(executorCounters, appCounters)) {
+                    if (!WarnedLayoutMismatch) {
+                        WarnedLayoutMismatch = true;
+                        YDB_LOG_WARN("Skipped the detailed metrics of a tablet, whose counter layout differs from the one of its tablet type",
+                            {"database", DatabasePath},
+                            {"tabletType", TTabletTypes::TypeToStr(descriptor.Type)});
+                    }
+                    return nullptr;
+                }
+                return binding.Get();
+            }
+
             static bool IsTableLevel(EDetailedMetricsLevel level) {
                 return level == TDetailedMetricsSettings::MetricsLevelTable;
             }
@@ -449,20 +466,16 @@ namespace NKikimr {
                 return level == TDetailedMetricsSettings::MetricsLevelPartition;
             }
 
-            NMonitoring::TDynamicCounterPtr GetOrCreateDatabaseGroup() {
-                if (!DatabaseGroup) {
-                    DatabaseGroup = TargetCounterGroup->GetSubgroup(DATABASE_LABEL, DatabasePath);
-                }
-
-                return DatabaseGroup;
-            }
-
-            NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(TTableEntry& entry) {
-                if (!entry.PerPartitionGroup) {
-                    entry.PerPartitionGroup = NDetailedMetrics::GetOrCreatePerPartitionGroup(entry.TableGroup);
-                }
-
-                return entry.PerPartitionGroup;
+            void CreateTableBucket(
+                TTableEntry& entry,
+                const TStringBuf relativePath,
+                TTabletTypes::EType tabletType,
+                const TDetailedMetricsBinding& binding)
+            {
+                entry.TableGroup = TargetCounterGroup
+                    ->GetSubgroup(DATABASE_LABEL, DatabasePath)
+                    ->GetSubgroup(TABLE_LABEL, TString(relativePath));
+                entry.TableBucket = MakeHolder<TCountersBucket>(entry.TableGroup, tabletType, CounterVisibility, binding);
             }
 
             /**
@@ -488,11 +501,7 @@ namespace NKikimr {
                     return &it->second;
                 }
 
-                // A new entry: this is the one place the key is actually materialized into a
-                // TString, once, shared between the map key and the GetSubgroup() call
-                const TString newKey(relativePath);
-                auto& entry = Tables[newKey];
-                entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
+                auto& entry = Tables[TString(relativePath)];
                 entry.TablePath = tablePath;
 
                 return &entry;
@@ -510,19 +519,11 @@ namespace NKikimr {
                 if (IsTableLevel(level)) {
                     ForgetTableBucketTablet(it->first, entry, tablet);
                 } else {
-                    ForgetLeaf(it->first, entry, tablet);
+                    ForgetLeaf(entry, tablet);
                 }
 
                 if (entry.IsEmpty()) {
-                    EraseTableEntry(it);
-                }
-            }
-
-            void EraseTableEntry(THashMap<TString, TTableEntry>::iterator it) {
-                Tables.erase(it);
-
-                if (Tables.empty()) {
-                    DatabaseGroup.Reset();
+                    Tables.erase(it);
                 }
             }
 
@@ -547,16 +548,17 @@ namespace NKikimr {
                 }
 
                 const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
-                RetireBucket(entry.TablePath, Nothing(), *entry.TableBucket);
+                RetireBucket(entry.TablePath, Nothing(), tabletType, entry.TableBucket->GetValues());
                 entry.TableBucket.Reset();
 
                 TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(Nothing(), tabletType, {
                                                                                                      {DATABASE_LABEL, DatabasePath},
                                                                                                      {TABLE_LABEL, relativePath},
                                                                                                  }));
+                entry.TableGroup.Reset();
             }
 
-            void ForgetLeaf(const TString& relativePath, TTableEntry& entry, const TTabletKey& tablet) {
+            void ForgetLeaf(TTableEntry& entry, const TTabletKey& tablet) {
                 auto it = entry.Leaves.find(tablet);
                 if (it == entry.Leaves.end()) {
                     return;
@@ -565,20 +567,11 @@ namespace NKikimr {
                 // A leaf holds exactly this one tablet, so it is empty right afterwards. Dropping
                 // the contribution first keeps this symmetric with the table bucket path and holds
                 // even if a leaf ever comes to hold more than one tablet
-                it->second->Forget(tablet);
-                Y_DEBUG_ABORT_UNLESS(it->second->IsEmpty());
+                it->second.Forget(tablet);
+                Y_DEBUG_ABORT_UNLESS(it->second.IsEmpty());
 
-                RetireBucket(entry.TablePath, tablet, *it->second);
+                RetireBucket(entry.TablePath, tablet, entry.RegisteredTabletType, it->second);
                 entry.Leaves.erase(it);
-
-                TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(tablet, entry.RegisteredTabletType, {
-                                                                                                                  {DATABASE_LABEL, DatabasePath},
-                                                                                                                  {TABLE_LABEL, relativePath},
-                                                                                                              }));
-
-                if (entry.Leaves.empty()) {
-                    entry.PerPartitionGroup.Reset();
-                }
             }
 
         private:
@@ -597,16 +590,9 @@ namespace NKikimr {
             const TString DatabasePrefix;
 
             /**
-             * The role of the tablets this instance serves. A validation input only: it never
-             * reaches the counter tree, both roles build the very same shape.
+             * The role of the tablets this instance serves: a follower instance never touches the counter tree.
              */
             const bool IsFollowerRole;
-
-            /**
-             * The database= node, where the table= nodes are created. Created together with
-             * the very first table.
-             */
-            NMonitoring::TDynamicCounterPtr DatabaseGroup;
 
             /**
              * Reverse map from (tabletId, followerId) to the table's relative path, used to
@@ -632,7 +618,11 @@ namespace NKikimr {
             THashMap<TString, TTableEntry> Tables;
 
             // Outlives the live tree until a report carries each retired bucket's final delta.
-            THashMap<TContributionKey, NKikimrSysView::TDbTabletCounters> PendingCounters;
+            THashMap<TContributionKey, TRetiredBucket> PendingCounters;
+
+            // The buckets and the leaves point to the bindings, so none is destroyed while the instance lives
+            THashMap<TTabletTypes::EType, THolder<TDetailedMetricsBinding>> Bindings;
+            bool WarnedLayoutMismatch = false;
         };
 
     } // namespace

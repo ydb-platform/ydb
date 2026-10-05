@@ -201,4 +201,5 @@ enum ETxTypes {
     TXTYPE_SHRINK_POOL = 71                               [(TxTypeOpts) = {Name: "TxShrinkPool"}];
     TXTYPE_SHRINK_POOL_REPLY = 72                         [(TxTypeOpts) = {Name: "TxShrinkPoolReply"}];
     TXTYPE_MON_SHRINK_POOL = 73                           [(TxTypeOpts) = {Name: "TxMonShrinkPool"}];
+    TXTYPE_MON_MOVE_DATA = 74                             [(TxTypeOpts) = {Name: "TxMonMoveData"}];
 }

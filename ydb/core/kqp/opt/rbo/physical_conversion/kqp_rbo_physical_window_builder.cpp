@@ -23,11 +23,6 @@ bool IsRunningFrame(const TOpWindowFrame& frame) {
             (frame.EndKind == EWindowFrameBound::Following && frame.EndValue == 0));
 }
 
-bool IsWholePartitionFrame(const TOpWindowFrame& frame) {
-    return (frame.Type == EWindowFrameType::Rows || frame.Type == EWindowFrameType::Range) &&
-           frame.BeginKind == EWindowFrameBound::UnboundedPreceding && frame.EndKind == EWindowFrameBound::UnboundedFollowing;
-}
-
 bool IsRangeRunningFrame(const TOpWindowFrame& frame) {
     return frame.Type == EWindowFrameType::Range && frame.BeginKind == EWindowFrameBound::UnboundedPreceding &&
            frame.EndKind == EWindowFrameBound::CurrentRow;
@@ -46,7 +41,7 @@ bool IsRowSuffixFrame(const TOpWindowFrame& frame) {
 }
 
 bool IsRangeOffsetFrame(const TOpWindowFrame& frame) {
-    return frame.Type == EWindowFrameType::Range && !IsRangeRunningFrame(frame) && !IsWholePartitionFrame(frame);
+    return frame.Type == EWindowFrameType::Range && !IsRangeRunningFrame(frame) && !frame.IsWholePartition();
 }
 
 bool IsRangeIncrementalFrame(const TOpWindowFrame& frame) {
@@ -148,7 +143,7 @@ std::pair<TString, TString> DecimalParams(const TTypeAnnotationNode* type) {
 } // anonymous namespace
 
 bool TPhysicalWindowBuilder::UsesWholePartition(const TOpWindow& window) {
-    if (!IsWholePartitionFrame(window.GetFrame())) {
+    if (!window.GetFrame().IsWholePartition()) {
         return false;
     }
 
@@ -191,7 +186,7 @@ bool TPhysicalWindowBuilder::UsesRangePeerGroups(const TOpWindow& window) {
 
 bool TPhysicalWindowBuilder::UsesRowFrames(const TOpWindow& window) {
     const auto& frame = window.GetFrame();
-    if (frame.Type != EWindowFrameType::Rows || IsRunningFrame(frame) || IsWholePartitionFrame(frame)) {
+    if (frame.Type != EWindowFrameType::Rows || IsRunningFrame(frame) || frame.IsWholePartition()) {
         return false;
     }
     return HasAggregate(window);

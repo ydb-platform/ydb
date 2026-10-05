@@ -206,8 +206,8 @@ class TpccSuiteBase(LoadSuiteBase):
             'warmup_seconds': summary.get('warmup_seconds', ''),
         }
         deviation = DeviationCheckResult()
+        run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
         if result.success and 'tpcc_json' in stats:
-            run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
             # Read the baseline before the upload, so that the current run is not part of it.
             deviation = check_tpcc_deviation(stats['tpcc_json'], run_type, result.start_time)
             # Results are stored regardless of the deviation check outcome.

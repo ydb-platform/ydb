@@ -8,12 +8,18 @@
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 namespace NYdb::NConsoleClient {
 namespace {
 
 class TMemoryStorage : public IBackupStorage {
 public:
     void Put(const TString& key, const TString& data) {
+        std::lock_guard<std::mutex> lock(Mu);
         Files[key] = data;
     }
 
@@ -25,10 +31,12 @@ public:
     }
 
     bool Exists(const TString& key) const override {
+        std::lock_guard<std::mutex> lock(Mu);
         return Files.contains(key);
     }
 
     TVector<TString> List(const TString& prefix) const override {
+        std::lock_guard<std::mutex> lock(Mu);
         TVector<TString> keys;
         for (const auto& [key, data] : Files) {
             Y_UNUSED(data);
@@ -40,6 +48,7 @@ public:
     }
 
     TString Read(const TString& key) const override {
+        std::lock_guard<std::mutex> lock(Mu);
         const auto it = Files.find(key);
         if (it == Files.end()) {
             ythrow yexception() << "missing " << key;
@@ -60,6 +69,7 @@ public:
     }
 
     THashMap<TString, TString> Files;
+    mutable std::mutex Mu;
 };
 
 class TSchemeOnlyGuard : public TMemoryStorage {
@@ -163,6 +173,7 @@ TValidationReport RunFast(const IBackupStorage& storage, const TString& path, bo
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
     settings.FailFast = true;
+    settings.Threads = 1;
     return ValidateBackup(storage, path, settings);
 }
 
@@ -209,6 +220,69 @@ Y_UNIT_TEST(DataFilesAreHashedInChunks) {
     TChunkStorage compressed;
     AddTable(compressed, "t", 1, "row\n", true, true);
     UNIT_ASSERT_C(Run(compressed, "t").Ok(), Issues(Run(compressed, "t")));
+}
+
+Y_UNIT_TEST(DefaultThreadsMatchImportFileCsv) {
+    const unsigned processors = std::thread::hardware_concurrency();
+    const ui64 expected = processors > 1 ? static_cast<ui64>(processors) - 1 : 1;
+    UNIT_ASSERT_VALUES_EQUAL(DefaultValidateThreads(), expected);
+}
+
+Y_UNIT_TEST(ThreadsCheckObjectsAndDataFilesConcurrently) {
+    class TOverlapStorage : public TMemoryStorage {
+    public:
+        bool DataFiles = false;
+        mutable std::mutex WaitMu;
+        mutable std::condition_variable Cv;
+        mutable int Active = 0;
+        mutable int MaxActive = 0;
+
+        bool Match(const TString& key) const {
+            if (DataFiles) {
+                return key.Contains("data_") && !key.EndsWith(".sha256");
+            }
+            return key.EndsWith("/scheme.pb");
+        }
+
+        TString Read(const TString& key) const override {
+            if (!Match(key)) {
+                return TMemoryStorage::Read(key);
+            }
+            {
+                std::unique_lock<std::mutex> lock(WaitMu);
+                ++Active;
+                if (Active > MaxActive) {
+                    MaxActive = Active;
+                }
+                Cv.notify_all();
+                Cv.wait_for(lock, std::chrono::seconds(2), [&] { return Active >= 2; });
+            }
+            TString data = TMemoryStorage::Read(key);
+            {
+                std::lock_guard<std::mutex> lock(WaitMu);
+                --Active;
+            }
+            return data;
+        }
+    };
+
+    TOverlapStorage data;
+    data.DataFiles = true;
+    AddTable(data, "t", 2, "row\n", true);
+    TValidateSettings dataSettings;
+    dataSettings.Threads = 2;
+    const TValidationReport dataReport = ValidateBackup(data, "t", dataSettings);
+    UNIT_ASSERT_C(dataReport.Ok(), Issues(dataReport));
+    UNIT_ASSERT_VALUES_EQUAL(data.MaxActive, 2);
+
+    TOverlapStorage metadata;
+    AddTable(metadata, "a", 1, "a\n", true);
+    AddTable(metadata, "b", 1, "b\n", true);
+    TValidateSettings metadataSettings;
+    metadataSettings.Threads = 2;
+    const TValidationReport metadataReport = ValidateBackup(metadata, "", metadataSettings);
+    UNIT_ASSERT_C(metadataReport.Ok(), Issues(metadataReport));
+    UNIT_ASSERT_VALUES_EQUAL(metadata.MaxActive, 2);
 }
 
 Y_UNIT_TEST(TableFullAndSchemeOnly) {
@@ -661,6 +735,7 @@ Y_UNIT_TEST(FailFastKeepsWarningsAndStopsOnFirstMissingObject) {
     UNIT_ASSERT(HasIssue(all, "missing-b", "was not found"));
 
     settings.FailFast = true;
+    settings.Threads = 1;
     const TValidationReport fast = ValidateBackup(storage, "dir", settings);
     UNIT_ASSERT(HasWarning(fast, "extra", "not listed"));
     UNIT_ASSERT_VALUES_EQUAL(fast.Issues.size(), 1);

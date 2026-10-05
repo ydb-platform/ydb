@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-WideSort",
+                                        "Node Type": "TopSort-Sort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,13 +47,8 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-<<<<<<< HEAD
                                                 "Name": "Sort",
                                                 "SortBy": "row.nsum"
-=======
-                                                "Name": "WideSort",
-                                                "SortBy": "depname asc, nsum desc"
->>>>>>> main
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -68,7 +63,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "WideSort",
+                                                        "Node Type": "Sort",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [
@@ -76,13 +71,8 @@
                                                                         "ExternalPlanNodeId": 3
                                                                     }
                                                                 ],
-<<<<<<< HEAD
                                                                 "Name": "Sort",
                                                                 "SortBy": "row.salary"
-=======
-                                                                "Name": "WideSort",
-                                                                "SortBy": "depname asc, salary desc"
->>>>>>> main
                                                             }
                                                         ],
                                                         "PlanNodeId": 4,

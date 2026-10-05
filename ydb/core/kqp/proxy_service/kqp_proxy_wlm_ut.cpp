@@ -4,6 +4,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
@@ -34,13 +35,17 @@ struct TWlmFixture {
 
         // NMetadata::NProvider::TServiceOperator is a process-wide singleton — if another test
         // in the same binary already flipped it to enabled, our state actor Bootstrap would send
-        // TEvAskSnapshot into a metadata service that we disabled above, and
-        // ClassifierMetadataInitialized_ would never become true. Force it with an empty snapshot.
+        // TEvAskSnapshot into a metadata service that we disabled above, and classifier metadata
+        // would stay Pending until the timeout. Force it Ready with an empty snapshot.
         Runtime->Send(new IEventHandle(
-            NWorkloadManager::MakeServiceId(Runtime->GetNodeId(0)),
+            StateActorId(),
             Sender,
             new NMetadata::NProvider::TEvRefreshSubscriberData(
                 NWorkloadManager::MakeClassifierSnapshot({}))));
+    }
+
+    TActorId StateActorId() const {
+        return Runtime->GetLocalServiceId(NWorkloadManager::MakeWorkloadManagerStateActorId(Runtime->GetNodeId(0)));
     }
 
     static Tests::TServerSettings BuildSettings(TPortManager& tp) {
@@ -70,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     ///
     /// Test query is deferred until wlm replies ready for DB
     ///
-    Y_UNIT_TEST(KqpQueryDeferredUntilWlmReady) {
+    Y_UNIT_TEST(QueryDeferredUntilWlmReady) {
         TWlmFixture fx;
 
         std::vector<TAutoPtr<IEventHandle>> held;
@@ -102,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     ///
     /// Test query fails when wlm replies with error for Db preparing
     ///
-    Y_UNIT_TEST(KqpQueryFailsWhenWlmFetchFails) {
+    Y_UNIT_TEST(QueryFailsWhenWlmFetchFails) {
         TWlmFixture fx;
 
         fx.Runtime->SetEventFilter([runtime = fx.Runtime](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
@@ -131,14 +136,13 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     /// Test query runs after wlm replies with unsupported DB.
     /// In this case query has to run but wlm will be skipped
     ///
-    Y_UNIT_TEST(KqpQuerySucceedsOnWlmUnsupportedDb) {
+    Y_UNIT_TEST(QuerySucceedsOnWlmUnsupportedDb) {
         TWlmFixture fx;
 
         // Rewrite the successful fetch response from the DB fetcher to UNSUPPORTED — mimics
-        // "path exists but isn't a subdomain" (e.g. a table). State actor will record it in
-        // DatabasesCache_ with FetchStatus=UNSUPPORTED and notify subscribers with SUCCESS;
-        // proxy re-dispatches, EnsureReady answers ClassificationDisabled, query proceeds
-        // without a classifier and succeeds normally.
+        // "path exists but isn't a subdomain" (e.g. a table). State actor marks the database
+        // Unsupported and notifies subscribers with SUCCESS; proxy re-dispatches, EnsureReady
+        // answers Disabled, query proceeds without a classifier and succeeds normally.
         fx.Runtime->SetEventFilter([runtime = fx.Runtime](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
             if (ev->GetTypeRewrite() != NWorkloadManager::TEvFetchDatabaseResponse::EventType) {
                 return false;
@@ -169,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     ///
     /// Test query sends a warmup to the wlm for an unknown db
     ///
-    Y_UNIT_TEST(KqpQuerySendsWlmWarmupOnEntry) {
+    Y_UNIT_TEST(QuerySendsWlmWarmupOnEntry) {
         TWlmFixture fx;
 
         int warmupCount = 0;
@@ -191,11 +195,11 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     ///
     /// Test query fails fast for DB which has error in the wlm
     ///
-    Y_UNIT_TEST(KqpQueryFailsFastOnCachedWlmFailure) {
+    Y_UNIT_TEST(QueryFailsFastOnCachedWlmFailure) {
         TWlmFixture fx;
 
-        // Every real SUCCESS fetch response is rewritten to NOT_FOUND — state actor caches the
-        // failure in DatabasesCache_ with FetchStatus=NOT_FOUND.
+        // Every real SUCCESS fetch response is rewritten to NOT_FOUND — state actor marks the
+        // database Failed with NOT_FOUND.
         fx.Runtime->SetEventFilter([runtime = fx.Runtime](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
             if (ev->GetTypeRewrite() != NWorkloadManager::TEvFetchDatabaseResponse::EventType) {
                 return false;
@@ -234,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
         const int subscribesAfterFirst = subscribes;
         UNIT_ASSERT_C(subscribesAfterFirst >= 1, "First query should have taken the park path");
 
-        // Second query for the same DB: state actor's snapshot has FetchStatus=NOT_FOUND,
+        // Second query for the same DB: state actor's snapshot has the database Failed,
         // EnsureReady returns Failed synchronously — proxy replies via TEvDelayedRequestError
         // without calling SubscribeOnReady again.
         fx.Runtime->Send(new IEventHandle(fx.KqpProxy, fx.Sender, MakeSelect42Query("/Root").Release()));
@@ -247,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     ///
     /// Test two parallel queries resume after wlm replies ready
     ///
-    Y_UNIT_TEST(KqpParallelQueriesResumeOnWlmReady) {
+    Y_UNIT_TEST(ParallelQueriesResumeOnWlmReady) {
         TWlmFixture fx;
         const TActorId sender2 = fx.Runtime->AllocateEdgeActor();
 
@@ -279,6 +283,27 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
         auto reply2 = fx.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
         UNIT_ASSERT_VALUES_EQUAL_C(reply2->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
                                     reply2->Get()->Record.GetResponse().GetQueryIssues());
+    }
+
+    ///
+    /// Test query fails with retryable UNAVAILABLE when the db info fetch never completes:
+    /// the state actor times the fetch out and releases the parked query, wlm is not bypassed
+    ///
+    Y_UNIT_TEST(QueryFailsRetryablyWhenWlmFetchTimesOut) {
+        TWlmFixture fx;
+        const TActorId stateActor = fx.StateActorId();
+
+        // Drop only the fetch responses addressed to the state actor; the workload service
+        // keeps its own database fetches.
+        fx.Runtime->SetEventFilter([stateActor](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
+            return ev->GetTypeRewrite() == NWorkloadManager::TEvFetchDatabaseResponse::EventType
+                && ev->Recipient == stateActor;
+        });
+
+        fx.Runtime->Send(new IEventHandle(fx.KqpProxy, fx.Sender, MakeSelect42Query("/Root").Release()));
+        auto reply = fx.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fx.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE,
+                                    reply->Get()->Record.GetResponse().GetQueryIssues());
     }
 
 }

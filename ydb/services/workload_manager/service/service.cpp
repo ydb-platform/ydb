@@ -13,7 +13,6 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/common/helpers.h>
@@ -78,7 +77,11 @@ public:
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
-        InitializeWorkloadService();
+        StateActor = Register(CreateWorkloadManagerStateActor(Gateway));
+        TActivationContext::ActorSystem()->RegisterLocalService(MakeWorkloadManagerStateActorId(SelfId().NodeId()), StateActor);
+        if (EnabledResourcePools) {
+            InitializeWorkloadService();
+        }
     }
 
     void HandlePoison() {
@@ -161,7 +164,7 @@ public:
         }
     }
 
-    void Handle(TEvGetPoolInfo::TPtr& ev) {
+    void Handle(TEvSubscribeOnPoolChanges::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
         if (!EnabledResourcePools) {
@@ -170,7 +173,7 @@ public:
         }
 
         LOG_D("Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
-        GetOrCreateDatabaseState(databaseId)->DoGetPoolInfo(std::move(ev));
+        GetOrCreateDatabaseState(databaseId)->DoSubscribeRequest(std::move(ev));
     }
 
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
@@ -182,11 +185,6 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
-        if (!EnabledResourcePoolsOnServerless && IsServerlessInSnapshot(databaseId)) {
-            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED,
-                "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
-            return;
-        }
         LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId
                                            << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
@@ -230,13 +228,6 @@ public:
         }
     }
 
-    // Test-only: WaitForClassifierPropagation injects TEvRefreshSubscriberData via this well-known service id; forward to cache actor.
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        if (StateActor) {
-            TActivationContext::Send(ev->Forward(StateActor));
-        }
-    }
-
     STRICT_STFUNC(MainState,
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
@@ -244,11 +235,10 @@ public:
         hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
-        hFunc(TEvGetPoolInfo, Handle);
+        hFunc(TEvSubscribeOnPoolChanges, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
-        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
@@ -550,7 +540,6 @@ private:
         ServiceInitialized = true;
 
         LOG_I("Started workload service initialization");
-        StateActor = Register(CreateWorkloadManagerStateActor(Gateway));
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -713,18 +702,6 @@ private:
 
     TString LogPrefix() const {
         return "[Service] ";
-    }
-
-    bool IsServerlessInSnapshot(const TString& databaseId) const {
-        if (!Gateway) {
-            return false;
-        }
-        auto snapshot = Gateway->GetSnapshot();
-        if (!snapshot) {
-            return false;
-        }
-        const auto it = snapshot->Databases.find(databaseId);
-        return it != snapshot->Databases.end() && it->second.Serverless;
     }
 
 private:

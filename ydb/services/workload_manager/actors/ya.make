@@ -1,8 +1,11 @@
 YQL_LIBRARY()
 
 SRCS(
+    classifier_metadata_tracker.cpp
     cpu_load_actors.cpp
+    database_readiness_tracker.cpp
     pool_handlers_actors.cpp
+    resource_pool_tracker.cpp
     workload_manager_state_actor.cpp
     scheme_actors.cpp
 )
@@ -15,3 +18,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

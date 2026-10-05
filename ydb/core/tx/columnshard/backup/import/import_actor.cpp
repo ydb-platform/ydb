@@ -135,7 +135,11 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
         YDB_LOG_WARN("",
             {"event", "import_batch_after_terminal"},
+<<<<<<< HEAD
             {"stage", ::ToString(Stage)},
+=======
+            {"stage", StageToString(Stage)},
+>>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
             {"isFinished", ImportSession->IsFinished()},
             {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
@@ -217,7 +221,11 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
         YDB_LOG_WARN("",
             {"event", "import_write_result_after_terminal"},
+<<<<<<< HEAD
             {"stage", ::ToString(Stage)},
+=======
+            {"stage", StageToString(Stage)},
+>>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
             {"isFinished", ImportSession->IsFinished()},
             {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;

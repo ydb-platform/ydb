@@ -164,6 +164,10 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     }
     YDB_LOG_TRACE("",
         {"graphConstructed", DebugDOT()});
+<<<<<<< HEAD
+=======
+//    Cerr << DebugDOT() << Endl;
+>>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(

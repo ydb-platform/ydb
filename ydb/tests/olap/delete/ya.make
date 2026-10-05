@@ -10,7 +10,7 @@ PY3TEST()
     )
 
     IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ELSE()
     REQUIREMENTS(cpu:2)
 ENDIF()

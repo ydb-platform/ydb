@@ -10,7 +10,7 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:1)
+    REQUIREMENTS(ram:32 cpu:4)
 ELSE()
     REQUIREMENTS(ram:32 cpu:4)
 ENDIF()

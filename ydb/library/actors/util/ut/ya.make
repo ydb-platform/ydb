@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/actors/util)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:4)
     SIZE(MEDIUM)
 ELSE()
     REQUIREMENTS(cpu:4)

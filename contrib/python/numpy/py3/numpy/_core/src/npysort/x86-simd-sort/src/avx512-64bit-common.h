@@ -9,19 +9,8 @@
 
 #include "avx2-32bit-qsort.hpp"
 
-/*
- * Constants used in sorting 8 elements in a ZMM registers. Based on Bitonic
- * sorting network (see
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg)
- */
-// ZMM                  7, 6, 5, 4, 3, 2, 1, 0
-#define NETWORK_64BIT_1 4, 5, 6, 7, 0, 1, 2, 3
-#define NETWORK_64BIT_2 0, 1, 2, 3, 4, 5, 6, 7
-#define NETWORK_64BIT_3 5, 4, 7, 6, 1, 0, 3, 2
-#define NETWORK_64BIT_4 3, 2, 1, 0, 7, 6, 5, 4
-
 template <typename vtype, typename reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_zmm_64bit(reg_t zmm);
+X86_SIMD_SORT_INLINE reg_t sort_reg_8lanes(reg_t zmm);
 
 struct avx512_64bit_swizzle_ops;
 struct avx512_ymm_64bit_swizzle_ops;
@@ -196,7 +185,7 @@ struct ymm_vector<float> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<ymm_vector<type_t>>(x);
+        return sort_reg_8lanes<ymm_vector<type_t>>(x);
     }
     static void storeu(void *mem, reg_t x)
     {
@@ -210,9 +199,13 @@ struct ymm_vector<float> {
     {
         return _mm256_castps_si256(v);
     }
+    static bool all_false(opmask_t k)
+    {
+        return k == 0;
+    }
     static reg_t reverse(reg_t ymm)
     {
-        const __m256i rev_index = _mm256_set_epi32(NETWORK_32BIT_AVX2_2);
+        const __m256i rev_index = _mm256_set_epi32(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, ymm);
     }
     static int double_compressstore(type_t *left_addr,
@@ -380,7 +373,7 @@ struct ymm_vector<uint32_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<ymm_vector<type_t>>(x);
+        return sort_reg_8lanes<ymm_vector<type_t>>(x);
     }
     static void storeu(void *mem, reg_t x)
     {
@@ -394,9 +387,13 @@ struct ymm_vector<uint32_t> {
     {
         return v;
     }
+    static bool all_false(opmask_t k)
+    {
+        return k == 0;
+    }
     static reg_t reverse(reg_t ymm)
     {
-        const __m256i rev_index = _mm256_set_epi32(NETWORK_32BIT_AVX2_2);
+        const __m256i rev_index = _mm256_set_epi32(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, ymm);
     }
     static int double_compressstore(type_t *left_addr,
@@ -564,7 +561,7 @@ struct ymm_vector<int32_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<ymm_vector<type_t>>(x);
+        return sort_reg_8lanes<ymm_vector<type_t>>(x);
     }
     static void storeu(void *mem, reg_t x)
     {
@@ -578,9 +575,13 @@ struct ymm_vector<int32_t> {
     {
         return v;
     }
+    static bool all_false(opmask_t k)
+    {
+        return k == 0;
+    }
     static reg_t reverse(reg_t ymm)
     {
-        const __m256i rev_index = _mm256_set_epi32(NETWORK_32BIT_AVX2_2);
+        const __m256i rev_index = _mm256_set_epi32(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, ymm);
     }
     static int double_compressstore(type_t *left_addr,
@@ -751,12 +752,12 @@ struct zmm_vector<int64_t> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const regi_t rev_index = seti(NETWORK_64BIT_2);
+        const regi_t rev_index = seti(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<zmm_vector<type_t>>(x);
+        return sort_reg_8lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -930,12 +931,12 @@ struct zmm_vector<uint64_t> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const regi_t rev_index = seti(NETWORK_64BIT_2);
+        const regi_t rev_index = seti(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<zmm_vector<type_t>>(x);
+        return sort_reg_8lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -967,8 +968,7 @@ struct zmm_vector<uint64_t> {
 static_assert(sizeof(size_t) == sizeof(uint64_t),
               "Size of size_t and uint64_t are not the same");
 template <>
-struct zmm_vector<size_t> : public zmm_vector<uint64_t> {
-};
+struct zmm_vector<size_t> : public zmm_vector<uint64_t> {};
 #endif
 
 template <>
@@ -1128,12 +1128,12 @@ struct zmm_vector<double> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const regi_t rev_index = seti(NETWORK_64BIT_2);
+        const regi_t rev_index = seti(NETWORK_REVERSE_8LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_64bit<zmm_vector<type_t>>(x);
+        return sort_reg_8lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -1156,28 +1156,6 @@ struct zmm_vector<double> {
                 left_addr, right_addr, k, reg);
     }
 };
-
-/*
- * Assumes zmm is random and performs a full sorting network defined in
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg
- */
-template <typename vtype, typename reg_t = typename vtype::reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_zmm_64bit(reg_t zmm)
-{
-    const typename vtype::regi_t rev_index = vtype::seti(NETWORK_64BIT_2);
-    zmm = cmp_merge<vtype>(
-            zmm, vtype::template shuffle<SHUFFLE_MASK(1, 1, 1, 1)>(zmm), 0xAA);
-    zmm = cmp_merge<vtype>(
-            zmm, vtype::permutexvar(vtype::seti(NETWORK_64BIT_1), zmm), 0xCC);
-    zmm = cmp_merge<vtype>(
-            zmm, vtype::template shuffle<SHUFFLE_MASK(1, 1, 1, 1)>(zmm), 0xAA);
-    zmm = cmp_merge<vtype>(zmm, vtype::permutexvar(rev_index, zmm), 0xF0);
-    zmm = cmp_merge<vtype>(
-            zmm, vtype::permutexvar(vtype::seti(NETWORK_64BIT_3), zmm), 0xCC);
-    zmm = cmp_merge<vtype>(
-            zmm, vtype::template shuffle<SHUFFLE_MASK(1, 1, 1, 1)>(zmm), 0xAA);
-    return zmm;
-}
 
 struct avx512_64bit_swizzle_ops {
     template <typename vtype, int scale>

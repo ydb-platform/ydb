@@ -1,0 +1,4 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --database-space-block-color YELLOW --database-space-unblock-color ORANGE
+Exit Status: 1
+===== stderr =====
+error, Database space unblock color ORANGE must not be worse than block color YELLOW

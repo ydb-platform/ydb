@@ -24,9 +24,13 @@ std::set<TString> GetAllExternalDataSourceTypes() {
         ToString(NYql::EDatabaseType::Prometheus),
         ToString(NYql::EDatabaseType::OpenSearch),
         ToString(NYql::EDatabaseType::DataStreams),
-        ToString(NYql::EDatabaseType::YdbTopics),
     };
     return allTypes;
+}
+
+bool IsValidAvailableExternalDataSourceType(const TString& type) {
+    static const auto allTypes = GetAllExternalDataSourceTypes();
+    return type == "YdbTopics" || allTypes.contains(type);
 }
 
 EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {

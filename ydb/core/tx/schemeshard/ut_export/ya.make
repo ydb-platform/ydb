@@ -21,6 +21,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/svnversion
         ydb/core/testlib/default
         ydb/core/sys_view/show_create/formatters
+        ydb/library/testlib/backup_test_enums
         ydb/library/testlib/parquet_helpers
         ydb/core/tx
         ydb/core/tx/columnshard

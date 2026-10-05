@@ -74,6 +74,10 @@ Ordinary storage groups that are not [static](#static-group) are called **dynami
 
 **Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
 
+#### BlobDepot {#blob-depot}
+
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+
 ### Storage pool {#storage-pool}
 
 **Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.

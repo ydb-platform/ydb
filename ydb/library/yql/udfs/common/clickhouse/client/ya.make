@@ -443,7 +443,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     END()
 ELSE()
-    LIBRARY()
+    YQL_LIBRARY()
     END()
 ENDIF()
 

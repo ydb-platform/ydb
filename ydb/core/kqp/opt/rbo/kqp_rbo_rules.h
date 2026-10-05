@@ -149,6 +149,26 @@ public:
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
+class TPushDependentJoinThroughSortRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughSortRule()
+        : ISimplifiedRule("Push dependent join through sort", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughLimitRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughLimitRule()
+        : ISimplifiedRule("Push dependent join through limit", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 class TDependentJoinNotSupportedRule: public ISimplifiedRule {
 public:
     TDependentJoinNotSupportedRule()

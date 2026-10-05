@@ -15,6 +15,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
@@ -269,7 +270,7 @@ private:
         {}
         ui32 Index = 0;
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
-        ITopicClient::TPtr TopicClient;
+        std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
         ui32 PartitionsCount;
         TDqPqRdReadActor* Child = nullptr;
         NActors::TActorId ChildId;
@@ -493,7 +494,7 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const;
     IFederatedTopicClient& GetFederatedTopicClient();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
-    ITopicClient& GetTopicClient(TClusterState& clusterState);
+    NFq::IMessageStreamClient& GetTopicClient(TClusterState& clusterState);
     void SchedulePartitionCountTimer();
 };
 
@@ -504,11 +505,13 @@ IFederatedTopicClient& TDqPqRdReadActor::GetFederatedTopicClient() {
     return *FederatedTopicClient;
 }
 
-ITopicClient& TDqPqRdReadActor::GetTopicClient(TClusterState& clusterState) {
+NFq::IMessageStreamClient& TDqPqRdReadActor::GetTopicClient(TClusterState& clusterState) {
     if (!clusterState.TopicClient) {
         auto settings = GetTopicClientSettings();
         clusterState.Info.AdjustTopicClientSettings(settings);
-        clusterState.TopicClient = PqGateway->GetTopicClient(Driver, settings);
+        std::string topicPath = SourceParams.GetTopicPath();
+        clusterState.Info.AdjustTopicPath(topicPath);
+        clusterState.TopicClient = PqGateway->GetTopicClient(TString(topicPath), Driver, settings);
     }
     return *clusterState.TopicClient;
 }
@@ -1579,23 +1582,21 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
     auto& clusterState = Clusters[ev->Get()->ClusterIndex];
     SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
 
-    std::string clusterTopicPath = SourceParams.GetTopicPath();
-    clusterState.Info.AdjustTopicPath(clusterTopicPath);
-
     GetTopicClient(clusterState)
-        .DescribeTopic(TString(clusterTopicPath), {})
+        .DescribeStream()
         .Subscribe([
             index = clusterState.Index,
             actorSystem = TActivationContext::ActorSystem(),
             selfId = SelfId()](const auto& describeTopicFuture)
         {
             try {
-                auto& describeTopic = describeTopicFuture.GetValue();
+                const auto& describeTopic = describeTopicFuture.GetValue();
                 if (!describeTopic.IsSuccess()) {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, describeTopic));
+                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,
+                        ToSdkStatus(describeTopic.Status, describeTopic.Issues)));
                     return;
                 }
-                auto partitionsCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
+                auto partitionsCount = static_cast<ui32>(describeTopic.Value.Partitions.size());
                 actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, partitionsCount));
             } catch (const std::exception& ex) {
                 actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,

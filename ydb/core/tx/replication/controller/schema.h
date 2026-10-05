@@ -83,6 +83,14 @@ struct TControllerSchema: NIceDb::Schema {
         // Ordered target-only flush snapshot; retain it until ordinary global
         // commits retire the captured write transaction IDs.
         struct SchemaBarrierFlushTxIds: Column<17, NScheme::NTypeIds::String> {};
+        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
+            using Type = TOwnerId;
+            static constexpr Type Default = InvalidOwnerId;
+        };
+        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> {
+            using Type = TLocalPathId;
+            static constexpr Type Default = InvalidLocalPathId;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -102,7 +110,9 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierPhase,
             SchemaBarrierChange,
             DstAlterTxId,
-            SchemaBarrierFlushTxIds
+            SchemaBarrierFlushTxIds,
+            PendingDstPathOwnerId,
+            PendingDstPathLocalId
         >;
     };
 

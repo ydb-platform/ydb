@@ -28,6 +28,7 @@ message TReplicationDefaults {
     optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
     optional TSchemeOperationLimits SchemeOperationLimits = 2;
     optional TIamServiceControl IamServiceControl = 3;
+    optional bool SkipInitialScan = 4 [default = false];
 }
 
 message TStaticCredentials {
@@ -127,6 +128,7 @@ message TReplicationConfig {
     optional TConsistencySettings ConsistencySettings = 7;
     optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
+    optional bool SkipInitialScan = 11 [default = false];
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.

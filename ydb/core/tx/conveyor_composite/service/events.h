@@ -1,5 +1,6 @@
 #pragma once
 #include "counters.h"
+#include "query.h"
 #include "scope.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
@@ -118,19 +119,26 @@ struct TEvInternal {
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
         std::vector<TWorkerTask> Tasks;
+        TSchedulerLease SchedulerLease;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
         YDB_READONLY(double, CPULimit, 1);
+        YDB_READONLY(TSchedulerQueryIdentity, QueryIdentity, kServiceQueryIdentity);
 
     public:
-        TEvNewTask() = default;
-
         std::vector<TWorkerTask>&& ExtractTasks() {
             return std::move(Tasks);
         }
 
-        TEvNewTask(std::vector<TWorkerTask>&& tasks, const double cpuLimit)
+        TSchedulerLease ExtractSchedulerLease() {
+            return std::move(SchedulerLease);
+        }
+
+        TEvNewTask(std::vector<TWorkerTask>&& tasks, TSchedulerLease&& schedulerLease, const double cpuLimit,
+            const TSchedulerQueryIdentity& identity = kServiceQueryIdentity)
             : Tasks(std::move(tasks))
-            , CPULimit(cpuLimit) {
+            , SchedulerLease(std::move(schedulerLease))
+            , CPULimit(cpuLimit)
+            , QueryIdentity(identity) {
         }
     };
 
@@ -141,6 +149,7 @@ struct TEvInternal {
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
         YDB_READONLY(ui64, WorkerIdx, 0);
         YDB_READONLY(ui64, WorkersPoolId, 0);
+        YDB_READONLY(TSchedulerQueryIdentity, QueryIdentity, kServiceQueryIdentity);
 
     public:
         const std::vector<TWorkerTaskResult>& GetResults() const {
@@ -152,7 +161,8 @@ struct TEvInternal {
         }
 
         TEvTaskProcessedResult(
-            std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId);
+            std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId,
+            const TSchedulerQueryIdentity& identity = kServiceQueryIdentity);
     };
 
     class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};

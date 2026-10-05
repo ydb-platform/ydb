@@ -477,9 +477,11 @@ TInfoUnitId TMapElement::GetColumnAccess() const {
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements)
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements, bool needToPush)
     : TOpMap(std::move(input), pos, TPhysicalOpProps{}, std::move(elements))
-{}
+{
+    NeedToPush = needToPush;
+}
 
 TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props,
     TMapIUs elements)
@@ -1558,6 +1560,9 @@ TString TOpTableEffect::GetExplainName() const {
         case EEffectType::UpdateRows:
         case EEffectType::UpdateRowsIndex:
             return "UpdateRows";
+        case EEffectType::UpsertRows:
+        case EEffectType::UpsertRowsIndex:
+            return "UpsertRows";
         case EEffectType::DeleteRows:
         case EEffectType::DeleteRowsIndex:
             return "DeleteRows";

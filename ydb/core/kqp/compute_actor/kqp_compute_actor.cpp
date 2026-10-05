@@ -212,7 +212,15 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         const auto& driver = federatedQuerySetup->Driver;
         Y_VALIDATE(driver, "Missing YDB driver in federated query setup");
 
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqReadActorFactory(
+            *factory,
+            *driver,
+            federatedQuerySetup->CredentialsFactory,
+            pqGateway,
+            counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"),
+            {},
+            enableStreamingQueriesCounters,
+            NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
         NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
         NYql::NDq::RegisterDqPqControlPlaneActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway);
@@ -288,12 +296,13 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+    const TString& databasePath, const std::optional<NScheduler::NHdrf::TFullPoolId>& schedulerPool,
+    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
     bool useBatchPool) {
     return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode,
-        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
+        databasePath, schedulerPool, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
 }
 
 } // namespace NKikimr::NKqp

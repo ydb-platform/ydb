@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     global_inlining.cpp
@@ -51,8 +51,6 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

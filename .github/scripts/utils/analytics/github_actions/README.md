@@ -172,7 +172,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `prepare_ya_make` | флаги, mute-лист, каталоги — всё сразу перед `ya make` |
 | `ya_make_try_N` | весь `ya make` попытки N (сборка + тесты). Счётчики тестов — в `labels.tests` |
 | `ya_build` | из evlog: локальная компиляция и линковка внутри этой попытки |
-| `ya_tests` | из evlog: прогон тестов внутри попытки, без интервалов сборки |
+| `ya_tests` | из evlog: прогон тестов внутри попытки; может пересекаться с `ya_build` / `ya_cache_*` |
 | `ya_cache_download` | из evlog: скачивание из dist-кэша во время сборки |
 | `ya_cache_upload` | из evlog: заливка в dist-кэш во время сборки |
 | `postprocess_try` | сразу после `ya make`, ещё до «сборка красная / зелёная»: разобрать evlog на `ya_build`/`ya_tests`, вытащить OOM из dmesg, timeline, отчёт по RAM, test_bloat |

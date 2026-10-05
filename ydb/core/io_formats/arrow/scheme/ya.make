@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scheme.cpp
@@ -9,8 +9,6 @@ PEERDIR(
     ydb/library/formats/arrow/csv/converter
     ydb/core/scheme_types
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

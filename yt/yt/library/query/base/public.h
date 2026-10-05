@@ -178,7 +178,7 @@ using NTableClient::ESimpleLogicalValueType;
 
 namespace NAst {
 
-DECLARE_REFCOUNTED_STRUCT(TTableHint);
+using NQueryClient::TTableHint;
 
 } // namespace NAst
 

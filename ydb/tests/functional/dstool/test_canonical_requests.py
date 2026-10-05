@@ -219,7 +219,9 @@ class TestBase:
             if canonize_columns:
                 for column in canonize_columns:
                     if column in row:
-                        row[column] = f'<{column}>'
+                        # Numeric replacements must remain numeric until -H formats bytes and percentages.
+                        row[column] = (canonize_columns[column] if isinstance(canonize_columns, dict)
+                                       else f'<{column}>')
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -407,9 +409,13 @@ class Test(TestBase):
             self._trace('device', 'list', '-AH'),
             self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH', expected_storage_api='distributed_storage'),
-            self._trace('pdisk', 'list', '-AH'),
+            self._trace('pdisk', 'list', '-AH', canonize_columns={
+                'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,
+            }),
             self._trace('pool', 'list', '-AH'),
-            self._trace('box', 'list', '-AH'),
+            self._trace('box', 'list', '-AH', canonize_columns={
+                'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,
+            }),
             self._trace('node', 'list', '-A'),
             self._trace('cluster', 'list', '-A'),
         ]
@@ -505,12 +511,16 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--scrub-periodicity', 'disable', with_grpc_calls=True),
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1000', with_grpc_calls=True),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'LIGHT_YELLOW', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--database-space-block-color', 'YELLOW',
+                        '--database-space-unblock-color', 'LIGHT_YELLOW', with_grpc_calls=True),
             self._trace('cluster', 'get', '-A', '--format=json', with_grpc_calls=True),
 
             # Errors:
             self._trace('cluster', 'set', '--enable-self-heal', '--enable-donor-mode'),
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1001'),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
+            self._trace('cluster', 'set', '--database-space-unblock-color', 'CYAN'),
+            self._trace('cluster', 'set', '--database-space-block-color', 'YELLOW', '--database-space-unblock-color', 'ORANGE'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
 

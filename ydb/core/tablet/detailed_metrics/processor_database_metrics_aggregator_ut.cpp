@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         }
     }
 
-    Y_UNIT_TEST(NodeRemovalDropsLiveHistogramsAndRetainsCumulativeHistory) {
+    Y_UNIT_TEST(NodeRemovalDropsNonDerivativeHistogramsAndRetainsCumulativeHistory) {
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node1, node2;
@@ -600,7 +600,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
             AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
 
-            // An unchanged report has no histogram deltas, but still owns its live observation.
+            // An unchanged report repeats the whole non-derivative histogram of the node, which replaces
+            // the previous one and still holds the tablet's observation.
             fixture.ApplyNode(1, node1);
             fixture.Processor->DropNode(1);
             fixture.Processor->RecalculateAllCounters();
@@ -657,7 +658,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
     }
 
-    Y_UNIT_TEST(FinalHistogramCancellationIsNotRepeatedOnNodeAbsence) {
+    Y_UNIT_TEST(RetiredTabletFinalSnapshotEmptiesHistogramAndStaysGoneOnNodeAbsence) {
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node1, node2;
@@ -676,12 +677,15 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
             AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
 
+            // The final report of the retired tablet is an empty histogram, which replaces its
+            // observation.
             node1.Leaders->ForgetTablet(first.TabletId, first.FollowerId);
             fixture.ApplyNode(1, node1);
             fixture.Processor->RecalculateAllCounters();
             AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
 
+            // The node reports nothing for the retired tablet afterwards: nothing is repeated.
             fixture.ApplyNode(1, node1);
             fixture.Processor->RecalculateAllCounters();
             AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
@@ -980,12 +984,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         // Node1's leader was already retired above, so row_count is unchanged at 30 -
         // what DropNode removes here is node1's follower leaf, asserted above.
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 30u);
-        // DropNode retires the live gauges but keeps the cumulative history, matching
-        // NodeRemovalDropsLiveHistogramsAndRetainsCumulativeHistory.
+        // DropNode retires the gauges and non-derivative histograms but keeps the cumulative history, matching
+        // NodeRemovalDropsNonDerivativeHistogramsAndRetainsCumulativeHistory.
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
     }
 
-    Y_UNIT_TEST(SingleNodeResumeAfterDropDoesNotWrapLiveHistogram) {
+    Y_UNIT_TEST(SingleNodeResumeAfterDropRebuildsNonDerivativeHistogram) {
         // Histogram buckets on per-second rate between consecutive reports, not cumulative values.
         // First report parks tablet in bucket 0 (rate 0 on diff==0). Move needs a second report.
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
@@ -1015,9 +1019,9 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             // destroying all group pointers (the counters are detached from the tree).
             fixture.Processor->DropNode(1);
 
-            // NOW+2s: Third report (rate 150000 -> bucket 2). The sender kept its baseline,
-            // so it emits a phantom decrement from bucket 1. The recreated processor's Total
-            // starts at 0, so without clamping the decrement lands as Max<ui64>() in bucket 1.
+            // NOW+2s: Third report (rate 150000 -> bucket 2). The sender kept its baseline, but
+            // its report carries the whole non-derivative histogram, not a change against the baseline.
+            // The recreated processor state therefore starts from exactly the sender's state.
             first.AddCumulative(CONSUMED_CPU, 150000)
                 .Report(node1.Leaders, level, NOW + TDuration::Seconds(2));
             fixture.ApplyNode(1, node1);
@@ -1029,8 +1033,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                               ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
                               : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
 
-            // The recreated bucket has only node1's new observation. Bucket 1 should be 0
-            // (clamped phantom decrement prevents Max<ui64>()). Bucket 2 has the tablet.
+            // The recreated bucket has only node1's current observation: bucket 2 holds the
+            // tablet, bucket 1 is empty.
             snapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
             UNIT_ASSERT_VALUES_EQUAL_C(snapshot->Value(1), 0, DumpBuckets(snapshot.Get()));
             UNIT_ASSERT_VALUES_EQUAL_C(snapshot->Value(2), 1, DumpBuckets(snapshot.Get()));
@@ -1042,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         }
     }
 
-    Y_UNIT_TEST(LiveHistogramMultiNodeIsolationPreventsTotalClamp) {
+    Y_UNIT_TEST(NonDerivativeHistogramsAreIsolatedPerNode) {
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node1, node2;
@@ -1073,9 +1077,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
             // Drop node1. The bucket survives on node2, so the group pointers stay valid.
             fixture.Processor->DropNode(1);
+            fixture.Processor->RecalculateAllCounters();
+            rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
 
             // NOW+2s: Node1 moves to bucket 2 (rate 150000). Node2 does not report.
-            // Per-node clamping should not affect node2's contribution to bucket 1.
+            // Node1's report replaces only node1's own counts, node2's stay in bucket 1.
             first.AddCumulative(CONSUMED_CPU, 150000)
                 .Report(node1.Leaders, level, NOW + TDuration::Seconds(2));
             fixture.ApplyNode(1, node1);
@@ -1094,7 +1101,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         }
     }
 
-    Y_UNIT_TEST(LiveHistogramClampingDoesNotAffectCumulativeHistory) {
+    Y_UNIT_TEST(NonDerivativeReplacementDoesNotAffectCumulativeHistory) {
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             TSimulatedNode node1, node2;
             TProcessorFixture fixture;
@@ -1109,8 +1116,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 80000);
 
             // Drop node1, then resume it with a bucket move to bucket 2.
-            // The cumulative total must not change: clamp affects only live histograms,
-            // not cumulative counters (which are append-only).
+            // The cumulative total must not change: the replacement affects only non-derivative
+            // histograms, not cumulative counters (which are append-only).
             fixture.Processor->DropNode(1);
             first.AddCumulative(CONSUMED_CPU, 150000)
                 .Report(node1.Leaders, level, NOW + TDuration::Seconds(1));
@@ -1118,18 +1125,21 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             fixture.Processor->RecalculateAllCounters();
 
             // Cumulative counters are append-only. The total is 50000 + 150000 + 30000 = 230000,
-            // never affected by the clamp of the live-histogram bucket counts.
+            // never affected by the replacement of the non-derivative histogram bucket counts.
             // At partition level, DropNode removes node1's leaf source from the rollup via source
             // removal and re-registration. The rollup's RetainOnSourceRemoval history plus the
             // re-added source correctly recovers the cumulative (confirmed).
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 230000);
+            // The non-derivative histogram holds node2's idle tablet (bucket 0) and node1's resumed one.
+            UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(table, "table.datashard.used_core_percents", "name"), 2);
         }
     }
 
-    Y_UNIT_TEST(ProcessorRestartEquivalentWithoutNodeBaseline) {
-        // When the processor is restarted with an empty in-memory aggregator, but the node
-        // keeps its baseline, reports sent after the restart trigger phantom decrements that
-        // must be clamped. Node2 never reports to the new processor, so its observation is lost.
+    Y_UNIT_TEST(ProcessorRestartRestoresNonDerivativeHistogramsFromNextReport) {
+        // When the processor is restarted with an empty in-memory aggregator, but the nodes
+        // keep their baselines, every report still carries the whole non-derivative histogram of its node.
+        // A node's observation is therefore back as soon as the node reports to the new
+        // processor, whether or not the tablet changed its bucket.
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node1, node2;
@@ -1150,9 +1160,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             fixture.ApplyNode(2, node2);
             fixture.Processor->RecalculateAllCounters();
 
-            // Simulate processor restart: new fixture, node baseline unchanged.
-            // The new processor will see node1's move to bucket 2 as a phantom decrement from bucket 1.
-            // Node2 does not report to the new processor at all.
+            // Simulate processor restart: new fixture, node baselines unchanged.
             TProcessorFixture newFixture;
 
             // NOW+2s: Node1 moves to bucket 2 (rate 150000). Apply to the new processor only.
@@ -1161,10 +1169,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             newFixture.ApplyNode(1, node1);
             newFixture.Processor->RecalculateAllCounters();
 
-            // Bucket 1 is 0: node1's phantom decrement is clamped (unfixed code would be Max<ui64>()).
-            // Bucket 2 is 1: node1's new observation. Bucket 1 being 0 is two things at once: the
-            // clamped phantom decrement, and node2's missing observation (it never reported to
-            // the new processor — the accepted residual undercount).
+            // Node1's observation is in bucket 2, whatever the lost state was. Node2 has not
+            // reported to the new processor yet, so bucket 1 is empty for now.
             auto newTable = FindPublicTableGroup(newFixture.PublicRoot);
             auto newRawExecutor = tableLevel
                                       ? FindRawExecutorCountersGroup(FindRawTableGroup(newFixture.RawRoot))
@@ -1173,16 +1179,30 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(newRawSnapshot->Value(1), 0, DumpBuckets(newRawSnapshot.Get()));
             UNIT_ASSERT_VALUES_EQUAL_C(newRawSnapshot->Value(2), 1, DumpBuckets(newRawSnapshot.Get()));
             AssertNoWrappedBuckets(newRawExecutor);
-            // The cumulative total is 150000 (only node1's delta). Node2's 70000 is lost
-            // until node2's cumulative moves buckets and sends a delta to the new processor.
+            AssertCpuHistogram(newRawExecutor, newTable, 1);
+            // The cumulative total is 150000 (only node1's delta): cumulative history is
+            // delta based and is not recovered from before the restart.
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(newTable, "table.datashard.consumed_cpu_us"), 150000);
+
+            // NOW+2s: Node2 reports to the new processor with the SAME rate as before (70000),
+            // so its tablet does not change the bucket. Its observation is restored regardless.
+            second.AddCumulative(CONSUMED_CPU, 70000)
+                .Report(node2.Leaders, level, NOW + TDuration::Seconds(2));
+            newFixture.ApplyNode(2, node2);
+            newFixture.Processor->RecalculateAllCounters();
+
+            newRawSnapshot = newRawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(newRawSnapshot->Value(1), 1, DumpBuckets(newRawSnapshot.Get()));
+            UNIT_ASSERT_VALUES_EQUAL_C(newRawSnapshot->Value(2), 1, DumpBuckets(newRawSnapshot.Get()));
+            AssertNoWrappedBuckets(newRawExecutor);
+            AssertCpuHistogram(newRawExecutor, newTable, 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(newTable, "table.datashard.consumed_cpu_us"), 220000);
         }
     }
 
-    Y_UNIT_TEST(LiveHistogramClampingKnownGapUnchangedObservation) {
-        // After dropping a node and resuming it with the same rate (no rate change),
-        // no histogram delta is emitted and the observation stays missing (known limit).
-        // Full repair would require baseline resync from the sender, which is deliberately not implemented.
+    Y_UNIT_TEST(NonDerivativeUnchangedObservationRestoredAfterNodeResume) {
+        // After dropping a node and resuming it with the same rate (no rate change), the node
+        // still reports its whole non-derivative histogram, so its observation is counted again.
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node1, node2;
@@ -1214,28 +1234,184 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             // Drop node1. The bucket survives on node2, so the group pointers stay valid.
             fixture.Processor->DropNode(1);
 
-            // NOW+2s: Node1 reports again with the SAME cumulative value (50000). Same rate,
-            // so the histogram bucket stays the same and no histogram delta is emitted.
+            // NOW+2s: Node1 reports again with the same rate (50000 over 1s), so its tablet stays
+            // in bucket 1 and nothing changes on the sender side.
             first.AddCumulative(CONSUMED_CPU, 50000)
                 .Report(node1.Leaders, level, NOW + TDuration::Seconds(2));
             fixture.ApplyNode(1, node1);
             fixture.Processor->RecalculateAllCounters();
 
-            // Node1's observation is lost and cannot be recovered without baseline resync.
-            // This is a deliberate limit: the processor has no way to know the original
-            // bucket placement after it has forgotten the baseline. Same rate = no delta sent.
-            // Node1 no longer contributes to the histogram. Node2 is still in bucket 1.
+            // The report carries node1's whole non-derivative histogram, so its observation is back
+            // in bucket 1 next to node2's.
             rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
-            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
-            // The histogram total is 1 (only node2), not 2 (node1 is missing).
-            AssertCpuHistogram(rawExecutor, table, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 2, DumpBuckets(rawSnapshot.Get()));
+            AssertCpuHistogram(rawExecutor, table, 2);
             AssertNoWrappedBuckets(rawExecutor);
-            // Cumulative history is preserved even though the live observation is lost.
-            // Node1's third report carries its cumulative delta even though its rate is
-            // unchanged and no histogram delta is emitted, and the bucket survived the drop
-            // on node2, so nothing was unwound.
+            // Cumulative history is preserved as well: node1's third report carries its
+            // cumulative delta, and the bucket survived the drop on node2, so nothing was unwound.
             // Total: node1 3 x 50000 + node2 2 x 70000 = 290000.
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 290000);
+        }
+    }
+
+    Y_UNIT_TEST(RedeliveredReportDoesNotDoubleNonDerivativeHistogram) {
+        // A retried or duplicated report holds the same full non-derivative histogram, which
+        // replaces the one applied before. Cumulative counters are deltas and would double,
+        // so only the non-derivative histogram is asserted.
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TSimulatedNode node1;
+            TProcessorFixture fixture;
+            TFakeTablet first(1000, 0);
+
+            // Rate 50000 on the second report -> bucket 1.
+            first.AddCumulative(CONSUMED_CPU, 50000).Report(node1.Leaders, level, NOW);
+            first.AddCumulative(CONSUMED_CPU, 50000).Report(node1.Leaders, level, NOW + TDuration::Seconds(1));
+
+            NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
+            node1.Leaders->Pack(tables);
+            fixture.Processor->ApplyFromNode(1, false, tables);
+            fixture.Processor->ApplyFromNode(1, false, tables);
+            fixture.Processor->RecalculateAllCounters();
+
+            auto table = FindPublicTableGroup(fixture.PublicRoot);
+            auto rawExecutor = tableLevel
+                                   ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
+                                   : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+            auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
+            auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 0, DumpBuckets(rawSnapshot.Get()));
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
+        }
+    }
+
+    Y_UNIT_TEST(NodeRestartReplacesNonDerivativeHistogramOfTheLostNode) {
+        // A restarted node starts from an empty baseline, while the processor still holds the
+        // node's previous observations. The first report of the restarted node replaces them.
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TSimulatedNode node1, node2;
+            TProcessorFixture fixture;
+            TFakeTablet first(1000, 0), second(tableLevel ? 2000 : 1000, 0);
+
+            first.AddCumulative(CONSUMED_CPU, 50000).Report(node1.Leaders, level, NOW);
+            first.AddCumulative(CONSUMED_CPU, 50000).Report(node1.Leaders, level, NOW + TDuration::Seconds(1));
+            second.AddCumulative(CONSUMED_CPU, 70000).Report(node2.Leaders, level, NOW);
+            fixture.ApplyNode(1, node1);
+            fixture.ApplyNode(2, node2);
+            fixture.Processor->RecalculateAllCounters();
+
+            auto table = FindPublicTableGroup(fixture.PublicRoot);
+            auto rawExecutor = tableLevel
+                                   ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
+                                   : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+            auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
+            auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 1, DumpBuckets(rawSnapshot.Get()));
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
+
+            // Node1 restarts: a fresh aggregator, the tablet has its first report (rate 0 -> bucket 0).
+            // The processor has not dropped node1 in between.
+            TSimulatedNode restartedNode1;
+            TFakeTablet restarted(1000, 0);
+            restarted.AddCumulative(CONSUMED_CPU, 10000)
+                .Report(restartedNode1.Leaders, level, NOW + TDuration::Seconds(2));
+            fixture.ApplyNode(1, restartedNode1);
+            fixture.Processor->RecalculateAllCounters();
+
+            // The old bucket 1 observation of node1 is gone rather than kept next to the new one.
+            rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 2, DumpBuckets(rawSnapshot.Get()));
+            UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 0, DumpBuckets(rawSnapshot.Get()));
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
+        }
+    }
+
+    Y_UNIT_TEST(UnmarkedNonDerivativeHistogramIsIgnored) {
+        // A non-derivative histogram that is not marked NonDerivative is a delta, which cannot
+        // be applied without the baseline it was taken against: the node contributes nothing
+        // to it, but the rest of its report is applied as usual.
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TSimulatedNode node1, node2;
+            TProcessorFixture fixture;
+            TFakeTablet first(1000, 0), second(2000, 0);
+            first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node1.Leaders, level, NOW);
+            second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7).Report(node2.Leaders, level, NOW);
+
+            NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
+            node1.Leaders->Pack(tables);
+            UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+            auto* counters = tableLevel
+                                 ? tables.Mutable(0)->MutableTableCounters()
+                                 : tables.Mutable(0)->MutableLeaves(0)->MutableCounters();
+            auto* histogram = counters->MutableExecutorCounters()->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+            UNIT_ASSERT(histogram->GetNonDerivative());
+            histogram->ClearNonDerivative();
+
+            fixture.Processor->ApplyFromNode(1, false, tables);
+            fixture.ApplyNode(2, node2);
+            fixture.Processor->RecalculateAllCounters();
+
+            auto table = FindPublicTableGroup(fixture.PublicRoot);
+            UNIT_ASSERT(table);
+            UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 10u + 20u);
+            UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 5u + 7u);
+            // Only node2 contributes to the histogram.
+            UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(table, "table.datashard.used_core_percents", "name"), 1);
+            if (tableLevel) {
+                AssertCpuHistogram(FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot)), table, 1);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0), "HIST(ConsumedCPU)"), 0);
+                UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(FindRawLeafExecutorCounters(fixture.RawRoot, 2000, 0), "HIST(ConsumedCPU)"), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ProcessorRestartRestoresIdleTabletsFromNextReports) {
+        // Idle tablets never change their bucket, so a delta encoding would never report them
+        // again. Every report carries the whole non-derivative histogram of the node instead.
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TSimulatedNode node1, node2;
+            TProcessorFixture fixture;
+            TFakeTablet first(1000, 0), second(2000, 0);
+
+            // Rate 0 -> bucket 0 for both, and they stay there.
+            first.AddCumulative(CONSUMED_CPU, 50000).Report(node1.Leaders, level, NOW);
+            second.AddCumulative(CONSUMED_CPU, 70000).Report(node2.Leaders, level, NOW);
+            fixture.ApplyNode(1, node1);
+            fixture.ApplyNode(2, node2);
+            fixture.Processor->RecalculateAllCounters();
+
+            // Simulate processor restart: new fixture, node baselines unchanged, nothing reported
+            // since the tablets are idle.
+            TProcessorFixture newFixture;
+            newFixture.ApplyNode(1, node1);
+            newFixture.ApplyNode(2, node2);
+            newFixture.Processor->RecalculateAllCounters();
+
+            auto newTable = FindPublicTableGroup(newFixture.PublicRoot);
+            UNIT_ASSERT(newTable);
+            UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(newTable, "table.datashard.used_core_percents", "name"), 2);
+            if (tableLevel) {
+                auto rawExecutor = FindRawExecutorCountersGroup(FindRawTableGroup(newFixture.RawRoot));
+                AssertCpuHistogram(rawExecutor, newTable, 2);
+                auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+                UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 2, DumpBuckets(rawSnapshot.Get()));
+            } else {
+                for (ui64 tabletId : {1000, 2000}) {
+                    auto rawExecutor = FindRawLeafExecutorCounters(newFixture.RawRoot, tabletId, 0);
+                    AssertCpuHistogram(rawExecutor, FindPublicLeafGroup(newFixture.PublicRoot, tabletId, 0), 1,
+                                       "table.datashard.partition.used_core_percents");
+                    auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
+                    UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 1, DumpBuckets(rawSnapshot.Get()));
+                }
+            }
         }
     }
 } // Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest)

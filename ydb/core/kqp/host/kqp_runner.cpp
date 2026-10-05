@@ -414,7 +414,7 @@ private:
             .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation()
             .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
-            .Add(CreateKqpTxsPeepholeTransformer(*typesCtx, Config), "Peephole")
+            .Add(CreateKqpTxsPeepholeTransformer(*typesCtx, Config, OptimizeCtx), "Peephole")
             .Build(false);
 
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,

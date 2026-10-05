@@ -15,6 +15,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
+#include <util/datetime/base.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -309,25 +310,83 @@ public:
     }
 
     TValidationReport Run(const TString& path) {
-        const TString root = NormalizeKey(path);
+        RootPath = NormalizeKey(path);
+        const TString root = RootPath;
         const TString metadataKey = JoinKey(root, "metadata.json");
-        if (auto metadata = TryRead(metadataKey)) {
-            NJson::TJsonValue json;
-            if (!NJson::ReadJsonTree(*metadata, &json) || !json.IsMap()) {
-                Error(metadataKey, "metadata.json is not a JSON object");
-                if (Stopped()) {
-                    return Report;
-                }
-            } else if (json["kind"].GetStringRobust() == "SimpleExportV0") {
-                if (Settings.ExpectedObjects.Defined()) {
-                    Error(metadataKey, "--expected-objects applies only to backups created without SchemaMapping");
-                }
-                if (!Stopped()) {
-                    ValidateFullBackup(root, metadataKey, *metadata, json);
-                }
-                return Report;
+        const bool forceFull = Settings.Format == EValidateFormat::Full;
+        const bool forceItem = Settings.Format == EValidateFormat::Item;
+        const bool schemaMapping = HasSchemaMapping(root);
+
+        const TReadResult metadata = ReadFile(metadataKey);
+        if (metadata.Status == EReadStatus::Missing && Exists(metadataKey + ".enc")) {
+            RejectEncrypted(metadataKey + ".enc");
+            if (forceFull || schemaMapping || Stopped()) {
+                return Finish();
             }
         }
+        if (metadata.Status == EReadStatus::Failed) {
+            Error(metadataKey, TStringBuilder() << "failed to read file: " << metadata.Error);
+            if (forceFull || schemaMapping || Stopped()) {
+                return Finish();
+            }
+        }
+
+        NJson::TJsonValue json;
+        bool parsedObject = false;
+        bool isSimpleExport = false;
+        if (metadata.Status == EReadStatus::Ok) {
+            if (!NJson::ReadJsonTree(metadata.Content, &json) || !json.IsMap()) {
+                Error(metadataKey, "metadata.json is not a JSON object");
+                if (forceFull || schemaMapping || Stopped()) {
+                    return Finish();
+                }
+            } else {
+                parsedObject = true;
+                isSimpleExport = JsonString(json, "kind") == "SimpleExportV0";
+                if (json.Has("kind") && !isSimpleExport && !forceItem) {
+                    VerifyChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
+                    const TString kind = json["kind"].IsString()
+                        ? json["kind"].GetString()
+                        : json["kind"].GetStringRobust();
+                    Error(metadataKey, TStringBuilder() << "unsupported backup kind \"" << kind << "\"");
+                    return Finish();
+                }
+            }
+        }
+
+        const bool looksFull = isSimpleExport || schemaMapping;
+        const bool validateAsFull = forceFull || (!forceItem && looksFull);
+        if (validateAsFull) {
+            if (metadata.Status == EReadStatus::Missing) {
+                Error(metadataKey, schemaMapping
+                    ? "full backup is missing metadata.json; SchemaMapping is present"
+                    : "full backup is missing metadata.json");
+                if (Exists(metadataKey + ".sha256")) {
+                    Error(metadataKey + ".sha256", "checksum sidecar is present without metadata.json");
+                }
+                return Finish();
+            }
+            if (!parsedObject) {
+                return Finish();
+            }
+            if (!isSimpleExport) {
+                VerifyChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
+                Error(metadataKey, "full backup metadata.json must have kind SimpleExportV0");
+                return Finish();
+            }
+            if (Settings.ExpectedObjects.Defined()) {
+                Error(metadataKey, "--expected-objects applies only to backups created without SchemaMapping");
+            }
+            if (!Stopped()) {
+                ValidateFullBackup(root, metadataKey, metadata.Content, json);
+            }
+            return Finish();
+        }
+
+        if (forceItem && looksFull) {
+            Warning(metadataKey, "path looks like a full backup; --format=item skips SchemaMapping completeness checks");
+        }
+
         const bool self = ValidateObject(root, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing());
         // Exports created with --item have no backup-level metadata.json and no SchemaMapping.
         // The destination prefix is a directory of objects, and index tables may sit under a table
@@ -345,8 +404,12 @@ public:
         }
         if (Settings.ExpectedObjects.Defined() && !Stopped()) {
             CheckExpectedObjects(root);
+        } else if (!Settings.ExpectedObjects.Defined() && nested && !self && !Stopped()) {
+            Warning(root ? root : ".",
+                "item export completeness is not checked without --expected-objects; "
+                "a successful result means the objects found here are intact");
         }
-        return Report;
+        return Finish();
     }
 
 private:
@@ -356,6 +419,8 @@ private:
     TValidationReport Report;
     THashSet<TString> AllowedObjectDirs;
     THashSet<TString> Visited;
+    TString RootPath;
+    std::atomic<bool> SawEncryption{false};
     mutable std::mutex Mu;
 
     void Error(const TString& path, const TString& message) {
@@ -366,6 +431,18 @@ private:
     void Warning(const TString& path, const TString& message) {
         std::lock_guard<std::mutex> lock(Mu);
         Report.Warnings.push_back({path, message});
+    }
+
+    TString RootLabel() const {
+        return RootPath ? RootPath : TString(".");
+    }
+
+    TValidationReport Finish() {
+        if (Settings.EncryptionKey && !SawEncryption.load()) {
+            Warning(RootLabel(),
+                "encryption key is unused; encrypted backup files are not validated by this command");
+        }
+        return Report;
     }
 
     // Fail-fast stops on errors only. Warnings are still collected until that point.
@@ -402,6 +479,16 @@ private:
         return AllowedObjectDirs.contains(dir);
     }
 
+    void InvokeCheck(const std::function<void(size_t)>& fn, size_t index) {
+        try {
+            fn(index);
+        } catch (const std::exception& ex) {
+            Error(RootLabel(), TStringBuilder() << "internal error while validating: " << ex.what());
+        } catch (...) {
+            Error(RootLabel(), "internal error while validating");
+        }
+    }
+
     // Runs fn(0) .. fn(count-1). At most Threads calls are in progress.
     // With one thread, calls are in order and stop after the first error when fail-fast is set.
     void ParallelFor(size_t count, const std::function<void(size_t)>& fn) {
@@ -413,40 +500,28 @@ private:
                 if (Stopped()) {
                     return;
                 }
-                fn(i);
+                InvokeCheck(fn, i);
             }
             return;
         }
         const size_t workers = std::min(static_cast<size_t>(Threads), count);
         std::atomic<size_t> next{0};
-        std::exception_ptr error;
-        std::mutex errorMu;
         std::vector<std::thread> pool;
         pool.reserve(workers);
         for (size_t worker = 0; worker < workers; ++worker) {
             pool.emplace_back([&] {
                 InValidateWorker = true;
-                try {
-                    while (!Stopped()) {
-                        const size_t index = next.fetch_add(1, std::memory_order_relaxed);
-                        if (index >= count) {
-                            return;
-                        }
-                        fn(index);
+                while (!Stopped()) {
+                    const size_t index = next.fetch_add(1, std::memory_order_relaxed);
+                    if (index >= count) {
+                        return;
                     }
-                } catch (...) {
-                    std::lock_guard<std::mutex> lock(errorMu);
-                    if (!error) {
-                        error = std::current_exception();
-                    }
+                    InvokeCheck(fn, index);
                 }
             });
         }
         for (std::thread& thread : pool) {
             thread.join();
-        }
-        if (error) {
-            std::rethrow_exception(error);
         }
     }
 
@@ -454,36 +529,52 @@ private:
         return Storage.Exists(key);
     }
 
-    TMaybe<TString> TryRead(const TString& key) const {
-        if (!Storage.Exists(key)) {
-            return {};
-        }
-        try {
-            return Storage.Read(key);
-        } catch (const std::exception& ex) {
-            return {};
-        }
+    bool HasSchemaMapping(const TString& root) const {
+        return Exists(JoinKey(root, "SchemaMapping/mapping.json"))
+            || Exists(JoinKey(root, "SchemaMapping/metadata.json"));
     }
 
-    TString ReadRequired(const TString& key) {
-        if (!Storage.Exists(key)) {
-            Error(key, "file is missing");
-            return {};
+    enum class EReadStatus {
+        Missing,
+        Failed,
+        Ok,
+    };
+
+    struct TReadResult {
+        EReadStatus Status = EReadStatus::Missing;
+        TString Content;
+        TString Error;
+    };
+
+    TReadResult ReadFile(const TString& key) const {
+        try {
+            if (!Storage.Exists(key)) {
+                TReadResult result;
+                result.Status = EReadStatus::Missing;
+                return result;
+            }
+        } catch (const std::exception& ex) {
+            TReadResult result;
+            result.Status = EReadStatus::Failed;
+            result.Error = ex.what();
+            return result;
         }
         try {
-            return Storage.Read(key);
+            TReadResult result;
+            result.Status = EReadStatus::Ok;
+            result.Content = Storage.Read(key);
+            return result;
         } catch (const std::exception& ex) {
-            Error(key, TStringBuilder() << "failed to read file: " << ex.what());
-            return {};
+            TReadResult result;
+            result.Status = EReadStatus::Failed;
+            result.Error = ex.what();
+            return result;
         }
     }
 
     void RejectEncrypted(const TString& key) {
-        if (!Settings.EncryptionKey) {
-            Error(key, "backup file is encrypted; pass --encryption-key-file or YDB_ENCRYPTION_KEY");
-        } else {
-            Error(key, "encrypted backup files are not validated by this command");
-        }
+        SawEncryption.store(true);
+        Error(key, "encrypted backup files are not validated by this command");
     }
 
     TMaybe<TString> ReadPlainFile(const TString& key) {
@@ -491,12 +582,16 @@ private:
             RejectEncrypted(key + ".enc");
             return {};
         }
-        auto content = TryRead(key);
-        if (!content) {
+        const TReadResult content = ReadFile(key);
+        if (content.Status == EReadStatus::Failed) {
+            Error(key, TStringBuilder() << "failed to read file: " << content.Error);
+            return {};
+        }
+        if (content.Status == EReadStatus::Missing) {
             Error(key, "file is missing");
             return {};
         }
-        return content;
+        return content.Content;
     }
 
     void VerifyChecksum(const TString& contentKey, const TString& content, bool required) {
@@ -629,12 +724,12 @@ private:
         if (parentExpect.Defined()) {
             return *parentExpect;
         }
-        const auto metadata = TryRead(JoinKey(dir, "metadata.json"));
-        if (!metadata) {
+        const TReadResult metadata = ReadFile(JoinKey(dir, "metadata.json"));
+        if (metadata.Status != EReadStatus::Ok) {
             return Exists(JoinKey(dir, "scheme.pb.sha256")) || Exists(JoinKey(dir, "create_view.sql.sha256"));
         }
         NJson::TJsonValue json;
-        if (!NJson::ReadJsonTree(*metadata, &json) || !json.IsMap()) {
+        if (!NJson::ReadJsonTree(metadata.Content, &json) || !json.IsMap()) {
             return false;
         }
         if (json.Has("version") && IsJsonInteger(json["version"])) {
@@ -645,15 +740,19 @@ private:
 
     void ValidateObjectMetadata(const TString& dir, bool expectChecksums, bool table) {
         const TString key = JoinKey(dir, "metadata.json");
-        auto content = TryRead(key);
-        if (!content) {
+        const TReadResult content = ReadFile(key);
+        if (content.Status == EReadStatus::Failed) {
+            Error(key, TStringBuilder() << "failed to read file: " << content.Error);
+            return;
+        }
+        if (content.Status == EReadStatus::Missing) {
             if (expectChecksums) {
                 Error(key, "file is missing");
             }
             return;
         }
         NJson::TJsonValue json;
-        if (!NJson::ReadJsonTree(*content, &json) || !json.IsMap()) {
+        if (!NJson::ReadJsonTree(content.Content, &json) || !json.IsMap()) {
             Error(key, "metadata.json is not a JSON object");
             return;
         }
@@ -673,7 +772,7 @@ private:
         if (Stopped()) {
             return;
         }
-        VerifyChecksum(key, *content, expectChecksums);
+        VerifyChecksum(key, content.Content, expectChecksums);
         if (Stopped()) {
             return;
         }
@@ -801,7 +900,15 @@ private:
                 Error(JoinKey(dir, "metadata.json"), "index entry must have export_prefix and impl_table_prefix");
                 return;
             }
-            const TString indexDir = JoinKey(dir, item["export_prefix"].GetString());
+            const TString exportPrefix = item["export_prefix"].GetString();
+            const TString implPrefix = item["impl_table_prefix"].GetString();
+            if (exportPrefix != implPrefix) {
+                Warning(JoinKey(dir, "metadata.json"), TStringBuilder()
+                    << "index export_prefix \"" << exportPrefix
+                    << "\" differs from impl_table_prefix \"" << implPrefix
+                    << "\"; they match in an unencrypted backup");
+            }
+            const TString indexDir = JoinKey(dir, exportPrefix);
             AllowDir(indexDir);
             ValidateTable(indexDir, expectChecksums, Nothing(), false);
         });
@@ -840,11 +947,14 @@ private:
             ValidateObjectMetadata(dir, checksums, true);
         } else {
             const TString metadataKey = JoinKey(dir, "metadata.json");
-            if (auto metadata = TryRead(metadataKey)) {
-                VerifyChecksum(metadataKey, *metadata, checksums);
+            const TReadResult metadata = ReadFile(metadataKey);
+            if (metadata.Status == EReadStatus::Failed) {
+                Error(metadataKey, TStringBuilder() << "failed to read file: " << metadata.Error);
+            } else if (metadata.Status == EReadStatus::Ok) {
+                VerifyChecksum(metadataKey, metadata.Content, checksums);
                 if (!Stopped()) {
                     NJson::TJsonValue json;
-                    if (NJson::ReadJsonTree(*metadata, &json) && json.IsMap()) {
+                    if (NJson::ReadJsonTree(metadata.Content, &json) && json.IsMap()) {
                         ValidatePermissions(dir, PermissionsFlag(json), checksums);
                     } else {
                         Error(metadataKey, "metadata.json is not a JSON object");
@@ -1219,6 +1329,20 @@ private:
 ui64 DefaultValidateThreads() {
     const unsigned processors = std::thread::hardware_concurrency();
     return processors > 1 ? static_cast<ui64>(processors) - 1 : 1;
+}
+
+TDuration ValidateRetryBackoff(ui32 failedAttempt) {
+    if (failedAttempt == 0) {
+        return TDuration::Zero();
+    }
+    ui64 ms = 100;
+    for (ui32 i = 1; i < failedAttempt; ++i) {
+        if (ms >= 2000) {
+            return TDuration::MilliSeconds(2000);
+        }
+        ms *= 2;
+    }
+    return TDuration::MilliSeconds(std::min<ui64>(ms, 2000));
 }
 
 TVector<TString> ParseExpectedObjects(TStringBuf text) {

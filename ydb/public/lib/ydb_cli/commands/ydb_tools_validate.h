@@ -38,6 +38,7 @@ protected:
     TString EncryptionKey;
     TString EncryptionKeyFile;
     TString ExpectedObjectsFile;
+    TString Format = "auto";
 };
 
 class TCommandValidateFromS3 : public TCommandValidateBase,

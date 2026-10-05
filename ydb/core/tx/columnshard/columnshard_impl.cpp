@@ -1708,6 +1708,9 @@ public:
                 itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
             } else if (itPortionConstructor->second.IsReady()) {
                 continue;
+            } else {
+                // Cleanup may remove metadata between retries of an incomplete constructor.
+                itPortionConstructor->second = TPortionConstructorV2(portion);
             }
             if (!itPortionConstructor->second.HasRecords()) {
                 auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(pathId.GetRawValue(), p).Select();

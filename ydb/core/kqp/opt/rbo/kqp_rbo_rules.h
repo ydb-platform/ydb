@@ -253,6 +253,19 @@ public:
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
+/**
+ * Rewrite aggregates over a whole partition window into an aggregation joined back to the window input.
+ */
+class TExpandWholePartitionWindowRule: public ISimplifiedRule {
+public:
+    TExpandWholePartitionWindowRule()
+        : ISimplifiedRule("Expand whole partition window rule", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /***
  * Fuse two consequtive filters
  */

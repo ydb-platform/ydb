@@ -881,6 +881,11 @@ struct TOpWindowFrame {
                (EndKind == EWindowFrameBound::Preceding) ||
                (EndKind == EWindowFrameBound::Following && EndValue == 0);
     }
+
+    bool IsWholePartition() const {
+        return (Type == EWindowFrameType::Rows || Type == EWindowFrameType::Range) &&
+               BeginKind == EWindowFrameBound::UnboundedPreceding && EndKind == EWindowFrameBound::UnboundedFollowing;
+    }
 };
 
 // Represents a window function.

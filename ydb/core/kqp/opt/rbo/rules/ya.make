@@ -12,6 +12,7 @@ JOIN_SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     expand_grouping_sets.cpp
+    expand_whole_partition_window.cpp
 )
 
 JOIN_SRCS(

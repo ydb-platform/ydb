@@ -614,6 +614,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> expandAggregationRules;
     expandAggregationRules.emplace_back(std::make_unique<TExpandGroupingSetsRule>());
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
+    expandAggregationRules.emplace_back(std::make_unique<TExpandWholePartitionWindowRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 
     // Rewrite all right joins into left joins

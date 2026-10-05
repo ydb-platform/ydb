@@ -6,6 +6,8 @@
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
 
+#include <functional>
+
 namespace NYdb::inline Dev::NImport {
     struct TImportFromS3Settings;
 }
@@ -73,7 +75,8 @@ public:
     virtual TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
     // False when the object is absent. Other failures throw.
     virtual bool ObjectExists(const TString& key) = 0;
-    virtual TString GetObject(const TString& key) = 0;
+    // Delivers object bytes as they arrive. A chunk is valid only during the call.
+    virtual void GetObject(const TString& key, const std::function<void(TStringBuf)>& onChunk) = 0;
     virtual ~IS3ClientWrapper() = default;
 };
 

@@ -213,37 +213,65 @@ TMaybe<TDataPart> ParseDataPart(const TString& key) {
     return part;
 }
 
-TString HashBuffer(TStringBuf data) {
-    return Sha256Hex(data);
+TString FinishSha256(SHA256_CTX* ctx) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_Final(hash, ctx);
+    return to_lower(HexEncode(hash, SHA256_DIGEST_LENGTH));
 }
 
-// SHA-256 of the stored object. Compressed objects are hashed after zstd decompression,
-// because export checksums are computed from uncompressed plaintext.
+// SHA-256 of the stored object. Bytes are hashed as they arrive.
+// Compressed objects are decompressed in the same pass, because export checksums
+// are computed from uncompressed plaintext. Neither form is buffered whole.
 TString HashStoredFile(const IBackupStorage& storage, const TString& key, bool compressed) {
-    const TString bytes = storage.Read(key);
+    SHA256_CTX ctx;
     if (!compressed) {
-        return HashBuffer(bytes);
+        storage.ReadChunks(
+            key,
+            [&] { SHA256_Init(&ctx); },
+            [&](TStringBuf chunk) {
+                if (chunk) {
+                    SHA256_Update(&ctx, chunk.data(), chunk.size());
+                }
+            });
+        return FinishSha256(&ctx);
     }
-    std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> ctx(ZSTD_createDCtx(), &ZSTD_freeDCtx);
-    if (!ctx) {
+
+    std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> dctx(ZSTD_createDCtx(), &ZSTD_freeDCtx);
+    if (!dctx) {
         ythrow yexception() << "failed to create zstd context";
     }
-    TString plain;
+    size_t lastRet = 1;
     char outBuf[1 << 16];
-    ZSTD_inBuffer input{bytes.data(), bytes.size(), 0};
-    size_t ret = 1;
-    while (input.pos < input.size) {
-        ZSTD_outBuffer output{outBuf, sizeof(outBuf), 0};
-        ret = ZSTD_decompressStream(ctx.get(), &output, &input);
-        if (ZSTD_isError(ret)) {
-            ythrow yexception() << "zstd: " << ZSTD_getErrorName(ret);
-        }
-        plain.append(outBuf, output.pos);
-    }
-    if (ret != 0) {
+    storage.ReadChunks(
+        key,
+        [&] {
+            SHA256_Init(&ctx);
+            const size_t reset = ZSTD_DCtx_reset(dctx.get(), ZSTD_reset_session_only);
+            if (ZSTD_isError(reset)) {
+                ythrow yexception() << "zstd: " << ZSTD_getErrorName(reset);
+            }
+            lastRet = 1;
+        },
+        [&](TStringBuf chunk) {
+            if (!chunk) {
+                return;
+            }
+            ZSTD_inBuffer input{chunk.data(), chunk.size(), 0};
+            while (input.pos < input.size) {
+                ZSTD_outBuffer output{outBuf, sizeof(outBuf), 0};
+                lastRet = ZSTD_decompressStream(dctx.get(), &output, &input);
+                if (ZSTD_isError(lastRet)) {
+                    ythrow yexception() << "zstd: " << ZSTD_getErrorName(lastRet);
+                }
+                if (output.pos != 0) {
+                    SHA256_Update(&ctx, outBuf, output.pos);
+                }
+            }
+        });
+    if (lastRet != 0) {
         ythrow yexception() << "truncated zstd frame";
     }
-    return HashBuffer(plain);
+    return FinishSha256(&ctx);
 }
 
 bool IsJsonInteger(const NJson::TJsonValue& value) {

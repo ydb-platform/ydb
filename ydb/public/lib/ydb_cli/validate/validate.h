@@ -16,8 +16,17 @@ public:
     virtual bool Exists(const TString& key) const = 0;
     // Keys equal to prefix or starting with prefix + '/'.
     virtual TVector<TString> List(const TString& prefix) const = 0;
+    // Loads the whole object. For metadata and checksum sidecars, which are small.
+    // Data files are processed with ReadChunks and must not be loaded here.
     virtual TString Read(const TString& key) const = 0;
-    virtual void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const = 0;
+    // Streams the object. `beginAttempt` runs before each read, including a retry
+    // after an I/O error, so the caller can reset checksum state. `onChunk` then
+    // receives successive pieces. A piece is valid only until `onChunk` returns;
+    // the storage does not keep the object body.
+    virtual void ReadChunks(
+        const TString& key,
+        const std::function<void()>& beginAttempt,
+        const std::function<void(TStringBuf)>& onChunk) const = 0;
 };
 
 struct TValidateSettings {

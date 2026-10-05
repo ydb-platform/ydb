@@ -57,21 +57,36 @@ public:
     }
 
     TString Read(const TString& key) const override {
-        return RetryIo(Retries, [&] {
+        TString data;
+        ReadChunks(
+            key,
+            [&] { data.clear(); },
+            [&](TStringBuf chunk) { data.append(chunk.data(), chunk.size()); });
+        return data;
+    }
+
+    void ReadChunks(
+        const TString& key,
+        const std::function<void()>& beginAttempt,
+        const std::function<void(TStringBuf)>& onChunk) const override
+    {
+        RetryIo(Retries, [&] {
+            beginAttempt();
             const TFsPath path = ToPath(key);
             if (!path.Exists() || !path.IsFile()) {
                 ythrow yexception() << "file is missing: " << key;
             }
             TFileInput input(path);
-            return input.ReadAll();
+            TString buf;
+            buf.resize(1 << 20);
+            for (;;) {
+                const size_t read = input.Read(buf.begin(), buf.size());
+                if (read == 0) {
+                    break;
+                }
+                onChunk(TStringBuf(buf.data(), read));
+            }
         });
-    }
-
-    void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
-        const TString data = Read(key);
-        if (data) {
-            onChunk(data);
-        }
     }
 
 private:
@@ -141,16 +156,23 @@ public:
     }
 
     TString Read(const TString& key) const override {
-        return RetryIo(Retries, [&] {
-            return Client->GetObject(key);
-        });
+        TString data;
+        ReadChunks(
+            key,
+            [&] { data.clear(); },
+            [&](TStringBuf chunk) { data.append(chunk.data(), chunk.size()); });
+        return data;
     }
 
-    void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
-        const TString data = Read(key);
-        if (data) {
-            onChunk(data);
-        }
+    void ReadChunks(
+        const TString& key,
+        const std::function<void()>& beginAttempt,
+        const std::function<void(TStringBuf)>& onChunk) const override
+    {
+        RetryIo(Retries, [&] {
+            beginAttempt();
+            Client->GetObject(key, onChunk);
+        });
     }
 
 private:

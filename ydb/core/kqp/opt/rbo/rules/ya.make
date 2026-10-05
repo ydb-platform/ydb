@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    expand_replicate.cpp
     inline_join_filters.cpp
     propagate_topsort_through_stage.cpp
     pull_up_map_over_cbo.cpp

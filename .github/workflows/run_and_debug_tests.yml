@@ -1,121 +1,513 @@
 name: Run and debug tests
-
+# Manual run of the sharded PR-check path. Dispatch this workflow from the
+# sharding branch. The tree under test is the pull request's merge commit.
+# PR-check on main stays the unsharded workflow and should be cancelled on
+# that pull request so it does not fill the dist cache first.
 on:
   workflow_dispatch:
     inputs:
-      test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
-        required: false
+      pull_number:
+        description: 'Pull request number. Checked out at its merge commit.'
+        required: true
         type: string
-        default: 'ydb/tests/olap/'
-      build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
-        required: false
-        type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
-        required: false
-        type: string
-        default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
-        required: false
-        type: boolean
-        default: false
       shard_count:
-        description: 'Passed to Run-tests. 1 keeps one job per branch. 2-16 shards one branch only.'
+        description: 'Same as PR_CHECK_SHARD_COUNT: auto, or an integer 2-16. 1 is the unsharded PR-check job.'
         required: false
         type: string
-        default: '1'
+        default: auto
+
+env:
+  PR_CHECK_SHARD_COUNT: ${{ inputs.shard_count }}
 
 jobs:
-  prepare:
+  resolve:
     runs-on: ubuntu-latest
     outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+      commit_sha: ${{ steps.pr.outputs.commit_sha }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      base_ref: ${{ steps.pr.outputs.base_ref }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Resolve pull request
+        id: pr
+        env:
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_number }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
-            done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+          set -euo pipefail
+          if ! [[ "$PULL_REQUEST_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "pull_number must be digits, got: $PULL_REQUEST_NUMBER"
+            exit 1
           fi
+          PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -sS \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/$PULL_REQUEST_NUMBER")
+          MERGE_SHA=$(printf '%s' "$PR_DATA" | jq -r '.merge_commit_sha // empty')
+          HEAD_SHA=$(printf '%s' "$PR_DATA" | jq -r '.head.sha // empty')
+          BASE_REF=$(printf '%s' "$PR_DATA" | jq -r '.base.ref // empty')
+          if [ -z "$MERGE_SHA" ] || [ -z "$HEAD_SHA" ] || [ -z "$BASE_REF" ]; then
+            echo "Could not resolve merge commit, head, or base for PR $PULL_REQUEST_NUMBER"
+            exit 1
+          fi
+          echo "commit_sha=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PULL_REQUEST_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "PR $PULL_REQUEST_NUMBER merge=$MERGE_SHA head=$HEAD_SHA base=$BASE_REF"
 
-      - name: Format build presets
-        id: format-build-preset
-        run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
-          fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
-          fi
-
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
+  build_and_test:
+    needs: resolve
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
-    with:
-      test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
-      build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
-      shard_count: ${{ inputs.shard_count }}
+        include:
+          - build_preset: relwithdebinfo
+            threads_count: 52
+            timeout: 240
+            build_target: "ydb/"
+            test_size: small,medium
+          - build_preset: release-asan
+            threads_count: 52
+            timeout: 240
+            build_target: "ydb/"
+            test_size: small,medium
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
+    name: Build and test ${{ matrix.build_preset }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.commit_sha }}
+          fetch-depth: 2
+          allow-unsafe-pr-checkout: true
+      - name: Checkout planner from this workflow
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts/tests
+          path: _planner
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Decide shard mode
+        id: shard-mode
+        run: |
+          mode="${PR_CHECK_SHARD_COUNT:-1}"
+          case "$mode" in
+            1|auto) ;;
+            *)
+              if ! [[ "$mode" =~ ^[0-9]+$ ]] || [ "$mode" -lt 2 ] || [ "$mode" -gt 16 ]; then
+                echo "shard_count must be 1, auto, or 2-16, got: $mode"
+                exit 1
+              fi
+              ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+      - name: Build and test
+        if: steps.shard-mode.outputs.mode == '1'
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
+          increment: true
+          run_tests: true
+          test_size: ${{ matrix.test_size }}
+          test_threads: ${{ matrix.threads_count }}
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          pull_number: ${{ inputs.pull_number }}
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Save increment graph
+        id: save-graph
+        if: steps.shard-mode.outputs.mode != '1'
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
+          increment: true
+          run_tests: false
+          save_test_graph: true
+          publish_github_status: false
+          test_size: ${{ matrix.test_size }}
+          test_threads: ${{ matrix.threads_count }}
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          pull_number: ${{ inputs.pull_number }}
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Choose host count and plan shards
+        id: plan
+        if: steps.save-graph.outcome == 'success'
+        run: |
+          requested="${{ steps.shard-mode.outputs.mode }}"
+          plan_args=(
+            --graph graph.json
+            --context context.json
+            --threads "${{ matrix.threads_count }}"
+            --build-preset "${{ matrix.build_preset }}"
+            --branch "${{ needs.resolve.outputs.base_ref }}"
+            --build-target "${{ matrix.build_target }}"
+            --test-size "${{ matrix.test_size }}"
+            -o shard_plan.json
+            --summary shard_plan.md
+          )
+          if [ "$requested" = "auto" ]; then
+            plan_args+=(--shard-count auto --preset-label "build-preset-${{ matrix.build_preset }}")
+          else
+            plan_args+=(--shard-count "$requested")
+          fi
+          python3 _planner/.github/scripts/tests/shard_graph.py plan "${plan_args[@]}"
+          cat shard_plan.md >> "$GITHUB_STEP_SUMMARY"
+          python3 - << 'PY'
+          import json
+          from pathlib import Path
+          plan = json.loads(Path("shard_plan.json").read_text())
+          Path("active_count.txt").write_text(str(int(plan["shard_count"])))
+          PY
+          echo "active_shard_count=$(cat active_count.txt)" >> "$GITHUB_OUTPUT"
+      - name: Run the single job
+        if: steps.plan.outputs.active_shard_count == '1'
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
+          increment: false
+          run_tests: true
+          skip_graph_compare: true
+          prebuilt_graph_path: graph.json
+          prebuilt_context_path: context.json
+          test_size: ${{ matrix.test_size }}
+          test_threads: ${{ matrix.threads_count }}
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          pull_number: ${{ inputs.pull_number }}
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Upload graph and plan
+        if: steps.plan.outputs.active_shard_count != '' && steps.plan.outputs.active_shard_count != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-graph-${{ matrix.build_preset }}-${{ github.run_id }}
+          retention-days: 7
+          path: |
+            graph.json
+            context.json
+            shard_plan.json
+            shard_plan.md
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+  expand_shards:
+    needs: [resolve, build_and_test]
+    if: always() && (needs.build_and_test.result == 'success' || needs.build_and_test.result == 'failure')
+    runs-on: ubuntu-latest
+    outputs:
+      has_shards: ${{ steps.matrix.outputs.has_shards || steps.gate.outputs.has_shards }}
+      include: ${{ steps.matrix.outputs.include || steps.gate.outputs.include }}
+      presets: ${{ steps.matrix.outputs.presets || steps.gate.outputs.presets }}
+      should_gate: ${{ steps.gate.outputs.should_gate }}
+      degraded: ${{ steps.matrix.outputs.degraded || steps.gate.outputs.degraded }}
+    steps:
+      - name: Download plans
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pr-check-graph-*
+          path: graphs
+      - name: Decide shard gate
+        id: gate
+        run: |
+          mode="${PR_CHECK_SHARD_COUNT:-1}"
+          if [ "$mode" = "1" ]; then
+            echo "should_gate=false" >> "$GITHUB_OUTPUT"
+            echo "has_shards=false" >> "$GITHUB_OUTPUT"
+            echo "include=[]" >> "$GITHUB_OUTPUT"
+            echo "presets=[]" >> "$GITHUB_OUTPUT"
+            echo "degraded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_gate=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout planner
+        if: steps.gate.outputs.should_gate == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts/tests
+      - name: Build shard matrix from plans
+        id: matrix
+        if: steps.gate.outputs.should_gate == 'true'
+        run: |
+          mode="${PR_CHECK_SHARD_COUNT:-1}"
+          python3 - << 'PY'
+          import json
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, ".github/scripts/tests")
+          import shard_graph
+          plans = []
+          for plan_path in sorted(Path("graphs").glob("*/shard_plan.json")):
+              try:
+                  parsed = json.loads(plan_path.read_text())
+              except json.JSONDecodeError as exc:
+                  parsed = {"_error": str(exc)}
+              plans.append((plan_path.parent.name, parsed))
+          rows, errors = shard_graph.matrix_rows_from_plans(plans)
+          presets = sorted({row["build_preset"] for row in rows})
+          Path("include.json").write_text(json.dumps(rows))
+          Path("presets.json").write_text(json.dumps(presets))
+          Path("errors.txt").write_text("\n".join(errors))
+          for error in errors:
+              print(f"plan error: {error}", file=sys.stderr)
+          PY
+          plans=$(find graphs -name shard_plan.json 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$mode" != "1" ] && [ "${plans:-0}" = "0" ]; then
+            echo "degraded=true" >> "$GITHUB_OUTPUT"
+            echo "has_shards=false" >> "$GITHUB_OUTPUT"
+            echo "include=[]" >> "$GITHUB_OUTPUT"
+            echo "presets=[]" >> "$GITHUB_OUTPUT"
+            echo "shard mode is on but no shard plan was uploaded"
+            exit 1
+          fi
+          count=$(python3 -c 'import json; print(len(json.load(open("include.json"))))')
+          if [ -s errors.txt ]; then
+            echo "degraded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "degraded=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$count" = "0" ]; then
+            echo "has_shards=false" >> "$GITHUB_OUTPUT"
+            echo "include=[]" >> "$GITHUB_OUTPUT"
+            echo "presets=[]" >> "$GITHUB_OUTPUT"
+            if [ -s errors.txt ]; then
+              exit 1
+            fi
+          else
+            echo "has_shards=true" >> "$GITHUB_OUTPUT"
+            echo "include=$(cat include.json)" >> "$GITHUB_OUTPUT"
+            echo "presets=$(cat presets.json)" >> "$GITHUB_OUTPUT"
+          fi
+
+  test_shard:
+    needs: [resolve, build_and_test, expand_shards]
+    if: needs.expand_shards.result == 'success' && needs.expand_shards.outputs.has_shards == 'true'
+    name: Test ${{ matrix.build_preset }} shard ${{ matrix.shard_id }}
+    timeout-minutes: 240
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.expand_shards.outputs.include || '[]') }}
+    steps:
+      - name: Record shard start
+        run: echo "SHARD_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.commit_sha }}
+          fetch-depth: 2
+          allow-unsafe-pr-checkout: true
+      - name: Checkout planner from this workflow
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts/tests
+          path: _planner
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Download graph and plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-graph-${{ matrix.build_preset }}-${{ github.run_id }}
+          path: test-graph
+      - name: Filter graph for shard ${{ matrix.shard_id }}
+        run: |
+          mkdir -p shard_graph
+          python3 _planner/.github/scripts/tests/shard_graph.py filter \
+            --graph test-graph/graph.json \
+            --context test-graph/context.json \
+            --plan test-graph/shard_plan.json \
+            --shard-id "${{ matrix.shard_id }}" \
+            -o shard_graph/graph.json \
+            --context-output shard_graph/context.json
+      - name: Run shard tests
+        id: run_tests
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
+          increment: false
+          run_tests: true
+          skip_graph_compare: true
+          prebuilt_graph_path: shard_graph/graph.json
+          prebuilt_context_path: shard_graph/context.json
+          s3_subdir: shard_${{ matrix.shard_id }}
+          publish_github_status: false
+          test_size: ${{ matrix.test_size }}
+          test_threads: ${{ matrix.threads_count }}
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          pull_number: ${{ inputs.pull_number }}
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Publish shard progress
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          SHARD_ID: ${{ matrix.shard_id }}
+          SHARD_RESULT: ${{ steps.run_tests.outcome }}
+        run: |
+          finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          job_url=$(python3 _planner/.github/scripts/tests/shard_progress.py job-url \
+            --run-id "$GITHUB_RUN_ID" \
+            --preset "${{ matrix.build_preset }}" \
+            --shard-id "$SHARD_ID" || true)
+          if [ -z "${job_url:-}" ]; then
+            job_url="$run_url"
+          fi
+          count=$(python3 -c 'import json; print(json.load(open("test-graph/shard_plan.json"))["shard_count"])')
+          python3 _planner/.github/scripts/tests/shard_progress.py publish \
+            --pr "$PR_NUMBER" \
+            --run-id "$GITHUB_RUN_ID" \
+            --preset "${{ matrix.build_preset }}" \
+            --target "${{ matrix.build_target }}" \
+            --shard-id "$SHARD_ID" \
+            --shard-count "$count" \
+            --result "${SHARD_RESULT:-failure}" \
+            --build-result "${{ steps.run_tests.outputs.build_result }}" \
+            --test-result "${{ steps.run_tests.outputs.test_result }}" \
+            --started-at "${SHARD_STARTED_AT}" \
+            --finished-at "$finished_at" \
+            --job-url "$job_url" \
+            --run-url "$run_url" \
+            --log-prefix "shard_${SHARD_ID}" \
+            --report "${LAST_BUILD_RESULTS_REPORT:-}" \
+            --state-output shard_event.json \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+      - name: Upload shard result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-event-${{ github.run_id }}-${{ matrix.build_preset }}-${{ matrix.shard_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: shard_event.json
+
+  shard_result:
+    needs: [resolve, build_and_test, expand_shards, test_shard]
+    if: always() && needs.expand_shards.outputs.should_gate == 'true' && (needs.expand_shards.outputs.has_shards == 'true' || needs.expand_shards.result == 'failure' || needs.expand_shards.outputs.degraded == 'true' || needs.build_and_test.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout progress script
+        if: always()
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts/tests
+      - name: Download shard results
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: shard-event-${{ github.run_id }}-*
+          path: shard-events
+      - name: Reconcile shard comments
+        if: always() && needs.expand_shards.result == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          PRESETS: ${{ needs.expand_shards.outputs.presets }}
+        run: |
+          for preset in $(printf '%s' "$PRESETS" | jq -r '.[]'); do
+            python3 .github/scripts/tests/shard_progress.py finalize \
+              --pr "$PR_NUMBER" \
+              --run-id "$GITHUB_RUN_ID" \
+              --preset "$preset" \
+              --state-dir shard-events \
+              --summary-file "$GITHUB_STEP_SUMMARY" || true
+          done
+      - name: Post preset statuses
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ needs.resolve.outputs.head_sha }}
+          PRESETS: ${{ needs.expand_shards.outputs.presets }}
+          BUILD_RESULT: ${{ needs.build_and_test.result }}
+        run: |
+          python3 .github/scripts/tests/shard_progress.py list-jobs --run-id "$GITHUB_RUN_ID" > jobs.json || echo '[]' > jobs.json
+          post() {
+            curl --retry 5 --retry-all-errors --retry-delay 2 -sS -X POST \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
+              -d "$1" || echo "warning: status post failed"
+          }
+          target="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -z "$PRESETS" ] || [ "$PRESETS" = "[]" ]; then
+            PRESETS='[]'
+          fi
+          for preset in $(printf '%s' "$PRESETS" | jq -r '.[]'); do
+            states=$(python3 .github/scripts/tests/shard_progress.py aggregate-statuses \
+              --preset "$preset" --state-dir shard-events --jobs jobs.json)
+            build_state=$(printf '%s\n' "$states" | awk -F= '$1=="build"{print $2}')
+            test_state=$(printf '%s\n' "$states" | awk -F= '$1=="tests"{print $2}')
+            if [ -n "$build_state" ]; then
+              if [ "$build_state" = "success" ]; then
+                build_message="Shard builds finished"
+              else
+                build_message="ya make failed"
+              fi
+              post "{\"state\":\"${build_state}\",\"description\":\"${build_message}\",\"context\":\"build_${preset}\",\"target_url\":\"${target}\"}"
+            fi
+            if [ -n "$test_state" ]; then
+              if [ "$test_state" = "success" ]; then
+                test_message="The check has been completed successfully"
+              else
+                test_message="The check has been failed"
+              fi
+              post "{\"state\":\"${test_state}\",\"description\":\"${test_message}\",\"context\":\"test_${preset}\",\"target_url\":\"${target}\"}"
+            fi
+          done
+          if [ "$BUILD_RESULT" = "failure" ]; then
+            python3 .github/scripts/tests/shard_progress.py missing-build \
+              --state-dir shard-events \
+              --jobs jobs.json \
+              --presets relwithdebinfo,release-asan \
+              | while IFS= read -r preset; do
+                [ -z "$preset" ] && continue
+                post "{\"state\":\"failure\",\"description\":\"Preset failed before tests\",\"context\":\"build_${preset}\",\"target_url\":\"${target}\"}"
+              done
+          fi
+      - name: Fail unless every shard succeeded
+        if: always()
+        run: |
+          expand="${{ needs.expand_shards.result }}"
+          shards="${{ needs.test_shard.result }}"
+          build="${{ needs.build_and_test.result }}"
+          degraded="${{ needs.expand_shards.outputs.degraded }}"
+          echo "build_and_test=$build expand_shards=$expand test_shard=$shards degraded=$degraded"
+          if [ "$expand" != "success" ] || [ "$degraded" = "true" ] || [ "$build" = "failure" ]; then
+            echo "A preset failed or its plan could not be read. Shards that were planned still ran."
+            exit 1
+          fi
+          if [ "$shards" != "success" ] && [ "$shards" != "skipped" ]; then
+            echo "A shard failed. See the PR comment and jobs named 'Test <preset> shard N'."
+            exit 1
+          fi

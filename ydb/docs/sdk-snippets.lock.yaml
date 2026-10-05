@@ -62,14 +62,14 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 1fc70b9b7df5dfeb7e70a6f57a456211c03a8a96
+    resolved-commit: 912c141d51f0e437ff0a41f3e8524880764d2e89
     include:
     - ydb_tech/topic/main.ts
     files:
       ydb_tech/topic/main.ts:
-        git-blob: f21f3a1e20f62bffdec4d431f5f0a394ea9ec9d3
-        size: 8238
-        sha256: d81d53faa4abc600de84957171f6a4c6fed174297936e60838643a9e92c0b4ba
+        git-blob: 29f133c669f80e06ff074d9d2e6f3cc3504aad85
+        size: 8430
+        sha256: 9956de07d6aa1358a74e8d9d6295b20fd8527c7249bfa3ee8fdcde87e140811d
   rust:
     repository: https://github.com/ydb-platform/ydb-rs-sdk
     requested-ref:
@@ -88,11 +88,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 6c790d30842a8a7b6e07dc2bd5653a2b923ab8c5
+    resolved-commit: e6e3f140a1cdf643cb8e2cfdc80822a2d52a2d33
     include:
     - ydb_tech/topic/main.cpp
     files:
       ydb_tech/topic/main.cpp:
-        git-blob: b75ee5d51a1ebcf42212835d14b88770ddfbcb3f
-        size: 22868
-        sha256: ba804e783b1233934565ff488e61bfd94e7e0ff60fff13d84dec48c42ba190bf
+        git-blob: 44533aa20e10bcbef4169251d8262db727987684
+        size: 23064
+        sha256: 8f2ac1b4266d5666708ab72fc4f901e5975a0af10e99a8e8a3b09cf80f691c9e

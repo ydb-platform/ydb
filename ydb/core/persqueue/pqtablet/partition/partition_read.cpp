@@ -31,41 +31,28 @@
 
 namespace NKikimr::NPQ {
 
-// now - min(max(topic lifetime, availability), user max lag).
-// Empty when retention must not cut the read: storage limit, or an unbounded lag
-// (Important, or no user max lag and an unbounded availability period).
-TMaybe<TInstant> RetentionReadFloor(ui32 maxTimeLagMs, const TUserInfoBase& userInfo, const NKikimrPQ::TPartitionConfig& partConfig, TInstant now) {
-    if (partConfig.HasStorageLimitBytes() && partConfig.GetStorageLimitBytes() > 0) {
-        return {};
+// TDuration::Max() means the caller set no finite lag.
+// Retention tightens it only when limitReadToRetention is set and the topic has no storage limit:
+// min(max(lifetime, availability), request max lag). Important passes availability = Max, so the
+// topic lifetime drops out and only the request lag remains.
+TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeriod, const NKikimrPQ::TPartitionConfig& partConfig, bool limitReadToRetention) {
+    const TDuration userMaxLag = requestMaxTimeLagMs > 0 ? TDuration::MilliSeconds(requestMaxTimeLagMs) : TDuration::Max();
+    if (!limitReadToRetention || (partConfig.HasStorageLimitBytes() && partConfig.GetStorageLimitBytes() > 0)) {
+        return userMaxLag;
     }
-
-    const TDuration topicBound = Max(TDuration::Seconds(partConfig.GetLifetimeSeconds()), GetAvailabilityPeriod(userInfo));
-    const TDuration userMaxLag = maxTimeLagMs > 0 ? TDuration::MilliSeconds(maxTimeLagMs) : TDuration::Max();
-    const TDuration bound = Min(topicBound, userMaxLag);
-    if (bound >= TDuration::Max() || now.MicroSeconds() < bound.MicroSeconds()) {
-        return {};
-    }
-    return now - bound;
+    return Min(Max(TDuration::Seconds(partConfig.GetLifetimeSeconds()), availabilityPeriod), userMaxLag);
 }
 
-TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx,
-                             bool limitReadToRetention = false, const TUserInfoBase* userInfo = nullptr,
-                             const NKikimrPQ::TPartitionConfig* partConfig = nullptr) {
-    TMaybe<TInstant> retentionFloor;
-    if (limitReadToRetention && userInfo && partConfig) {
-        retentionFloor = RetentionReadFloor(maxTimeLagMs, *userInfo, *partConfig, ctx.Now());
-    }
-
-    if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1) || retentionFloor)) {
+TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
+    const TInstant now = ctx.Now();
+    const bool hasLag = maxLag < TDuration::Max() && now.MicroSeconds() >= maxLag.MicroSeconds();
+    if (!hasLag && readTimestampMs == 0 && consumerReadFromTimestamp <= TInstant::MilliSeconds(1)) {
         return {};
     }
 
-    TInstant timestamp = maxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(maxTimeLagMs) : TInstant::Zero();
+    TInstant timestamp = hasLag ? now - maxLag : TInstant::Zero();
     timestamp = Max(timestamp, TInstant::MilliSeconds(readTimestampMs));
     timestamp = Max(timestamp, consumerReadFromTimestamp);
-    if (retentionFloor) {
-        timestamp = Max(timestamp, *retentionFloor);
-    }
     return timestamp;
 }
 
@@ -273,7 +260,15 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto now = ctx.Now();
 
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
-    auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
+    const TString& clientId = record.GetClientId();
+    const TUserInfo* reader = InitDone
+        ? UsersInfoStorage->GetIfExists(clientId.empty() ? CLIENTID_WITHOUT_CONSUMER : clientId)
+        : nullptr;
+    const TDuration availability = reader ? GetAvailabilityPeriod(*reader) : TDuration::Zero();
+    const TInstant consumerReadFrom = reader ? reader->ReadFromTimestamp : TInstant::Zero();
+    const bool limitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
+    const TDuration maxLag = ReadMaxLag(record.GetMaxTimeLagMs(), availability, Config.GetPartitionConfig(), limitReadToRetention);
+    auto readTimestamp = GetReadFrom(maxLag, record.GetReadTimestampMs(), consumerReadFrom, ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
     if (InitDone && !record.GetSessionId().empty()) {
@@ -987,8 +982,8 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     ui64 offset = read->Offset;
 
     ui64 readTimestampMs = read->ReadTimestampMs;
-    auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx,
-                                     read->LimitReadToRetention, userInfo, &Config.GetPartitionConfig());
+    const TDuration maxLag = ReadMaxLag(read->MaxTimeLagMs, GetAvailabilityPeriod(*userInfo), Config.GetPartitionConfig(), read->LimitReadToRetention);
+    auto readTimestamp = GetReadFrom(maxLag, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
     // Publish the bound into the result so readproxy drops messages written before it.
     if (read->LimitReadToRetention && readTimestamp) {
         readTimestampMs = readTimestamp->MilliSeconds();

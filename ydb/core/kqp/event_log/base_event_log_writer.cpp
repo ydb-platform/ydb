@@ -26,19 +26,8 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         return false;
     }
 
-    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(State.load()) << Endl;
+    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(State.load().Kind) << Endl;
 
-    if (State.load() == TState::Created) {
-        State.store(TState::Creating);
-
-        if (FlushInterval) {
-            NActors::TActivationContext::Register(
-                new TBaseEventLogAutoFlushActor(shared_from_this(), FlushInterval));
-        }
-        CreateOrUpdateStorage();
-    }
-
-    Cerr << "DEBUG: Append to batch " << message.TextMessage << Endl;
     TStringBuilder columnWriteErrors;
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         if (ErrorColumnIndex.has_value() && ErrorColumnIndex.value() == i) {
@@ -88,7 +77,23 @@ void TBaseEventLogWriter::Flush() {
     if (CurrentBatchSize == 0) {
         return;
     }
-    if (State.load() != TState::Working) {
+
+    // Check need to create storage
+    TState oldState = State.load();
+    TState newState = oldState;
+    oldState.Kind = TStateKind::Started;
+    newState.Kind = TStateKind::StorageCreating;
+    if (State.compare_exchange_strong(oldState, TState(TStateKind::StorageCreating))) {
+        if (FlushInterval) {
+            NActors::TActivationContext::Register(
+                new TBaseEventLogAutoFlushActor(shared_from_this(), FlushInterval));
+        }
+        CreateOrUpdateStorage();
+        return ;
+    }
+
+    // If storage should be created
+    if (State.load().Kind != TStateKind::Working) {
         Cerr << "DEBUG: TBaseEventLogWriter::Flush delay" <<  Endl;
         return;
     }

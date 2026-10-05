@@ -36,7 +36,7 @@ public:
     }
 
     virtual bool IsAlive() const {
-        return State.load() != TState::Stop;
+        return State.load().Kind != TStateKind::Stop;
     };
 
 protected:
@@ -51,14 +51,21 @@ protected:
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 
-    enum class TState {
-        Created = 1,
-        Creating = 2,
-        CreateError = 3,
+    enum class TStateKind : std::uint8_t {
+        Started = 1,
+        StorageCreating = 2,
+        StorageCreateError = 3,
         Working = 4,
         Stop = 5,
     };
-    std::atomic<TState> State {TState::Created};
+    struct TState {
+        TStateKind Kind {TStateKind::Started};
+        std::uint8_t CreateAttempCount{5};
+
+        TState() = default;
+        TState(TStateKind kind): Kind(kind) {};
+    };
+    std::atomic<TState> State {TState(TStateKind::Started)};
     unsigned CurrentBatchSize {0};
 };
 

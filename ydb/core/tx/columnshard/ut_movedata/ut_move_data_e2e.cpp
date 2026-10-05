@@ -13,7 +13,6 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
@@ -123,15 +122,20 @@ public:
         return writeIds;
     }
 
-    void CommitLock(const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
-        ReadStep = ProposeCommit(Runtime, Sender, TabletId, txId, writeIds, lockId);
+    // A lock whose commit was never proposed is aborted on boot, so a write that must stay uncommitted across a restart needs this first.
+    void ProposeLockCommit(const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+        Y_UNUSED(ProposeCommit(Runtime, Sender, TabletId, txId, writeIds, lockId));
+    }
+
+    // The proposal's own min step is long past by now, so plan at the step after the shard's latest.
+    void PlanProposedCommit(const ui64 txId) {
+        ReadStep = TPlanStep{ Controller->GetTheOnlyShard()->GetLastPlannedSnapshot().GetPlanStep() + 1 };
         PlanCommit(Runtime, Sender, TabletId, ReadStep, TSet<ui64>{ txId });
     }
 
-    // What the lock service answers once the lock's owner is gone: the shard aborts the writes under it.
-    void ReportLockGone(const ui64 lockId) {
-        Runtime.SendToPipe(TabletId, Sender, new NLongTxService::TEvLongTxService::TEvLockStatus(lockId, /*lockNode=*/1,
-                                                 NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND), 0, GetPipeConfigWithRetries());
+    // What kqp sends when it gives up on a proposal: the shard aborts the writes under the lock.
+    void CancelProposedCommit(const ui64 txId) {
+        Runtime.SendToPipe(TabletId, Sender, new TEvDataShard::TEvCancelTransactionProposal(txId), 0, GetPipeConfigWithRetries());
     }
 
     // Reassign past everything written so far: those portions stay behind in OldGroup.
@@ -372,12 +376,14 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Write(1, 0, 1000);
         const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
+        // Proposed but left unplanned, so the write survives the restart below and still holds no commit snapshot.
+        f.ProposeLockCommit(3, writeIds, 7);
         f.ReassignPastWrittenData();
 
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
 
-        f.CommitLock(3, writeIds, 7);
+        f.PlanProposedCommit(3);
         const auto response = f.DriveGateWithWrite(150, 4, 1001, 1002);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write committed");
         f.AssertDrainedSuccess(response);
@@ -389,15 +395,17 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(SuccessWaitsForAbortedWriteToBeCleanedUp) {
         TMoveDataFixture f;
         f.Write(1, 0, 1000);
-        f.WriteUncommitted(100, 5000, 5010, 7);
+        const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
+        // Proposed but left unplanned, so the write survives the restart below and can be aborted on demand afterwards.
+        f.ProposeLockCommit(3, writeIds, 7);
         f.ReassignPastWrittenData();
 
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
 
-        f.ReportLockGone(7);
-        const auto response = f.DriveGateWithWrite(150, 3, 1001, 1002);
+        f.CancelProposedCommit(3);
+        const auto response = f.DriveGateWithWrite(150, 4, 1001, 1002);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write aborted");
         f.AssertDrainedSuccess(response);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1001);

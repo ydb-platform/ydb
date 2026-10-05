@@ -1,3 +1,4 @@
+import {loadChartKit} from './chartkit.js';
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
  const fmt=v=>v===null||v===undefined?'\u2014':typeof v==='string'?v:Number(v).toLocaleString(undefined,{maximumSignificantDigits:3});
 export const defaultChartSettings={type:'line',fill:false,format:'',height:360,unit:'number',precision:null,min:null,max:null};
@@ -92,7 +93,6 @@ export function createMetricChartCursorGroup(){
 }
 export function createMetricChart(chart,options={}){
  const hidden=new Set();
- if(!document.querySelector('link[data-metric-chartkit]')){const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('./chartkit.css',import.meta.url).href;link.dataset.metricChartkit='';document.head.append(link);}
  let unmount=null,generation=0;
  let settings={...defaultChartSettings,...options.settings};
  const format=value=>formatMetricValue(value,settings);
@@ -118,7 +118,7 @@ export function createMetricChart(chart,options={}){
   const H=innerWidth<=650?Math.min(settings.height,260):settings.height;
   const axisWidth=Math.max(options.plotLeft||55,...labels.map(label=>label.length*7+14));
   const host=text('div','','ymc-canvas');host.style.height=H+'px';host.setAttribute('role','img');host.setAttribute('aria-label',title+' comparison chart');chart.append(host);
-  import('./chartkit.js').then(({mountChartKit})=>{
+  loadChartKit().then(({mountChartKit})=>{
    if(destroyed||current!==generation)return;
    unmount=mountChartKit(host,{
     data:{timeline:prepared.timeline,graphs:prepared.graphs},

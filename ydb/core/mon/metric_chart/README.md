@@ -3,7 +3,8 @@
 Add `ydb/core/mon/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
 setup, call `NKikimr::NMetricChart::RegisterResources(mon)` once. This publishes
 `static/metric-chart/chart.js`, `client.js` and `chart.css` from binary resources.
-ChartKit, its Yagr Canvas renderer, React and styles are bundled into the binary.
+The existing monitoring UI must also be served by the node. Its shared resources
+provide ChartKit, Yagr, React and styles; the chart component adds no dependency bundle.
 No external CDN or browser-side package resolution is required.
 
 Load the stylesheet and import the modules relative to the monitoring root.
@@ -125,26 +126,24 @@ Pointer positions use the Canvas plot overlay and Yagr's coordinate conversion.
 Layout width is measured before replacing content, to avoid measuring the
 temporary disappearance of a page scrollbar during redraw.
 
-### Updating the bundled engine
+### Shared monitoring engine
 
-`vendor/entry.js` mounts ChartKit with its Yagr plugin behind the plain JavaScript
-chart API. It retains our exact-value tooltip, legend, cursor groups and range
-selection. ChartKit assets are lazy-loaded on the first nonempty chart.
-The adapter aligns independent histories to one timeline, retaining both sides
-of on-change transitions and null gaps. Stacked areas use explicit Canvas bands
-so positive and negative layers remain separate; tooltip and statistics still
-read original samples. The existing client limits apply before alignment.
+ChartKit, Yagr and React are built by `ydb-embedded-ui`, using its existing
+package manifest and lockfile. The monitoring build has two entry points:
+its application and a small `metricChart` embedding entry. Both use one
+runtime and shared dependency chunks. The metric chart adapter contains no
+vendored JavaScript dependencies or separate npm package.
 
-To regenerate the checked-in resources:
+`chartkit.js` loads `/monitoring/static/js/metric-chart-assets.json`, then its
+CSS and scripts in dependency order. The embedding entry exposes
+`window.YdbMetricChartKit.mountChartKit`; it does not start the monitoring
+application. All assets are served from the node, without a CDN.
 
-```bash
-cd ydb/core/mon/metric_chart/vendor
-npm ci
-npm run build
-node --test ../tests/chart_data.test.mjs
-```
+The shared entry is proposed in
+[ydb-embedded-ui#4464](https://github.com/ydb-platform/ydb-embedded-ui/pull/4464).
+It must be released and imported by the existing monitoring UI pipeline before
+this adapter can be enabled. Do not regenerate or edit the checked-in
+`ydb/core/viewer/monitoring` bundle as part of this component change.
 
-Commit `chartkit.js`, `chartkit.css`, their `.LEGAL.txt` notices and
-`vendor/THIRD_PARTY_LICENSES.txt` together with the entry, build script and lockfile.
-The C++ build embeds these assets directly and does not invoke npm or require
-network access to build the bundle.
+The C++ build embeds the resources provided by the monitoring UI pipeline;
+this component does not run npm or maintain a separate dependency lockfile.

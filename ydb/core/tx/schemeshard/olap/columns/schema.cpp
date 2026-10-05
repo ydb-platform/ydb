@@ -69,6 +69,21 @@ bool TOlapColumnsDescription::ApplyUpdate(
                     << newColumn.GetName() << "'");
                 return false;
             }
+            if (columnDiff.GetNotNull().has_value() && *columnDiff.GetNotNull() != newColumn.IsNotNull()) {
+                for (const auto& [_, column] : Columns) {
+                    if (!column.GetDefaultFromExpression()) {
+                        continue;
+                    }
+                    for (const auto& dependency : column.GetDefaultFromExpression()->GetDependencyColumnNames()) {
+                        if (dependency == newColumn.GetName()) {
+                            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                                << "Can't change nullability of column '" << newColumn.GetName()
+                                << "': it is used by generated column '" << column.GetName() << "'");
+                            return false;
+                        }
+                    }
+                }
+            }
             if (!newColumn.ApplyDiff(columnDiff, errors)) {
                 return false;
             }

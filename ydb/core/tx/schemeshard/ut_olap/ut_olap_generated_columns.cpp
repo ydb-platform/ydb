@@ -58,6 +58,119 @@ void CheckGeneratedDescriptor(TTestBasicRuntime& runtime, ui32 expectedPhysicalI
 }
 
 Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
+    Y_UNIT_TEST(BackupRejectsVirtualGeneratedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", ValidGeneratedTable);
+        env.TestWaitNotification(runtime, txId);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
+
+        for (bool internal : {false, true}) {
+            auto* request = BackupRequest(++txId, "/MyRoot", R"(
+                TableName: "GeneratedTable"
+                S3Settings { Endpoint: "localhost:1" Scheme: HTTP }
+            )");
+            if (internal) {
+                request = InternalTransaction(request);
+            }
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed,
+                "Cannot backup table with generated column 'derived'"}});
+            CheckGeneratedDescriptor(runtime);
+        }
+    }
+
+    Y_UNIT_TEST(DropNotNullOnGeneratedDependencyRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GeneratedTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "source" Type: "Int64" NotNull: true }
+                Columns {
+                    Name: "derived"
+                    Type: "Int64"
+                    NotNull: true
+                    DefaultFromExpression {
+                        ExprText: "source + 1"
+                        DependencyColumnNames: "source"
+                        Stored: false
+                    }
+                }
+                KeyColumnNames: "key"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GeneratedTable"
+            AlterSchema { AlterColumns { Name: "source" NotNull: false } }
+        )", {{NKikimrScheme::StatusSchemeError,
+            "Can't change nullability of column 'source': it is used by generated column 'derived'"}});
+
+        const auto describe = DescribePrivatePath(runtime, "/MyRoot/GeneratedTable");
+        const auto& schema = describe.GetPathDescription().GetColumnTableDescription().GetSchema();
+        UNIT_ASSERT(FindColumn(schema, "source").GetNotNull());
+        UNIT_ASSERT(FindColumn(schema, "derived").GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(FindColumn(schema, "derived").GetDefaultFromExpression().GetExprText(), "source + 1");
+    }
+
+    Y_UNIT_TEST(SetNotNullOnGeneratedDependencyRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", ValidGeneratedTable);
+        env.TestWaitNotification(runtime, txId);
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GeneratedTable"
+            AlterSchema { AlterColumns { Name: "source" NotNull: true } }
+        )", {{NKikimrScheme::StatusSchemeError,
+            "Can't change nullability of column 'source': it is used by generated column 'derived'"}});
+
+        const auto describe = DescribePrivatePath(runtime, "/MyRoot/GeneratedTable");
+        const auto& schema = describe.GetPathDescription().GetColumnTableDescription().GetSchema();
+        UNIT_ASSERT(!FindColumn(schema, "source").GetNotNull());
+        CheckGeneratedDescriptor(runtime);
+    }
+
+    Y_UNIT_TEST(SetColumnConstraintRejectsGeneratedDependency) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        runtime.GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", ValidGeneratedTable);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto response = TestSetColumnConstraint(runtime, ++txId, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/GeneratedTable", {"source"});
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(response.IssuesSize(), 1, response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "path is not a table");
+
+        const auto describe = DescribePrivatePath(runtime, "/MyRoot/GeneratedTable");
+        const auto& schema = describe.GetPathDescription().GetColumnTableDescription().GetSchema();
+        UNIT_ASSERT(!FindColumn(schema, "source").GetNotNull());
+        CheckGeneratedDescriptor(runtime);
+    }
+
     Y_UNIT_TEST(CreatePersistsAndUnrelatedAlterKeepsLogicalIds) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

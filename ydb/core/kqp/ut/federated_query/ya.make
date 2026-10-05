@@ -4,6 +4,6 @@ RECURSE_FOR_TESTS(
     datastreams
     generic_ut
     large_results
-    native_ydb
+    ydb_external
     s3
 )

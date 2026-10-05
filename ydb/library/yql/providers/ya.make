@@ -10,6 +10,6 @@ RECURSE(
     s3
     solomon
     ydb
-    ydb_remote
+    ydb_external
     yt
 )

@@ -28,7 +28,7 @@ namespace NKqpProto {
 }  // namespace NKqpProto
 
 namespace NYql {
-    class IYdbRemoteMetadataClientCache;
+    class IYdbExternalMetadataClientCache;
 }
 
 namespace NKikimr::NKqp {
@@ -49,15 +49,15 @@ namespace NKikimr::NKqp {
     // Separate from the topic driver, with a gRPC message-size limit. TLS and
     // plaintext clients require independently constructed drivers: the existing
     // SDK channel pool does not include TLS settings in its cache identity.
-    std::shared_ptr<NYdb::TDriver> MakeNativeYdbDriver();
+    std::shared_ptr<NYdb::TDriver> MakeYdbExternalDriver();
 
     // Factory registration is unconditional, while drivers and metadata clients
-    // are initialized only when native compilation or execution needs them.
-    class TNativeYdbResources {
+    // are initialized only when YdbExternal metadata loading or execution needs them.
+    class TYdbExternalResources {
     public:
-        TNativeYdbResources();
+        TYdbExternalResources();
         std::shared_ptr<NYdb::TDriver> GetDriver(bool useTls);
-        std::shared_ptr<NYql::IYdbRemoteMetadataClientCache> GetMetadataClientCache();
+        std::shared_ptr<NYql::IYdbExternalMetadataClientCache> GetMetadataClientCache();
 
     private:
         class TImpl;
@@ -77,7 +77,7 @@ namespace NKikimr::NKqp {
         // it outlives all other objects here that might hold
         // gRPC contexts, preventing deadlocks during graceful shutdown.
         std::shared_ptr<NYdb::TDriver> Driver;
-        std::shared_ptr<TNativeYdbResources> NativeYdbResources;
+        std::shared_ptr<TYdbExternalResources> YdbExternalResources;
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
@@ -145,7 +145,7 @@ namespace NKikimr::NKqp {
         NYql::TPqGatewayConfig PqGatewayConfig;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
-        std::shared_ptr<TNativeYdbResources> NativeYdbResources = std::make_shared<TNativeYdbResources>();
+        std::shared_ptr<TYdbExternalResources> YdbExternalResources = std::make_shared<TYdbExternalResources>();
         std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
         TScriptExecutionSettings ScriptExecutionSettings;
     };
@@ -195,7 +195,7 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                Driver, NativeYdbResources, HttpGateway, ConnectorClient, CredentialsFactory,
+                Driver, YdbExternalResources, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 ComputationFactory, S3ReadActorFactoryConfig,
@@ -225,7 +225,7 @@ namespace NKikimr::NKqp {
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
-        std::shared_ptr<TNativeYdbResources> NativeYdbResources = std::make_shared<TNativeYdbResources>();
+        std::shared_ptr<TYdbExternalResources> YdbExternalResources = std::make_shared<TYdbExternalResources>();
         TScriptExecutionSettings ScriptExecutionSettings;
     };
 

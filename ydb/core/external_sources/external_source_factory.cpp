@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
@@ -135,8 +135,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources,
-                                                         bool enableNativeYdbProvider) {
+                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -157,7 +156,11 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{enableNativeYdbProvider ? NYql::YdbRemoteProviderName : NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::YdbExternal),
+            CreateExternalDataSource(TString{NYql::YdbExternalProviderName}, {"NONE", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

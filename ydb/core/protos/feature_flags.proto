@@ -444,6 +444,4 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
-    // Selects the native external YDB provider when compiling new query plans.
-    optional bool EnableNativeYdbProvider = 362 [default = false];
 }

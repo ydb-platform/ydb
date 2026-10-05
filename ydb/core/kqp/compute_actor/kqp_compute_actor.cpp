@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/library/yql/providers/ydb_remote/actors/dq_ydb_remote_read_actor.h>
+#include <ydb/library/yql/providers/ydb_external/actors/dq_ydb_external_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
@@ -206,11 +206,10 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
 
-        // Actor registration is independent of the compile-time provider flag:
-        // existing plans must retain their implementation after a flag change.
-        Y_VALIDATE(federatedQuerySetup->NativeYdbResources, "Missing native YDB resources");
-        NYql::NDq::RegisterYdbRemoteReadActorFactory(
-            *factory, [resources = federatedQuerySetup->NativeYdbResources](bool useTls) {
+        // Register the runtime independently of compilation-time availability.
+        Y_VALIDATE(federatedQuerySetup->YdbExternalResources, "Missing YdbExternal resources");
+        NYql::NDq::RegisterYdbExternalReadActorFactory(
+            *factory, [resources = federatedQuerySetup->YdbExternalResources](bool useTls) {
                 return *resources->GetDriver(useTls);
             },
             federatedQuerySetup->CredentialsFactory);

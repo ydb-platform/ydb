@@ -24,7 +24,11 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Modify the configuration file `config.yaml` by changing the value of parameter `state_storage_self_heal_config.enable` to `true` or `false`:
+2. Modify the configuration file `config.yaml` by changing the value of parameter `state_storage_self_heal_config.enable` to `true` or `false`.
+
+    SelfHeal requires Sentinel to be enabled: set `cms_config.sentinel_config.enable` to `true` in the `config` section of `config.yaml`. Apply the changes in step 3.
+
+    Example configuration with Sentinel and SelfHeal enabled:
 
     ```yaml
     config:

@@ -24,7 +24,11 @@ SelfHeal подсистем распространения метаданных 
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Измените конфигурационный файл `config.yaml`. Для этого поменяйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
+2. Измените конфигурационный файл `config.yaml`. Для этого поменяйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`.
+
+    Для работы SelfHeal необходимо включить Sentinel: установите параметр `cms_config.sentinel_config.enable` в значение `true` в секции `config` файла `config.yaml`. Примените изменения на шаге 3.
+
+    Пример конфигурации с включёнными Sentinel и SelfHeal:
 
     ```yaml
     config:

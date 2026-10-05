@@ -1,10 +1,22 @@
 #include "manager.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {
+
+void TOperationsManager::BreakReadLocksForTable(const TUnifiedPathId& pathId) {
+    for (auto& [_, lock] : LockFeatures) {
+        for (const auto& event : lock.GetEvents()) {
+            if (event->GetClassName() == NOlap::NTxInteractions::TEvReadStart::GetClassNameStatic() && event->GetPathId() == pathId) {
+                lock.SetBroken();
+                break;
+            }
+        }
+    }
+}
 
 void TLockFeatures::SetTxId(const ui64 txId) {
     AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);

@@ -343,6 +343,14 @@ public:
         return ShardActuals.size();
     }
 
+    const ::NKikimr::NColumnShard::TColumnShard* GetAnyShard() const {
+        TGuard<TMutex> g(Mutex);
+        if (ShardActuals.size() != 1) {
+            return nullptr;
+        }
+        return ShardActuals.begin()->second;
+    }
+
     const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
         TGuard<TMutex> g(Mutex);
         AFL_VERIFY(ShardActuals.size() == 1);

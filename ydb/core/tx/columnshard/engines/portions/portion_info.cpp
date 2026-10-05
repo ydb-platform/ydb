@@ -62,7 +62,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
     if (HasRemoveSnapshot()) {
-        sb << "remove_snapshot:(" << RemoveSnapshot.Get().DebugString() << ");";
+        sb << "remove_snapshot:(" << GetRemoveSnapshotVerified().DebugString() << ");";
     }
     return sb << ")";
 }
@@ -80,7 +80,7 @@ void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, 
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
     if (HasRemoveSnapshot()) {
-        *proto.MutableRemoveSnapshot() = RemoveSnapshot.Get().SerializeToProto();
+        *proto.MutableRemoveSnapshot() = GetRemoveSnapshotVerified().SerializeToProto();
     }
 
     // Removal is serialized separately; metadata keeps the original physical type.

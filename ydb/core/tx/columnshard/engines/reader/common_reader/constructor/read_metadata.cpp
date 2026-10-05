@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
@@ -171,8 +172,22 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
         return;
     }
 
-    auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
-        GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
+    const auto pathId = TableMetadataAccessor->GetPathIdVerified();
+    if (!owner.GetTablesManager().GetCopyVersionOptional(pathId.GetSchemeShardLocalPathId())) {
+        const auto& truncates = owner.GetTablesManager()
+                                    .GetPrimaryIndexAsVerified<TColumnEngineForLogs>()
+                                    .GetGranuleVerified(pathId.InternalPathId)
+                                    .GetTruncateSnapshots();
+        if (truncates.upper_bound(GetRequestSnapshot()) != truncates.end()) {
+            // This read started after truncate, so it was not present when the table's
+            // existing locks were broken. A transaction using the older state must fail.
+            BreakLock();
+            return;
+        }
+    }
+
+    auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
+        pathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 

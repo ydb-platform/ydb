@@ -50,6 +50,8 @@ public:
     {
     }
 
+    bool IsCancelled(const TColumnEngineForLogs& engine) const override;
+
     const TRemovePortionsChange& GetPortionsToRemove() const {
         return PortionsToRemove;
     }

@@ -1,5 +1,6 @@
 #include "test_path_id_translator.h"
 
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/snapshot_holders.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
@@ -38,6 +39,67 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
             registryBuilder->AddSnapshot({ tableId }, snapshot);
         }
         return TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>(std::move(*registryBuilder).Build().release());
+    }
+
+    Y_UNIT_TEST(TruncateVisibilityAndSnapshotRetention) {
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        auto portion = NTest::MakeTestCompactedPortion(pathId, 1, 0, 9, 10, Step(1), std::nullopt);
+        portion->SetRemoveSnapshot(Step(10));
+
+        UNIT_ASSERT(portion->HasRemoveSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(portion->GetRemoveSnapshotVerified(), Step(10));
+        UNIT_ASSERT(portion->IsVisible(Step(9)));
+        UNIT_ASSERT(!portion->IsVisible(Step(10)));
+        UNIT_ASSERT(!portion->MayGetForScanAt(Step(10)));
+        UNIT_ASSERT(TSnapshotHoldersPerTable(Step(9), {}).CouldUsePortion(portion));
+        UNIT_ASSERT(TSnapshotHoldersPerTable(Step(20), { Step(5) }).CouldUsePortion(portion));
+        UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), { Step(15) }).CouldUsePortion(portion));
+        UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), {}).CouldUsePortion(portion));
+
+        NKikimrColumnShardDataSharingProto::TPortionInfo proto;
+        portion->SerializeToProto({ TUnifiedBlobId(1, TLogoBlobID(1, 1, 1, 1, 100, 0)) }, proto);
+        UNIT_ASSERT(proto.HasRemoveSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetRemoveSnapshot().GetPlanStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetRemoveSnapshot().GetTxId(), 1);
+    }
+
+    Y_UNIT_TEST(TruncatePrecedesBackgroundRemoval) {
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        const TSnapshot truncate(10, 5);
+        for (const auto physicalRemove : { TSnapshot(10, 100), Step(20) }) {
+            auto portion = NTest::MakeTestCompactedPortion(pathId, 1, 0, 9, 10, Step(1), physicalRemove);
+            const auto& publishedRemoval = portion->GetRemoveSnapshotVerified();
+            portion->SetTruncateSnapshot(truncate);
+            portion->SetTruncateSnapshot(truncate);
+            portion->SetTruncateSnapshot(Step(30));
+            UNIT_ASSERT_VALUES_EQUAL(publishedRemoval, physicalRemove);
+            UNIT_ASSERT_VALUES_EQUAL(portion->GetRemoveSnapshotVerified(), truncate);
+            UNIT_ASSERT_VALUES_EQUAL(*portion->GetRemoveSnapshotOptional(), truncate);
+            UNIT_ASSERT(portion->IsVisible(TSnapshot(10, 4)));
+            UNIT_ASSERT(!portion->IsVisible(truncate));
+            UNIT_ASSERT(!portion->MayGetForScanAt(truncate));
+            UNIT_ASSERT(TSnapshotHoldersPerTable(Step(30), { Step(9) }).CouldUsePortion(portion));
+            UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(30), { Step(11) }).CouldUsePortion(portion));
+            NKikimrColumnShardDataSharingProto::TPortionInfo proto;
+            portion->SerializeToProto({ TUnifiedBlobId(1, TLogoBlobID(1, 1, 1, 1, 100, 0)) }, proto);
+            UNIT_ASSERT_VALUES_EQUAL(proto.GetRemoveSnapshot().GetPlanStep(), truncate.GetPlanStep());
+            UNIT_ASSERT_VALUES_EQUAL(proto.GetRemoveSnapshot().GetTxId(), truncate.GetTxId());
+        }
+        auto earlier = NTest::MakeTestCompactedPortion(pathId, 2, 0, 9, 10, Step(1), Step(5));
+        earlier->SetTruncateSnapshot(truncate);
+        UNIT_ASSERT_VALUES_EQUAL(earlier->GetRemoveSnapshotVerified(), Step(5));
+    }
+
+    Y_UNIT_TEST(CleanupConflictsWithInternalTasks) {
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        const auto portion = MakePortion(1, std::nullopt, pathId, 1);
+        const std::vector<TPortionInfo::TConstPtr> portions{ portion };
+        for (const auto category : { NDataLocks::ELockCategory::Compaction, NDataLocks::ELockCategory::Actualization }) {
+            NDataLocks::TListPortionsLock task("task", portions, category);
+            NDataLocks::TListPortionsLock cleanup("cleanup", portions, NDataLocks::ELockCategory::Cleanup);
+            UNIT_ASSERT(task.IsLocked(*portion, NDataLocks::ELockCategory::Cleanup));
+            UNIT_ASSERT(cleanup.IsLocked(*portion, category));
+        }
     }
 
     void CheckInactivePortionSerialization(const bool written) {

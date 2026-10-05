@@ -40,9 +40,11 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
     for (auto&& i : SwitchedPortions) {
         portionGroups[i->GetMeta().GetCompactionLevel()].AddPortion(i);
-        if (i->GetProduced() == NPortion::EProduced::INSERTED) {
+        // A truncate may deactivate inputs while this task is constructing its output.
+        // Their physical type remains stable even when GetProduced() becomes INACTIVE.
+        if (i->GetPortionType() == EPortionType::Written) {
             insertedPortions.AddPortion(i);
-        } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
+        } else if (i->GetPortionType() == EPortionType::Compacted) {
             compactedPortions.AddPortion(i);
         } else {
             AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());

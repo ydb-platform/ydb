@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/truncate.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
@@ -138,6 +139,8 @@ private:
 
     mutable bool AllowInsertionFlag = false;
     const TInternalPathId PathId;
+    std::shared_ptr<const TTruncateSnapshots> TruncateSnapshots = std::make_shared<const TTruncateSnapshots>();
+    bool TruncatePending = false;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -173,6 +176,23 @@ private:
     bool DataAccessorConstructed = false;
 
 public:
+    void SetTruncatePending(const bool pending) {
+        TruncatePending = pending;
+    }
+
+    const TTruncateSnapshots& GetTruncateSnapshots() const {
+        return *TruncateSnapshots;
+    }
+
+    void BindTruncateSnapshots(std::shared_ptr<const TTruncateSnapshots> snapshots) {
+        AFL_VERIFY(snapshots);
+        AFL_VERIFY(TruncateSnapshots->empty());
+        TruncateSnapshots = std::move(snapshots);
+    }
+
+    std::optional<TSnapshot> GetApplicableTruncateSnapshot(const TPortionInfo& portion) const;
+    void ApplyTruncateSnapshots(TPortionInfo& portion) const;
+
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
@@ -346,7 +366,9 @@ public:
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
 
     NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
-        return OptimizerPlanner->GetUsefulMetric();
+        // Writes accepted before propose may finish on either side of the plan
+        // snapshot. Do not merge them until the truncate boundary is known.
+        return TruncatePending ? NStorageOptimizer::TOptimizationPriority::Zero() : OptimizerPlanner->GetUsefulMetric();
     }
 
     void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {

@@ -719,6 +719,84 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         }
     }
 
+    Y_UNIT_TEST(DropLastCopyAfterLegacySourceDrop) {
+        TTestBasicRuntime runtime;
+        SetupCopyTableTestRuntime(runtime);
+        auto csControllerGuard = RegisterCopyTableTestController<TCopyTableDropTestController>();
+        auto& csController = *csControllerGuard.operator->();
+        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        constexpr ui64 srcPathId = 1;
+        constexpr ui64 copyPathId = 2;
+        constexpr ui64 auxPathId = 99;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 auxTxId = 1000;
+        int auxWriteId = 1000;
+        const auto auxPlan = ProposeSchemaTx(runtime, sender,
+            TTestSchema::CreateTableTxBody(auxPathId, testTable.Standalone, testTable.Schema, testTable.Pk, {}, /*generation=*/1), ++auxTxId);
+        PlanSchemaTx(runtime, sender, { auxPlan, auxTxId });
+
+        ui64 txId = 10;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto* shard = WaitForShard(csController, runtime);
+        const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(copyPathId), false);
+        UNIT_ASSERT(internalPathId);
+
+        // Before 37a93ef12d2, DROP persisted the source's drop snapshot in both
+        // metadata tables even while a live copy retained the same internal path.
+        // Reproduce that on-disk state and load it with the current implementation.
+        const NOlap::TSnapshot legacyDropSnapshot(planStep.Val() + 1, ++txId);
+        const TString query = Sprintf(R"___(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let keyV1 '('('PathId (Uint64 '%lu)) '('SchemeShardLocalPathId (Uint64 '%lu))))
+                (let update '('('DropStep (Uint64 '%lu)) '('DropTxId (Uint64 '%lu))))
+                (return (AsList
+                    (UpdateRow 'TableInfo key update)
+                    (UpdateRow 'TableInfoV1 keyV1 update)))
+            )
+        )___", internalPathId->GetRawValue(), internalPathId->GetRawValue(), srcPathId, legacyDropSnapshot.GetPlanStep(),
+            legacyDropSnapshot.GetTxId());
+        auto evTx = std::make_unique<TEvTablet::TEvLocalMKQL>();
+        evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evTx.release());
+        auto response = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrProto::OK, response->Get()->Record.DebugString());
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT_VALUES_EQUAL(shard->GetTablesManager().GetTable(*internalPathId).GetPathIds().size(), 2);
+        UNIT_ASSERT(shard->GetTablesManager().GetCopyVersionOptional(TSchemeShardLocalPathId::FromRawValue(copyPathId)));
+        AssertPathsToDropState(*shard, *internalPathId, false);
+        UNIT_ASSERT(CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), srcPathId));
+
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyPathId, 2), ++txId);
+        const NOlap::TSnapshot copyDropSnapshot(Max(planStep.Val(), legacyDropSnapshot.GetPlanStep() + 1), txId);
+        PlanSchemaTx(runtime, sender, copyDropSnapshot);
+        shard = WaitForShard(csController, runtime);
+        const auto& table = shard->GetTablesManager().GetTable(*internalPathId, /*withDeleted=*/true);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPathIds().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetDropVersionVerified(), legacyDropSnapshot);
+        UNIT_ASSERT(!CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId));
+
+        // GC must find the path using the remaining source alias's older snapshot.
+        // Without the fix it is registered under the newer copy-drop snapshot,
+        // and TryFinalizeDropPathOnExecute aborts when looking up the older key.
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+        const auto advancePlanStep = [&] {
+            AdvanceShardPlanStep(runtime, sender, auxTxId, auxWriteId, auxPathId, testTable);
+        };
+        UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender, advancePlanStep));
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(!shard->GetTablesManager().HasTable(*internalPathId, /*withDeleted=*/true));
+        UNIT_ASSERT(!CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), srcPathId));
+    }
+
     // Drop source first while read-only copies still exist, then drop copies one by one.
     // The internal path must enter PathsToDrop only after the last copy is removed, then cleanup erases it.
     Y_UNIT_TEST(DropSourceThenReadOnlyCopiesAddedToPathsToDropAndCleanedUp) {

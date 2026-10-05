@@ -460,9 +460,6 @@ void TTablesManager::DropTable(
     const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
     const bool isPartialDrop = table->GetPathIds().size() > 1;
     table->SetDropVersion(schemeShardLocalPathId, version);
-    if (table->IsDropped()) {
-        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
-    }
     if (isReadOnly) {
         RebuildReadOnlyTablesSnapshots();
     } else if (!isPartialDrop) {
@@ -478,6 +475,11 @@ void TTablesManager::DropTable(
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
     } else {
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    }
+    // GC looks up this key using the remaining aliases' maximum drop snapshot.
+    // Register it after removing the dropped alias, which may change that maximum.
+    if (table->IsDropped()) {
+        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
     }
 }
 

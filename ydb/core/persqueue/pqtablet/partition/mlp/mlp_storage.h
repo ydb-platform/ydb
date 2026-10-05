@@ -471,7 +471,6 @@ private:
         size_t UnlockedMessageGroupsIdSize() const;
         bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
         void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
-        // STD only: keep the group in the unlocked fairness order iff eligible.
         void SetUnlockedEligibility(ui32 messageGroupIdHash, bool eligible);
         const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
         TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();

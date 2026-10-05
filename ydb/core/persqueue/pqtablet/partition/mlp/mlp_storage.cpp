@@ -771,22 +771,11 @@ static bool TrackMessageStatusInLockedGroups(const TStorage::TMessage& message) 
 }
 
 void TStorage::TMessageGroups::UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash) {
-    if (locked.IsAccessible()) {
-        auto [uIt, uIns] = UnlockedMessageGroupsId.insert(messageGroupIdHash);
-        if (uIns) {
-            const TIntrusiveListItem<TOrderedMessageGroupIdHash>& pc = *uIt;
-            // the base class cannot be declared as mutable
-            TIntrusiveListItem<TOrderedMessageGroupIdHash>& p = const_cast<TIntrusiveListItem<TOrderedMessageGroupIdHash>&>(pc);
-            UnlockedMessageGroupsIdViewOrder.PushBack(&p);
-        }
-        LockedMessageGroupsId.erase(messageGroupIdHash);
+    SetUnlockedEligibility(messageGroupIdHash, locked.IsAccessible());
+    if (locked.LockedSelf) {
+        LockedMessageGroupsId.insert(messageGroupIdHash);
     } else {
-        UnlockedMessageGroupsIdErase(messageGroupIdHash);
-        if (locked.LockedSelf) {
-            LockedMessageGroupsId.insert(messageGroupIdHash);
-        } else {
-            LockedMessageGroupsId.erase(messageGroupIdHash);
-        }
+        LockedMessageGroupsId.erase(messageGroupIdHash);
     }
 }
 
@@ -795,6 +784,7 @@ void TStorage::TMessageGroups::SetUnlockedEligibility(ui32 messageGroupIdHash, b
         auto [uIt, uIns] = UnlockedMessageGroupsId.insert(messageGroupIdHash);
         if (uIns) {
             const TIntrusiveListItem<TOrderedMessageGroupIdHash>& pc = *uIt;
+            // the base class cannot be declared as mutable
             TIntrusiveListItem<TOrderedMessageGroupIdHash>& p = const_cast<TIntrusiveListItem<TOrderedMessageGroupIdHash>&>(pc);
             UnlockedMessageGroupsIdViewOrder.PushBack(&p);
         }

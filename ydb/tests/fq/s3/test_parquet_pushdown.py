@@ -3,15 +3,7 @@
 """
 Integration tests for Parquet min/max predicate pushdown in S3 Federated Query.
 
-Tests cover all supported column types and operators:
-- INT32/INT64 (already partially covered, but extended here)
-- FLOAT/DOUBLE
-- BOOL
-- UUID
-- TIMESTAMP/DATE (already covered, but extended here)
-- BETWEEN operator
-- Multi-column AND predicates
-- Edge cases (all skipped, all kept, non-contiguous groups)
+Tests cover UUID equality, a missing UUID value, and BETWEEN predicates.
 """
 
 import struct
@@ -61,11 +53,7 @@ class TestS3ParquetPushdown(TestYdsBase):
         assert sorted(rows_with) == sorted(expected_rows), f"With pushdown: {rows_with}"
 
     # =========================================================================
-    # FLOAT/DOUBLE pushdown tests (T4)
-    # =========================================================================
-
-    # =========================================================================
-    # UUID pushdown tests (T11)
+    # UUID pushdown tests
     # =========================================================================
 
     @yq_v2

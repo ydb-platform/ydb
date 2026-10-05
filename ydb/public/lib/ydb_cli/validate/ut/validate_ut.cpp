@@ -338,8 +338,12 @@ Y_UNIT_TEST(SchemeChecksumMismatchFailsBothModes) {
 Y_UNIT_TEST(FullModeRequiresDataChecksums) {
     TMemoryStorage storage;
     AddTable(storage, "t", 1, "row\n", false);
-    UNIT_ASSERT(HasIssue(Run(storage, "t"), "t", "checksums are absent"));
-    UNIT_ASSERT_C(Run(storage, "t", true).Ok(), Issues(Run(storage, "t", true)));
+    TValidateSettings settings;
+    settings.MetadataChecksums = EMetadataChecksumMode::Auto;
+    UNIT_ASSERT(HasIssue(ValidateBackup(storage, "t", settings), "t", "checksums are absent"));
+    settings.SchemeOnly = true;
+    const TValidationReport schemeOnly = ValidateBackup(storage, "t", settings);
+    UNIT_ASSERT_C(schemeOnly.Ok(), Issues(schemeOnly));
 }
 
 Y_UNIT_TEST(MalformedDataChecksumSidecar) {
@@ -614,8 +618,7 @@ Y_UNIT_TEST(ReportsEveryIndependentError) {
 
     TMemoryStorage missing;
     AddTable(missing, "t", 2, "row\n", true);
-    missing.Put("t/metadata.json", TableMetadata(false));
-    missing.Files.erase("t/metadata.json.sha256");
+    missing.PutChecked("t/metadata.json", TableMetadata(false));
     missing.Files.erase("t/data_00.csv");
     missing.Files.erase("t/data_00.csv.sha256");
     missing.Files.erase("t/data_01.csv");
@@ -669,8 +672,7 @@ Y_UNIT_TEST(FailFastStopsAtFirstError) {
 
     TMemoryStorage missing;
     AddTable(missing, "t", 2, "row\n", true);
-    missing.Put("t/metadata.json", TableMetadata(false));
-    missing.Files.erase("t/metadata.json.sha256");
+    missing.PutChecked("t/metadata.json", TableMetadata(false));
     missing.Files.erase("t/data_00.csv");
     missing.Files.erase("t/data_00.csv.sha256");
     missing.Files.erase("t/data_01.csv");
@@ -975,6 +977,84 @@ Y_UNIT_TEST(WorkerExceptionBecomesIssue) {
     const TValidationReport report = ValidateBackup(storage, "", settings);
     UNIT_ASSERT(HasIssue(report, ".", "internal error while validating"));
     UNIT_ASSERT(HasIssue(report, ".", "exists boom"));
+}
+
+TValidationReport RunMetadataChecksums(
+    const IBackupStorage& storage,
+    const TString& path,
+    EMetadataChecksumMode mode,
+    bool schemeOnly = false)
+{
+    TValidateSettings settings;
+    settings.MetadataChecksums = mode;
+    settings.SchemeOnly = schemeOnly;
+    return ValidateBackup(storage, path, settings);
+}
+
+Y_UNIT_TEST(MetadataChecksumAlwaysRequiresSidecar) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", false);
+    const TValidationReport always = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Always, true);
+    UNIT_ASSERT(HasIssue(always, "t/metadata.json.sha256", "checksum sidecar is missing"));
+    UNIT_ASSERT(!always.Ok());
+
+    const TValidationReport automatic = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Auto, true);
+    UNIT_ASSERT_C(automatic.Ok(), Issues(automatic));
+
+    const TValidationReport ignored = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Ignore, true);
+    UNIT_ASSERT_C(ignored.Ok(), Issues(ignored));
+}
+
+Y_UNIT_TEST(MetadataChecksumIgnoreSkipsMismatch) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.Put("t/metadata.json.sha256", TString(64, 'c') + " metadata.json\n");
+
+    const TValidationReport always = Run(storage, "t");
+    UNIT_ASSERT(HasIssue(always, "t/metadata.json", "checksum mismatch"));
+
+    const TValidationReport ignored = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Ignore);
+    UNIT_ASSERT_C(ignored.Ok(), Issues(ignored));
+    UNIT_ASSERT(!HasIssue(ignored, "t/metadata.json", "checksum mismatch"));
+}
+
+Y_UNIT_TEST(MetadataChecksumAlwaysRequiresMetadataFile) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.Files.erase("t/metadata.json");
+    storage.Files.erase("t/metadata.json.sha256");
+
+    const TValidationReport always = Run(storage, "t");
+    UNIT_ASSERT(HasIssue(always, "t/metadata.json", "file is missing"));
+    UNIT_ASSERT(!always.Ok());
+
+    const TValidationReport automatic = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Auto);
+    UNIT_ASSERT(HasIssue(automatic, "t/metadata.json", "file is missing"));
+
+    const TValidationReport ignored = RunMetadataChecksums(storage, "t", EMetadataChecksumMode::Ignore);
+    UNIT_ASSERT_C(ignored.Ok(), Issues(ignored));
+}
+
+Y_UNIT_TEST(MetadataChecksumAlwaysRequiresFullBackupSidecars) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    storage.Put("metadata.json", "{\"kind\":\"SimpleExportV0\"}");
+    storage.Files.erase("metadata.json.sha256");
+    storage.Files.erase("SchemaMapping/metadata.json.sha256");
+
+    const TValidationReport always = Run(storage, "");
+    bool rootSidecar = false;
+    for (const TValidationIssue& issue : always.Issues) {
+        if (issue.Path == "metadata.json.sha256" && issue.Message.Contains("checksum sidecar is missing")) {
+            rootSidecar = true;
+        }
+    }
+    UNIT_ASSERT(rootSidecar);
+    UNIT_ASSERT(HasIssue(always, "SchemaMapping/metadata.json.sha256", "checksum sidecar is missing"));
+    UNIT_ASSERT(!always.Ok());
+
+    const TValidationReport automatic = RunMetadataChecksums(storage, "", EMetadataChecksumMode::Auto);
+    UNIT_ASSERT_C(automatic.Ok(), Issues(automatic));
 }
 
 Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {

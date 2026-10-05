@@ -1024,9 +1024,7 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
                 continue;
             }
             if (OperationsManager->HasWriteOperations(pathId)) {
-                YDB_LOG_DEBUG("",
-                    {"event", "CleanupTableMetadataDeferredByWriteOperations"},
-                    {"pathId", pathId});
+                YDB_LOG_DEBUG("", {"event", "CleanupTableMetadataDeferredByWriteOperations"}, {"path_id", pathId});
                 continue;
             }
             pathIdsToCleanup.insert(pathId);

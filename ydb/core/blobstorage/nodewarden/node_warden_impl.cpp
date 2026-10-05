@@ -625,6 +625,7 @@ void TNodeWarden::Bootstrap() {
     YamlConfig = std::move(Cfg->YamlConfig);
 
     InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig->GetInferPDiskSlotCountSettings());
+    VDiskHeapAllocatorNumLeadingDisks = Cfg->BlobStorageConfig->GetVDiskHeapAllocatorNumLeadingDisks();
     ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
@@ -760,7 +761,9 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
                     : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
             if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk); // start the current VDisk after the previous slot contents are gone
+                // start the current VDisk after the previous slot contents are gone; after a wipe, this waits for
+                // the record BS_CONTROLLER sends in reply to the WIPED report
+                StartLocalVDiskActor(vdisk);
             }
             break;
         }
@@ -1523,7 +1526,9 @@ void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscrip
 void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
     if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
-        auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
+        const auto& bsConfig = record.GetConfig().GetBlobStorageConfig();
+        VDiskHeapAllocatorNumLeadingDisks = bsConfig.GetVDiskHeapAllocatorNumLeadingDisks();
+        auto inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
         if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
             InferPDiskSlotCountSettings.CopyFrom(inferSettings);

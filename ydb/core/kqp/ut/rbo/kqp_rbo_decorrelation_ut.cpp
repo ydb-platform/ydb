@@ -75,6 +75,8 @@ struct TPlan {
         rules.emplace_back(std::make_unique<TPushDependentJoinThroughUnionAllRule>());
         rules.emplace_back(std::make_unique<TPushDependentJoinThroughJoinRule>());
         rules.emplace_back(std::make_unique<TPushDependentJoinThroughReplicateRule>());
+        rules.emplace_back(std::make_unique<TPushDependentJoinThroughSortRule>());
+        rules.emplace_back(std::make_unique<TPushDependentJoinThroughLimitRule>());
         rules.emplace_back(std::make_unique<TDependentJoinNotSupportedRule>());
         TRuleBasedStage("Decorrelation", std::move(rules)).RunStage(Root, Test.RboCtx);
     }
@@ -317,8 +319,9 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     Y_UNIT_TEST(UnsupportedCorrelatedOperatorFails) {
         TPlan plan;
         const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id();
+        // The count reads a parameter: there is no common bound for the row numbers.
         auto limit = MakeIntrusive<TOpLimit>(plan.Producer(parameter, local, value), plan.Pos,
-            MakeConstant("Uint64", "1", plan.Pos, &plan.Ctx), EOpPhase::Undefined);
+            plan.Column(local), EOpPhase::Undefined);
         plan.Attach(std::move(limit), {parameter});
         auto* old = plan.Root.GetInput().Get();
         UNIT_ASSERT_EXCEPTION_CONTAINS(plan.Decorrelate(), yexception, "Cannot decorrelate");

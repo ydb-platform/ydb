@@ -678,11 +678,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             m->SetStoragePoolId(1);
             m->SetItemConfigGeneration(1);
             request.AddCommand()->MutableQueryBaseConfig();
+            request.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
             response = env.Invoke(request);
             UNIT_ASSERT(response.GetSuccess());
             const auto& baseConfig = response.GetStatus(1).GetBaseConfig();
             UNIT_ASSERT(baseConfig.GetGroup().empty());
             UNIT_ASSERT(baseConfig.GetVSlot().empty());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(2).StoragePoolSize(), 0);
         });
     }
 

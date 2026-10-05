@@ -152,6 +152,9 @@ namespace NKikimr {
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
+            // Pools whose leading-disk override changed. Their VDisk service-set records are resent
+            // without touching group generation.
+            THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -323,6 +326,31 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(inserted);
                     }
                 }
+
+                // unbind group from its storage pool; bridge pile groups are not counted in NumGroups
+                auto& storagePools = StoragePools.Unshare();
+                const auto spIt = storagePools.find(group->StoragePoolId);
+                Y_ABORT_UNLESS(spIt != storagePools.end());
+                if (auto& numGroups = spIt->second.NumGroups; !group->BridgePileId && numGroups) {
+                    --numGroups;
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(group->BridgePileId);
+                }
+                const size_t numErased = StoragePoolGroups.Unshare().erase({spIt->first, groupId});
+                Y_ABORT_UNLESS(numErased == 1);
+
+                // remove group from species index
+                auto& index = IndexGroupSpeciesToGroup.Unshare();
+                const auto indexIt = index.find(group->GetGroupSpecies());
+                Y_ABORT_UNLESS(indexIt != index.end());
+                auto& speciesGroups = indexIt->second;
+                const auto groupIt = std::find(speciesGroups.begin(), speciesGroups.end(), groupId);
+                Y_ABORT_UNLESS(groupIt != speciesGroups.end());
+                speciesGroups.erase(groupIt);
+                if (speciesGroups.empty()) {
+                    index.erase(indexIt);
+                }
+
                 Groups.DeleteExistingEntry(groupId);
                 GroupContentChanged.erase(groupId);
                 GroupFailureModelChanged.erase(groupId);
@@ -354,6 +382,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TUpdateStoragePoolSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);

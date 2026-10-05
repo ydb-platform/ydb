@@ -173,6 +173,26 @@ message TDefineStoragePool {
 
     // this value is only accounted when new groups are added to the pool
     uint32 DefaultGroupSizeInUnits = 102;
+
+    // Output only: ReadStoragePool fills it, DefineStoragePool ignores it. Use UpdateStoragePoolSettings to change.
+    TStoragePoolSettings Settings = 103;
+}
+
+// Per-pool settings that DefineStoragePool neither sets nor resets.
+message TStoragePoolSettings {
+    // How many leading VDisks of each group (order number 0 .. N-1) may use the stripe heap. Overrides
+    // blob_storage_config.vdisk_heap_allocator_num_leading_disks for this pool, including 0; absent inherits it.
+    // Takes effect when a VDisk starts; running VDisks are not restarted.
+    optional uint32 VDiskHeapAllocatorNumLeadingDisks = 1;
+}
+
+message TUpdateStoragePoolSettings {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    // fields present here are written
+    TStoragePoolSettings Settings = 3;
+    // names of TStoragePoolSettings fields to reset, so the pool inherits the global value again
+    repeated string Reset = 4;
 }
 
 message TReadStoragePool {
@@ -702,6 +722,7 @@ message TConfigRequest {
             TMoveDDisk MoveDDisk = 60;
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
+            TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

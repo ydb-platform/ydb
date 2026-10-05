@@ -416,7 +416,7 @@ namespace NKikimr {
             // A planned compaction writes exclusive chunks only.
             if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
                 if (Config->HeapAllocatorMaxSstInBytes > 0 &&
-                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator() && !InPlannedMode() && !Planned.Leased) {
+                        Config->UseHeapAllocator && !InPlannedMode() && !Planned.Leased) {
                     params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
                 }
             }

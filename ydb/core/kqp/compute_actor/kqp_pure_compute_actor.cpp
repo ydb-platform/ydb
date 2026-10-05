@@ -36,6 +36,7 @@ TKqpComputeActor::TKqpComputeActor(
     , Database(database)
 {
     ComputeCtx.SetQueryContext(Database, UserToken);
+    ComputeCtx.SetCheckpointContext(CheckpointContext);
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();

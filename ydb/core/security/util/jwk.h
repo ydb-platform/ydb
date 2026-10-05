@@ -54,6 +54,9 @@ enum class EJwkAlg : ui8 {
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 struct TJwk {
+    // Bound certificate parsing and verification work for each key.
+    static constexpr size_t MAX_CERTIFICATE_CHAIN_LENGTH = 100;
+
     struct TRsaParameters {
         std::string Modulus; // decoded `n` (unsigned, big endian)
         std::string Exponent; // decoded `e` (unsigned, big endian)
@@ -67,7 +70,7 @@ struct TJwk {
 
     EJwkKeyType Type; // `kty`
     std::optional<EJwkUsage> Usage; // `use`
-    std::vector<EJwkKeyOps> KeyOperations; // `key_ops`
+    std::optional<std::vector<EJwkKeyOps>> KeyOperations; // `key_ops`; absent differs from empty
     std::optional<EJwkAlg> Algorithm; // `alg`
     std::string KeyId; // `kid`
     std::string X509Url; // `x5u`
@@ -86,7 +89,8 @@ struct TJwk {
     // signatures for which an issuer is available. The last certificate need
     // not be a root: trust in the JWK must come from its authenticated source,
     // not from this consistency check. Does not fetch x5u or check revocation.
-    std::optional<std::string> CalculatePublicKey() const;
+    // Sets a diagnostic on failure; clears error on success.
+    std::optional<std::string> CalculatePublicKey(std::string& error) const;
 };
 
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5

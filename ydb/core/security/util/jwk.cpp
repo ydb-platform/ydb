@@ -12,6 +12,7 @@
 
 #include <limits>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -72,21 +73,22 @@ std::optional<EJwkUsage> ParseUsage(const NJson::TJsonValue& jwk) {
     return TryFromString(usage.value(), res) ? std::make_optional(res) : std::nullopt;
 }
 
-std::vector<EJwkKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
-    if (!jwk.Has(KEY_OPS) || !jwk[KEY_OPS].IsArray()) {
-        return {};
+std::optional<std::vector<EJwkKeyOps>> ParseKeyOps(const NJson::TJsonValue& jwk) {
+    if (!jwk[KEY_OPS].IsArray()) {
+        return std::nullopt;
     }
 
     std::vector<EJwkKeyOps> keyOps;
+    std::set<EJwkKeyOps> seen;
 
     for (const auto& op : jwk[KEY_OPS].GetArray()) {
         if (!op.IsString()) {
-            continue;
+            return std::nullopt;
         }
 
         EJwkKeyOps res = EJwkKeyOps::SIGN;
-        if (!TryFromString(op.GetString(), res)) {
-            continue;
+        if (!TryFromString(op.GetString(), res) || !seen.insert(res).second) {
+            return std::nullopt;
         }
 
         keyOps.push_back(res);
@@ -134,7 +136,9 @@ std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
         return std::vector<std::string>{};
     }
 
-    if (!jwk[X5C].IsArray() || jwk[X5C].GetArray().empty()) {
+    if (!jwk[X5C].IsArray() || jwk[X5C].GetArray().empty()
+        || jwk[X5C].GetArray().size() > TJwk::MAX_CERTIFICATE_CHAIN_LENGTH)
+    {
         return std::nullopt;
     }
 
@@ -211,20 +215,11 @@ std::optional<std::string> ParseThumbprint(
         return std::string{};
     }
 
-    const auto thumbprint = ParseStr(jwk, name);
-    if (!thumbprint.has_value()) {
+    auto thumbprint = ParseKeyBytes(jwk, name);
+    if (!thumbprint.has_value() || thumbprint.value().size() != expectedLength) {
         return std::nullopt;
     }
-
-    try {
-        auto decoded = NKikimr::NSecurity::Base64StrictDecodeUneven(thumbprint.value());
-        if (decoded.size() != expectedLength) {
-            return std::nullopt;
-        }
-        return decoded;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
+    return thumbprint;
 }
 
 // Parsing based on https://datatracker.ietf.org/doc/html/rfc7517
@@ -235,7 +230,13 @@ std::optional<TJwk> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
     }
 
     res.value().Usage = ParseUsage(jwk);
-    res.value().KeyOperations = ParseKeyOps(jwk);
+    if (jwk.Has(KEY_OPS)) {
+        auto keyOps = ParseKeyOps(jwk);
+        if (!keyOps.has_value()) {
+            return std::nullopt;
+        }
+        res.value().KeyOperations = std::move(keyOps.value());
+    }
 
     if (jwk.Has(ALG)) {
         auto algorithm = ParseCompatibleAlg(jwk, res.value().Type);
@@ -320,7 +321,10 @@ bool CheckCertificateKeyUsage(const TJwk& jwk, X509* cert) {
                 break;
         }
     }
-    for (const auto operation : jwk.KeyOperations) {
+    if (!jwk.KeyOperations.has_value()) {
+        return (usage & required) == required;
+    }
+    for (const auto operation : jwk.KeyOperations.value()) {
         switch (operation) {
             case EJwkKeyOps::SIGN:
             case EJwkKeyOps::VERIFY:
@@ -342,29 +346,42 @@ bool CheckCertificateKeyUsage(const TJwk& jwk, X509* cert) {
     return (usage & required) == required;
 }
 
-TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk) {
-    if (jwk.X509Chain.empty()) {
+std::string CertificateError(size_t index, const std::string& reason) {
+    return "x5c certificate index " + std::to_string(index) + ": " + reason;
+}
+
+TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk, std::string& error) {
+    if (jwk.X509Chain.empty() || jwk.X509Chain.size() > TJwk::MAX_CERTIFICATE_CHAIN_LENGTH) {
+        error = "x5c must contain between 1 and " + std::to_string(TJwk::MAX_CERTIFICATE_CHAIN_LENGTH) + " certificates";
         return {};
     }
 
     const auto& keyCert = jwk.X509Chain.front();
     if (!CheckCertificateThumbprints(jwk, keyCert)) {
+        error = CertificateError(0, "thumbprint mismatch");
         return {};
     }
 
     std::vector<TCertPtr> certificates;
     for (const auto& der : jwk.X509Chain) {
         if (der.empty() || der.size() > std::numeric_limits<long>::max()) {
+            error = CertificateError(certificates.size(), "invalid DER length");
             return {};
         }
         const auto* begin = reinterpret_cast<const unsigned char*>(der.data());
         const auto* cursor = begin;
         TCertPtr cert(d2i_X509(nullptr, &cursor, der.size()));
         if (cert == nullptr || cursor != begin + der.size()) {
+            error = CertificateError(certificates.size(), "invalid DER encoding or trailing data");
             return {};
         }
-        if (!certificates.empty() && X509_check_issued(cert.get(), certificates.back().get()) != X509_V_OK) {
-            return {};
+        if (!certificates.empty()) {
+            const auto code = X509_check_issued(cert.get(), certificates.back().get());
+            if (code != X509_V_OK) {
+                error = CertificateError(certificates.size(), "invalid issuer: "
+                    + std::string(X509_verify_cert_error_string(code)) + " (code " + std::to_string(code) + ")");
+                return {};
+            }
         }
         certificates.push_back(std::move(cert));
     }
@@ -377,23 +394,32 @@ TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk) {
     if (store == nullptr || chain == nullptr || ctx == nullptr
         || X509_STORE_add_cert(store.get(), certificates.back().get()) != 1)
     {
+        error = "Failed to initialize x5c certificate store";
         return {};
     }
     for (size_t i = 1; i < certificates.size(); ++i) {
         if (sk_X509_push(chain.get(), certificates[i].get()) == 0) {
+            error = "Failed to build x5c verification chain";
             return {};
         }
     }
     if (X509_STORE_CTX_init(ctx.get(), store.get(), certificates.front().get(), chain.get()) != 1
-        || X509_VERIFY_PARAM_set_flags(X509_STORE_CTX_get0_param(ctx.get()), X509_V_FLAG_PARTIAL_CHAIN) != 1
-        || X509_verify_cert(ctx.get()) != 1)
+        || X509_VERIFY_PARAM_set_flags(X509_STORE_CTX_get0_param(ctx.get()), X509_V_FLAG_PARTIAL_CHAIN) != 1)
     {
+        error = "Failed to initialize x5c verification context";
+        return {};
+    }
+    if (X509_verify_cert(ctx.get()) != 1) {
+        const auto code = X509_STORE_CTX_get_error(ctx.get());
+        error = CertificateError(X509_STORE_CTX_get_error_depth(ctx.get()),
+            std::string(X509_verify_cert_error_string(code)) + " (code " + std::to_string(code) + ")");
         return {};
     }
     // Do not silently ignore extra or duplicate certificates when OpenSSL
     // builds a shorter path to the pinned certificate.
     const auto* verified = X509_STORE_CTX_get0_chain(ctx.get());
     if (static_cast<size_t>(sk_X509_num(verified)) != certificates.size()) {
+        error = "x5c contains extra or duplicate certificates";
         return {};
     }
     auto* last = certificates.back().get();
@@ -402,13 +428,18 @@ TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk) {
     if ((X509_get_extension_flags(last) & EXFLAG_SS)
         && X509_verify(last, X509_get0_pubkey(last)) != 1)
     {
+        error = CertificateError(certificates.size() - 1, "invalid self-signature");
         return {};
     }
 
     if (!CheckCertificateKeyUsage(jwk, certificates.front().get())) {
+        error = CertificateError(0, "key usage is incompatible with the JWK");
         return {};
     }
     TKeyPtr publicKey(X509_get_pubkey(certificates.front().get()));
+    if (publicKey == nullptr) {
+        error = CertificateError(0, "missing or unsupported public key");
+    }
     return publicKey;
 }
 
@@ -433,9 +464,10 @@ TOpenSslPtr<BIGNUM, BN_free> DecodeNumber(const std::string& bytes) {
         reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size(), nullptr));
 }
 
-TKeyPtr GetPublicKeyFromParameters(const TJwk& jwk) {
+TKeyPtr GetPublicKeyFromParameters(const TJwk& jwk, std::string& error) {
     TKeyPtr key(EVP_PKEY_new());
     if (key == nullptr) {
+        error = "Failed to allocate public key";
         return {};
     }
     if (jwk.Type == EJwkKeyType::RSA && jwk.RsaParameters.has_value()) {
@@ -445,25 +477,30 @@ TKeyPtr GetPublicKeyFromParameters(const TJwk& jwk) {
         if (modulus == nullptr || exponent == nullptr || rsa == nullptr
             || RSA_set0_key(rsa.get(), modulus.get(), exponent.get(), nullptr) != 1)
         {
+            error = "Invalid RSA parameters";
             return {};
         }
         modulus.release();
         exponent.release();
         if (EVP_PKEY_set1_RSA(key.get(), rsa.get()) != 1) {
+            error = "Failed to construct RSA public key";
             return {};
         }
     } else if (jwk.Type == EJwkKeyType::EC && jwk.EcParameters.has_value()) {
         const auto& params = jwk.EcParameters.value();
         const int curve = GetCurveId(params.Curve);
         if (curve == NID_undef) {
+            error = "Unsupported EC curve: expected P-256, P-384 or P-521";
             return {};
         }
         TOpenSslPtr<EC_KEY, EC_KEY_free> ec(EC_KEY_new_by_curve_name(curve));
         if (ec == nullptr) {
+            error = "Failed to allocate EC public key";
             return {};
         }
         const size_t size = (EC_GROUP_get_degree(EC_KEY_get0_group(ec.get())) + 7) / 8;
         if (params.X.size() != size || params.Y.size() != size) {
+            error = "Invalid EC coordinate length";
             return {};
         }
         auto x = DecodeNumber(params.X);
@@ -471,50 +508,112 @@ TKeyPtr GetPublicKeyFromParameters(const TJwk& jwk) {
         if (x == nullptr || y == nullptr || EC_KEY_set_public_key_affine_coordinates(ec.get(), x.get(), y.get()) != 1
             || EVP_PKEY_set1_EC_KEY(key.get(), ec.get()) != 1)
         {
+            error = "Invalid EC public point";
             return {};
         }
     } else {
+        error = "Missing public key parameters for the specified key type";
         return {};
     }
     return key;
 }
 
-bool CheckPublicKey(const TJwk& jwk, EVP_PKEY* key) {
+bool CheckRsaPssRestrictions(const TJwk& jwk, EVP_PKEY* key) {
+    if (!jwk.Algorithm.has_value()) {
+        return false;
+    }
+    const EVP_MD* digest = nullptr;
+    switch (jwk.Algorithm.value()) {
+        case EJwkAlg::PS256: digest = EVP_sha256(); break;
+        case EJwkAlg::PS384: digest = EVP_sha384(); break;
+        case EJwkAlg::PS512: digest = EVP_sha512(); break;
+        default: return false;
+    }
+    // OpenSSL enforces the SPKI restrictions when configuring verification.
+    // JWA requires the same hash for MGF1 and a salt as long as the digest.
+    TOpenSslPtr<EVP_PKEY_CTX, EVP_PKEY_CTX_free> ctx(EVP_PKEY_CTX_new(key, nullptr));
+    return ctx != nullptr && EVP_PKEY_verify_init(ctx.get()) == 1
+        && EVP_PKEY_CTX_set_rsa_padding(ctx.get(), RSA_PKCS1_PSS_PADDING) == 1
+        && EVP_PKEY_CTX_set_signature_md(ctx.get(), digest) == 1
+        && EVP_PKEY_CTX_set_rsa_mgf1_md(ctx.get(), digest) == 1
+        && EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx.get(), EVP_MD_size(digest)) == 1;
+}
+
+bool CheckPublicKey(const TJwk& jwk, EVP_PKEY* key, std::string& error) {
     if (jwk.Algorithm.has_value() && !IsCompatibleAlgorithm(jwk.Type, jwk.Algorithm.value())) {
+        error = "JWK algorithm is incompatible with the key type";
         return false;
     }
     if (jwk.Type == EJwkKeyType::RSA) {
-        if (EVP_PKEY_base_id(key) != EVP_PKEY_RSA) {
+        const auto type = EVP_PKEY_base_id(key);
+        if (type != EVP_PKEY_RSA && type != EVP_PKEY_RSA_PSS) {
+            error = "Expected an RSA public key";
+            return false;
+        }
+        if (type == EVP_PKEY_RSA_PSS && !CheckRsaPssRestrictions(jwk, key)) {
+            error = "RSA-PSS public key requires a compatible PS256, PS384 or PS512 algorithm, hash and salt length";
             return false;
         }
         const auto* rsa = EVP_PKEY_get0_RSA(key);
         const auto* modulus = RSA_get0_n(rsa);
         const auto* exponent = RSA_get0_e(rsa);
-        return modulus != nullptr && exponent != nullptr && !BN_is_negative(modulus) && !BN_is_negative(exponent)
-            && BN_num_bits(modulus) >= 2048 && BN_num_bits(modulus) <= OPENSSL_RSA_MAX_MODULUS_BITS
-            && BN_is_odd(modulus) && BN_is_odd(exponent) && BN_cmp(exponent, BN_value_one()) > 0
-            && BN_cmp(exponent, modulus) < 0;
+        if (modulus == nullptr || exponent == nullptr || BN_is_negative(modulus) || BN_is_negative(exponent)
+            || !BN_is_odd(modulus) || !BN_is_odd(exponent) || BN_cmp(exponent, BN_value_one()) <= 0
+            || BN_cmp(exponent, modulus) >= 0)
+        {
+            error = "Invalid RSA modulus or exponent";
+            return false;
+        }
+        if (BN_num_bits(modulus) < 2048) {
+            error = "RSA modulus below 2048 bits";
+            return false;
+        }
+        if (BN_num_bits(modulus) > OPENSSL_RSA_MAX_MODULUS_BITS) {
+            error = "RSA modulus exceeds the OpenSSL size limit";
+            return false;
+        }
+        return true;
     }
     if (jwk.Type != EJwkKeyType::EC || EVP_PKEY_base_id(key) != EVP_PKEY_EC) {
+        error = "Expected an EC public key";
         return false;
     }
     const auto* ec = EVP_PKEY_get0_EC_KEY(key);
     if (ec == nullptr || EC_KEY_check_key(ec) != 1) {
+        error = "Invalid EC public key";
         return false;
     }
     const int curve = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
     if (curve != NID_X9_62_prime256v1 && curve != NID_secp384r1 && curve != NID_secp521r1) {
+        error = "Unsupported EC curve: expected P-256, P-384 or P-521";
         return false;
     }
     if (jwk.Algorithm.has_value()) {
+        int expectedCurve = NID_undef;
         switch (jwk.Algorithm.value()) {
-            case EJwkAlg::ES256: return curve == NID_X9_62_prime256v1;
-            case EJwkAlg::ES384: return curve == NID_secp384r1;
-            case EJwkAlg::ES512: return curve == NID_secp521r1;
+            case EJwkAlg::ES256: expectedCurve = NID_X9_62_prime256v1; break;
+            case EJwkAlg::ES384: expectedCurve = NID_secp384r1; break;
+            case EJwkAlg::ES512: expectedCurve = NID_secp521r1; break;
             default: break;
+        }
+        if (expectedCurve != NID_undef && curve != expectedCurve) {
+            error = "EC curve is incompatible with the JWK algorithm";
+            return false;
         }
     }
     return true;
+}
+
+bool EqualPublicKeys(EJwkKeyType type, EVP_PKEY* parameters, EVP_PKEY* certificate) {
+    if (type == EJwkKeyType::RSA) {
+        // RSA parameters and an RSA-PSS SPKI have different EVP key types.
+        // Both keys have already passed validation, including PSS restrictions.
+        const auto* lhs = EVP_PKEY_get0_RSA(parameters);
+        const auto* rhs = EVP_PKEY_get0_RSA(certificate);
+        return BN_cmp(RSA_get0_n(lhs), RSA_get0_n(rhs)) == 0
+            && BN_cmp(RSA_get0_e(lhs), RSA_get0_e(rhs)) == 0;
+    }
+    return EVP_PKEY_cmp(parameters, certificate) == 1;
 }
 
 } // namespace
@@ -547,33 +646,39 @@ std::optional<EJwkKeyType> GetKeyType(EJwkAlg alg) {
     }
 }
 
-std::optional<std::string> TJwk::CalculatePublicKey() const {
+std::optional<std::string> TJwk::CalculatePublicKey(std::string& error) const {
+    error.clear();
     TKeyPtr key;
     if (RsaParameters.has_value() || EcParameters.has_value()) {
-        key = GetPublicKeyFromParameters(*this);
-        if (key == nullptr || !CheckPublicKey(*this, key.get())) {
+        key = GetPublicKeyFromParameters(*this, error);
+        if (key == nullptr || !CheckPublicKey(*this, key.get(), error)) {
             return std::nullopt;
         }
     }
     if (!X509Chain.empty()) {
-        auto certificateKey = GetPublicKeyFromX5C(*this);
-        if (certificateKey == nullptr || !CheckPublicKey(*this, certificateKey.get())
-            || (key != nullptr && EVP_PKEY_cmp(key.get(), certificateKey.get()) != 1))
-        {
+        auto certificateKey = GetPublicKeyFromX5C(*this, error);
+        if (certificateKey == nullptr || !CheckPublicKey(*this, certificateKey.get(), error)) {
+            return std::nullopt;
+        }
+        if (key != nullptr && !EqualPublicKeys(Type, key.get(), certificateKey.get())) {
+            error = "Public key parameters do not match x5c certificate index 0";
             return std::nullopt;
         }
         key = std::move(certificateKey);
     }
     if (key == nullptr) {
+        error = "Missing public key parameters and x5c certificates";
         return std::nullopt;
     }
     TOpenSslPtr<BIO, BIO_free> bio(BIO_new(BIO_s_mem()));
     if (bio == nullptr || PEM_write_bio_PUBKEY(bio.get(), key.get()) != 1) {
+        error = "Failed to serialize public key as PEM";
         return std::nullopt;
     }
     char* data = nullptr;
     const auto size = BIO_get_mem_data(bio.get(), &data);
     if (size <= 0) {
+        error = "Empty public key PEM";
         return std::nullopt;
     }
     return std::string(data, size);

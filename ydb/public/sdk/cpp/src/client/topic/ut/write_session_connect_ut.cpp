@@ -8,10 +8,8 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <atomic>
-#include <fstream>
+#include <cstdlib>
 #include <memory>
-#include <string>
-#include <string_view>
 #include <thread>
 
 namespace NYdb::inline Dev::NTopic::NTests {
@@ -28,19 +26,6 @@ void StopDriverOrFail(TDriver& driver, TDuration timeout = TDuration::Seconds(15
         UNIT_FAIL("TDriver::Stop(true) did not return in " << timeout);
     }
     stopper.join();
-}
-
-size_t CountOsThreads() {
-    std::ifstream status("/proc/self/status");
-    std::string line;
-    while (std::getline(status, line)) {
-        constexpr std::string_view prefix = "Threads:";
-        if (line.starts_with(prefix)) {
-            return std::stoul(line.substr(prefix.size()));
-        }
-    }
-    UNIT_FAIL("Threads field is missing from /proc/self/status");
-    return 0;
 }
 
 // Blocks inside CompressWriteBlock so the test can destroy the client while the
@@ -152,36 +137,13 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
     }
 
     // Compression used to capture the topic client. The client owns the default
-    // compression executor, so the task kept that pool alive and the pool was
-    // destroyed from one of its own threads. The sibling worker then finished
-    // without a join and ThreadSanitizer reported a thread leak (YDBBUGS-957).
+    // compression executor, so the task kept that pool alive until it finished
+    // on a pool thread, and the pool was destroyed from inside itself (YDBBUGS-957).
+    // Shutdown must block in executor Stop while compression is still in flight,
+    // then finish once compression is released.
     Y_UNIT_TEST(CompressionDoesNotLeakClientExecutorThreads) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TDriver driver(setup.MakeDriverConfig());
-
-        {
-            TTopicClient warmup(driver);
-            auto session = warmup.CreateWriteSession(
-                TWriteSessionSettings()
-                    .Path(setup.GetTopicPath())
-                    .MessageGroupId("warmup-raw")
-                    .Codec(ECodec::RAW));
-            auto token = WaitForWriteToken(*session);
-            session->Write(std::move(token), "warmup");
-            session.reset();
-        }
-        size_t baseline = CountOsThreads();
-        size_t stableReads = 0;
-        for (int attempt = 0; attempt < 30 && stableReads < 3; ++attempt) {
-            Sleep(TDuration::MilliSeconds(100));
-            const size_t now = CountOsThreads();
-            if (now == baseline) {
-                ++stableReads;
-            } else {
-                baseline = now;
-                stableReads = 0;
-            }
-        }
 
         std::atomic<bool> entered{false};
         std::atomic<bool> release{false};
@@ -214,42 +176,31 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
         }
         UNIT_ASSERT_C(entered.load(), "compression did not start on the default executor");
 
-        std::atomic<bool> destroyStarted{false};
         auto destroyDone = NThreading::NewPromise<void>();
-        std::thread releaser([&] {
-            const auto deadline = TInstant::Now() + TDuration::Seconds(20);
-            while (!destroyStarted.load() && TInstant::Now() < deadline) {
-                Sleep(TDuration::MilliSeconds(10));
-            }
-            // Give the client destructor time to block in executor Stop before the
-            // compression task is allowed to finish.
-            Sleep(TDuration::MilliSeconds(200));
-            release.store(true);
-        });
         std::thread destroyer([&] {
-            destroyStarted.store(true);
             session.reset();
             client.reset();
             destroyDone.SetValue();
         });
 
+        // The pool is stopped on this teardown thread and must wait for the
+        // in-flight compression task. Finishing while the codec is still blocked
+        // means the task kept the client alive and Stop did not run here.
+        const bool finishedWhileBlocked = destroyDone.GetFuture().Wait(TDuration::Seconds(3));
+        if (finishedWhileBlocked) {
+            release.store(true);
+            destroyer.join();
+            UNIT_FAIL("write session shutdown finished while compression was still blocked");
+        }
+
+        release.store(true);
         const bool destroyed = destroyDone.GetFuture().Wait(TDuration::Seconds(20));
         if (!destroyed) {
-            release.store(true);
+            // Forked subtest. Joining a thread stuck in executor Stop never reaches the assertion.
+            Cerr << "write session destroy did not finish after compression was released" << Endl;
+            std::abort();
         }
         destroyer.join();
-        releaser.join();
-        UNIT_ASSERT_C(destroyed, "write session destroy did not finish; executor Stop is stuck");
-
-        const auto quietDeadline = TInstant::Now() + TDuration::Seconds(5);
-        size_t left = CountOsThreads();
-        while (left > baseline && TInstant::Now() < quietDeadline) {
-            Sleep(TDuration::MilliSeconds(50));
-            left = CountOsThreads();
-        }
-        UNIT_ASSERT_C(left <= baseline,
-            "client executor threads are still alive after write session shutdown: baseline "
-            << baseline << ", now " << left);
 
         StopDriverOrFail(driver);
     }

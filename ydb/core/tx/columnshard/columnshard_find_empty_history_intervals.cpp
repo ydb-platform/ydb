@@ -97,7 +97,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         // GC cannot invalidate the empty-interval proof; sharing admission can.
-        if (Self->SharingSessionsManager->CanCutHistory() && !Self->GetStoragesManager()->GetDefaultOperator()->GetStopped()) {
+        if (Self->SharingSessionsManager->CanCutHistory()) {
             for (const auto& request : ReadyToSendRequests) {
                 auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
                 event->Record.SetTabletID(Self->TabletID());

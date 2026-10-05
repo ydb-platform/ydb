@@ -390,7 +390,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(oldBlobQueued);
         UNIT_ASSERT(NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to));
         UNIT_ASSERT(!storage->HasGCInFlight());
-        UNIT_ASSERT(!storage->GetStopped());
         UNIT_ASSERT(shard->GetSharingSessionsManager()->CanCutHistory());
         UNIT_ASSERT(!storage->GetSharedBlobs()->HasBlobsInRange(FirstDataChannel, 0, to));
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);

@@ -7678,7 +7678,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(confirmed->Record.GetStatus(), NKikimrProto::OK);
     }
 
-    Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
+    void TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::EReplyStatus status) {
         const ui64 hiveTablet = MakeDefaultHiveID();
 
         THiveInitialEventsFilter initialEventsFilter;
@@ -7700,17 +7700,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
 
             static constexpr ui32 actualGeneration = 100;
-            bool errorInjected = false;
+            bool statusInjected = false;
             bool sawNewGeneration = false;
             auto blockObserver = runtime.AddObserver<TEvBlobStorage::TEvBlock>([&](auto&& ev) {
-                if (errorInjected && ev->Get()->Generation > actualGeneration) {
+                if (statusInjected && ev->Get()->Generation > actualGeneration) {
                     sawNewGeneration = true;
                 }
             });
             auto resultObserver = runtime.AddObserver<TEvBlobStorage::TEvBlockResult>([&](auto&& ev) {
-                if (!errorInjected) {
-                    errorInjected = true;
-                    ev->Get()->Status = NKikimrProto::ERROR;
+                if (!statusInjected) {
+                    statusInjected = true;
+                    ev->Get()->Status = status;
                     ev->Get()->ActualGeneration = actualGeneration;
                     ev->Get()->ErrorReason = "injected generation race";
                 }
@@ -7815,6 +7815,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(channel.GetHistory(channel.HistorySize() - 1).GetFromGeneration(), *blockGeneration + 2,
                 channel.ShortDebugString());
         }
+    }
+
+    Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
+        TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::ERROR);
+    }
+
+    Y_UNIT_TEST(TestBlockStorageAlreadyRestartsReassignAtActualGeneration) {
+        TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::ALREADY);
     }
 
     Y_UNIT_TEST(TestGetStorageInfoDeleteTabletBeforeAssigned) {

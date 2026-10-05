@@ -1019,7 +1019,9 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
                 continue;
             }
             if (OperationsManager->HasWriteOperations(pathId)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "CleanupTableMetadataDeferredByWriteOperations")("path_id", pathId);
+                YDB_LOG_DEBUG("",
+                    {"event", "CleanupTableMetadataDeferredByWriteOperations"},
+                    {"pathId", pathId});
                 continue;
             }
             pathIdsToCleanup.insert(pathId);

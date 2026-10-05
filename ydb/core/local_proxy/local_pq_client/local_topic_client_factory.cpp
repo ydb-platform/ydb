@@ -17,8 +17,8 @@ public:
         : Settings(settings)
     {}
 
-    NYql::ITopicClient::TPtr CreateTopicClient(const TTopicClientSettings& clientSettings) final {
-        return CreateLocalTopicClient(Settings, clientSettings);
+    std::shared_ptr<NFq::IMessageStreamClient> CreateTopicClient(const TString& stream, const TTopicClientSettings& clientSettings) final {
+        return CreateLocalMessageStreamClient(stream, Settings, clientSettings);
     }
 
     NYql::IFederatedTopicClient::TPtr CreateFederatedTopicClient(const TFederatedTopicClientSettings& clientSettings) final {

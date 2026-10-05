@@ -36,6 +36,11 @@ struct TStreamingAggregationTypeAnnTest {
     TExprContext Ctx;
     TTypeAnnotationContext Types;
     const TKikimrConfiguration::TPtr Config = MakeIntrusive<TKikimrConfiguration>();
+    TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext = MakeIntrusive<NKikimr::NKqp::TUserRequestContext>();
+
+    TStreamingAggregationTypeAnnTest() {
+        UserRequestContext->IsStreamingQuery = true;
+    }
 
     TExprNode::TPtr Atom(TStringBuf value) {
         return Ctx.NewAtom(TPositionHandle(), value);
@@ -47,7 +52,7 @@ struct TStreamingAggregationTypeAnnTest {
 
     TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)",
         TStringBuf itemType = "(StructType '('key (DataType 'String)))",
-        TStringBuf save = "state", TStringBuf load = "state", TStringBuf init = "(Int64 '0)")
+        TStringBuf save = "state", TStringBuf load = "state", TStringBuf init = "(Int64 '0)", TStringBuf merge = "left")
     {
         const TString program = TStringBuilder() << R"((
             (return (AggregationTraits )" << itemType << R"(
@@ -55,7 +60,7 @@ struct TStreamingAggregationTypeAnnTest {
                 (lambda '(item state) state)
                 (lambda '(state) )" << save << R"()
                 (lambda '(state) )" << load << R"()
-                (lambda '(left right) left)
+                (lambda '(left right) )" << merge << R"()
                 (lambda '(state) )" << finish << ") " << defaultValue << ")) )";
         auto traits = ParseAndAnnotate(program, Ctx, /*instant=*/false, /*wholeProgram=*/false, Types);
         UNIT_ASSERT_C(traits, Ctx.IssueManager.GetIssues().ToString());
@@ -151,7 +156,7 @@ struct TStreamingAggregationTypeAnnTest {
             return true;
         });
         return NKikimr::NKqp::NOpt::KqpBuildStreamingFlow(0, NNodes::TKqpPhysicalTx(tx), output,
-            streamingResults, *Config, tables, "db", Ctx);
+            streamingResults, *Config, tables, "db", UserRequestContext.Get(), Ctx);
     }
 
     IGraphTransformer::TStatus Annotate(TExprNode::TPtr& node) {
@@ -628,6 +633,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         }
         for (const TStringBuf type : {
                 "(PgType 'int4)",
+                "(MultiType (DataType 'Int64))",
                 "(StructType '('member (DataType 'String)))",
                 "(TaggedType (DataType 'String) 'tag)",
                 "(VariantType (TupleType (DataType 'String) (DataType 'Int64)))",
@@ -739,10 +745,10 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
                 {test.List({test.Atom("value"), traits})}, std::move(settings));
             TStringBuf expectedError;
-            if (TiedTable && !testCase.Supported) {
-                expectedError = "Unsupported saved state type for streaming aggregation output state table, column: value";
-            } else if (!DisableCheckpoints && !traits->Child(NNodes::TCoAggregationTraits::idx_SaveHandler)->GetTypeAnn()->IsPersistable()) {
+            if ((TiedTable || !DisableCheckpoints) && !traits->Child(NNodes::TCoAggregationTraits::idx_SaveHandler)->GetTypeAnn()->IsPersistable()) {
                 expectedError = "Expected persistable data, but got:";
+            } else if (TiedTable && !testCase.Supported) {
+                expectedError = "Unsupported saved state type for streaming aggregation output state table, column: value";
             }
             UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), expectedError.empty()
                 ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
@@ -773,8 +779,43 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             test.Ctx.IssueManager.GetIssues().ToString());
         if (!supported) {
             UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
-                "Unsupported saved state type for streaming aggregation output state table, column: value");
+                "Expected persistable data, but got:");
         }
+    }
+
+    Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateRequiresMerge, TiedTable, HasMerge) {
+        TStreamingAggregationTypeAnnTest test;
+        const auto traits = test.Traits("state", "(Null)", "(StructType '('key (DataType 'String)))",
+            "state", "state", "(Int64 '0)", HasMerge ? "left" : "(Void)");
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+            {test.List({test.Atom("value"), traits})}, TiedTable ? TExprNodeList{
+                test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})})} : TExprNodeList{});
+        UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), TiedTable && !HasMerge
+            ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        if constexpr (TiedTable && !HasMerge) {
+            UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
+                "Merge handler must be specified for streaming aggregation tied to an output state table");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingAggregationPendingInputMayBeNonPersistable, TiedTable) {
+        TStreamingAggregationTypeAnnTest test;
+        const auto traits = test.Traits("state", "(Null)",
+            "(StructType '('key (DataType 'String)) '('payload (ResourceType 'TestInput)))");
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+            {test.List({test.Atom("value"), traits})}, TiedTable ? TExprNodeList{
+                test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"), test.List({
+                    test.List({test.Atom("key"), test.Atom("key")}),
+                    test.List({test.Atom("value"), test.Atom("value")})})})})} : TExprNodeList{});
+        const auto* rowType = test.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            test.Ctx.MakeType<TItemExprType>("key", test.Ctx.MakeType<TDataExprType>(EDataSlot::String)),
+            test.Ctx.MakeType<TItemExprType>("payload", test.Ctx.MakeType<TResourceExprType>("TestInput"))});
+        node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(rowType));
+        // Pending lookups retain saved aggregate contributions, not input resources.
+        test.CheckType(node);
     }
 
     Y_UNIT_TEST(StreamingAggregationOutputStateSerializationDoesNotMutateSharedTraits) {
@@ -921,6 +962,46 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateEligibility, StreamingQuery, DisableCheckpoints) {
+        using namespace NNodes;
+        for (const bool withRequestContext : {false, true}) {
+            for (const bool identityFinish : {false, true}) {
+                TStreamingAggregationTypeAnnTest test;
+                test.Config->DisableCheckpoints = DisableCheckpoints;
+                test.UserRequestContext->IsStreamingQuery = StreamingQuery;
+                if (!withRequestContext) {
+                    test.UserRequestContext.Reset();
+                }
+                auto aggregation = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")},
+                    {test.List({test.Atom("value"), test.Traits(identityFinish ? "state" : "(Add state (Int64 '1))")})});
+                test.CheckType(aggregation);
+                aggregation->AddConstraint(test.Ctx.MakeConstraint<TDistinctConstraintNode>(std::vector<std::string_view>{"key"}));
+                test.MarkStreaming(aggregation);
+                test.MarkStreaming(aggregation->HeadPtr());
+                TKikimrTablesData tables;
+                const auto tx = test.Ctx.NewCallable(aggregation->Pos(), TKqpPhysicalTx::CallableName(), {
+                    test.List({test.TableSinkStage("/Root/result", aggregation, tables)}),
+                    test.List({}), test.List({}), test.List({})});
+                THashSet<std::pair<ui64, ui64>> streamingResults;
+                TExprNode::TPtr output;
+                const auto status = test.BuildStreamingFlow(tx, output, streamingResults, tables);
+                if (!withRequestContext || !StreamingQuery || DisableCheckpoints) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(status, IGraphTransformer::TStatus::Ok, test.Ctx.IssueManager.GetIssues().ToString());
+                    UNIT_ASSERT(output == tx);
+                    UNIT_ASSERT(!GetSetting(TKqpStreamingAggregation(aggregation).Settings().Ref(), "output_state_table"));
+                } else if (!identityFinish) {
+                    UNIT_ASSERT_VALUES_EQUAL(status, IGraphTransformer::TStatus::Error);
+                    UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "require an identity finalizer");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(status, IGraphTransformer::TStatus::Repeat, test.Ctx.IssueManager.GetIssues().ToString());
+                    const auto rewritten = FindNode(output, [](const TExprNode::TPtr& node) { return TKqpStreamingAggregation::Match(node.Get()); });
+                    UNIT_ASSERT(rewritten);
+                    UNIT_ASSERT(GetSetting(TKqpStreamingAggregation(rewritten).Settings().Ref(), "output_state_table"));
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST_QUAD(StreamingAggregationOutputStateWrites, SameTable, Assigned) {
         using namespace NNodes;
         TStreamingAggregationTypeAnnTest test;
@@ -1046,7 +1127,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         });
         output = consumer;
         const auto status = NKikimr::NKqp::NOpt::KqpBuildStreamingFlow(1, TKqpPhysicalTx(consumer), output,
-            streamingResults, *test.Config, tables, "db", test.Ctx);
+            streamingResults, *test.Config, tables, "db", test.UserRequestContext.Get(), test.Ctx);
         UNIT_ASSERT_VALUES_EQUAL_C(status, StreamingProducer ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok,
             test.Ctx.IssueManager.GetIssues().ToString());
         if (StreamingProducer) {
@@ -1876,6 +1957,8 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             test.List({test.Atom("output_state_table"), test.List({test.Atom("/Root/result"),
                 test.List({test.List({test.Atom("key"), test.Atom("key")})})})})});
         test.CheckType(aggregation);
+        // Enable table tying when validating conflicting metadata in this pre-annotated plan.
+        test.Config->DisableCheckpoints = false;
         aggregation->AddConstraint(test.Ctx.MakeConstraint<TDistinctConstraintNode>(std::vector<std::string_view>{"key"}));
         test.MarkStreaming(aggregation);
         test.MarkStreaming(aggregation->HeadPtr());

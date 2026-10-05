@@ -73,7 +73,8 @@ public:
         const TBinaryLambda& finish, // (key, state) -> (output_item)
         TRuntimeNode stateTablePath, // String path or Tuple<path, Struct<aggregation column: table column>> literal
         const TUnaryLambda& save = {}, // (state) -> (saved_state)
-        const TUnaryLambda& load = {}); // (saved_state) -> (state)
+        const TUnaryLambda& load = {}, // (saved_state) -> (state)
+        const TBinaryLambda& merge = {}); // (state, state) -> (state)
 };
 
 } // namespace NMiniKQL

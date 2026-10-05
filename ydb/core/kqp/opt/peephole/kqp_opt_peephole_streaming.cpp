@@ -1,6 +1,7 @@
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -456,11 +457,11 @@ class TStreamingFlowBuilder {
     };
 
 public:
-    TStreamingFlowBuilder(const TStringBuf& cluster, const TKikimrConfiguration& config, const TKikimrTablesData& tables, TExprContext& ctx)
+    TStreamingFlowBuilder(const TStringBuf& cluster, const TKikimrConfiguration& config, const TKikimrTablesData& tables, const TUserRequestContext* userRequestContext, TExprContext& ctx)
         : Cluster(cluster)
         , Tables(tables)
         , Config(config)
-        , CollectColumnMappings(!Config.UseInMemoryStreamingAggregation.Get().GetOrElse(false))
+        , UseOutputStateTable(CanUseOutputStateTable(config, userRequestContext))
         , Ctx(ctx)
     {}
 
@@ -643,7 +644,7 @@ public:
     bool TieStreamingAggregationWithOutputTable(const TKqpPhysicalTx& tx, TExprNode::TPtr& output) {
         output = tx.Ptr();
 
-        if (Config.UseInMemoryStreamingAggregation.Get().GetOrElse(false)) {
+        if (!UseOutputStateTable) {
             return true;
         }
 
@@ -1117,6 +1118,12 @@ private:
 
     //// Streaming aggregation tie with output table
 
+    static bool CanUseOutputStateTable(const TKikimrConfiguration& config, const TUserRequestContext* userRequestContext) {
+        return userRequestContext && userRequestContext->IsStreamingQuery
+            && !config.DisableCheckpoints.Get().GetOrElse(false)
+            && !config.UseInMemoryStreamingAggregation.Get().GetOrElse(false);
+    }
+
     bool ValidateAggregationOutputState(const TKqpStreamingAggregation& aggregation) const {
         for (const auto& handler : aggregation.Handlers()) {
             if (!handler.Ref().Head().IsAtom()) {
@@ -1206,7 +1213,7 @@ private:
 
         if (TCoVariant::Match(&node)) {
             const ui32 index = FromString<ui32>(node.Child(1)->Content());
-            outputs.at(index) = {.Seen = true, .NonEmpty = true, .ColumnMapping = CollectColumnMappings ? CollectOperatorsColumnsMapping(node.Head()) : TColumnOriginMapping{}};
+            outputs.at(index) = {.Seen = true, .NonEmpty = true, .ColumnMapping = UseOutputStateTable ? CollectOperatorsColumnsMapping(node.Head()) : TColumnOriginMapping{}};
         } else if (TCoJust::Match(&node) || TCoToFlow::Match(&node) || TCoFromFlow::Match(&node) || TCoToStream::Match(&node) || TCoIterator::Match(&node) || TCoEnsure::Match(&node)) {
             outputs = CollectVariantOperatorsColumnsMapping(node.Head(), count);
         } else if (TCoIf::Match(&node) || TCoIfStrict::Match(&node)) {
@@ -1244,7 +1251,7 @@ private:
             }
         }
 
-        if (!CollectColumnMappings) {
+        if (!UseOutputStateTable) {
             return;
         }
 
@@ -1360,7 +1367,7 @@ private:
                 auto& output = summary.Outputs[index];
                 output.Source = {&node, index};
 
-                if (CollectColumnMappings) {
+                if (UseOutputStateTable) {
                     output.ColumnMapping = TColumnOriginMapping::Initial(output.Source, OutputItemType(node, index), Ctx);
                 }
             }
@@ -1376,7 +1383,7 @@ private:
             auto& output = summary.Outputs.front();
             output.Source = {&node};
 
-            if (CollectColumnMappings) {
+            if (UseOutputStateTable) {
                 output.ColumnMapping = TColumnOriginMapping::Initial(output.Source, OutputItemType(node, /* index */ 0), Ctx);
             }
 
@@ -1514,7 +1521,7 @@ private:
     const TStringBuf Cluster;
     const TKikimrTablesData& Tables;
     const TKikimrConfiguration& Config;
-    const bool CollectColumnMappings = false;
+    const bool UseOutputStateTable = false;
     TExprContext& Ctx;
 
     YDB_ACCESSOR_DEF(bool, HasStreamingNodes);
@@ -1541,9 +1548,10 @@ IGraphTransformer::TStatus KqpBuildStreamingFlow(
     const TKikimrConfiguration& config,
     const TKikimrTablesData& tables,
     const TStringBuf cluster,
+    const TUserRequestContext* userRequestContext,
     TExprContext& ctx)
 {
-    TStreamingFlowBuilder builder(cluster, config, tables, ctx);
+    TStreamingFlowBuilder builder(cluster, config, tables, userRequestContext, ctx);
     if (!builder.ValidateStreamingConstraints(txIdx, tx, streamingTxResults)) {
         return IGraphTransformer::TStatus::Error;
     }

@@ -1,5 +1,7 @@
 #include <fmt/format.h>
 
+#include <ydb/core/kqp/common/kqp.h>
+
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/session_updater.h>
@@ -542,6 +544,100 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
             UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << ui32(state));
             UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << ui32(state));
             UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << ui32(state));
+        }
+    }
+
+    Y_UNIT_TEST(WmStateNotificationsPreserveRequestObserverAndCookie) {
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED, /*limit=*/1);
+        auto ydb = f.GetYdb();
+        auto& runtime = *ydb->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto busySender = runtime.AllocateEdgeActor();
+        const auto proxy = NKqp::MakeKqpProxyID(runtime.GetNodeId());
+        auto client = ydb->GetTableClient();
+        auto firstSession = client.CreateSession().GetValueSync().GetSession();
+        auto secondSession = client.CreateSession().GetValueSync().GetSession();
+
+        auto sendQuery = [&](const TString& sessionId, const TString& query, TActorId actor,
+                             ui64 cookie, bool report = true) {
+            auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            event->Record.SetUserToken(NACLib::TUserToken("", "user@" BUILTIN_SYSTEM_DOMAIN, {}).SerializeAsString());
+            auto* request = event->Record.MutableRequest();
+            request->SetSessionId(sessionId);
+            request->SetQuery(query);
+            request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request->SetDatabase("/Root");
+            request->SetPoolId("my_pool");
+            request->SetKeepSession(true);
+            request->SetReportWmStateChanges(report);
+            request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            request->MutableTxControl()->set_commit_tx(true);
+            runtime.Send(new IEventHandle(proxy, actor, event.Release(), 0, cookie));
+        };
+        auto checkState = [&](ISessionUpdater::EState state, ui64 cookie) {
+            auto event = runtime.GrabEdgeEvent<TEvWmStateChanged>(sender, FUTURE_WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(event->Get()->State), static_cast<ui32>(state));
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->PoolId, "my_pool");
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->ClassifiedBy, "USER");
+        };
+        auto checkResponse = [&](TActorId actor, ui64 cookie, Ydb::StatusIds::StatusCode status) {
+            auto event = runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvQueryResponse>(actor, FUTURE_WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetYdbStatus(), status,
+                                      event->Get()->Record.DebugString());
+        };
+        auto release = [&](TEvContinueRequest::TPtr& event, TActorId edge) {
+            runtime.Send(new IEventHandle(event->Sender, edge, event->Release().Release()));
+        };
+
+        // Keep the only pool slot occupied until both observed requests queue.
+        const auto hangingEdge = f.SetupInterceptor("SELECT 11;");
+        auto hanging = ydb->ExecuteQueryAsync("SELECT 11;", TQueryRunnerSettings().PoolId("my_pool"));
+        auto hangingEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(hangingEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(hangingEvent);
+        const auto firstEdge = f.SetupInterceptor("SELECT 42;");
+        const auto secondEdge = f.SetupInterceptor("SELECT 43;");
+
+        sendQuery(TString(firstSession.GetId()), "SELECT 42;", sender, 101);
+        checkState(ISessionUpdater::PENDING, 101);
+        checkState(ISessionUpdater::DELAYED, 101);
+        sendQuery(TString(secondSession.GetId()), "SELECT 43;", sender, 202);
+        checkState(ISessionUpdater::PENDING, 202);
+        checkState(ISessionUpdater::DELAYED, 202);
+
+        // Rejection must not steal the active request's observer or its cookie.
+        sendQuery(TString(firstSession.GetId()), "SELECT 99;", busySender, 303);
+        checkResponse(busySender, 303, Ydb::StatusIds::SESSION_BUSY);
+
+        release(hangingEvent, hangingEdge);
+        UNIT_ASSERT_VALUES_EQUAL(hanging.GetResult().GetStatus(), NYdb::EStatus::SUCCESS);
+        checkState(ISessionUpdater::EXITED, 101);
+        auto firstEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(firstEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(firstEvent);
+        release(firstEvent, firstEdge);
+        checkResponse(sender, 101, Ydb::StatusIds::SUCCESS);
+        checkState(ISessionUpdater::EXITED, 202);
+        auto secondEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(secondEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(secondEvent);
+        release(secondEvent, secondEdge);
+        checkResponse(sender, 202, Ydb::StatusIds::SUCCESS);
+
+        // Reusing a session without opting in must clear the previous observer.
+        sendQuery(TString(firstSession.GetId()), "SELECT 44;", sender, 404, false);
+        checkResponse(sender, 404, Ydb::StatusIds::SUCCESS);
+        // All WM transitions precede the completed query response. A marker
+        // bounds the edge queue check without waiting for an absent event.
+        for (auto actor : {sender, busySender}) {
+            runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvWakeup()));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+                UNIT_ASSERT_C(event->GetTypeRewrite() != TEvWmStateChanged::EventType,
+                              "Unexpected WM notification after query completion");
+                return event->GetTypeRewrite() == TEvents::TEvWakeup::EventType;
+            }, {actor}, FUTURE_WAIT_TIMEOUT);
         }
     }
 

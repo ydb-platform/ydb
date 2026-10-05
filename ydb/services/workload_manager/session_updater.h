@@ -42,11 +42,6 @@ inline NKikimrKqp::EWmState WmStateToProto(ISessionUpdater::EState state) {
     }
 }
 
-///
-/// Convert the protobuf EWmState enum to a human-readable status string.
-/// Returns "QUEUED" for WM_STATE_QUEUED, "EXECUTING" for WM_STATE_EXECUTING,
-/// and an empty string for WM_STATE_NONE (not managed by the workload manager).
-///
 inline TString WmStateToStatus(NKikimrKqp::EWmState state) {
     switch (state) {
         case NKikimrKqp::WM_STATE_QUEUED:
@@ -63,10 +58,6 @@ inline TString WmStateToStatus(ISessionUpdater::EState state) {
     return WmStateToStatus(WmStateToProto(state));
 }
 
-///
-/// Check if the WM session state indicates the request is in the WM queue
-/// (either PENDING or DELAYED).
-///
 inline bool IsWmStateQueued(ISessionUpdater::EState state) {
     return state == ISessionUpdater::EState::PENDING ||
            state == ISessionUpdater::EState::DELAYED;

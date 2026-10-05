@@ -29,6 +29,9 @@ struct TWorkloadManagerEvents {
     };
 };
 
+// Local-only notification for ReportWmStateChanges: the requester must send to
+// the session owner's KQP proxy on the same node. Cross-node proxy forwarding
+// is not supported. The event cookie is the original query request's cookie.
 struct TEvWmStateChanged : public NActors::TEventLocal<TEvWmStateChanged, TWorkloadManagerEvents::EvWmStateChanged> {
     TEvWmStateChanged(ISessionUpdater::EState state, TString poolId, TString classifiedBy)
         : State(state)

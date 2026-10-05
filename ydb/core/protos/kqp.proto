@@ -200,6 +200,9 @@ message TQueryRequest {
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
     optional bool IsWarmupCompilation = 41;
     optional bool CollectAffectedRows = 43;
+    // Local actor API only: the sender must be on the session owner's node and
+    // send directly to its KQP proxy. WM notifications are not serialized or
+    // relayed by proxies across nodes. Notifications retain the request cookie.
     optional bool ReportWmStateChanges = 44;
 }
 

@@ -106,24 +106,28 @@ public:
 
         if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED) {
             TActorId observer;
+            ui64 observerCookie;
             TString poolId;
             TString classifiedBy;
             {
                 TGuard<TAdaptiveLock> guard(PoolIdLock);
                 observer = StateObserver;
+                observerCookie = StateObserverCookie;
                 poolId = PoolId;
                 classifiedBy = ClassifiedBy;
             }
             if (observer) {
                 NActors::TActivationContext::Send(new NActors::IEventHandle(observer, {},
-                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy))));
+                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy)),
+                    0, observerCookie));
             }
         }
     }
 
-    void SetStateObserver(TActorId observer) {
+    void SetStateObserver(TActorId observer, ui64 cookie) {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         StateObserver = observer;
+        StateObserverCookie = cookie;
     }
 
     void SetPoolContext(TString poolId, TString classifiedBy) override {
@@ -162,6 +166,7 @@ public:
             PoolId.clear();
             ClassifiedBy.clear();
             StateObserver = {};
+            StateObserverCookie = 0;
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -175,6 +180,7 @@ private:
     TString PoolId;
     TString ClassifiedBy;
     TActorId StateObserver;
+    ui64 StateObserverCookie = 0;
 };
 
 template<typename TValue>

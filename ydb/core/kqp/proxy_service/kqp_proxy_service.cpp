@@ -951,6 +951,9 @@ public:
                 // A concurrent request must not replace the active query's stats.
                 // The session actor still decides whether to accept the request.
                 LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+                if (ev->Get()->Record.GetRequest().GetReportWmStateChanges()) {
+                    sessionInfo->WmState->SetStateObserver(ev->Sender, ev->Cookie);
+                }
             }
             if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
@@ -959,9 +962,6 @@ public:
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
-            if (ev->Get()->Record.GetRequest().GetReportWmStateChanges()) {
-                sessionInfo->WmState->SetStateObserver(ev->Sender);
-            }
         }
 
         SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);

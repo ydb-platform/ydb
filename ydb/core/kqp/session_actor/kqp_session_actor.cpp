@@ -3283,6 +3283,9 @@ public:
                 response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
             }
         }
+        if (!QueryState->RequestEv) {
+            return;
+        }
         if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
             const auto state = updater->GetState();
             response->SetWmState(NWorkloadManager::WmStateToProto(state));

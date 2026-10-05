@@ -239,6 +239,33 @@ class CancelledJobExportTest(unittest.TestCase):
         self.assertFalse(any(row["name"] == "Post Cancel" for row in rows))
         self.assertFalse(any(row["github_job_id"] == 202 for row in rows))
 
+    def test_skips_a_matrix_job_whose_name_was_not_interpolated(self):
+        run = {
+            "id": 22,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "event": "workflow_dispatch",
+            "name": "Run-tests",
+            "head_sha": "abc",
+            "head_branch": "ci/shard-run-tests",
+            "created_at": "2026-10-04T20:00:00Z",
+            "html_url": "https://example.test/run/22",
+        }
+        jobs = [
+            {
+                "id": 301,
+                "name": "${{ matrix.branch }}:${{ inputs.build_preset }}",
+                "created_at": "2026-10-04T20:00:00Z",
+                "started_at": "2026-10-04T20:00:01Z",
+                "completed_at": "2026-10-04T20:00:01Z",
+                "conclusion": "skipped",
+                "steps": [],
+            }
+        ]
+        rows = metrics_from_workflow_run(run, jobs)
+        self.assertEqual(rows, [])
+
     def test_held_cancelled_run_is_exported(self):
         run = {
             "id": 21,

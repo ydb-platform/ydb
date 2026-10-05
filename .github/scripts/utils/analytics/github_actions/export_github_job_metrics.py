@@ -89,6 +89,9 @@ def metrics_from_workflow_run(
         if job_id is None or (skip_job_ids is not None and job_id in skip_job_ids):
             continue
         job_name = job.get("name") or ""
+        # A matrix job skipped before expansion keeps the workflow template as its name.
+        if "${{" in job_name:
+            continue
         job_started = parse_datetime(job.get("started_at"))
         job_completed = parse_datetime(job.get("completed_at"))
         conclusion = job.get("conclusion") or job.get("status")

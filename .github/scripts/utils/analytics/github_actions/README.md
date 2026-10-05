@@ -169,7 +169,8 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `setup_cache` | подключение dist-кэша / bazel-remote |
 | `graph_compare` | сравнение графа сборки с базовым коммитом |
 | `checkout_head` | `git checkout` на коммит, который тестируем |
-| `prepare_ya_make` | флаги, mute-лист, каталоги — всё сразу перед `ya make` |
+| `prepare_ya_make` | флаги, mute-лист, каталоги — всё сразу перед `ya make` с тестами. На джобе сохранения графа этой фазы нет |
+| `save_test_graph` | `ya make`, который только пишет `graph.json` и `context.json`. Тесты в нём не исполняются |
 | `ya_make_try_N` | весь `ya make` попытки N (сборка + тесты). Счётчики тестов — в `labels.tests` |
 | `ya_build` | из evlog: локальная компиляция и линковка внутри этой попытки |
 | `ya_tests` | из evlog: прогон тестов внутри попытки; может пересекаться с `ya_build` / `ya_cache_*` |

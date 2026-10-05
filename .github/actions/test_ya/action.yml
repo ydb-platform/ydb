@@ -509,12 +509,11 @@ runs:
             if [ "$INPUT_PUT_BUILD_RESULTS_TO_CACHE" = "true" ]; then
               SAVE_COMMAND="$SAVE_COMMAND --bazel-remote-username $INPUT_BAZEL_REMOTE_USERNAME --bazel-remote-password-file $BAZEL_REMOTE_PASSWORD_FILE --bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs"
             fi
-            # Same phases as a test try: the graph save is a ya make, so it gets
-            # ya_make_try plus evlog splits (ya_build / ya_tests / ya_cache_*).
+            # Configure writes the graph and returns before tests run. This is
+            # not a test attempt, so it must not be ya_make_try or ya_tests.
             mkdir -p "$PUBLIC_DIR"
             GRAPH_EVLOG="$PUBLIC_DIR/ya_evlog.jsonl"
-            export CI_YA_ATTEMPT=1
-            analytics start ya_make_try_1
+            analytics start save_test_graph
             set +e
             $SAVE_COMMAND -k --cache-tests \
               --evlog-file "$GRAPH_EVLOG" \
@@ -523,15 +522,9 @@ runs:
             SAVE_RC=$?
             set -e
             if [ "$SAVE_RC" -eq 0 ]; then
-              analytics end ya_make_try_1
+              analytics end save_test_graph
             else
-              analytics end ya_make_try_1 --rc "$SAVE_RC" --error "ya make rc=${SAVE_RC}"
-            fi
-            if [ -f "$GRAPH_EVLOG" ]; then
-              python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
-                --evlog "$GRAPH_EVLOG" \
-                --parent ya_make_try_1 \
-                --ya-attempt 1 || true
+              analytics end save_test_graph --rc "$SAVE_RC" --error "ya make rc=${SAVE_RC}"
             fi
             if [ "$SAVE_RC" -ne 0 ]; then
               echo "status=failed" >> $GITHUB_OUTPUT
@@ -548,7 +541,9 @@ runs:
         fi
 
         export CI_YA_ATTEMPT=1
-        analytics start prepare_ya_make
+        if [ "$GRAPH_ONLY" != "true" ]; then
+          analytics start prepare_ya_make
+        fi
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "$INPUT_BUILD_PRESET")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -577,7 +572,6 @@ runs:
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
 
         if [ "$GRAPH_ONLY" = "true" ]; then
-          analytics end prepare_ya_make
           if [ -f "$GRAPH_PATH" ]; then
             cp -f "$GRAPH_PATH" "$PUBLIC_DIR/graph.json"
           fi

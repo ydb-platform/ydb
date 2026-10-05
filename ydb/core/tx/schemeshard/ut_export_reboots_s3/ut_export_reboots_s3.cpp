@@ -1,3 +1,4 @@
+// ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 #include <ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>

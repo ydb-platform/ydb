@@ -1,3 +1,4 @@
+// ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 #include "common.h"
 
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>

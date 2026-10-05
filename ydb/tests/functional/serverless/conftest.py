@@ -1,3 +1,4 @@
+# ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 # -*- coding: utf-8 -*-
 import os
 import logging

@@ -76,7 +76,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanData, Handle);
-            hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanError, ResendToOwnerAndDie);
+            hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanError, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, ResendToOwnerAndDie);
@@ -125,6 +125,14 @@ public:
         }
 
         TBase::Send(OwnerId, THolder(data->Release().Release()));
+    }
+
+    void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
+        const bool isWarning = ev->Get()->Record.GetStatus() == Ydb::StatusIds::SUCCESS;
+        TBase::Send(OwnerId, ev->Release().Release());
+        if (!isWarning) {
+            PassAway();
+        }
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {

@@ -16,11 +16,10 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
-    // Test breaks when changing the flags for stable-26-4
-    // We need to include the option to not fallback on DML
-    /*
     Y_UNIT_TEST(UpsertKeepsDefaultColumnsThroughLowering) {
         NTests::TIdTestContext f;
+        // Exercise RBO lowering regardless of the DML fallback default.
+        f.Config->SetEnableFallbackOnDML(false);
         auto& ctx = f.ExprCtx;
         const auto pos = f.Pos;
         auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
@@ -56,7 +55,6 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Item(0).StringValue(), "value");
     }
-    */
 
     Y_UNIT_TEST(TypeAnnotationAllowsSharingOnlyThroughDistinctReplicatePorts) {
         // Extra local references are harmless. Reusing an ordinary subtree or

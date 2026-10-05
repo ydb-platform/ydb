@@ -167,10 +167,10 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `init` | шаг Init: каталоги, креды, S3 |
 | `clean_ya_cache` | чистка локального кэша `ya` |
 | `setup_cache` | подключение dist-кэша / bazel-remote |
-| `graph_compare` | сравнение графа сборки с базовым коммитом |
+| `graph_compare` | сравнение графа сборки с базовым коммитом. Evlog обоих `ya make` (base и head) режется на `ya_build` / `ya_cache_*` |
 | `checkout_head` | `git checkout` на коммит, который тестируем |
 | `prepare_ya_make` | флаги, mute-лист, каталоги — всё сразу перед `ya make` с тестами. На джобе сохранения графа этой фазы нет |
-| `save_test_graph` | `ya make`, который только пишет `graph.json` и `context.json`. Тесты в нём не исполняются |
+| `save_test_graph` | `ya make`, который только пишет `graph.json` и `context.json`. Тесты в нём не исполняются. Evlog режется на `ya_build` / `ya_cache_*` |
 | `ya_make_try_N` | весь `ya make` попытки N (сборка + тесты). Счётчики тестов — в `labels.tests` |
 | `ya_build` | из evlog: локальная компиляция и линковка внутри этой попытки |
 | `ya_tests` | из evlog: прогон тестов внутри попытки; может пересекаться с `ya_build` / `ya_cache_*` |
@@ -185,8 +185,9 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
-[`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,
-что рисует `ya analyze-make timeline`.
+[`ya_evlog_phases.py`](ya_evlog_phases.py) по любому evlog, который пишет
+`test_ya`: попытка тестов, `save_test_graph` и оба `ya make` в
+`graph_compare`. Те же узлы, что рисует `ya analyze-make timeline`.
 
 ## Выгрузка job и step
 

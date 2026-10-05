@@ -468,9 +468,11 @@ runs:
 
           analytics start graph_compare
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$COMPARE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$COMPARE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH --evlog-dir "$PUBLIC_DIR" $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
+          analytics_evlog "$PUBLIC_DIR/graph_compare_base_evlog.jsonl" graph_compare
+          analytics_evlog "$PUBLIC_DIR/graph_compare_head_evlog.jsonl" graph_compare
           analytics end graph_compare --rc "$RC"
           analytics flush
 
@@ -522,6 +524,7 @@ runs:
               $YA_MAKE_TARGET
             SAVE_RC=$?
             set -e
+            analytics_evlog "$GRAPH_EVLOG" save_test_graph
             if [ "$SAVE_RC" -eq 0 ]; then
               analytics end save_test_graph
             else
@@ -735,12 +738,7 @@ runs:
           # Optional sub-steps use || true so they don't abort the step.
           # Remember if any failed so we don't write conclusion=success.
           POSTPROCESS_RC=0
-          if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
-            python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
-              --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-              --parent "$YA_MAKE_NAME" \
-              --ya-attempt "$RETRY" || POSTPROCESS_RC=$?
-          fi
+          analytics_evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" "$YA_MAKE_NAME" "$RETRY"
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"

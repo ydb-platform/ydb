@@ -3,7 +3,8 @@
 Add `ydb/core/mon/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
 setup, call `NKikimr::NMetricChart::RegisterResources(mon)` once. This publishes
 `static/metric-chart/chart.js`, `client.js` and `chart.css` from binary resources.
-No external CDN or JavaScript framework is required.
+ChartKit, its Yagr Canvas renderer, React and styles are bundled into the binary.
+No external CDN or browser-side package resolution is required.
 
 Load the stylesheet and import the modules relative to the monitoring root.
 For a page under `/actors/`, the following paths also work through `/node/<id>/`:
@@ -72,9 +73,10 @@ allows chart settings per query and appearance overrides per retained line.
 `area` renders stacked layers: each layer thickness is its raw value, with
 positive and negative values stacked separately. Tooltip values remain raw.
 `fill: true` shades the region under ordinary lines without stacking them;
-per-series `fill` overrides the chart setting. Stack baselines use a shared
-grid capped at 1000 timestamps plus each series' own samples, preserving its
-changes and gaps. Automatic numeric formatting uses three significant digits;
+per-series `fill` overrides the chart setting. The adapter aligns both sides of each timestamp, preserving steps and gaps.
+Aligned graph data is capped at one million cells. Larger timestamp unions
+are sampled for display; tooltip values and statistics use retained samples.
+A note below the chart indicates when display sampling is active. Automatic numeric formatting uses three significant digits;
 axis labels reserve space according to their length.
 
 Set `settings.format` to a series name template. `{metric}`, `{name}`, `{query}`
@@ -86,8 +88,8 @@ format; series metadata uses `metric`, `queryLabel` and `labelValues` (the label
 name/value array). The shared JSON client supplies these fields. Names are plain
 text and never HTML, and formatting does not change series keys or query matching.
 
-Chart geometry uses CSS pixel coordinates without a scaled SVG viewBox, so
-axis text keeps its 12 px font at every chart width and configured height.
+ChartKit uses Yagr/uPlot to draw axes and series in Canvas.
+Axis text keeps its 12 px font at every chart width and configured height.
 Overview chunks stack used and free counts; together they cover the chunk pool.
 Memory compares allocated chunk capacity and recorded payload as ordinary lines.
 
@@ -119,6 +121,30 @@ group. `destroy()` removes the chart from the group. `plotLeft` reserves a commo
 minimum width for the Y axis; use the same value on aligned dashboard charts.
 Charts without a cursor group keep independent pinned tooltips.
 
-Pointer positions use the SVG's screen transform. Layout width is measured
-before replacing content, to avoid measuring the temporary disappearance of a
-page scrollbar during redraw.
+Pointer positions use the Canvas plot overlay and Yagr's coordinate conversion.
+Layout width is measured before replacing content, to avoid measuring the
+temporary disappearance of a page scrollbar during redraw.
+
+### Updating the bundled engine
+
+`vendor/entry.js` mounts ChartKit with its Yagr plugin behind the plain JavaScript
+chart API. It retains our exact-value tooltip, legend, cursor groups and range
+selection. ChartKit assets are lazy-loaded on the first nonempty chart.
+The adapter aligns independent histories to one timeline, retaining both sides
+of on-change transitions and null gaps. Stacked areas use explicit Canvas bands
+so positive and negative layers remain separate; tooltip and statistics still
+read original samples. The existing client limits apply before alignment.
+
+To regenerate the checked-in resources:
+
+```bash
+cd ydb/core/mon/metric_chart/vendor
+npm ci
+npm run build
+node --test ../tests/chart_data.test.mjs
+```
+
+Commit `chartkit.js`, `chartkit.css`, their `.LEGAL.txt` notices and
+`vendor/THIRD_PARTY_LICENSES.txt` together with the entry, build script and lockfile.
+The C++ build embeds these assets directly and does not invoke npm or require
+network access to build the bundle.

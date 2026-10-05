@@ -1,7 +1,4 @@
-const ns='http://www.w3.org/2000/svg';
-let nextChartId=0;
  const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};
- const node=(tag,attrs,value)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(value!==undefined)n.textContent=value;return n;};
  const fmt=v=>v===null||v===undefined?'\u2014':typeof v==='string'?v:Number(v).toLocaleString(undefined,{maximumSignificantDigits:3});
 export const defaultChartSettings={type:'line',fill:false,format:'',height:360,unit:'number',precision:null,min:null,max:null};
 export function formatSeriesName(series,format=''){
@@ -36,21 +33,42 @@ function sampleAt(series,time,before=false){
 function stackBase(areas,index,time,value,before=false){
  let base=0;for(let i=0;i<index;i++){const lower=sampleAt(areas[i],time,before);if(lower!==null&&(lower<0)===(value<0))base+=lower;}return base;
 }
-function stackAreas(series,begin,end){
- const areas=series.filter(s=>s.type==='area');if(!areas.length)return new Map();
- const times=[...new Set([begin,end,...areas.flatMap(s=>s.points.filter(p=>p.time>=begin&&p.time<=end).map(p=>p.time))])].sort((a,b)=>a-b);
- // Bound the shared baseline grid; retain every line's own samples and gaps.
- const shared=times.length<=1000?times:Array.from({length:1000},(_,i)=>times[Math.round(i*(times.length-1)/999)]);
- const result=new Map();
- for(const [index,s] of areas.entries()){
-  const grid=[...new Set([...shared,...s.points.filter(p=>p.time>=begin&&p.time<=end).map(p=>p.time)])].sort((a,b)=>a-b),points=[];
-  for(const time of grid)for(const before of [true,false]){
-   const value=sampleAt(s,time,before),base=value===null?0:stackBase(areas,index,time,value,before);
-   points.push({time,value,base,top:value===null?null:base+value});
+// Yagr requires a shared timeline. Duplicate timestamps preserve both sides of
+// discontinuities in stacked layers, including explicit null gaps.
+export function prepareChartKitSeries(series,begin,end){
+ const allTimes=[...new Set([begin,end,...series.flatMap(s=>s.points.filter(p=>p.time>=begin&&p.time<=end).map(p=>p.time))])].sort((a,b)=>a-b);
+ // Bound aligned cells, not only source samples: unrelated timestamps would
+ // otherwise multiply each retained history by every other history's length.
+ const graphCount=series.reduce((count,s)=>count+(s.type==='area'?2*(Number(s.points.some(p=>p.value!==null&&p.value>=0))+Number(s.points.some(p=>p.value<0))):1),0);
+ const limit=Math.max(2,Math.floor(1000000/(2*Math.max(1,graphCount))));
+ const sampled=allTimes.length>limit;
+ const times=sampled?Array.from({length:limit},(_,i)=>allTimes[Math.round(i*(allTimes.length-1)/(limit-1))]):allTimes;
+ const align=s=>{const values=times.flatMap(time=>[sampleAt(s,time,true),sampleAt(s,time)]);
+  if(sampled){let index=0;for(let i=1;i<times.length;i++){let gap=false;while(index<s.points.length&&s.points[index].time<times[i]){const p=s.points[index++];if(p.time>times[i-1]&&p.value===null)gap=true;}if(gap)values[i*2]=null;}}
+  return values;
+ };
+ const timeline=times.flatMap(time=>[time,time]),graphs=[],pairs=[];
+ const positive=new Float64Array(timeline.length),negativeBase=new Float64Array(timeline.length);
+ for(const s of series){
+  const common={id:s.key,name:s.display,color:s.color,spanGaps:false,interpolation:s.step?'left':'linear',showInLegend:false,showInTooltip:false};
+  if(s.type==='area'){
+   const samples=align(s).map((value,i)=>{const stack=value<0?negativeBase:positive,base=stack[i];if(value!==null)stack[i]+=value;return {value,base,top:value===null?null:stack[i]};});
+   for(const negative of [false,true]){
+    if(!samples.some(p=>p.value!==null&&(p.value<0)===negative))continue;
+    const top=graphs.length,sign=p=>p.value!==null&&(p.value<0)===negative;
+    graphs.push({...common,id:s.key+':'+negative+':top',color:'transparent',data:samples.map(p=>sign(p)?p.top:null)});
+    graphs.push({...common,id:s.key+':'+negative+':base',color:'transparent',data:samples.map(p=>sign(p)?p.base:null)});
+    pairs.push({top,base:top+1,negative,color:s.color});
+   }
+  }else{
+   graphs.push({...common,color:s.fill&&/^#[0-9a-f]{6}$/i.test(s.color)?s.color+'2e':s.color,type:(!s.step&&s.points.filter(p=>p.value!==null).length===1?'dots':s.fill?'area':'line'),pointsSize:6,lineColor:s.color,lineWidth:s.width||2,width:s.width||2,data:align(s)});
   }
-  result.set(s.key,points);
  }
- return result;
+ // Yagr reverses graph order before handing it to uPlot; bands use uPlot indices.
+ const idx=i=>graphs.length-i;
+ const bands=pairs.map(p=>({series:p.negative?[idx(p.base),idx(p.top)]:[idx(p.top),idx(p.base)],fill:p.color}));
+ const extent=[0,0];let hasValues=false;for(const graph of graphs)for(const value of graph.data)if(value!==null){hasValues=true;extent[0]=Math.min(extent[0],value);extent[1]=Math.max(extent[1],value);}
+ return {timeline,graphs,bands,extent,hasValues,sampled};
 }
 export function seriesStats(s,begin,end){
   const pts=s.points.filter(p=>p.time>=begin&&p.time<=end), valid=pts.filter(p=>p.value!==null);let avg=null;
@@ -73,7 +91,9 @@ export function createMetricChartCursorGroup(){
  };
 }
 export function createMetricChart(chart,options={}){
- const clipId='ymc-clip-'+(++nextChartId),hidden=new Set();
+ const hidden=new Set();
+ if(!document.querySelector('link[data-metric-chartkit]')){const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('./chartkit.css',import.meta.url).href;link.dataset.metricChartkit='';document.head.append(link);}
+ let unmount=null,generation=0;
  let settings={...defaultChartSettings,...options.settings};
  const format=value=>formatMetricValue(value,settings);
  let data={series:[],begin:0,end:1,title:'Metrics'},destroyed=false,lastWidth=chart.clientWidth,tooltipLayer=null,cursorTime=null,drawCursor=()=>{},cursorPinned=false,releaseTooltip=()=>{};
@@ -81,58 +101,51 @@ export function createMetricChart(chart,options={}){
  chart.classList.add('ymc');
  chart.style.setProperty('--ymc-height',settings.height+'px');
  function render(){
-  // Measure before clearing content: removing the SVG can temporarily remove
+  // Measure before clearing content: removing the chart can temporarily remove
   // the page scrollbar and inflate the measured width by its full thickness.
   const width=chart.clientWidth;lastWidth=width;
+  const current=++generation;unmount?.();unmount=null;
   tooltipLayer?.remove();tooltipLayer=null;drawCursor=()=>{};cursorPinned=false;releaseTooltip=()=>{};
   chart.replaceChildren();
   const {begin,end,title,emptyText}=data;
-  const active=data.series.filter(s=>!hidden.has(s.key)).map(s=>({...s,type:s.type||settings.type,display:formatSeriesName(s,s.format??settings.format)}));
-  const stacked=stackAreas(active,begin,end),areas=active.filter(s=>s.type==='area');
-  const values=active.flatMap(s=>{
-   const values=s.points.filter(p=>p.value!==null&&p.time>=begin&&p.time<=end).map(p=>p.value);
-   if(s.step){const predecessor=s.points.filter(p=>p.time<begin).at(-1);if(predecessor&&predecessor.value!==null&&(!s.closed||s.points.at(-1).time>begin))values.push(predecessor.value);}
-   return stacked.has(s.key)?stacked.get(s.key).filter(p=>p.value!==null).flatMap(p=>[p.base,p.top]):values;
-  });
-  if(!values.length){chart.append(text('div',data.series.length&&!active.length?'No visible series. Select rows in the legend.':emptyText||'No retained numeric samples in this interval','ymc-empty'));renderLegend();return;}
-  const extent=values.reduce((range,value)=>[Math.min(range[0],value),Math.max(range[1],value)],[0,0]);
+  const active=data.series.filter(s=>!hidden.has(s.key)).map(s=>({...s,type:s.type||settings.type,fill:s.fill??settings.fill,display:formatSeriesName(s,s.format??settings.format)}));
+  const areas=active.filter(s=>s.type==='area'),prepared=prepareChartKitSeries(active,begin,end);
+  if(!prepared.hasValues){chart.append(text('div',data.series.length&&!active.length?'No visible series. Select rows in the legend.':emptyText||'No retained numeric samples in this interval','ymc-empty'));renderLegend();return;}
+  const extent=prepared.extent;
   let lo=settings.min??extent[0],hi=settings.max??extent[1];if(lo>=hi){if(settings.max!==null&&settings.min===null)lo=hi-1;else hi=lo+1;}
   const axisSettings={...settings,precision:settings.precision===null?null:Math.min(3,settings.precision)};
   const labels=Array.from({length:5},(_,i)=>formatMetricValue(hi-(hi-lo)*i/4,axisSettings));
-  const W=Math.max(1,width),H=typeof innerWidth==='number'&&innerWidth<=650?Math.min(settings.height,260):settings.height,L=Math.max(options.plotLeft||55,...labels.map(label=>label.length*7+14)),R=W-20,T=20,B=H-50,x=t=>L+(t-begin)*(R-L)/(end-begin),y=v=>B-(v-lo)*(B-T)/(hi-lo);
-  const svg=node('svg',{role:'img','aria-label':title+' comparison chart'});
-  const defs=node('defs',{}),clip=node('clipPath',{id:clipId});clip.append(node('rect',{x:L,y:T,width:R-L,height:B-T}));defs.append(clip);svg.append(defs);
-  for(let i=0;i<=4;i++){const py=T+(B-T)*i/4;svg.append(node('line',{x1:L,x2:R,y1:py,y2:py,stroke:'#e8ebef'}),node('text',{x:L-10,y:py+4,'text-anchor':'end'},labels[i]));}
-  const ticks=W<600?2:4;for(let i=0;i<=ticks;i++){const px=L+(R-L)*i/ticks;svg.append(node('text',{x:px,y:B+30,'text-anchor':i===0?'start':i===ticks?'end':'middle'},new Date(begin+(end-begin)*i/ticks).toLocaleTimeString()));}
-  const graph=node('g',{'clip-path':'url(#'+clipId+')'});
-  for(const s of active){
-   if(stacked.has(s.key)){
-    let segment=[];
-    const flush=()=>{if(!segment.length)return;
-     const top=segment.map((p,i)=>(i?' L ':' M ')+x(p.time)+' '+y(p.top)).join('');
-     const bottom=[...segment].reverse().map(p=>' L '+x(p.time)+' '+y(p.base)).join('');
-     graph.append(node('path',{d:top+bottom+' Z',fill:s.color,'fill-opacity':.65,stroke:'none','data-area':s.key}));segment=[];};
-    for(const p of stacked.get(s.key)){if(p.value===null)flush();else segment.push(p);}flush();
-    continue;
-   }
-   let path='',segment='',lastTime=null,firstTime=null;
-   const flush=()=>{if(!segment)return;if(s.fill??settings.fill){const baseline=y(Math.max(lo,Math.min(hi,0)));graph.append(node('path',{d:segment+' L '+x(lastTime)+' '+baseline+' L '+x(firstTime)+' '+baseline+' Z',fill:s.color,'fill-opacity':.18,stroke:'none'}));}path+=segment;segment='';};
-   for(const p of s.points){if(p.value===null){flush();continue;}if(!segment){firstTime=p.time;segment=' M '+x(p.time)+' '+y(p.value);}else segment+=s.step?' H '+x(p.time)+' V '+y(p.value):' L '+x(p.time)+' '+y(p.value);lastTime=p.time;}
-   if(s.step&&segment){lastTime=Math.min(end,s.closed?s.points.at(-1).time:end);segment+=' H '+x(lastTime);}flush();
-   graph.append(node('path',{d:path,fill:'none',stroke:s.color,'stroke-width':s.width||2,'data-series':s.key}));
-   for(const p of s.points){if(p.value!==null&&p.time>=begin&&p.time<=end&&s.points.length===1)graph.append(node('circle',{cx:x(p.time),cy:y(p.value),r:3,fill:s.color}));}
-  }svg.append(graph);
-  const cursor=node('line',{'data-cursor':'time',x1:L,x2:L,y1:T,y2:B,stroke:'#8b97a7','stroke-dasharray':'4 3',visibility:'hidden'}),selection=node('rect',{x:L,y:T,width:0,height:B-T,fill:'#2678bc',opacity:.12});svg.append(selection,cursor);
-  drawCursor=()=>{const visible=cursorTime!==null&&cursorTime>=begin&&cursorTime<=end;cursor.setAttribute('visibility',visible?'visible':'hidden');if(visible){const px=x(cursorTime);cursor.setAttribute('x1',px);cursor.setAttribute('x2',px);}};drawCursor();
-  const tip=text('div','','ymc-tooltip');tip.hidden=true;chart.append(svg);tooltipLayer=text('div','','ymc ymc-tooltip-layer');tooltipLayer.append(tip);document.body.append(tooltipLayer);let start=null,pinned=false,tooltipSort='value',tooltipDirection=-1,tooltipData=null;
+  const H=innerWidth<=650?Math.min(settings.height,260):settings.height;
+  const axisWidth=Math.max(options.plotLeft||55,...labels.map(label=>label.length*7+14));
+  const host=text('div','','ymc-canvas');host.style.height=H+'px';host.setAttribute('role','img');host.setAttribute('aria-label',title+' comparison chart');chart.append(host);
+  import('./chartkit.js').then(({mountChartKit})=>{
+   if(destroyed||current!==generation)return;
+   unmount=mountChartKit(host,{
+    data:{timeline:prepared.timeline,graphs:prepared.graphs},
+    libraryConfig:{
+     chart:{size:{height:H,padding:[20,20,0,0]},timeMultiplier:1,select:{zoom:false}},
+     scales:{x:{range:()=>[begin,end]},y:{range:()=>[lo,hi]}},
+     axes:{x:{font:'12px Arial',size:45,values:(_,ticks)=>ticks.map(t=>new Date(t).toLocaleTimeString())},y:{font:'12px Arial',size:axisWidth,values:(_,ticks)=>ticks.map(v=>formatMetricValue(v,axisSettings))}},
+     bands:prepared.bands,legend:{show:false},tooltip:{show:false},markers:{show:false},cursor:{x:{visible:false},y:{visible:false},maxMarkers:0},
+    },
+   },widget=>{
+    if(destroyed||current!==generation)return;
+    attachInteraction(widget);
+   },()=>{if(!destroyed&&current===generation)host.replaceChildren(text('div','Unable to render chart','ymc-empty'));});
+  }).catch(()=>{if(!destroyed&&current===generation)host.replaceChildren(text('div','Unable to load chart engine','ymc-empty'));});
+  if(prepared.sampled)chart.append(text('div','Plot sampled to '+prepared.timeline.length/2+' timestamps; tooltip and statistics use retained samples.','ymc-render-note'));
+  renderLegend();
+  function attachInteraction(widget){
+  const plot=widget.uplot.over,u=widget.uplot;
+  const x=t=>u.valToPos(t,'x'),y=v=>u.valToPos(v,'y');
+  const cursor=text('div','','ymc-cursor'),selection=text('div','','ymc-selection');cursor.dataset.cursor='time';plot.append(selection,cursor);
+  drawCursor=()=>{const visible=cursorTime!==null&&cursorTime>=begin&&cursorTime<=end;cursor.hidden=!visible;if(visible)cursor.style.left=x(cursorTime)+'px';};drawCursor();
+  const tip=text('div','','ymc-tooltip');tip.hidden=true;tooltipLayer=text('div','','ymc ymc-tooltip-layer');tooltipLayer.append(tip);document.body.append(tooltipLayer);let start=null,pinned=false,tooltipSort='value',tooltipDirection=-1,tooltipData=null;
   const pos=e=>{
-   // SVG coordinates are native CSS pixels, not a stretched viewBox. Use its
-   // actual transform, including zoom and fractional grid widths.
-   const matrix=svg.getScreenCTM?.();let px,py;
-   if(matrix){const dx=e.clientX-matrix.e,dy=e.clientY-matrix.f,det=matrix.a*matrix.d-matrix.b*matrix.c;px=(matrix.d*dx-matrix.c*dy)/det;py=(matrix.a*dy-matrix.b*dx)/det;}
-   else{const rect=svg.getBoundingClientRect();px=(e.clientX-rect.left)*W/rect.width;py=(e.clientY-rect.top)*H/rect.height;}
-   const inside=px>=L&&px<=R&&py>=T&&py<=B;px=Math.max(L,Math.min(R,px));
-   return {px,py,inside,time:begin+(px-L)*(end-begin)/(R-L)};
+   const rect=plot.getBoundingClientRect(),px=(e.clientX-rect.left)*plot.clientWidth/rect.width,py=(e.clientY-rect.top)*plot.clientHeight/rect.height;
+   const inside=px>=0&&px<=plot.clientWidth&&py>=0&&py<=plot.clientHeight;
+   const clamped=Math.max(0,Math.min(plot.clientWidth,px));
+   return {px:clamped,py,inside,time:u.posToVal(clamped,'x')};
   };
   function at(s,t){let a=0,b=s.points.length;while(a<b){const m=(a+b)>>1;if(s.points[m].time<=t)a=m+1;else b=m;}if(s.step)return a?s.points[a-1]:null;const p=s.points[a-1],q=s.points[a];return !p?q:!q?p:t-p.time<=q.time-t?p:q;}
   const setPinned=value=>{pinned=value;cursorPinned=value;tip.classList.toggle('ymc-tooltip-pinned',value);if(value)options.onPin?.();const hint=tip.querySelector('footer');if(hint)hint.textContent=value?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.';};
@@ -144,19 +157,19 @@ export function createMetricChart(chart,options={}){
    for(const row of ordered){const tr=document.createElement('tr');if(row.series.key===nearest)tr.className='ymc-tooltip-nearest';const label=text('td',row.series.display),dot=text('span','','ymc-dot');dot.style.background=row.series.color;label.prepend(dot);tr.append(label,text('td',row.point&&row.point.value!==null?format(row.point.raw):'\u2014'));body.append(tr);}table.append(body);
    const sumRows=rows.filter(row=>row.point&&row.point.value!==null),sum=sumRows.reduce((total,row)=>total+row.point.value,0),foot=document.createElement('tfoot'),sumRow=document.createElement('tr');sumRow.append(text('th','Sum'),text('th',sumRows.length&&Number.isFinite(sum)?format(sum):'\u2014'));foot.append(sumRow);table.append(foot);tip.append(table,text('footer',pinned?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.'));
   }
-  const hover=e=>{if(pinned&&start===null)return;const p=pos(e);if(start===null&&!p.inside){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);return;}cursorTime=p.time;drawCursor();publishCursor(p.time);if(start!==null){selection.setAttribute('x',Math.min(start.px,p.px));selection.setAttribute('width',Math.abs(start.px-p.px));return;}
+  const hover=e=>{if(pinned&&start===null)return;const p=pos(e);if(start===null&&!p.inside){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);return;}cursorTime=p.time;drawCursor();publishCursor(p.time);if(start!==null){selection.style.left=Math.min(start.px,p.px)+'px';selection.style.width=Math.abs(start.px-p.px)+'px';return;}
    const rows=active.map(series=>({series,point:at(series,p.time)})),py=p.py;let nearest=null,distance=Infinity;for(const row of rows)if(row.point&&row.point.value!==null){let delta=Math.abs(y(row.point.value)-py);if(row.series.type==='area'){const value=sampleAt(row.series,p.time);if(value===null)continue;const base=stackBase(areas,areas.findIndex(s=>s.key===row.series.key),p.time,value),a=y(base),b=y(base+value);delta=Math.max(Math.min(a,b)-py,py-Math.max(a,b),0);}if(delta<distance){distance=delta;nearest=row.series.key;}}tooltipData={time:p.time,rows,nearest};renderTooltip();tip.hidden=false;
    const margin=8,gap=16,leftSpace=e.clientX-margin,rightSpace=innerWidth-e.clientX-margin;
    tip.style.width=Math.min(480,Math.max(120,Math.max(leftSpace,rightSpace)-gap))+'px';tip.style.maxHeight=Math.max(80,Math.min(430,innerHeight-2*margin))+'px';
    const width=tip.offsetWidth,height=tip.offsetHeight;
    const left=e.clientX+gap+width<=innerWidth-margin?e.clientX+gap:e.clientX-gap-width;
    tip.style.left=Math.max(margin,Math.min(left,innerWidth-width-margin))+'px';
-   tip.style.top=Math.max(margin,Math.min(e.clientY+12,innerHeight-height-margin))+'px';};svg.addEventListener('pointermove',hover);
-  svg.addEventListener('pointerleave',()=>{if(start===null&&!pinned){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);}});
-  svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;const point=pos(e);if(!point.inside)return;start=point;svg.setPointerCapture(e.pointerId);if(!pinned)tip.hidden=true;});
-  svg.addEventListener('pointerup',e=>{if(!start)return;const p=pos(e);if(Math.abs(start.px-p.px)>8){const range={from:Math.min(start.time,p.time),to:Math.max(start.time,p.time)};start=null;options.onRangeChange?.(range);}else{start=null;const wasPinned=pinned;setPinned(false);hover(e);setPinned(p.inside&&!wasPinned);}});
-  svg.addEventListener('pointercancel',()=>{start=null;cursorTime=null;publishCursor(null);render();});
-  renderLegend();
+   tip.style.top=Math.max(margin,Math.min(e.clientY+12,innerHeight-height-margin))+'px';};plot.addEventListener('pointermove',hover);
+  plot.addEventListener('pointerleave',()=>{if(start===null&&!pinned){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);}});
+  plot.addEventListener('pointerdown',e=>{if(e.button!==0)return;const point=pos(e);if(!point.inside)return;start=point;plot.setPointerCapture(e.pointerId);if(!pinned)tip.hidden=true;});
+  plot.addEventListener('pointerup',e=>{if(!start)return;const p=pos(e);selection.style.width='0';if(Math.abs(start.px-p.px)>8){const range={from:Math.min(start.time,p.time),to:Math.max(start.time,p.time)};start=null;options.onRangeChange?.(range);}else{start=null;const wasPinned=pinned;setPinned(false);hover(e);setPinned(p.inside&&!wasPinned);}});
+  plot.addEventListener('pointercancel',()=>{start=null;cursorTime=null;publishCursor(null);render();});
+  }
  }
  function renderLegend(){
   if(options.legend){
@@ -169,7 +182,7 @@ export function createMetricChart(chart,options={}){
   setCursor(time,{replacePinned=false}={}){if(destroyed)return;if(replacePinned)releaseTooltip();else if(cursorPinned)return;cursorTime=Number.isFinite(time)?time:null;drawCursor();},
   setSettings(next){settings={...settings,...next};chart.style.setProperty('--ymc-height',settings.height+'px');render();},
   setData(next){if(destroyed)return;data=next;for(const key of hidden)if(!data.series.some(s=>s.key===key))hidden.delete(key);render();},
-  destroy(){destroyed=true;options.cursorGroup?.remove(api);observer.disconnect();tooltipLayer?.remove();tooltipLayer=null;chart.replaceChildren();chart.classList.remove('ymc');},
+  destroy(){destroyed=true;++generation;unmount?.();unmount=null;options.cursorGroup?.remove(api);observer.disconnect();tooltipLayer?.remove();tooltipLayer=null;chart.replaceChildren();chart.classList.remove('ymc');},
  };
  options.cursorGroup?.add(api);return api;
 }

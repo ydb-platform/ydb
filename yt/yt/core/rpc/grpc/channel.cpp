@@ -120,6 +120,11 @@ public:
     std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
     { return {}; }
 
+    void AddOptionalLabels(
+        OptionalLabelComponent /* component */,
+        std::shared_ptr<std::map<TString, TString>> /* labels */) override
+    { }
+
 private:
     AtomicError Error_;
 };

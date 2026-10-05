@@ -5875,7 +5875,6 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
@@ -8096,7 +8095,7 @@ FROM (
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
-                        /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
+                        /*queriesWithoutCboCheck=*/{});
     }
 
     Y_UNIT_TEST(ClickBench_YQL) {

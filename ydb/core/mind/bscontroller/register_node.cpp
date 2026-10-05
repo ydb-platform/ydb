@@ -541,6 +541,9 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
         vDisk->SetGroupSizeInUnits(group->GroupSizeInUnits);
+        if (info.VDiskHeapAllocatorNumLeadingDisks) {
+            vDisk->SetVDiskHeapAllocatorNumLeadingDisks(*info.VDiskHeapAllocatorNumLeadingDisks);
+        }
 
         const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {

@@ -49,7 +49,6 @@ namespace {
 
 NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
     NSQLTranslation::TSqlFlags flags = {
-        "AnsiOrderByLimitInUnionAll",
         "AnsiRankForNullableKeys",
         "DisableAnsiOptionalAs",
         "DisableCoalesceJoinKeysOnQualifiedAll",

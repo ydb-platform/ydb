@@ -63,6 +63,7 @@ message TTabletStateInfo {
     optional NKikimrSubDomains.TDomainKey TenantId = 16 [(DefaultField) = true];
     optional fixed64 HiveId = 17 [(DefaultField) = true];
     optional string EndOfRangeKeyPrefix = 18; // filled during merge
+    optional string NbsDiskId = 19 [(DefaultField) = true]; // reported by NBS partitions
 }
 
 message TEvTabletStateRequest {
@@ -159,6 +160,7 @@ message TPDiskStateInfo {
     optional string DecommitStatus = 30;
     optional string MaintenanceStatus = 31;
     optional bool HasWhiteboardData = 32; // filled by viewer
+    optional uint64 UserChunkPoolSize = 33; // physical upper bound for one owner's quota, in bytes
 }
 
 // One DDisk slot and its PB share a PDisk owner. Reported by the PB every 5s.
@@ -177,6 +179,7 @@ message TDDiskStateInfo {
     optional bool HasWhiteboardData = 11; // filled by viewer
     optional uint32 GroupId = 12; // absent when controller information is unavailable
     optional string DDiskPath = 13; // actor monitoring path on the owning node
+    optional string StoragePoolName = 14; // controller identity, also available without whiteboard samples
 }
 
 message TEvPDiskStateRequest {

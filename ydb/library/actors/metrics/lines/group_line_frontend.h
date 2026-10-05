@@ -192,6 +192,7 @@ namespace NActors {
                 .Name = "group",
                 .ReadRange = &TGroupLineFrontend<TDescriptor>::ReadRange,
                 .Fields = Fields,
+                .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
         }
@@ -201,6 +202,19 @@ namespace NActors {
         }
 
     private:
+        template<size_t... I>
+        static auto NumericValues(const TValueType& value, std::index_sequence<I...>) {
+            return std::array<TLineNumericValue, FieldCount>{MakeLineNumericValue(value.template Get<TField<I>>())...};
+        }
+
+        static void ReadNumericRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs,
+                                     void* opaque, TLineFrontendOps::TInvokeNumericValues invoke) {
+            ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValueType& value) {
+                const auto values = NumericValues(value, Indices);
+                invoke(opaque, timestamp, values);
+            });
+        }
+
         friend class TLine<TGroupLineFrontend<TDescriptor>>;
 
         template<size_t... I>

@@ -6,6 +6,7 @@
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/sys_view.h>
+#include <ydb/core/mind/bscontroller/storage_stats_calculator.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -678,11 +679,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             m->SetStoragePoolId(1);
             m->SetItemConfigGeneration(1);
             request.AddCommand()->MutableQueryBaseConfig();
+            request.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
             response = env.Invoke(request);
             UNIT_ASSERT(response.GetSuccess());
             const auto& baseConfig = response.GetStatus(1).GetBaseConfig();
             UNIT_ASSERT(baseConfig.GetGroup().empty());
             UNIT_ASSERT(baseConfig.GetVSlot().empty());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(2).StoragePoolSize(), 0);
         });
     }
 
@@ -1264,6 +1267,117 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
             UNIT_ASSERT(SameVSlotId(acceptor.GetDonors(0).GetVSlotId(), source.GetVSlotId()));
         });
+    }
+
+    void CheckFixedQuotaDonorAccountingAfterResize(bool dropDonor) {
+        TEnvironmentSetup env(2, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); },
+            [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+                TFinalizer finalizer(env);
+                env.Prepare(dispatchName, setup, outActiveZone);
+                env.Runtime->EnableScheduleForActor(ResolveTablet(*env.Runtime, env.TabletId));
+
+                NKikimrBlobStorage::TConfigRequest request;
+                env.DefineBox(1, "box", {
+                    {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                }, env.GetNodes(), request);
+                auto* config = request.MutableCommand(0)->MutableDefineHostConfig()
+                    ->MutableDrive(0)->MutablePDiskConfig();
+                config->SetExpectedSlotSize(100ull << 30);
+                config->SetMaxSlots(4);
+                auto response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                // Fixed-quota disks become available for placement once NodeWarden reports slot geometry.
+                const auto disksBeforeMetrics = FetchBaseConfig(&env);
+                for (const auto& disk : disksBeforeMetrics.GetPDisk()) {
+                    const ui32 nodeIndex = disk.GetNodeId() - env.Runtime->GetNodeId(0);
+                    const auto sender = env.Runtime->AllocateEdgeActor(nodeIndex);
+                    const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, nodeIndex,
+                        GetPipeConfigWithRetries());
+                    env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerRegisterNode(
+                        disk.GetNodeId(), TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}), nodeIndex);
+                    env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+                    auto metrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+                    auto* pdisk = metrics->Record.AddPDisksMetrics();
+                    pdisk->SetPDiskId(disk.GetPDiskId());
+                    pdisk->SetExpectedSlotSize(100ull << 30);
+                    pdisk->SetEnforcedDynamicSlotSize(100ull << 30);
+                    pdisk->SetExpectedSlotCount(4);
+                    pdisk->SetSlotSizeInUnits(1);
+                    pdisk->SetTotalSize(400ull << 30);
+                    pdisk->SetUserChunkPoolSize(400ull << 30);
+                    env.Runtime->SendToPipe(pipe, sender, metrics.Release(), nodeIndex);
+                }
+                const auto disksWithMetrics = FetchBaseConfig(&env);
+                for (const auto& disk : disksWithMetrics.GetPDisk()) {
+                    UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskMetrics().GetExpectedSlotCount(), 4);
+                }
+                request.Clear();
+                env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "none");
+                request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()
+                    ->SetDefaultGroupSizeInUnits(1);
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                EnableDonorMode(&env);
+
+                const auto before = FetchBaseConfig(&env);
+                const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
+                request = MakePopulateRequest(source, FindSparePDisk(before, source.GetGroupId()));
+                request.SetIgnoreGroupFailModelChecks(true); // This environment does not run VDisks.
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                const auto acceptor = FindActiveVSlot(FetchBaseConfig(&env), source);
+                UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+                const auto donor = acceptor.GetDonors(0);
+                UNIT_ASSERT(SameVSlotId(donor.GetVSlotId(), source.GetVSlotId()));
+
+                auto getSourceSlots = [&]() -> ui32 {
+                    env.Runtime->SimulateSleep(TDuration::Seconds(6));
+                    const auto sender = env.Runtime->AllocateEdgeActor();
+                    env.Runtime->SendToPipe(env.TabletId, sender,
+                        new NSysView::TEvSysView::TEvGetPDisksRequest(), 0, GetPipeConfigWithRetries());
+                    const auto result = env.Runtime->GrabEdgeEventRethrow<NSysView::TEvSysView::TEvGetPDisksResponse>(sender);
+                    for (const auto& disk : result->Get()->Record.GetEntries()) {
+                        if (disk.GetKey().GetNodeId() == source.GetVSlotId().GetNodeId()
+                                && disk.GetKey().GetPDiskId() == source.GetVSlotId().GetPDiskId()) {
+                            return disk.GetInfo().GetNumActiveSlots();
+                        }
+                    }
+                    UNIT_FAIL("Source PDisk missing from system view");
+                    return 0;
+                };
+                UNIT_ASSERT_VALUES_EQUAL(getSourceSlots(), 1);
+
+                request.Clear();
+                auto* resize = request.AddCommand()->MutableChangeGroupSizeInUnits();
+                resize->SetBoxId(1);
+                resize->SetStoragePoolId(1);
+                resize->SetItemConfigGeneration(1);
+                resize->AddGroupId(source.GetGroupId());
+                resize->SetSizeInUnits(2);
+                response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+                if (dropDonor) {
+                    request.Clear();
+                    auto* drop = request.AddCommand()->MutableDropDonorDisk();
+                    drop->MutableVSlotId()->CopyFrom(donor.GetVSlotId());
+                    drop->MutableVDiskId()->CopyFrom(donor.GetVDiskId());
+                    response = env.Invoke(request);
+                    UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(getSourceSlots(), dropDonor ? 0u : 2u,
+                    (dropDonor ? "Deleting the resized donor must leave zero occupied slots"
+                               : "The live donor must acquire the new group weight"));
+            });
+    }
+
+    Y_UNIT_TEST(FixedQuotaDonorWeightTracksGroupResize) {
+        CheckFixedQuotaDonorAccountingAfterResize(false);
+    }
+
+    Y_UNIT_TEST(FixedQuotaDonorDeletionAfterResizeDoesNotUnderflow) {
+        CheckFixedQuotaDonorAccountingAfterResize(true);
     }
 
     Y_UNIT_TEST(PopulatePDiskSuppressesDonorMode) {
@@ -2212,10 +2326,171 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
     }
 
-    Y_UNIT_TEST(GroupUsagePrefersExpectedSlotSizeOverDynamicSlotSize) {
+    Y_UNIT_TEST(StorageStatsReserveFixedQuotaCapacity) {
+        TEnvironmentSetup env(1, 1);
+        env.SetupRuntime(1, 1);
+        auto& runtime = *env.Runtime;
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const TPDiskId pdiskId(nodeId, 1);
+        const auto groupId = TGroupId::FromValue(0x80000001);
+        TControllerSystemViewsState state;
+        auto& disk = state.PDisks[pdiskId];
+        disk.SetBoxId(1);
+        disk.SetCategory(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        disk.SetExpectedSlotCount(8);
+        disk.SetSlotSizeInUnits(2);
+        disk.SetExpectedSlotSize(100);
+        disk.SetEnforcedDynamicSlotSize(100);
+        disk.SetTotalSize(650);
+        disk.SetUserChunkPoolSize(600);
+        disk.SetNumActiveSlots(3); // One static reservation, one active slot, one donor.
+        disk.SetStaticSlotUsage(1);
+        const auto staticGroupId = TGroupId::FromValue(1);
+        state.Groups[staticGroupId].SetGroupSizeInUnits(1);
+        state.VSlots[TVSlotId(pdiskId, 0)].SetGroupId(staticGroupId.GetRawId());
+        auto& group = state.Groups[groupId];
+        group.SetGroupSizeInUnits(2);
+        group.SetBoxId(1);
+        group.SetStoragePoolId(1);
+        for (ui32 slotId : {1, 2, 3}) {
+            auto& slot = state.VSlots[TVSlotId(pdiskId, slotId)];
+            slot.SetGroupId(groupId.GetRawId());
+            slot.SetGroupGeneration(slotId == 1 ? 2 : 1);
+            slot.SetIsBeingDeleted(slotId == 3);
+        }
+        TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters{
+            {.Type = NKikimrBlobStorage::ROT}};
+        TStringStream filterData;
+        Save(&filterData, filters);
+        auto& pool = state.StoragePools[{1, 1}];
+        pool.SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters));
+        pool.SetPDiskFilterData(filterData.Str());
+        pool.SetErasureSpeciesV2("none");
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto* node = config.AddAllNodes();
+        node->SetNodeId(nodeId);
+        node->SetHost("host");
+        node->SetPort(19001);
+        node->MutableLocation()->SetDataCenter("dc");
+        node->MutableLocation()->SetRack("rack");
+        const THostRecordMap hosts = std::make_shared<THostRecordMapImpl>(config);
+        auto check = [&](ui32 expectedGroups, ui64 expectedSize) {
+            const auto edge = runtime.AllocateEdgeActor();
+            runtime.Register(CreateStorageStatsCoroCalculator(state, hosts, 0, 0).release(),
+                0, 0, TMailboxType::Simple, 0, edge);
+            auto response = runtime.GrabEdgeEventRethrow<TEvCalculateStorageStatsResponse>(edge);
+            bool found = false;
+            for (const auto& entry : response->Get()->StorageStats) {
+                if (entry.GetErasureSpecies() == "none") {
+                    found = true;
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableGroupsToCreate(), expectedGroups);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetImmediateGroupsToCreate(), expectedGroups);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableSizeToCreate(), expectedSize);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetImmediateSizeToCreate(), expectedSize);
+                }
+            }
+            UNIT_ASSERT(found);
+        };
+        // Five units are reserved out of 600 / 100; one more group fits.
+        check(1, 100);
+        // Changing the slot counter must not change the reserved capacity.
+        disk.SetNumActiveSlots(4);
+        check(1, 100);
+        disk.SetNumActiveSlots(3);
+        // Both one-unit and two-unit VDisks occupy one slot here.
+        group.SetGroupSizeInUnits(1);
+        check(3, 300);
+        group.SetGroupSizeInUnits(2);
+        disk.SetUserChunkPoolSize(0);
+        check(0, 0);
+        disk.ClearUserChunkPoolSize();
+        check(5, 500); // Without the pool metric, only slot count limits capacity.
+        disk.SetTotalSize(1200);
+        check(5, 500);
+        disk.SetTotalSize(650);
+        disk.SetUserChunkPoolSize(600);
+        disk.SetEnforcedDynamicSlotSize(80); // The reported quota includes chunk rounding.
+        check(2, 160); // Seven units fit in the pool; five are reserved.
+        disk.SetExpectedSlotSize(200);
+        check(2, 160); // The configured size does not replace the reported quota.
+        disk.ClearEnforcedDynamicSlotSize();
+        check(5, 1000); // Capacity is unknown until the per-unit quota is reported.
+        disk.SetEnforcedDynamicSlotSize(0);
+        check(5, 0);
+        disk.SetEnforcedDynamicSlotSize(80);
+        disk.SetExpectedSlotSize(0); // Fair-share quotas are limited only by slot count.
+        check(5, 400);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeResourcesCappedPerGroup) {
+        using TPDiskInfo = TBlobStorageController::TPDiskInfo;
+        TPDiskInfo pdisk(
+            TBlobStorageController::THostId(TString("host"), 1),
+            TString("/dev/disk"), 0, 1, {}, {}, std::nullopt, 1, TString(), 0, 16,
+            NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(),
+            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, TPDiskMood::Normal,
+            TString(), TString(), TString(), 0, true, NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+        pdisk.Metrics.SetExpectedSlotSize(100);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(100);
+        pdisk.Metrics.SetExpectedSlotCount(10);
+        pdisk.Metrics.SetTotalSize(1200);
+        pdisk.Metrics.SetUserChunkPoolSize(1000);
+
+        TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 1, 0,
+            TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default,
+            0, 0, TString(), TString(), 0, 0, false, true, 1, TBridgePileId(), TBoxStoragePoolId(1, 1),
+            1, 1, 1, false);
+        TBlobStorageController::TVSlotReadyTimestampQ readyTimestampQ;
+        TBlobStorageController::TVSlotInfo slot(TVSlotId(1, 1, 1), &pdisk, group.ID, 0, 1,
+            NKikimrBlobStorage::TVDiskKind::Default, 0, 0, 0, TMood::Normal, &group, &readyTimestampQ,
+            TInstant::Zero(), TDuration::Zero(), 0, 0);
+
+        auto checkResources = [&](ui32 groupSizeInUnits, ui64 expectedSize) {
+            group.GroupSizeInUnits = groupSizeInUnits;
+            for (bool assured : {false, true}) {
+                NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources resources;
+                group.FillInResources(&resources, assured);
+                UNIT_ASSERT(resources.HasSpace());
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetSpace(), expectedSize);
+            }
+        };
+        checkResources(3, 300);
+        checkResources(1, 100);
+        checkResources(100, 1000);
+        checkResources(2, 200);
+        // A single-unit VDisk on a double-unit PDisk still gets one capacity unit,
+        // including before PDisk starts reporting the rounded quota.
+        pdisk.Metrics.SetSlotSizeInUnits(2);
+        pdisk.Metrics.ClearEnforcedDynamicSlotSize();
+        checkResources(1, 100);
+        checkResources(2, 200);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        checkResources(ui32{1} << 24, 1000); // The uncapped quota is 2^64 bytes.
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(100);
+        pdisk.Metrics.SetUserChunkPoolSize(0);
+        checkResources(100, 0);
+        pdisk.Metrics.ClearUserChunkPoolSize();
+        checkResources(100, 10000);
+        pdisk.Metrics.SetExpectedSlotSize(0);
+        checkResources(100, 10000);
+
+        // Reported slot units only affect occupied weights while fixed quotas are active.
+        pdisk.Metrics.SetSlotSizeInUnits(2);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+        pdisk.Metrics.SetExpectedSlotSize(100);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 1);
+        pdisk.Metrics.SetSlotSizeInUnits(1);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+        pdisk.Metrics.SetExpectedSlotSize(0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+    }
+
+    Y_UNIT_TEST(GroupUsagePrefersRoundedDynamicSlotSize) {
         NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
-        pdiskMetrics.SetEnforcedDynamicSlotSize(1000);
-        pdiskMetrics.SetSlotSizeInUnits(1);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetSlotSizeInUnits(2);
+        pdiskMetrics.SetTotalSize(180);
 
         NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
         vdiskMetrics.SetAllocatedSize(25);
@@ -2228,7 +2503,39 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             2);
 
         UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
-        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 167); // No pool metric means no physical quota cap.
+
+        auto check = [&](ui64 expectedAvailable, ui32 groupSizeInUnits = 2, ui64 expectedSlotSize = 100) {
+            CalculateGroupUsageStats(&info, {{&pdiskMetrics, &vdiskMetrics, 10, expectedSlotSize}},
+                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), groupSizeInUnits);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailable);
+        };
+        check(71, 2, 0);
+        pdiskMetrics.SetTotalSize(1000);
+        check(167);
+        pdiskMetrics.ClearEnforcedDynamicSlotSize();
+        check(175);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(100);
+        check(175);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetUserChunkPoolSize(150);
+        check(125);
+        pdiskMetrics.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        check(125, ui32{1} << 24);
+        pdiskMetrics.ClearUserChunkPoolSize();
+        check(Max<ui64>() - 25, Max<ui32>());
+        pdiskMetrics.SetEnforcedDynamicSlotSize(96);
+        pdiskMetrics.SetUserChunkPoolSize(0);
+        check(0);
+
+        // An empty pool must remain the minimum even when another disk has capacity.
+        NKikimrBlobStorage::TPDiskMetrics otherPDisk = pdiskMetrics;
+        otherPDisk.SetUserChunkPoolSize(1000);
+        CalculateGroupUsageStats(&info,
+            {{&pdiskMetrics, &vdiskMetrics, 10, 100}, {&otherPDisk, &vdiskMetrics, 10, 100}},
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), 2);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 0);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultExpectedSlotCount) {
@@ -2269,13 +2576,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 16);
     }
 
-    Y_UNIT_TEST(NumActiveDynamicSlotsStaysConsistentWhenExpectedSlotSizeMetricsArrive) {
+    void CheckNumActiveDynamicSlotsAfterPDiskMetrics(ui32 slotSizeInUnits) {
         // NumActiveDynamicSlots is maintained incrementally with the owner weight computed at the
-        // moment a vslot is added or removed. The weight depends on the *effective* expected
-        // slot size, which flips from 0 to nonzero when the PDisk starts reporting
-        // ExpectedSlotSize in its metrics (the infer_pdisk_slot_count.<type>.slot_size case,
-        // where PDiskConfig itself carries no ExpectedSlotSize). The counter must be kept
-        // consistent with the new weights when that happens.
+        // moment a vslot is added or removed. The weight depends on SlotSizeInUnits, which may
+        // change when the PDisk starts reporting its inferred settings in metrics.
+        // The counter must be kept consistent with the new weights when that happens.
         TEnvironmentSetup env(1, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
             TFinalizer finalizer(env);
@@ -2312,8 +2617,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
             // The PDisk starts reporting ExpectedSlotSize and the materialized ExpectedSlotCount in
             // metrics, as it does when NodeWarden infers the slot count from a slot size.
-            // The effective expected slot size becomes nonzero and the owner weight of the
-            // already existing vslot flips from 2 to 1. BSC accepts disk status updates
+            // The owner weight changes only if SlotSizeInUnits changes. BSC accepts disk status updates
             // only over the pipe that carried TEvControllerRegisterNode of the same node,
             // so register the node and send the metrics through one pipe.
             {
@@ -2328,7 +2632,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 auto* m = ev->Record.AddPDisksMetrics();
                 m->SetPDiskId(pdiskId);
                 m->SetExpectedSlotCount(expectedSlotCount);
+                m->SetSlotSizeInUnits(slotSizeInUnits);
                 m->SetExpectedSlotSize(expectedSlotSize);
+                m->SetEnforcedDynamicSlotSize(expectedSlotSize);
+                m->SetTotalSize(expectedSlotCount * slotSizeInUnits * expectedSlotSize);
+                m->SetUserChunkPoolSize(expectedSlotCount * slotSizeInUnits * expectedSlotSize);
                 env.Runtime->SendToPipe(pipeClient, sender, ev.Release());
             }
 
@@ -2347,16 +2655,27 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotSize(), expectedSlotSize);
             }
 
-            // The disk now has 4 fixed-size slots and the PDisk accounts the existing
-            // 2-unit group as a single owner, so exactly 3 more single-unit groups must
-            // fit. With a stale NumActiveDynamicSlots (still 2) the third group does not fit.
+            // The existing group occupies ceil(2 / SlotSizeInUnits) slots.
             {
                 NKikimrBlobStorage::TConfigRequest more;
-                env.DefineStoragePool(1, 2, "pool-b", expectedSlotCount - 1, NKikimrBlobStorage::ROT, {}, more, "none");
+                env.DefineStoragePool(1, 2, "pool-b", expectedSlotCount - 2 / slotSizeInUnits, NKikimrBlobStorage::ROT, {}, more, "none");
                 NKikimrBlobStorage::TConfigResponse moreResponse = env.Invoke(more);
                 UNIT_ASSERT_C(moreResponse.GetSuccess(), moreResponse.GetErrorDescription());
             }
+            {
+                NKikimrBlobStorage::TConfigRequest excess;
+                env.DefineStoragePool(1, 3, "pool-c", 1, NKikimrBlobStorage::ROT, {}, excess, "none");
+                UNIT_ASSERT(!env.Invoke(excess).GetSuccess());
+            }
         });
+    }
+
+    Y_UNIT_TEST(NumActiveDynamicSlotsStaysConsistentWhenExpectedSlotSizeMetricsArrive) {
+        CheckNumActiveDynamicSlotsAfterPDiskMetrics(2);
+    }
+
+    Y_UNIT_TEST(NumActiveDynamicSlotsStayWeightedWithExpectedSlotSize) {
+        CheckNumActiveDynamicSlotsAfterPDiskMetrics(1);
     }
 
     Y_UNIT_TEST(UnsupportedCommandError) {

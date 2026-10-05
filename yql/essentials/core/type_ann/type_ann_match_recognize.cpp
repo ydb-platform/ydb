@@ -249,12 +249,7 @@ IGraphTransformer::TStatus MatchRecognizeParamsWrapper(const TExprNode::TPtr& in
         return IGraphTransformer::TStatus::Error;
     }
     const auto measures = input->Child(0);
-    const auto type = measures->GetTypeAnn();
-    if ((!type || type->GetKind() != ETypeAnnotationKind::Universal) &&
-        !EnsureStructType(*measures, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-    input->SetTypeAnn(type);
+    input->SetTypeAnn(measures->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 

@@ -115,9 +115,7 @@ class TestContinueMode(TestYdsBase):
             streaming_disposition=StreamingDisposition.from_last_checkpoint(),
         )
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert_has_issues(
-            "Topic `continue_2_input` is not found in previous query. Use force mode to ignore this issue"
-        )
+        assert_has_issues("Topic `continue_2_input` is not found in previous query")
 
         # 2. Forced mode. Expect to run.
         client.modify_query(

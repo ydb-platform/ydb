@@ -274,9 +274,9 @@ namespace NKikimr {
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
         NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
         std::vector<TDiskPart> Locations;
-        // Heap ownership at allocation time. Do not re-read the feature flag to classify these:
-        // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
-        // disagree with the heap that actually produced the location.
+        // Heap ownership at allocation time. Do not re-read the feature flag or the leading-disk
+        // knob to classify these: both are latched on the VDisk at start, and a missed restart can
+        // still disagree with the heap that actually produced the location.
         std::vector<bool> IsStripe;
 
         TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)

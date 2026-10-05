@@ -33,6 +33,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/provider
 
     ydb/public/sdk/cpp/adapters/issue

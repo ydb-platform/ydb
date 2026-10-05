@@ -402,21 +402,22 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ReadTopicMessages("historyOutput", {"old", "new:live"});
     }
 
-    Y_UNIT_TEST_TWIN_F(ConsumerAheadOfCheckpointIsRewoundOnTextChange, SharedReading, THistoryReplayFixture) {
+    Y_UNIT_TEST_TWIN_F(ChangedConsumerAheadOfCheckpointIsRewound, SharedReading, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ false, /* compressedGraph */ false, SharedReading);
         CreateScopedTopic("historyInput");
         CreateScopedTopic("historyOutput");
-        const auto body = [](TStringBuf prefix) {
+        AlterTopic("historyInput", NYdb::NTopic::TAlterTopicSettings().BeginAddConsumer("replacement_consumer").EndAddConsumer());
+        const auto body = [](TStringBuf prefix, TStringBuf consumer) {
             return fmt::format(R"( AS DO BEGIN
-                PRAGMA pq.Consumer = "test_consumer";
+                PRAGMA pq.Consumer = "{1}";
                 PRAGMA pq.EnableDeduplication = "FALSE";
-                INSERT INTO historySource.historyOutput SELECT "{}" || payload FROM historySource.historyInput
+                INSERT INTO historySource.historyOutput SELECT "{0}" || payload FROM historySource.historyInput
                     WITH (FORMAT = json_each_row, SCHEMA (payload String NOT NULL))
-            END DO)", prefix);
+            END DO)", prefix, consumer);
         };
-        const auto waitConsumer = [&](bool running) {
+        const auto waitConsumer = [&](bool running, const TString& consumer = "test_consumer") {
             NTestUtils::WaitFor(TDuration::Seconds(30), "consumer session", [&](TString& error) {
-                const auto result = GetTopicClient()->DescribeConsumer("historyInput", "test_consumer",
+                const auto result = GetTopicClient()->DescribeConsumer("historyInput", consumer,
                     NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 const auto& stats = result.GetConsumerDescription().GetPartitions().front().GetPartitionConsumerStats();
@@ -425,7 +426,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
                 return error.empty() != running;
             });
         };
-        ExecQuery("CREATE STREAMING QUERY historyQuery" + body(""));
+        ExecQuery("CREATE STREAMING QUERY historyQuery" + body("", "test_consumer"));
         waitConsumer(true);
         WriteTopicMessage("historyInput", R"({"payload":"old"})");
         ReadTopicMessages("historyOutput", {"old"});
@@ -433,10 +434,10 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = FALSE)");
         waitConsumer(false);
         WriteTopicMessage("historyInput", R"({"payload":"queued"})");
-        const auto committed = GetTopicClient()->CommitOffset("historyInput", 0, "test_consumer", 2).GetValue(TEST_OPERATION_TIMEOUT);
+        const auto committed = GetTopicClient()->CommitOffset("historyInput", 0, "replacement_consumer", 2).GetValue(TEST_OPERATION_TIMEOUT);
         UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
-        ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = TRUE, FORCE = FALSE)" + body("new:"));
-        waitConsumer(true);
+        ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = TRUE, FORCE = FALSE)" + body("new:", "replacement_consumer"));
+        waitConsumer(true, "replacement_consumer");
         ReadTopicMessages("historyOutput", {"old", "new:queued"});
     }
 
@@ -479,7 +480,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             INSERT INTO historySource.historyOutput SELECT "new:" || Data FROM historySource.historyInput
         END DO)";
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body,
-            NYdb::EStatus::PRECONDITION_FAILED, "Please use FORCE=true");
+            NYdb::EStatus::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint.");
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE)" + body);
         WriteTopicMessage("historyInput", "live");
         ReadTopicMessages("historyOutput", {"old", "new:live"});

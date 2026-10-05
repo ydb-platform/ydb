@@ -1,7 +1,7 @@
 #pragma once
 
 // Shared harness of the DQ Channels 2.0 tests: producer / consumer worker actors driving IChannelBuffer
-// directly, a two node TKikimrRunner whose nodes talk over the interconnect mock of the test runtime, and
+// directly, a two node TKikimrRunner whose nodes talk over the real interconnect, and
 // direct access to the node sessions of both channel services.
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -639,6 +639,7 @@ struct TLoadTest {
 
     virtual void Prepare() {
         settings.NodeCount = Local ? 1 : 2;
+        settings.UseRealInterconnect = !Local;
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::EPriority::PRI_TRACE);
         settings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
         if (Local) {
@@ -667,9 +668,6 @@ struct TLoadTest {
     virtual void Init() {
         Runner = std::make_unique<TKikimrRunner>(settings);
         Runtime = Runner->GetTestServer().GetRuntime();
-        // TKikimrRunner has initialized the runtime, which is when the interconnect is chosen: the nodes talk over
-        // the interconnect mock, a SetUseRealInterconnect() from here on would change nothing, see
-        // https://github.com/ydb-platform/ydb/issues/54892
 
         // the real bound of every GrabEdgeEvent: its own timeout is in simulated time
         Runtime->SetDispatchTimeout(WaitTimeout);
@@ -1234,6 +1232,23 @@ struct TSessionTest : public TLoadTest {
     static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->GetReconciliationLog();
+    }
+
+    // the node's interconnect subscriptions made by actors whose activity name contains the given part; the mock
+    // has no such sensor
+    i64 GetInterconnectSubscribers(ui32 nodeIndex, TStringBuf activity) {
+        std::function<i64(const NMonitoring::TDynamicCounters&, bool)> sum = [&](const NMonitoring::TDynamicCounters& group, bool bySubscriber) {
+            i64 result = 0;
+            for (const auto& [id, child] : group.ReadSnapshot()) {
+                if (auto subgroup = dynamic_cast<const NMonitoring::TDynamicCounters*>(child.Get())) {
+                    result += sum(*subgroup, id.LabelName == "sensor" && id.LabelValue == "InterconnectSessionSubscribersByActivity");
+                } else if (bySubscriber && id.LabelName == "activity" && id.LabelValue.Contains(activity)) {
+                    result += static_cast<const NMonitoring::TCounterForPtr*>(child.Get())->Val();
+                }
+            }
+            return result;
+        };
+        return sum(*Runtime->GetDynamicCounters(nodeIndex), false);
     }
 
     using TLoadTest::WaitFor;

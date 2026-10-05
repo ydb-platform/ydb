@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
@@ -24,13 +25,10 @@ class TStateLoadPlanResolverActor final : public NActors::TActorBootstrapped<TSt
         enum EEv : ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvSourcesPrepared = EvBegin,
-            EvReplayFailed,
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
-
-        struct TEvReplayFailed : NActors::TEventLocal<TEvReplayFailed, EvReplayFailed> {};
 
         struct TEvSourcesPrepared : NActors::TEventLocal<TEvSourcesPrepared, EvSourcesPrepared> {
             explicit TEvSourcesPrepared(NThreading::TFuture<NYql::TIssues> result)
@@ -51,36 +49,91 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+        const TGraphStateContext context;
+        const TGraphStateInfo next(Dst, context);
+
+        // Recovery from explicit output event time
 
         if (Settings.OutputStartTimeUs) {
-            if (MakeOutputStartTimeReplayPlan(Dst, *Settings.OutputStartTimeUs, Settings.UseSourceDisposition, Plan, Issues)) {
-                PrepareSources();
-            } else {
+            if (!MakeOutputStartTimeReplayPlan(next, *Settings.OutputStartTimeUs, Settings.UseSourceDisposition, Plan, Issues)) {
                 Finish(/* success */ false);
+                co_return;
             }
-            return;
+
+            Finish(co_await PrepareSources(/* selected */ nullptr));
+            co_return;
         }
 
-        Fallback = !NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute();
-        if (Fallback) {
-            Finish(MakeFallbackPlan());
-            return;
-        }
+        // Try to recalculate state if any of previous or new graph has hopping operators
 
-        for (const auto& task : Src.GetTasks()) {
-            if (NYql::NDq::GetTaskCheckpointingMode(task) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                TaskIds.push_back(task.GetId());
+        const TGraphStateInfo previous(Src, context);
+        if (NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute() && (previous.HasHopping() || next.HasHopping())) {
+            std::vector<ui64> taskIds;
+            taskIds.reserve(previous.GetStages().size());
+            for (const auto& stage : previous.GetStages()) {
+                for (const auto* task : stage.Tasks) {
+                    taskIds.push_back(task->GetId());
+                }
             }
+
+            if (taskIds.empty()) {
+                Issues.AddIssue("Previous query has no streaming inputs to restore");
+                Finish(/* success */ false);
+                co_return;
+            }
+
+            std::sort(taskIds.begin(), taskIds.end());
+
+            if (!co_await LoadStates(std::move(taskIds))) {
+                Finish(/* success */ false);
+                co_return;
+            }
+
+            if (MakeHistoryReplayPlan(previous, next, States, Plan, Issues) && co_await PrepareSources(/* selected */ nullptr)) {
+                Finish(/* success */ true);
+                co_return;
+            }
+
+            if (!Settings.Force) {
+                Finish(/* success */ false);
+                co_return;
+            }
+
+            WarnAndContinue("History replay is unavailable, FORCE=true resumes from streaming offsets");
         }
 
-        if (TaskIds.empty()) {
-            Issues.AddIssue("Previous query has no streaming inputs to restore");
+        // Directly transfer state and offsets from old graph to new one
+
+        TSourceRecoverySet sourcesToPrepare;
+        if (!MakeContinueFromStreamingOffsetsPlan(previous, next, Settings.Force, Plan, sourcesToPrepare, Issues)) {
             Finish(/* success */ false);
-            return;
+            co_return;
         }
 
-        std::sort(TaskIds.begin(), TaskIds.end());
-        Send(Settings.StorageProxy, new NYql::NDq::TEvDqCompute::TEvGetTaskState(Settings.GraphId, TaskIds, Settings.Checkpoint, Settings.CoordinatorGeneration));
+        THashSet<ui64> taskIds;
+        for (const auto& [taskId, taskPlan] : Plan) {
+            for (const auto& source : taskPlan.GetSources()) {
+                if (sourcesToPrepare.contains(std::pair<ui64, ui64>{taskId, source.GetInputIndex()}) && !source.HasState()) {
+                    for (const auto& foreign : source.GetForeignTasksSources()) {
+                        if (const auto foreignTaskId = foreign.GetTaskId(); !States.contains(foreignTaskId)) {
+                            taskIds.insert(foreignTaskId);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!co_await LoadStates(std::vector<ui64>(taskIds.begin(), taskIds.end()))) {
+            Finish(/* success */ false);
+            co_return;
+        }
+
+        const bool prepared = co_await PrepareSources(&sourcesToPrepare);
+        if (!prepared && Settings.Force) {
+            WarnAndContinue("Source recovery preparation failed, FORCE=true continues from streaming offsets");
+        }
+
+        Finish(prepared || Settings.Force);
     }
 
 private:
@@ -91,80 +144,52 @@ private:
 
     bool OnUnhandledException(const std::exception& e) final {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot prepare source recovery: " << e.what()));
-
-        if (Fallback || !Settings.Force || Settings.OutputStartTimeUs) {
-            Finish(/* success */ false);
-        } else {
-            Send(SelfId(), new TEvPrivate::TEvReplayFailed());
-        }
-
+        Finish(/* success */ false);
         return true;
     }
 
-    STRICT_STFUNC(StateWork,
-        hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskStateResult, Handle)
-        hFunc(TEvPrivate::TEvSourcesPrepared, Handle)
-        sFunc(TEvPrivate::TEvReplayFailed, ReplayFailed)
-        sFunc(NActors::TEvents::TEvPoison, PassAway)
-    )
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == NActors::TEvents::TEvPoison::EventType) {
+            PassAway();
+        }
+    }
 
-    void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskStateResult::TPtr& ev) {
-        if (!ev->Get()->Issues.Empty()) {
-            AddIssueWithSubIssues("Failed to load checkpoint task states", ev->Get()->Issues);
-            Finish(/* success */ false);
-            return;
+    NActors::async<bool> LoadStates(std::vector<ui64> taskIds) {
+        if (taskIds.empty()) {
+            co_return true;
         }
 
-        if (ev->Get()->States.size() != TaskIds.size()) {
+        const auto ev = co_await NActors::ActorRequest<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(
+            Settings.StorageProxy,
+            new NYql::NDq::TEvDqCompute::TEvGetTaskState(Settings.GraphId, taskIds, Settings.Checkpoint, Settings.CoordinatorGeneration)
+        );
+        const auto& result = *ev->Get();
+        YQL_ENSURE(result.Generation == Settings.CoordinatorGeneration
+            && result.Checkpoint.GetId() == Settings.Checkpoint.GetId()
+            && result.Checkpoint.GetGeneration() == Settings.Checkpoint.GetGeneration(), "Unexpected checkpoint response while preparing recovery");
+
+        if (!result.Issues.Empty()) {
+            AddIssueWithSubIssues("Failed to load checkpoint task states", result.Issues);
+            co_return false;
+        }
+
+        if (result.States.size() != taskIds.size()) {
             Issues.AddIssue("Incomplete checkpoint while preparing source recovery");
-            Finish(/* success */ false);
-            return;
+            co_return false;
         }
 
-        for (size_t i = 0; i < TaskIds.size(); ++i) {
-            States.emplace(TaskIds[i], std::move(ev->Get()->States[i]));
+        for (size_t i = 0; i < taskIds.size(); ++i) {
+            States.emplace(taskIds[i], std::move(ev->Get()->States[i]));
         }
 
-        if (MakeHistoryReplayPlan(Src, Dst, States, Plan, Issues)) {
-            PrepareSources();
-        } else {
-            ReplayFailed();
-        }
+        co_return true;
     }
 
-    void Handle(TEvPrivate::TEvSourcesPrepared::TPtr& ev) {
-        if (const auto& issues = ev->Get()->Result.GetValue(); issues.Empty()) {
-            Finish(/* success */ true);
-        } else {
-            AddIssueWithSubIssues("Failed to prepare sources for recovery", issues);
-            ReplayFailed();
-        }
-    }
-
-    void ReplayFailed() {
-        if (Fallback || !Settings.Force || Settings.OutputStartTimeUs) {
-            Finish(/* success */ false);
-            return;
-        }
-        Fallback = true;
-
-        NYql::TIssue warning("History replay is unavailable; FORCE=true resumes from streaming offsets");
-        warning.SetCode(NYql::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING);
-        for (const auto& issue : Issues) {
-            auto detail = MakeIntrusive<NYql::TIssue>(issue);
-            detail->SetCode(NYql::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING);
-            warning.AddSubIssue(detail);
-        }
-        Issues.Clear();
-        Issues.AddIssue(std::move(warning));
-
-        Finish(MakeFallbackPlan());
-    }
-
-    void PrepareSources() {
+    NActors::async<bool> PrepareSources(const TSourceRecoverySet* selected) {
         using namespace NYql::NDqProto::NDqStateLoadPlan;
 
         THashMap<TString, ICheckpointProviderIntegration::TPtr> integrations;
+        integrations.reserve(Settings.ProviderIntegrations.size());
         for (const auto& [_, integration] : Settings.ProviderIntegrations) {
             const auto& name = integration->GetSourceName();
             Y_VALIDATE(integrations.emplace(name, integration).second, "Duplicate source recovery integration: " << name);
@@ -178,12 +203,11 @@ private:
             }
 
             for (const auto& sourcePlan : taskPlan->GetSources()) {
-                if (sourcePlan.GetStateType() != STATE_TYPE_FOREIGN) {
+                if (sourcePlan.GetStateType() != STATE_TYPE_FOREIGN || (selected && !selected->contains(std::pair<ui64, ui64>{task.GetId(), sourcePlan.GetInputIndex()}))) {
                     continue;
                 }
 
                 const auto& source = task.GetInputs(sourcePlan.GetInputIndex()).GetSource();
-                YQL_ENSURE(integrations.contains(source.GetType()), "Source recovery preparation is unavailable for " << source.GetType());
 
                 auto [it, inserted] = stageSources.try_emplace(std::make_pair(task.GetStageId(), sourcePlan.GetInputIndex()));
                 auto& request = it->second;
@@ -225,23 +249,63 @@ private:
         TVector<NThreading::TFuture<NYql::TIssues>> futures;
         futures.reserve(requests.size());
         for (auto& [type, sources] : requests) {
-            futures.emplace_back(integrations.at(type)->PrepareSourceRecovery(std::move(sources)));
+            try {
+                const auto it = integrations.find(type);
+                YQL_ENSURE(it != integrations.end(), "Source recovery preparation is unavailable for " << type);
+                futures.emplace_back(it->second->PrepareSourceRecovery(std::move(sources)));
+            } catch (const std::exception& e) {
+                futures.emplace_back(NThreading::MakeFuture(NYql::TIssues{NYql::TIssue(e.what())}));
+            }
         }
 
+        if (futures.empty()) {
+            co_return true;
+        }
+
+        const auto cookie = NActors::AllocateWaitCookie();
         NThreading::WaitAll(futures).Apply([futures](const auto&) {
             NYql::TIssues issues;
             for (const auto& future : futures) {
-                issues.AddIssues(future.GetValue());
+                try {
+                    issues.AddIssues(future.GetValue());
+                } catch (const std::exception& e) {
+                    issues.AddIssue(NYql::TIssue(e.what()));
+                }
             }
+
             return issues;
-        }).Subscribe([system = ActorContext().ActorSystem(), self = SelfId()](const auto& result) {
-            system->Send(self, new TEvPrivate::TEvSourcesPrepared(result));
+        }).Subscribe([system = ActorContext().ActorSystem(), self = SelfId(), cookie](const auto& result) {
+            system->Send(new NActors::IEventHandle(self, {}, new TEvPrivate::TEvSourcesPrepared(result), /* flags */ 0, cookie));
         });
+
+        const auto ev = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvSourcesPrepared>(cookie);
+        if (const auto& issues = ev->Get()->Result.GetValue(); !issues.Empty()) {
+            AddIssueWithSubIssues("Failed to prepare sources for recovery", issues);
+            co_return false;
+        }
+
+        co_return true;
     }
 
-    bool MakeFallbackPlan() {
-        Plan.clear();
-        return MakeContinueFromStreamingOffsetsPlan(Src.GetTasks(), Dst.GetTasks(), Settings.Force, Plan, Issues);
+    void WarnAndContinue(const TString& message) {
+        NYql::TIssue warning(message);
+        warning.SetCode(NYql::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING);
+        const auto demote = [](auto&& self, NYql::TIssue& issue) -> void {
+            issue.SetCode(NYql::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING);
+
+            for (const auto& child : issue.GetSubIssues()) {
+                self(self, *child);
+            }
+        };
+
+        for (const auto& issue : Issues) {
+            auto detail = MakeIntrusive<NYql::TIssue>(issue);
+            demote(demote, *detail);
+            warning.AddSubIssue(detail);
+        }
+
+        Issues.Clear();
+        Issues.AddIssue(std::move(warning));
     }
 
     void Finish(bool success) {
@@ -249,7 +313,7 @@ private:
             Plan.clear();
         }
 
-        Send(Owner, new TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult(success, std::move(Plan), std::move(Issues)), 0, Cookie);
+        Send(Owner, new TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult(success, std::move(Plan), std::move(Issues)), /* flags */ 0, Cookie);
         PassAway();
     }
 
@@ -264,13 +328,11 @@ private:
     const NProto::TGraphParams Src;
     const NProto::TGraphParams Dst;
     const TStateLoadPlanResolverSettings Settings;
-    const ui64 Cookie;
+    const ui64 Cookie = 0;
     NActors::TActorId Owner;
-    std::vector<ui64> TaskIds;
     TCheckpointTaskStates States;
     TStateLoadPlan Plan;
     NYql::TIssues Issues;
-    bool Fallback = false;
 };
 
 } // anonymous namespace

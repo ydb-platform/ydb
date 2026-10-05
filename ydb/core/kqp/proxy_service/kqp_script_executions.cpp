@@ -2368,7 +2368,9 @@ private:
                 graph_compressed,
                 graph_compression_method,
                 retry_state,
-                user_token
+                user_token,
+                start_ts,
+                end_ts
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -2466,6 +2468,13 @@ private:
             } else {
                 return;
             }
+
+            if (const auto startTs = result.ColumnParser("start_ts").GetOptionalTimestamp()) {
+                SubmittedAt = *startTs;
+            }
+            if (const auto endTs = result.ColumnParser("end_ts").GetOptionalTimestamp()) {
+                FinishedAt = *endTs;
+            }
         }
 
         {   // Lease info
@@ -2529,6 +2538,8 @@ private:
             .LastFailAt = NProtoInterop::CastFromProto(RetryState.GetRetryCounterUpdatedAt()),
             .SuspendedUntil = SuspendedUntil,
             .RequestStatus = status,
+            .SubmittedAt = SubmittedAt,
+            .FinishedAt = FinishedAt,
         }, std::move(OperationIssues)), /* flags */ 0, Cookie);
     }
 
@@ -2543,6 +2554,8 @@ private:
     bool StateSaved = false;
     bool ExecutionEntryExists = true;
     TInstant SuspendedUntil;
+    TInstant SubmittedAt;
+    TInstant FinishedAt;
 };
 
 // List all available script execution operations with paging, used by gRPC API list-operations

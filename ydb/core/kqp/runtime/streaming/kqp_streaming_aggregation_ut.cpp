@@ -1,16 +1,374 @@
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_program_builder.h>
+#include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
 
+#include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/stream/str.h>
+#include <util/string/escape.h>
+
 #include <bit>
+#include <deque>
+#include <map>
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
+TString CheckQuotedIdentifier(NSQLTranslation::ILexer& lexer, const TStringBuf& name) {
+    const auto quoted = NPrivate::QuoteStreamingAggregationIdentifier(name);
+    const TString query = TStringBuilder() << "SELECT " << quoted << " FROM input_table; SELECT 42;";
+    NSQLTranslation::TParsedTokenList tokens;
+    NYql::TIssues issues;
+    UNIT_ASSERT_C(NSQLTranslation::Tokenize(lexer, query, "quoted identifier", tokens, issues, 10),
+        EscapeC(name) << ": " << issues.ToString());
+
+    TVector<TString> tokenNames;
+    TVector<TString> tokenContents;
+    for (const auto& token : tokens) {
+        if (token.Name != "WS") {
+            tokenNames.push_back(token.Name);
+            tokenContents.push_back(token.Content);
+        }
+    }
+    const TVector<TString> expectedNames = {
+        "SELECT", "ID_QUOTED", "FROM", "ID_PLAIN", "SEMICOLON", "SELECT", "DIGITS", "SEMICOLON", "EOF"
+    };
+    UNIT_ASSERT_VALUES_EQUAL_C(tokenNames.size(), expectedNames.size(), EscapeC(name));
+    for (size_t i = 0; i < tokenNames.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(tokenNames[i], expectedNames[i], EscapeC(name));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(tokenContents.at(1), quoted);
+    UNIT_ASSERT_VALUES_EQUAL(tokenContents.at(3), "input_table");
+    UNIT_ASSERT_VALUES_EQUAL(tokenContents.at(6), "42");
+    return quoted;
+}
+
+class TOutputTableAggregationRuntime {
+    class TInput final : public TComputationValue<TInput> {
+    public:
+        explicit TInput(TMemoryUsageInfo* const memInfo)
+            : TComputationValue<TInput>(memInfo)
+        {}
+
+        std::deque<NUdf::TUnboxedValue> Rows;
+        bool Finished = false;
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) final {
+            if (Rows.empty()) {
+                return Finished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+            }
+            value = std::move(Rows.front());
+            Rows.pop_front();
+            return NUdf::EFetchStatus::Ok;
+        }
+    };
+
+public:
+    TOutputTableAggregationRuntime()
+        : Setup([this](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+            auto* const node = GetKqpBaseComputeFactory(&ComputeCtx)(callable, ctx);
+            if (callable.GetType()->GetName() == "KqpStreamingAggregation") {
+                AggregationNode = node;
+            }
+            return node;
+        })
+    {
+        ComputeCtx.SetCheckpointContext(Checkpoints);
+        TKqpProgramBuilder pb(*Setup.Env, *Setup.FunctionRegistry);
+        const auto zero = pb.NewDataLiteral<ui64>(0);
+        const auto row = pb.NewStruct({{"key", zero}, {"value", zero}});
+        const auto input = pb.Arg(TStreamType::Create(row.GetStaticType(), *Setup.Env));
+        const auto key = pb.NewStruct({{"key", zero}});
+        const auto saved = pb.NewStruct({{"total", zero}});
+        KeyType = key.GetStaticType();
+        SavedType = saved.GetStaticType();
+        const auto binding = pb.NewTuple({pb.NewDataLiteral<NUdf::EDataSlot::String>("/Root/result"),
+            pb.NewStruct({{"key", pb.NewDataLiteral<NUdf::EDataSlot::String>("key")},
+                {"total", pb.NewDataLiteral<NUdf::EDataSlot::String>("total")}})});
+        const auto aggregation = pb.KqpStreamingAggregation(pb.ToFlow(input, {}),
+            [&](TRuntimeNode item) { return pb.NewStruct({{"key", pb.Member(item, "key")}}); },
+            [&](TRuntimeNode item) { return pb.NewStruct({{"total", pb.Member(item, "value")}}); },
+            [&](TRuntimeNode state, TRuntimeNode item) {
+                return pb.NewStruct({{"total", pb.Add(pb.Member(state, "total"), pb.Member(item, "value"))}});
+            },
+            [&](TRuntimeNode key, TRuntimeNode state) {
+                return pb.NewTuple({pb.Member(key, "key"), pb.Member(state, "total")});
+            }, binding, {}, {}, [&](TRuntimeNode state, TRuntimeNode other) {
+                return pb.NewStruct({{"total", pb.Add(pb.Member(state, "total"), pb.Member(other, "total"))}});
+            });
+        Graph = Setup.BuildGraph(pb.FromFlow(aggregation), {input.GetNode()});
+        InputValue = Graph->GetHolderFactory().Create<TInput>();
+        Input = static_cast<TInput*>(InputValue.AsBoxed().Get());
+        Graph->GetEntryPoint(0, true)->SetValue(Graph->GetContext(), NUdf::TUnboxedValue(InputValue));
+        Stream = Graph->GetValue();
+    }
+
+    void Seed(const std::vector<std::pair<ui64, ui64>>& rows) {
+        auto& ctx = Graph->GetContext();
+        TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, 2, ctx);
+        out.Write<ui64>(1);
+        out.Write<ui64>(1);
+        out.Write<ui64>(rows.size());
+        const TValuePacker keyPacker(false, KeyType);
+        const TValuePacker statePacker(false, SavedType);
+        for (const auto& [key, value] : rows) {
+            out.WriteUnboxedValue(keyPacker, Array({key}));
+            out.WriteUnboxedValue(statePacker, Array({value}));
+        }
+        out.Write<ui64>(0); // Pending lookups.
+        ctx.MutableValues[AggregationNode->GetIndex()] = out.MakeState();
+    }
+
+    void Add(ui64 key, ui64 value) {
+        Input->Rows.push_back(Array({key, value}));
+    }
+
+    void FinishInput() {
+        Input->Finished = true;
+    }
+
+    TString Save(ui64 generation, ui64 id) {
+        Checkpoints->PendingSaveCheckpoint = Checkpoint(generation, id);
+        auto result = Graph->SaveGraphState();
+        Checkpoints->PendingSaveCheckpoint.Clear();
+        return result;
+    }
+
+    void Restore(const TString& checkpoint) {
+        Checkpoints->LastCommittedCheckpoint.Clear();
+        Graph->LoadGraphState(checkpoint);
+    }
+
+    void Commit(ui64 generation, ui64 id) {
+        Checkpoints->LastCommittedCheckpoint = Checkpoint(generation, id);
+    }
+
+    std::pair<ui64, ui64> FetchRow() {
+        NUdf::TUnboxedValue row;
+        UNIT_ASSERT_VALUES_EQUAL(Stream.Fetch(row), NUdf::EFetchStatus::Ok);
+        return {row.GetElement(0).Get<ui64>(), row.GetElement(1).Get<ui64>()};
+    }
+
+    void ExpectRow(ui64 key, ui64 value) {
+        const auto row = FetchRow();
+        UNIT_ASSERT_VALUES_EQUAL(row.first, key);
+        UNIT_ASSERT_VALUES_EQUAL(row.second, value);
+    }
+
+    void ExpectStatus(NUdf::EFetchStatus status = NUdf::EFetchStatus::Yield) {
+        NUdf::TUnboxedValue row;
+        UNIT_ASSERT_VALUES_EQUAL(Stream.Fetch(row), status);
+    }
+
+    std::map<ui64, ui64> Drain() {
+        std::map<ui64, ui64> result;
+        NUdf::TUnboxedValue row;
+        while (Stream.Fetch(row) == NUdf::EFetchStatus::Ok) {
+            UNIT_ASSERT(result.emplace(row.GetElement(0).Get<ui64>(), row.GetElement(1).Get<ui64>()).second);
+        }
+        return result;
+    }
+
+private:
+    static NYql::NDqProto::TCheckpoint Checkpoint(ui64 generation, ui64 id) {
+        NYql::NDqProto::TCheckpoint result;
+        result.SetGeneration(generation);
+        result.SetId(id);
+        return result;
+    }
+
+    NUdf::TUnboxedValue Array(std::initializer_list<ui64> values) {
+        NUdf::TUnboxedValue* fields = nullptr;
+        auto result = Graph->GetHolderFactory().CreateDirectArrayHolder(values.size(), fields);
+        for (const auto value : values) {
+            *fields++ = NUdf::TUnboxedValuePod(value);
+        }
+        return result;
+    }
+
+    TKqpComputeContextBase ComputeCtx;
+    const TIntrusivePtr<NYql::NDq::TCheckpointContext> Checkpoints = MakeIntrusive<NYql::NDq::TCheckpointContext>();
+    IComputationNode* AggregationNode = nullptr;
+    TSetup<false> Setup;
+    TType* KeyType = nullptr;
+    TType* SavedType = nullptr;
+    THolder<IComputationGraph> Graph;
+    NUdf::TUnboxedValue InputValue;
+    TInput* Input = nullptr;
+    NUdf::TUnboxedValue Stream;
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
+    Y_UNIT_TEST(OutputTableFrozenSnapshotAndNewerLive) {
+        TOutputTableAggregationRuntime test;
+        test.Seed({{1, 10}});
+        test.ExpectRow(1, 10);
+        test.Add(1, 5);
+        test.ExpectStatus();
+        test.Save(1, 10);
+        test.Add(1, 7);
+        test.ExpectStatus();
+        test.Commit(1, 10);
+        test.ExpectRow(1, 15);
+        test.ExpectStatus();
+        test.Save(1, 11);
+        test.Commit(1, 11);
+        test.ExpectRow(1, 22);
+        test.ExpectStatus();
+        test.Save(1, 12);
+        test.Commit(1, 12);
+        test.ExpectStatus(); // Evict before emitting this unchanged snapshot again.
+        test.FinishInput();
+        test.ExpectStatus(NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST_TWIN(OutputTableUpdateCancelsEviction, AfterSave) {
+        TOutputTableAggregationRuntime test;
+        test.Seed({{1, 10}});
+        test.ExpectRow(1, 10);
+        test.ExpectStatus();
+        if constexpr (AfterSave) {
+            test.Save(1, 11);
+        }
+        test.Add(1, 7);
+        test.ExpectStatus();
+        if constexpr (!AfterSave) {
+            test.Save(1, 11);
+        }
+        test.Commit(1, 11);
+        test.ExpectRow(1, AfterSave ? 10 : 17);
+        test.ExpectStatus();
+        test.Save(1, 12);
+        test.Commit(1, 12);
+        if constexpr (AfterSave) {
+            test.ExpectRow(1, 17);
+        }
+        test.ExpectStatus();
+        test.Save(1, 13);
+        test.Commit(1, 13);
+        test.FinishInput();
+        test.ExpectStatus(NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST(OutputTableAbortedSaveAndCompletedRecovery) {
+        TOutputTableAggregationRuntime test;
+        test.Seed({{1, 10}, {2, 20}});
+        const std::map<ui64, ui64> initial = {{1, 10}, {2, 20}};
+        UNIT_ASSERT(test.Drain() == initial);
+        test.Save(1, 10);
+        test.Add(1, 7);
+        test.ExpectStatus();
+        const auto checkpoint = test.Save(1, 12); // Checkpoint 10 was aborted.
+        test.ExpectStatus();
+        test.Restore(checkpoint); // Completed restoration does not resend commit 12.
+        const std::map<ui64, ui64> expected = {{1, 17}, {2, 20}};
+        // A restored durable batch emits without a new save or commit notification.
+        UNIT_ASSERT(test.Drain() == expected);
+        test.FinishInput();
+        test.ExpectStatus();
+        test.Save(2, 1);
+        test.Commit(1, 100); // A stale generation must not enable output or eviction.
+        test.ExpectStatus();
+        test.Commit(2, 1);
+        test.ExpectStatus(NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST(OutputTableDrainsBeforeInputAndSurvivesRehash) {
+        TOutputTableAggregationRuntime test;
+        std::vector<std::pair<ui64, ui64>> rows;
+        std::map<ui64, ui64> expected;
+        for (ui64 i = 0; i < 4096; ++i) {
+            rows.emplace_back(i, i);
+            expected.emplace(i, i);
+        }
+        test.Seed(rows);
+        UNIT_ASSERT(test.Drain() == expected);
+        const auto checkpoint = test.Save(1, 10);
+        test.Restore(checkpoint);
+        test.Add(1, 7);
+        const auto first = test.FetchRow();
+        UNIT_ASSERT_VALUES_EQUAL(expected.at(first.first), first.second);
+        expected.erase(first.first);
+        // A late restored commit must not restart or evict the batch being drained.
+        test.Commit(1, 10);
+        UNIT_ASSERT(test.Drain() == expected);
+        test.Save(1, 11);
+        test.Commit(1, 11);
+        test.ExpectRow(1, 8);
+        test.ExpectStatus();
+        test.Save(1, 12);
+        test.Commit(1, 12);
+        test.ExpectStatus();
+    }
+
+    Y_UNIT_TEST(OutputTableFinishedInputWaitsForDurability) {
+        TOutputTableAggregationRuntime test;
+        test.Seed({{1, 10}});
+        test.ExpectRow(1, 10);
+        test.FinishInput();
+        test.ExpectStatus();
+        const auto checkpoint = test.Save(1, 10);
+        test.Restore(checkpoint);
+        test.ExpectRow(1, 10);
+        test.ExpectStatus(); // The restored input flow reports Finish again.
+        test.Commit(1, 10);
+        test.ExpectStatus(); // The restored commit cannot evict newly re-emitted rows.
+        test.Save(1, 11);
+        test.Commit(1, 11);
+        test.ExpectStatus(NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST_TWIN(QuoteIdentifierSqlSyntax, Ansi) {
+        const auto factory = Ansi ? NSQLTranslationV1::MakeAntlr4AnsiLexerFactory() : NSQLTranslationV1::MakeAntlr4LexerFactory();
+        const auto lexer = factory->MakeLexer();
+        const TVector<TString> names = {
+            "", "normal", "select", "column with spaces", "a`b", "``", "\\", "\\`", "\\\\`", "ends-with-\\",
+            "` FROM input_table; SELECT 123; --", "`; DROP TABLE input_table; /*", "'\"; -- /* */",
+            "line\n\r\t--!ansi_lexer\nSELECT 123;", R"(\x60\u0060\140)", "?" "?/`", "ключ"
+        };
+        for (const auto& name : names) {
+            const auto quoted = CheckQuotedIdentifier(*lexer, name);
+            TString decoded;
+            TStringOutput output(decoded);
+            size_t readBytes = 0;
+            const auto result = NYql::UnescapeArbitraryAtom(TStringBuf(quoted).SubStr(1), '`', &output, &readBytes);
+            UNIT_ASSERT_C(result == NYql::EUnescapeResult::OK, NYql::UnescapeResultToString(result));
+            UNIT_ASSERT_VALUES_EQUAL(readBytes, quoted.size() - 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(decoded, name, EscapeC(name));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(QuoteIdentifierArbitraryBytes, Ansi) {
+        const auto factory = Ansi ? NSQLTranslationV1::MakeAntlr4AnsiLexerFactory() : NSQLTranslationV1::MakeAntlr4LexerFactory();
+        const auto lexer = factory->MakeLexer();
+        TString allBytes;
+        for (ui32 first = 0; first < 256; ++first) {
+            const char byte = static_cast<char>(first);
+            allBytes.push_back(byte);
+            CheckQuotedIdentifier(*lexer, TStringBuf(&byte, 1));
+            for (ui32 second = 0; second < 256; ++second) {
+                const char pair[] = {byte, static_cast<char>(second)};
+                CheckQuotedIdentifier(*lexer, TStringBuf(pair, sizeof(pair)));
+            }
+        }
+        CheckQuotedIdentifier(*lexer, allBytes);
+        // Exercise longer runs of backslashes next to a delimiter and SQL-looking text.
+        for (ui32 count = 0; count <= 16; ++count) {
+            CheckQuotedIdentifier(*lexer, TStringBuilder() << TString(count, '\\') << "`; SELECT 123; --");
+        }
+    }
+
     Y_UNIT_TEST(InMemoryStateUsesMiniKqlAllocator) {
         constexpr ui64 keyCount = 65536;
         TKqpComputeContextBase computeCtx;

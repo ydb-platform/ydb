@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -101,6 +102,19 @@ bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     }
 
     return true;
+}
+
+bool HasSamplingRead(const TExprNode::TPtr& root) {
+    return FindNode(root, [](const TExprNode::TPtr& node) {
+        if (!TCoRead::Match(node.Get()) || node->ChildrenSize() <= TKiReadTable::idx_Settings ||
+            !TMaybeNode<TKiDataSource>(node->ChildPtr(TCoRead::idx_DataSource)))
+        {
+            return false;
+        }
+        const auto& settings = *node->Child(TKiReadTable::idx_Settings);
+        return HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+            HasSetting(settings, "samplingmemtablestride");
+    }) != nullptr;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -1432,6 +1446,32 @@ private:
                 result.CommandTagName,
                 &effectiveSettings
             );
+            if (!astRes.IsOk() && isSql && SessionCtx->Config().GetEnableNewRBO()) {
+                // Forced YqlSelect translation rejects table hints before we can
+                // inspect their Read! nodes. Accept legacy translation only for
+                // sampling; other queries retain the original parser diagnostics.
+                TExprContext samplingCtx;
+                auto samplingSqlVersion = sqlVersion;
+                bool samplingDeprecatedSQL = TypesCtx->DeprecatedSQL;
+                bool samplingKeepInCache = false;
+                TMaybe<TString> samplingCommandTag;
+                NSQLTranslation::TTranslationSettings samplingSettings;
+                settingsBuilder.SetYqlSelect(NSQLTranslation::EYqlSelect::Disable);
+                auto samplingAst = ParseQuery(query.Text, isSql, samplingSqlVersion, samplingDeprecatedSQL,
+                    samplingCtx, settingsBuilder, samplingKeepInCache, samplingCommandTag, &samplingSettings);
+                TExprNode::TPtr samplingExpr;
+                if (samplingAst.IsOk() &&
+                    CompileExpr(*samplingAst.Root, samplingExpr, samplingCtx, ModuleResolver.get(), nullptr) &&
+                    HasSamplingRead(samplingExpr))
+                {
+                    astRes = std::move(samplingAst);
+                    sqlVersion = samplingSqlVersion;
+                    TypesCtx->DeprecatedSQL = samplingDeprecatedSQL;
+                    result.KeepInCache = samplingKeepInCache;
+                    result.CommandTagName = std::move(samplingCommandTag);
+                    effectiveSettings = std::move(samplingSettings);
+                }
+            }
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
@@ -1478,6 +1518,15 @@ private:
 
         if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
+        }
+
+        if (HasSamplingRead(queryExpr)) {
+            // Sampling requires the read ranges source even for scan queries.
+            SessionCtx->ConfigPtr()->SetEnableKqpScanQuerySourceRead(true);
+            // RBO read operators do not preserve sampling settings. Select the
+            // legacy pipeline before optimization, independently of error fallback.
+            SessionCtx->ConfigPtr()->SetEnableNewRBO(false);
+            TypesCtx->IgnoreExpandPg = false;
         }
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);

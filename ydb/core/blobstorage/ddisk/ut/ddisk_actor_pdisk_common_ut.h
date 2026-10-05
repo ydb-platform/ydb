@@ -17,6 +17,7 @@
 
 #include <util/folder/tempdir.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 #include <util/random/entropy.h>
 
 #include <algorithm>
@@ -132,6 +133,7 @@ public:
         , CustomPBFormat(std::move(pbFormat))
         , PhysicalChunkSize(physicalChunkSize)
     {
+        Y_ENSURE(!SectorMap || numDisks == 1, "SectorMap supports exactly one PDisk");
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
@@ -161,6 +163,7 @@ public:
     // Formats a fresh on-disk file, registers a new PDisk actor for it, and returns its
     // index in PDisks. Does NOT attach a DDisk; use AddDDiskOnPDisk for that.
     ui32 AddPDisk() {
+        Y_ENSURE(!SectorMap || PDisks.empty(), "SectorMap supports exactly one PDisk");
         const ui32 p = static_cast<ui32>(PDisks.size());
         const ui32 pdiskId = PDiskId + p;
         const ui64 pdiskGuid = 12345 + p;

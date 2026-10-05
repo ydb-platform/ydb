@@ -182,7 +182,7 @@ public:
         if (base <= entry.Index->GetBaseVersion() || base < Self->SnapshotManager.GetLowWatermark()
                 || base >= Self->Pipeline.GetUnreadableEdge()
                 || Self->VolatileTxManager.HasVolatileTxsAtSnapshot(base)
-                || TInstant::Now() < entry.NextScanAttemptAt) {
+                || AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) {
             Retry = true;
             return true;
         }
@@ -254,7 +254,7 @@ bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         entry.Changes = std::make_shared<THnswIndexChanges>();
         entry.VectorColumnTag = vectorColumnTag;
         entry.Settings = settings;
-    } else if (TInstant::Now() < entry.NextScanAttemptAt) {
+    } else if (AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) {
         return false;
     }
     entry.Rebuilds += bool(entry.Index);

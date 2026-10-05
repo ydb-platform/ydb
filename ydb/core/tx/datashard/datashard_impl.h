@@ -1917,7 +1917,8 @@ public:
     void DeferHnswIndexBuild(ui32 localTid, TDuration delay) {
         auto& entry = HnswIndexCache[localTid];
         entry.Building = false;
-        entry.NextScanAttemptAt = TInstant::Now() + delay;
+        // Use the runtime clock for both the deadline and its retry checks.
+        entry.NextScanAttemptAt = AppData()->TimeProvider->Now() + delay;
     }
 
     void DisableHnswIndexBuild(ui32 localTid) {

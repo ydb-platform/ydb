@@ -6884,6 +6884,9 @@ FROM (
                 GROUP BY b, c
                 ORDER BY b, c;
             )"},
+            // Fails in the new RBO: it types every window aggregate as optional, while YQL keeps
+            // sum/min/max/avg over a NOT NULL column non-optional when the frame always holds the
+            // current row, so the rewritten plan fails CheckExpectedTypeAndColumnOrder ("Rewrite error").
             {"whole partition aggregates over a not null measure", R"(
                 PRAGMA YqlSelect = "force";
 

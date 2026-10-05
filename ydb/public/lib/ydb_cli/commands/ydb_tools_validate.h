@@ -35,6 +35,7 @@ protected:
     bool SchemeOnly = false;
     TString EncryptionKey;
     TString EncryptionKeyFile;
+    TString ExpectedObjectsFile;
 };
 
 class TCommandValidateFromS3 : public TCommandValidateBase,

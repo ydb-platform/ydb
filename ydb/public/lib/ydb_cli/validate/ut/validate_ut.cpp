@@ -397,6 +397,78 @@ Y_UNIT_TEST(IndexFilesWithoutMetadataEntry) {
     UNIT_ASSERT(HasIssue(Run(storage, "t"), "t/idx/indexImplTable/data_00.csv", "checksum mismatch"));
 }
 
+TValidationReport RunExpected(const IBackupStorage& storage, const TString& path, std::initializer_list<TString> names) {
+    TValidateSettings settings;
+    settings.ExpectedObjects = TVector<TString>(names);
+    return ValidateBackup(storage, path, settings);
+}
+
+bool HasWarning(const TValidationReport& report, TStringBuf pathPart, TStringBuf messagePart) {
+    for (const TValidationIssue& issue : report.Warnings) {
+        if (issue.Path.Contains(pathPart) && issue.Message.Contains(messagePart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Y_UNIT_TEST(ParseExpectedObjectsSkipsEmptyLines) {
+    const TVector<TString> names = ParseExpectedObjects("dir/t1\n\n  \n./dir/t2/ \n");
+    UNIT_ASSERT_VALUES_EQUAL(names.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(names[0], "dir/t1");
+    UNIT_ASSERT_VALUES_EQUAL(names[1], "./dir/t2/");
+}
+
+Y_UNIT_TEST(ExpectedObjectsMatch) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 1, "a\n", true);
+    AddTable(storage, "dir/t2", 1, "b\n", true);
+    const TValidationReport report = RunExpected(storage, "dir", {"t1", "./t2/"});
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(report.Warnings.empty());
+}
+
+Y_UNIT_TEST(ExpectedObjectsExtraIsWarning) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 1, "a\n", true);
+    AddTable(storage, "dir/t2", 1, "b\n", true);
+    const TValidationReport report = RunExpected(storage, "dir", {"t1"});
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(HasWarning(report, "t2", "not listed"));
+    UNIT_ASSERT(!HasWarning(report, "t1", "not listed"));
+}
+
+Y_UNIT_TEST(ExpectedObjectsMissingIsError) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 1, "a\n", true);
+    const TValidationReport report = RunExpected(storage, "dir", {"t1", "t2"});
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(HasIssue(report, "t2", "was not found"));
+    UNIT_ASSERT(report.Warnings.empty());
+}
+
+Y_UNIT_TEST(ExpectedObjectsCoversNestedIndex) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.PutChecked("t/metadata.json", "{\"version\":1,\"permissions\":0}");
+    AddTable(storage, "t/idx/indexImplTable", 1, "idx\n", true);
+    AddTable(storage, "other", 1, "x\n", true);
+    const TValidationReport report = RunExpected(storage, "", {"t"});
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(HasWarning(report, "other", "not listed"));
+    UNIT_ASSERT(!HasWarning(report, "idx", "not listed"));
+}
+
+Y_UNIT_TEST(ExpectedObjectsDoNotApplyToSchemaMapping) {
+    TMemoryStorage storage;
+    storage.PutChecked("metadata.json", "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    storage.PutChecked("SchemaMapping/metadata.json", "{\"kind\":\"SchemaMappingV0\"}");
+    storage.PutChecked("SchemaMapping/mapping.json", "{\"exportedObjects\":{\"/t\":{\"exportPrefix\":\"t\"}}}");
+    AddTable(storage, "t", 1, "a\n", true);
+    const TValidationReport report = RunExpected(storage, "", {"t"});
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "SchemaMapping"));
+}
+
 Y_UNIT_TEST(UnknownPath) {
     TMemoryStorage storage;
     storage.Put("readme.txt", "hello");

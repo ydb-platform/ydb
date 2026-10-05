@@ -160,27 +160,53 @@ private:
 
 int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, const TValidateSettings& settings) {
     size_t issues = 0;
+    size_t warnings = 0;
     size_t checked = 0;
     for (const TString& path : paths) {
         const TValidationReport report = ValidateBackup(storage, path, settings);
         checked += report.Checked.size();
+        for (const TValidationIssue& warning : report.Warnings) {
+            ++warnings;
+            Cerr << "warning: " << warning.Path << ": " << warning.Message << Endl;
+        }
         for (const TValidationIssue& issue : report.Issues) {
             ++issues;
             Cerr << issue.Path << ": " << issue.Message << Endl;
         }
     }
     if (issues != 0) {
-        Cerr << "Backup validation failed: " << issues << " issue(s), checked " << checked << " object(s)" << Endl;
+        Cerr << "Backup validation failed: " << issues << " issue(s), checked " << checked << " object(s)";
+        if (warnings != 0) {
+            Cerr << ", " << warnings << " warning(s)";
+        }
+        Cerr << Endl;
         return EXIT_FAILURE;
     }
-    Cout << "Backup validation succeeded: checked " << checked << " object(s)" << Endl;
+    Cout << "Backup validation succeeded: checked " << checked << " object(s)";
+    if (warnings != 0) {
+        Cout << ", " << warnings << " warning(s)";
+    }
+    Cout << Endl;
     return EXIT_SUCCESS;
 }
 
-TValidateSettings MakeSettings(bool schemeOnly, const TString& encryptionKey) {
+TMaybe<TVector<TString>> LoadExpectedObjects(const TString& path) {
+    if (!path) {
+        return {};
+    }
+    try {
+        TFileInput input(path);
+        return ParseExpectedObjects(input.ReadAll());
+    } catch (const std::exception& ex) {
+        throw TMisuseException() << "Cannot read --expected-objects file \"" << path << "\": " << ex.what();
+    }
+}
+
+TValidateSettings MakeSettings(bool schemeOnly, const TString& encryptionKey, const TMaybe<TVector<TString>>& expectedObjects) {
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
     settings.EncryptionKey = encryptionKey;
+    settings.ExpectedObjects = expectedObjects;
     return settings;
 }
 
@@ -227,6 +253,15 @@ void TCommandValidateBase::Config(TConfig& config) {
         .FileName("encryption key file").RequiredArgument("PATH")
         .StoreFilePath(&EncryptionKeyFile)
         .StoreResult(&EncryptionKey);
+
+    config.Opts->AddLongOption("expected-objects",
+            "Text file listing objects expected in a backup created with --item (one name per line, "
+            "relative to the validated path). Empty lines are ignored. "
+            "An object found in the backup and absent from the file is a warning. "
+            "An object listed in the file and absent from the backup is an error. "
+            "Index implementation tables stored under a listed object are part of that object. "
+            "The option does not apply to backups that contain SchemaMapping.")
+        .RequiredArgument("PATH").StoreResult(&ExpectedObjectsFile);
 }
 
 void TCommandValidateBase::Parse(TConfig& config) {
@@ -339,10 +374,11 @@ int TCommandValidateFromS3::Run(TConfig& config) {
         }
     }
 
+    const TMaybe<TVector<TString>> expectedObjects = LoadExpectedObjects(ExpectedObjectsFile);
     InitAwsAPI();
     try {
         TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
-        const int code = PrintReport(storage, paths, MakeSettings(SchemeOnly, EncryptionKey));
+        const int code = PrintReport(storage, paths, MakeSettings(SchemeOnly, EncryptionKey, expectedObjects));
         ShutdownAwsAPI();
         return code;
     } catch (...) {
@@ -390,7 +426,7 @@ int TCommandValidateFromNfs::Run(TConfig& config) {
     }
 
     TFsBackupStorage storage(FsPath, NumberOfRetries);
-    return PrintReport(storage, paths, MakeSettings(SchemeOnly, EncryptionKey));
+    return PrintReport(storage, paths, MakeSettings(SchemeOnly, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile)));
 }
 
 } // namespace NYdb::NConsoleClient

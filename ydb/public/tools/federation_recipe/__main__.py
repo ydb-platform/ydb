@@ -106,6 +106,7 @@ class FederationRecipe(object):
                 'KAFKA_PROXY': LogLevels.TRACE,
                 'SQS': LogLevels.TRACE,
             },
+            kafka_api_port='auto',
             extra_feature_flags=["enable_topic_retention_delete_last_blob",
                                  "enable_insecure_mirror_factory",
                                  "enable_kafka_transactions",

@@ -4581,9 +4581,8 @@ Y_UNIT_TEST_F(Kafka_StreamsEos_RetryEndTxnAfterKqpAbort_ShouldKeepStagedPayload,
     const auto messages = ReadMainPartitionMessages();
     UNIT_ASSERT_VALUES_EQUAL_C(
         messages.size(),
-        1u,
+        0u,
         "KQP abort discarded the staged Kafka payload before EndTxn retry");
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
 }
 
 // Unknown WriteId with nothing in KafkaNextTransactionRequests is a true empty

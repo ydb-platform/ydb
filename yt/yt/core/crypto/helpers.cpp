@@ -19,12 +19,14 @@ using namespace NLogging;
 namespace {
 
 bool IsSslCertificateUpdateEnabled(
-    const TServerSslContextConfigPtr& SslConfig_)
+    const TServerSslContextConfigPtr& sslConfig)
 {
-    return SslConfig_ &&
-        SslConfig_->CertificateChain->FileName &&
-        SslConfig_->PrivateKey->FileName &&
-        SslConfig_->UpdatePeriod;
+    return sslConfig &&
+        sslConfig->CertificateChain &&
+        sslConfig->CertificateChain->FileName &&
+        sslConfig->PrivateKey &&
+        sslConfig->PrivateKey->FileName &&
+        sslConfig->UpdatePeriod;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

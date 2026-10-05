@@ -93,6 +93,9 @@ public:
 
         const ui64 id = info.Id;
         NIceDb::TNiceDb db(txc.DB);
+        if (info.Uid) {
+            Self->OperationsByUid.erase(TOperationUidKey{EOperationUidKind::FullBackup, info.Uid});
+        }
         Self->PersistRemoveFullBackup(db, info);
         Self->FullBackups.erase(id);
 

@@ -106,8 +106,8 @@ namespace {
         const ui32 partsTotal = GetTablePartsFromRequest(*item.Table);
 
         const auto buildUid = MakeIndexBuildUid(importInfo, itemIdx, indexIdx);
-        if (ss->IndexBuildsByUid.contains(buildUid)) {
-            const auto& indexBuild = ss->IndexBuildsByUid[buildUid];
+        if (const auto* id = ss->OperationsByUid.FindPtr(TOperationUidKey{EOperationUidKind::IndexBuild, buildUid})) {
+            const auto& indexBuild = ss->IndexBuilds.at(TIndexBuildId(*id));
 
             ui32 partsCompleted = 0;
             if (indexBuild->IsTransferring()) {
@@ -303,13 +303,13 @@ void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
     Imports[importInfo->Id] = importInfo;
     ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
     if (importInfo->Uid) {
-        ImportsByUid[importInfo->Uid] = importInfo;
+        OperationsByUid[TOperationUidKey{EOperationUidKind::Import, importInfo->Uid}] = importInfo->Id;
     }
 }
 
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
     if (importInfo.Uid) {
-        ImportsByUid.erase(importInfo.Uid);
+        OperationsByUid.erase(TOperationUidKey{EOperationUidKind::Import, importInfo.Uid});
     }
     ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
     Imports.erase(importInfo.Id);

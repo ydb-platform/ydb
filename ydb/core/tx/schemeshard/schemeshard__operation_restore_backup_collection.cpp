@@ -288,6 +288,12 @@ public:
         const TOperationId restoreId(OperationId.GetTxId(), 0);
         context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, restoreId);
         context.SS->LongIncrementalRestoreOps[restoreId] = op;
+
+        // Track the admitted restore before the initial table copy completes.
+        auto& state = context.SS->IncrementalRestoreStates[txId];
+        state.OriginalOperationId = txId;
+        state.BackupCollectionPathId = bcPath.Base()->PathId;
+        state.AwaitingInitialRestore = true;
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state

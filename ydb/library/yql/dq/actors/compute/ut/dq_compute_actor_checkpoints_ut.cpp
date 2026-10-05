@@ -1,8 +1,9 @@
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -73,7 +74,7 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
             new TEvDqCompute::TEvRestoreFromCheckpoint(7, 1, 2, transportedPlan), 0, cookie));
     }
 
-    void CheckRestoreResult(ui64 cookie = 0) {
+    void CheckRestoreResult(ui64 cookie = 0, ui64 version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion) {
         const auto result = Runtime.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(
             Coordinator, TDuration::Seconds(5));
         UNIT_ASSERT(result);
@@ -88,8 +89,7 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetTaskId(), 42);
         UNIT_ASSERT(LoadedState);
         UNIT_ASSERT(LoadedState->MiniKqlProgram);
-        UNIT_ASSERT_VALUES_EQUAL(LoadedState->MiniKqlProgram->Data.Version,
-            static_cast<ui64>(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion));
+        UNIT_ASSERT_VALUES_EQUAL(LoadedState->MiniKqlProgram->Data.Version, version);
         UNIT_ASSERT(LoadedState->Sinks.empty());
 
         // The transported plan has its own buffers. After loading, the actor must
@@ -270,6 +270,7 @@ void CheckExplicitState(bool failLoad = false) {
         auto plan = MakeForeignPlan();
         plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
         plan.MutableProgram()->SetState(blob);
+        plan.MutableProgram()->SetForeignTaskId(88); // Explicit bytes take precedence, including an empty blob.
         auto& source = *plan.AddSources();
         source.SetStateType(STATE_TYPE_FOREIGN);
         source.SetInputIndex(5);
@@ -410,6 +411,117 @@ Y_UNIT_TEST_SUITE(TComputeActorCheckpointContext) {
 }
 
 Y_UNIT_TEST_SUITE(TComputeActorStateRestore) {
+    Y_UNIT_TEST(ForeignProgramWithoutSourcesReadsItsTask) {
+        TRestoreFixture fixture;
+        auto plan = MakeForeignPlan();
+        plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
+        plan.MutableProgram()->SetForeignTaskId(20);
+        fixture.Restore(plan, 123);
+        auto request = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(fixture.Storage);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (std::vector<ui64>{20}));
+        auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(request->Get()->Checkpoint, TIssues{}, 2);
+        auto& program = response->States.emplace_back().MiniKqlProgram.ConstructInPlace();
+        program.Data = {"program only", TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion};
+        fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Storage, response.release(), 0, request->Cookie));
+        fixture.CheckRestoreResult(123);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->MiniKqlProgram->Data.Blob, "program only");
+        UNIT_ASSERT(fixture.LoadedState->Sources.empty());
+    }
+
+    Y_UNIT_TEST(OwnAndEmptyRestorePreserveCookies) {
+        for (bool own : {false, true}) {
+            TRestoreFixture fixture;
+            TTaskPlan plan;
+            plan.SetStateType(own ? STATE_TYPE_OWN : STATE_TYPE_EMPTY);
+            fixture.Restore(plan, 789);
+            if (own) {
+                auto request = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(fixture.Storage);
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (std::vector<ui64>{42}));
+                auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(request->Get()->Checkpoint, TIssues{}, 2);
+                auto& program = response->States.emplace_back().MiniKqlProgram.ConstructInPlace();
+                program.Data = {"own program", TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion};
+                fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Storage, response.release(), 0, request->Cookie));
+                fixture.CheckRestoreResult(789);
+            } else {
+                auto result = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(fixture.Coordinator);
+                UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 789);
+                UNIT_ASSERT(result->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK);
+                UNIT_ASSERT(!fixture.LoadedState);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ForeignProgramPreservesVersionsAndCombinesIndependentSources) {
+        for (bool sameTask : {false, true}) {
+            for (const TString& blob : {TString(), TString("serialized aggregation state")}) {
+                TRestoreFixture fixture;
+                auto plan = MakeForeignPlan();
+                plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
+                plan.MutableProgram()->SetForeignTaskId(20);
+                auto& source = *plan.AddSources();
+                source.SetStateType(STATE_TYPE_FOREIGN);
+                source.SetInputIndex(3);
+                AddForeignSource(source, sameTask ? 20 : 10, 1);
+                fixture.Restore(plan, 123);
+                auto request = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(fixture.Storage);
+                UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 123);
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds.size(), sameTask ? 1 : 2);
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds.back(), 20);
+                auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(request->Get()->Checkpoint, TIssues{}, 2);
+                for (auto id : request->Get()->TaskIds) {
+                    auto& saved = response->States.emplace_back();
+                    auto& program = saved.MiniKqlProgram.ConstructInPlace();
+                    program.Data = {id == 20 ? TString(blob.data(), blob.size()) : TString("unrelated program"), 17};
+                    program.RuntimeVersion = 42;
+                    auto& input = saved.Sources.emplace_back();
+                    input.InputIndex = 1;
+                    input.Data.emplace_back("partition offsets", 3);
+                    saved.Sinks.emplace_back(); // Must never be copied from the foreign task.
+                }
+                fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Storage, response.release(), 0, request->Cookie));
+                fixture.CheckRestoreResult(123, 17);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->MiniKqlProgram->Data.Blob, blob);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->MiniKqlProgram->RuntimeVersion, 42);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->Sources.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->Sources.front().InputIndex, 3);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.LoadedState->Sources.front().Data.front().Blob, "partition offsets");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MissingForeignStateIsAnError) {
+        for (ui32 missing = 0; missing < 3; ++missing) {
+            TRestoreFixture fixture;
+            auto plan = MakeForeignPlan();
+            plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
+            if (missing != 0) {
+                plan.MutableProgram()->SetForeignTaskId(20);
+            }
+            fixture.Restore(plan, 456);
+            if (missing != 0) {
+                auto request = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(fixture.Storage);
+                auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(request->Get()->Checkpoint, TIssues{}, 2);
+                if (missing == 1) {
+                    response->States.emplace_back();
+                }
+                fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Storage, response.release(), 0, request->Cookie));
+            }
+            if (missing == 2) {
+                auto result = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(fixture.Coordinator);
+                UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 456);
+                UNIT_ASSERT(result->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::STORAGE_ERROR);
+                UNIT_ASSERT(!result->Get()->Record.GetIssues().empty());
+            } else {
+                auto result = fixture.Runtime.GrabEdgeEvent<TEvDq::TEvAbortExecution>(fixture.Coordinator);
+                UNIT_ASSERT(result->Get()->Record.GetStatusCode() == NDqProto::StatusIds::INTERNAL_ERROR);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->GetIssues().ToOneLineString(), missing == 0
+                    ? "Foreign program checkpoint requires explicit state or a task ID"
+                    : "Missing program checkpoint for task 20");
+            }
+            UNIT_ASSERT(!fixture.LoadedState);
+        }
+    }
+
     Y_UNIT_TEST(ExplicitStateDoesNotReadCheckpoints) {
         CheckExplicitState();
     }

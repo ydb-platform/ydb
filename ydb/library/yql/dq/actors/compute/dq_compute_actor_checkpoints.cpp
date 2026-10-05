@@ -57,6 +57,11 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 
 std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPlan& plan) {
     std::vector<ui64> taskIds;
+
+    if (const auto& program = plan.GetProgram(); program.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN && !program.HasState() && program.HasForeignTaskId()) {
+        taskIds.push_back(program.GetForeignTaskId());
+    }
+
     for (const auto& sourcePlan : plan.GetSources()) {
         if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN && !sourcePlan.HasState()) {
             for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {
@@ -69,16 +74,25 @@ std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPla
     return taskIds;
 }
 
+const TComputeActorState& FindTaskState(
+    const ui64 taskId,
+    const std::vector<TComputeActorState>& states,
+    const std::vector<ui64>& taskIds)
+{
+    // Find state index
+    const auto stateIndexIt = std::lower_bound(taskIds.begin(), taskIds.end(), taskId);
+    YQL_ENSURE(stateIndexIt != taskIds.end() && *stateIndexIt == taskId, "Task " << taskId << " was not found in plan");
+    const size_t stateIndex = std::distance(taskIds.begin(), stateIndexIt);
+    YQL_ENSURE(stateIndex < states.size(), "Missing checkpoint state for task " << taskId);
+    return states[stateIndex];
+}
+
 const TSourceState& FindSourceState(
     const NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& foreignTaskSource,
     const std::vector<TComputeActorState>& states,
     const std::vector<ui64>& taskIds)
 {
-    // Find state index
-    const auto stateIndexIt = std::lower_bound(taskIds.begin(), taskIds.end(), foreignTaskSource.GetTaskId());
-    YQL_ENSURE(stateIndexIt != taskIds.end(), "Task id was not found in plan");
-    const size_t stateIndex = std::distance(taskIds.begin(), stateIndexIt);
-    const TComputeActorState& state = states[stateIndex];
+    const auto& state = FindTaskState(foreignTaskSource.GetTaskId(), states, taskIds);
     for (const TSourceState& sourceState : state.Sources) {
         if (sourceState.InputIndex == foreignTaskSource.GetInputIndex()) {
             return sourceState;
@@ -99,9 +113,15 @@ TComputeActorState CombineForeignState(
     program.Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
 
     if (const auto& programPlan = plan.GetProgram(); programPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
-        YQL_ENSURE(programPlan.HasState(), "Unsupported program state type. For foreign checkpoint explicit MKQL program state is required");
-        program.Data.Blob = programPlan.GetState();
-        program.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+        if (programPlan.HasState()) {
+            program.Data.Blob = programPlan.GetState();
+            program.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+        } else {
+            YQL_ENSURE(programPlan.HasForeignTaskId(), "Foreign program checkpoint requires explicit state or a task ID");
+            const auto& saved = FindTaskState(programPlan.GetForeignTaskId(), states, taskIds);
+            YQL_ENSURE(saved.MiniKqlProgram, "Missing program checkpoint for task " << programPlan.GetForeignTaskId());
+            program = *saved.MiniKqlProgram;
+        }
     } else {
         YQL_ENSURE(programPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported program state type. Plan must be either empty or foreign but got: " << plan);
     }
@@ -428,7 +448,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
     LOG_CP_D(checkpoint, "TEvRestoreFromCheckpoint, StateLoadPlan = " << StateLoadPlan);
     switch (StateLoadPlan.GetStateType()) {
         case NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY: {
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}));
+            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}), ev->Cookie);
             break;
         }
         case NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN: {
@@ -438,7 +458,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
                     GraphId,
                     {Task.GetId()},
                     ev->Get()->Record.GetCheckpoint(),
-                    CheckpointCoordinator->Generation));
+                    CheckpointCoordinator->Generation), 0, ev->Cookie);
             break;
         }
         case NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN: {
@@ -456,7 +476,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
                     GraphId,
                     taskIds,
                     ev->Get()->Record.GetCheckpoint(),
-                    CheckpointCoordinator->Generation));
+                    CheckpointCoordinator->Generation), 0, ev->Cookie);
             break;
         }
         default: {
@@ -465,7 +485,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
             LOG_CP_E(checkpoint, message);
             NYql::TIssues issues;
             issues.AddIssue(message);
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues));
+            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues), ev->Cookie);
             break;
         }
     }

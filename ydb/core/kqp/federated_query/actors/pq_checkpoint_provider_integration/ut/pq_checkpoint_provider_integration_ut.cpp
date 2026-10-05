@@ -300,13 +300,19 @@ public:
     const TIntrusivePtr<TClient> Client = MakeIntrusive<TClient>();
     std::atomic<size_t> CreatedClients = 0;
     std::optional<TString> ExpectedAuth;
+    TString FailingTopicEndpoint;
 
     IDeferredPublishClient::TPtr GetDeferredPublishClient(const TDriver&, const TCommonClientSettings& settings) override {
         CheckClientSettings(settings);
         return Client;
     }
 
-    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const TDriver&, const TTopicClientSettings& settings) override { CheckClientSettings(settings); return std::make_shared<TBoundRecoveryClient>(stream, RecoveryClient); }
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const TDriver&, const TTopicClientSettings& settings) override {
+        CheckClientSettings(settings);
+        Y_ENSURE(!FailingTopicEndpoint || TString(settings.DiscoveryEndpoint_.value_or("")) != FailingTopicEndpoint,
+            "Test topic client creation failure");
+        return std::make_shared<TBoundRecoveryClient>(stream, RecoveryClient);
+    }
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver&, const NFederatedTopic::TFederatedTopicClientSettings&) override { return {}; }
     TTopicClientSettings GetTopicClientSettings() const override { return {}; }
     NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override { return {}; }
@@ -379,6 +385,52 @@ NFq::ICheckpointProviderIntegration::TPrepareSource MakeSourceRecovery(std::opti
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TPqCheckpointProviderIntegration) {
+    Y_UNIT_TEST(SourceRecoveryCollectsSynchronousAndAsynchronousFailures) {
+        for (ui32 mode = 0; mode < 4; ++mode) {
+            TTestRuntime runtime;
+            const auto gateway = MakeIntrusive<TGateway>();
+            gateway->FailingTopicEndpoint = "failed:2135";
+            auto unavailable = MakeSourceRecovery(50);
+            NYql::NPq::NProto::TDqPqTopicSource settings;
+            UNIT_ASSERT(unavailable.Source.GetSettings().UnpackTo(&settings));
+            settings.SetEndpoint(gateway->FailingTopicEndpoint);
+            unavailable.Source.MutableSettings()->PackFrom(settings);
+            if (mode & 2) {
+                unavailable.SecureParams.clear();
+            }
+            TVector<NFq::ICheckpointProviderIntegration::TPrepareSource> sources{unavailable, MakeSourceRecovery(9)};
+            if (mode & 1) {
+                std::swap(sources[0], sources[1]);
+            }
+            auto integration = CreatePqCheckpointProviderIntegration(runtime.GetActorSystem(0), gateway, TDriver(TDriverConfig{}), CreateStructuredTokenCredentialsFactory());
+            const auto issues = integration->PrepareSourceRecovery(std::move(sources)).GetValueSync();
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), mode & 2 ? "Missing auth references" : "Test topic client creation failure");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "Required checkpoint offset is unavailable");
+            UNIT_ASSERT_VALUES_EQUAL(gateway->CreatedClients.load(), mode & 2 ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RecoveryClient->Describes.load(), 1);
+            UNIT_ASSERT(gateway->RecoveryClient->Commits.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SourceRecoveryWithoutConsumerValidatesBothRetentionBoundaries) {
+        for (ui64 offset : {9, 10, 100, 101}) {
+            TTestRuntime runtime;
+            const auto gateway = MakeIntrusive<TGateway>();
+            gateway->RecoveryClient->WithoutConsumer = true;
+            auto source = MakeSourceRecovery(offset);
+            NYql::NPq::NProto::TDqPqTopicSource settings;
+            UNIT_ASSERT(source.Source.GetSettings().UnpackTo(&settings));
+            settings.ClearConsumerName();
+            source.Source.MutableSettings()->PackFrom(settings);
+            auto integration = CreatePqCheckpointProviderIntegration(runtime.GetActorSystem(0), gateway, TDriver(TDriverConfig{}), CreateStructuredTokenCredentialsFactory());
+            const auto issues = integration->PrepareSourceRecovery({std::move(source)}).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(issues.Empty(), offset >= 10 && offset <= 100);
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RecoveryClient->Describes.load(), 1);
+            UNIT_ASSERT(gateway->RecoveryClient->Commits.empty());
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RecoveryClient->Reads, 0);
+        }
+    }
+
     Y_UNIT_TEST(SourceRecoveryResolvesSharedSecretsBeforeTopicOperations) {
         for (bool fail : {false, true}) {
             TTestRuntime runtime;

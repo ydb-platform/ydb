@@ -3,5 +3,3 @@ items:
   href: query-plans-optimization.md
 - name: Подсказки оптимизатора
   href: query-hints.md
-- name: Параметризованные запросы и повторная компиляция
-  href: parameterized-queries.md

@@ -53,7 +53,7 @@ public:
     TString UnsupportedTabletTypes() const {
         TStringBuilder types;
         for (const auto type : Self->SeenTabletTypes) {
-            if (std::ranges::find(Self->CutHistoryDenyList, type) == Self->CutHistoryDenyList.end()) {
+            if (Self->IsCutHistoryAllowed(type)) {
                 continue;
             }
             if (!types.empty()) {

@@ -10663,9 +10663,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestShrinkStoragePoolReply) {
-
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true, 5);
+        Setup(runtime, true, 5, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryAllowList("Dummy");
+        });
 
         const ui64 hiveTablet = MakeDefaultHiveID();
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
@@ -10816,7 +10817,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     // A stalled shrink has to be diagnosable: the sensors must name how much is left and the page must name who holds it.
     Y_UNIT_TEST(TestShrinkStoragePoolObservability) {
         TTestBasicRuntime runtime(1, false);
-        // Without the allow list Hive drops every Dummy cut and the shrink never finishes.
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetCutHistoryAllowList("Dummy");
         });

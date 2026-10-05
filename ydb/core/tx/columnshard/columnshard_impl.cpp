@@ -974,9 +974,26 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
+<<<<<<< HEAD
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
     for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
         pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
+=======
+    THashSet<TInternalPathId> pathIdsToCleanup;
+    for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
+        for (const TInternalPathId pathId : pathIds) {
+            if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
+                continue;
+            }
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "CleanupTableMetadataDeferredByWriteOperations")("path_id", pathId);
+                continue;
+            }
+            pathIdsToCleanup.insert(pathId);
+        }
+>>>>>>> 6744d62c8b2 (Fix leaked locks of not proposed transactions (#54223))
     }
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);

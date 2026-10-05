@@ -335,11 +335,12 @@ private:
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 };
 
-void TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
-    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock) {
-        lock->SetTxId(op->GetTxId());
+bool TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
+    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock && !lock->TryProposeTransaction(op->GetTxId())) {
+        return false;
     }
     Execute(new TProposeWriteTransaction(this, op, source, cookie));
+    return true;
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -423,6 +424,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
+<<<<<<< HEAD
             LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0,
                 "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST),
                 conclusionParse.GetErrorMessage());
@@ -473,7 +475,49 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 } else {
                     ProposeTransaction(commitOperation, source, cookie);
                 }
+=======
+            sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, 0, 0, "CommitWriteLock", true);
+            return;
+        }
+        auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
+        if (!lockInfo) {
+            sendError("missing lock for commit: " + ::ToString(commitOperation->GetLockId()),
+                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
+            return;
+        }
+        THashSet<TSchemeShardLocalPathId> schemeShardLocalPathIds;
+        for (const auto& op : lockInfo->GetWriteOperations()) {
+            schemeShardLocalPathIds.insert(op->GetPathId().GetSchemeShardLocalPathId());
+        }
+        for (const auto& ev : lockInfo->GetEvents()) {
+            schemeShardLocalPathIds.insert(ev->GetPathId().GetSchemeShardLocalPathId());
+        }
+        for (const auto& p : schemeShardLocalPathIds) {
+            if (!TablesManager.ResolveInternalPathId(p, false)) {
+                //Table is renamed or dropped
+                sendError(
+                    "unknown table: " + ::ToString(p), NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "CommitWriteLock", true);
+                return;
+>>>>>>> 6744d62c8b2 (Fix leaked locks of not proposed transactions (#54223))
             }
+        }
+        if (commitOperation->NeedSyncLocks()) {
+            if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
+                sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
+                              " != " + ::ToString(commitOperation->GetGeneration()), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0,
+                    0, "CommitWriteLock", true);
+                return;
+            }
+            if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
+                sendError("tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
+                              " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
+                return;
+            }
+        }
+        if (!ProposeTransaction(commitOperation, source, cookie)) {
+            sendError("lock is being aborted: " + ::ToString(commitOperation->GetLockId()),
+                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
         }
         return;
     }

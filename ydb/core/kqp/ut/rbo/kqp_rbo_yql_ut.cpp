@@ -7003,7 +7003,6 @@ FROM (
         CompareWindowFunctionsWithOldOptimizer(ColumnStore, /*aggregates=*/false);
     }
 
-    // Kept apart from WindowFunctions so that each test fits in the timeout.
     Y_UNIT_TEST_TWIN(WindowAggregates, ColumnStore) {
         CompareWindowFunctionsWithOldOptimizer(ColumnStore, /*aggregates=*/true);
     }

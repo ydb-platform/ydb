@@ -456,12 +456,10 @@ private:
     };
     struct TSingleMessageGroupIdInfo {
         ui32 Size = 0;
+        ui32 UnprocessedCount = 0; // Messages in the group whose status is Unprocessed. STD keeps the group eligible for Next while this is > 0.
         TLockedGroup Locked;
         ui64 FirstOffset; // exclude DLQ
         ui64 LastOffset;
-        // STD only: number of Unprocessed messages currently in the group. The group is
-        // eligible for Next while this is > 0, regardless of how many are in flight.
-        ui32 UnprocessedCount = 0;
     };
 
     void PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup);

@@ -59,8 +59,6 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
-#include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h>
 #include <util/generic/object_counter.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
@@ -1679,72 +1677,56 @@ public:
         bool reask = false;
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
-        std::vector<NOlap::TPortionInfo::TConstPtr> portions;
-        for (const auto& [pathId, byConsumer] : PortionsByPath) {
-            const auto granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(pathId);
-            if (!granule) {
-                AFL_VERIFY(!Self->GetTablesManager().HasTable(pathId))("path_id", pathId);
-                continue;
-            }
-            for (const auto& [_, consumer] : byConsumer.GetConsumers()) {
-                for (const ui64 portionId : consumer.GetPortionIds()) {
-                    if (auto portion = granule->GetPortionOptional(portionId, false)) {
-                        portions.emplace_back(std::move(portion));
-                    }
-                }
-            }
-        }
-        // Cache requests regroup addresses in hash maps; restore global PortionId order here.
-        SortUniqueBy(portions, [](const auto& portion) {
-            return std::make_pair(portion->GetPortionId(), portion->GetPathId());
-        });
-        for (const auto& portion : portions) {
-            const auto pathId = portion->GetPathId();
-            const ui64 p = portion->GetPortionId();
-            const NOlap::TPortionAddress pAddress = portion->GetAddress();
-            auto itPortionConstructor = Constructors.find(pAddress);
-            if (itPortionConstructor == Constructors.end()) {
-                TPortionConstructorV2 constructor(portion);
-                itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
-            } else if (itPortionConstructor->second.IsReady()) {
-                continue;
-            }
-            if (!itPortionConstructor->second.HasRecords()) {
-                auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(pathId.GetRawValue(), p).Select();
-                if (!rowset.IsReady()) {
-                    reask = true;
-                } else {
-                    if (rowset.EndOfSet()) {
-                        AFL_VERIFY(portion->HasRemoveSnapshot() || !Self->GetTablesManager().HasTable(pathId))
-                        ("path_id", pathId)("portion_id", p);
-                        Constructors.erase(pAddress);
+        for (auto&& i : PortionsByPath) {
+            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
+            for (auto&& c : i.second.GetConsumers()) {
+                YDB_LOG_CREATE_CONTEXT(
+                    {"consumer", c.first},
+                    {"pathId", i.first});
+                YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
+                    {"size", c.second.GetPortionsCount()});
+                for (auto&& portion : c.second.GetPortions(granule)) {
+                    const ui64 p = portion->GetPortionId();
+                    const NOlap::TPortionAddress pAddress = portion->GetAddress();
+                    auto itPortionConstructor = Constructors.find(pAddress);
+                    if (itPortionConstructor == Constructors.end()) {
+                        TPortionConstructorV2 constructor(portion);
+                        itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
+                    } else if (itPortionConstructor->second.IsReady()) {
                         continue;
                     }
-                    NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
-                    itPortionConstructor->second.SetRecords(std::move(info));
-                }
-            }
-            if (!itPortionConstructor->second.HasIndexes()) {
-                if (!itPortionConstructor->second.GetPortionInfo()
-                         ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
-                         ->GetIndexesCount()) {
-                    itPortionConstructor->second.SetIndexes({});
-                } else {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(pathId.GetRawValue(), p).Select();
-                    if (!rowset.IsReady()) {
-                        reask = true;
-                    } else {
-                        std::vector<NOlap::TIndexChunkLoadContext> indexes;
-                        bool localReask = false;
-                        while (!localReask && !rowset.EndOfSet()) {
-                            indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
-                            if (!rowset.Next()) {
-                                reask = true;
-                                localReask = true;
-                            }
+                    if (!itPortionConstructor->second.HasRecords()) {
+                        auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
+                        if (!rowset.IsReady()) {
+                            reask = true;
+                        } else {
+                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                                "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
+                            itPortionConstructor->second.SetRecords(std::move(info));
                         }
-                        if (!localReask) {
-                            itPortionConstructor->second.SetIndexes(std::move(indexes));
+                    }
+                    if (!itPortionConstructor->second.HasIndexes()) {
+                        if (!itPortionConstructor->second.GetPortionInfo()
+                                 ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
+                                 ->GetIndexesCount()) {
+                            itPortionConstructor->second.SetIndexes({});
+                        } else {
+                            auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(i.first.GetRawValue(), p).Select();
+                            if (!rowset.IsReady()) {
+                                reask = true;
+                            } else {
+                                std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                                bool localReask = false;
+                                while (!localReask && !rowset.EndOfSet()) {
+                                    indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
+                                    if (!rowset.Next()) {
+                                        reask = true;
+                                        localReask = true;
+                                    }
+                                }
+                                itPortionConstructor->second.SetIndexes(std::move(indexes));
+                            }
                         }
                     }
                 }
@@ -1754,14 +1736,8 @@ public:
             return false;
         }
 
-        for (const auto& portion : portions) {
-            if (auto* constructor = MapFindPtr(Constructors, portion->GetAddress())) {
-                AFL_VERIFY(constructor->IsReady())("portion_id", portion->GetPortionId());
-                FetchedAccessors.emplace_back(std::move(*constructor));
-            } else {
-                AFL_VERIFY(portion->HasRemoveSnapshot() || !Self->GetTablesManager().HasTable(portion->GetPathId()))
-                ("portion_id", portion->GetPortionId());
-            }
+        for (auto&& i : Constructors) {
+            FetchedAccessors.emplace_back(std::move(i.second));
         }
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump stage",

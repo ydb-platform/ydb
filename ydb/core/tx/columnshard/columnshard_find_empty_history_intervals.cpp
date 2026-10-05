@@ -25,8 +25,7 @@ void ScheduleFindEmptyHistoryIntervalsContinuation(const NKikimrConfig::TColumnS
     ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueFindEmptyHistoryIntervals());
 }
 
-bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey& key, const THistoryInterval& interval,
-    const NOlap::TPendingGCBlobGenerations& pendingGenerations) {
+bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey& key, const THistoryInterval& interval) {
     if (key.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
         return false;
     }
@@ -44,7 +43,7 @@ bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey&
     const auto storage =
         std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(owner.GetStoragesManager()->GetDefaultOperator());
     AFL_VERIFY(storage);
-    return storage->CanCutHistory(pendingGenerations, key.Channel, key.From, interval.To);
+    return !storage->GetSharedBlobs()->HasBlobsInRange(key.Channel, key.From, interval.To);
 }
 
 class TFindEmptyHistoryIntervalsPreparationActor: public NActors::TActorBootstrapped<TFindEmptyHistoryIntervalsPreparationActor> {
@@ -95,8 +94,8 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
-        // GC cannot invalidate the empty-interval proof; sharing admission can.
+    void Complete(const TActorContext& /*ctx*/) override {
+        // Hive sending stays disabled until the pending-GC checks land.
         if (Self->SharingSessionsManager->CanCutHistory()) {
             for (const auto& request : ReadyToSendRequests) {
                 auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
@@ -104,8 +103,8 @@ public:
                 event->Record.SetChannel(request.GetChannel());
                 event->Record.SetFromGeneration(request.GetFromGeneration());
                 event->Record.SetGroupID(request.GetGroupID());
-                Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *Self->EmptyHistoryIntervalsScan->Finished);
-                ctx.Send(Self->LauncherID(), event.release());
+                // Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *Self->EmptyHistoryIntervalsScan->Finished);
+                // ctx.Send(Self->LauncherID(), event.release());
             }
         }
         Self->EmptyHistoryIntervalsScan.reset();
@@ -277,7 +276,8 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
             auto it = scan.Intervals.upper_bound({ id.Channel(), id.Generation() });
             if (it != scan.Intervals.begin()) {
                 --it;
-                if (it->first.Channel == id.Channel() && id.Generation() < it->second.To && blob.GetDsGroup() == it->second.Group) {
+                const auto& [key, interval] = *it;
+                if (key.Channel == id.Channel() && id.Generation() < interval.To && blob.GetDsGroup() == interval.Group) {
                     scan.Intervals.erase(it);
                 }
             }
@@ -293,12 +293,6 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
     ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);
 }
 
-void TColumnShard::ResumePostponedCutHistory(const TActorContext& ctx) {
-    if (EmptyHistoryIntervalsScan && EmptyHistoryIntervalsScan->WaitingForGC) {
-        TryCutHistory(ctx);
-    }
-}
-
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->Finished) {
         return;
@@ -307,16 +301,9 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         EmptyHistoryIntervalsScan.reset();
         return;
     }
-    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    EmptyHistoryIntervalsScan->WaitingForGC = storage->HasUnfinishedGC();
-    if (EmptyHistoryIntervalsScan->WaitingForGC) {
-        return;
-    }
-    const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
     for (const auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
-        if (!CanCutHistoryInterval(*this, key, interval, pendingGenerations)) {
+        if (!CanCutHistoryInterval(*this, key, interval)) {
             continue;
         }
         auto& request = requests.emplace_back();

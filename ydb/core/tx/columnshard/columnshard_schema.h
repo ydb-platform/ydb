@@ -125,27 +125,10 @@ struct Schema: NIceDb::Schema {
     struct CutHistoryRequests: Table<(ui32)ECommonTables::CutHistoryRequests> {
         struct Sequence: Column<1, NScheme::NTypeIds::Uint64> {};
 
-        struct TabletID: Column<2, NScheme::NTypeIds::Uint64> {};
-
-        struct Channel: Column<3, NScheme::NTypeIds::Uint32> {};
-
-        struct FromGeneration: Column<4, NScheme::NTypeIds::Uint32> {};
-
-        struct GroupID: Column<5, NScheme::NTypeIds::Uint32> {};
-
-        struct TimestampUs: Column<6, NScheme::NTypeIds::Uint64> {};
-
-        struct Recipient: Column<7, NScheme::NTypeIds::ActorId> {};
-
-        struct ToGeneration: Column<8, NScheme::NTypeIds::Uint32> {};
-
-        struct SendingGeneration: Column<9, NScheme::NTypeIds::Uint32> {};
-
-        struct RequestProto: Column<10, NScheme::NTypeIds::String> {};
+        struct RequestProto: Column<2, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Sequence>;
-        using TColumns = TableColumns<Sequence, TabletID, Channel, FromGeneration, GroupID, TimestampUs, Recipient, ToGeneration,
-            SendingGeneration, RequestProto>;
+        using TColumns = TableColumns<Sequence, RequestProto>;
     };
 
     // Tablet tables

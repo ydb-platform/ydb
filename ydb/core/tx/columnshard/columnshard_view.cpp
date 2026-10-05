@@ -665,24 +665,13 @@ bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& tx
     report.clear();
     using T = Schema::CutHistoryRequests;
     NIceDb::TNiceDb db(txc.DB);
-    auto row = db.Table<T>().Range().Select();
+    auto row = db.Table<T>().Range().Select<T::RequestProto>();
     if (!row.IsReady()) {
         return false;
     }
     while (!row.EndOfSet()) {
         NKikimrTxColumnShard::TCutHistoryRequest request;
-        if (row.HaveValue<T::RequestProto>()) {
-            Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
-        } else {
-            request.SetTabletID(row.GetValue<T::TabletID>());
-            request.SetChannel(row.GetValue<T::Channel>());
-            request.SetFromGeneration(row.GetValue<T::FromGeneration>());
-            request.SetGroupID(row.GetValue<T::GroupID>());
-            request.SetTimestampUs(row.GetValue<T::TimestampUs>());
-            ActorIdToProto(row.GetValue<T::Recipient>(), request.MutableRecipient());
-            request.SetToGeneration(row.GetValue<T::ToGeneration>());
-            request.SetSendingGeneration(row.GetValue<T::SendingGeneration>());
-        }
+        Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
         report += request.DebugString();
         report += "\n";
         if (!row.Next()) {
@@ -847,6 +836,7 @@ TString TTxMonitoring::RenderCutHistoryPage() {
         H3_CLASS("") {
             html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
         }
+        html << "Diagnostic candidates only: GC queues are not checked and requests are not sent.";
         PRE() {
             html << TEscapeHtml(CutHistoryReport);
         }

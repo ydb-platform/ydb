@@ -36,7 +36,6 @@ struct TEmptyHistoryIntervalsScan {
     size_t Position = 0;
     size_t Pending = 0;
     NActors::TActorId PreparationActor;
-    bool WaitingForGC = false;
     TInstant Started;
     std::optional<TInstant> Finished;
 };

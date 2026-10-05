@@ -348,7 +348,7 @@ public:
                 parsedObject = true;
                 isSimpleExport = JsonString(json, "kind") == "SimpleExportV0";
                 if (json.Has("kind") && !isSimpleExport && !forceItem) {
-                    VerifyChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
+                    VerifyMetadataChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
                     const TString kind = json["kind"].IsString()
                         ? json["kind"].GetString()
                         : json["kind"].GetStringRobust();
@@ -374,7 +374,7 @@ public:
                 return Finish();
             }
             if (!isSimpleExport) {
-                VerifyChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
+                VerifyMetadataChecksum(metadataKey, metadata.Content, Exists(metadataKey + ".sha256"));
                 Error(metadataKey, "full backup metadata.json must have kind SimpleExportV0");
                 return Finish();
             }
@@ -609,6 +609,25 @@ private:
         return content.Content;
     }
 
+    // requiredInAuto is the backup's own declaration (version, checksum field, or a scheme sidecar).
+    bool MetadataObjectRequired(bool requiredInAuto) const {
+        if (Settings.MetadataChecksums == EMetadataChecksumMode::Always) {
+            return true;
+        }
+        if (Settings.MetadataChecksums == EMetadataChecksumMode::Ignore) {
+            return false;
+        }
+        return requiredInAuto;
+    }
+
+    void VerifyMetadataChecksum(const TString& contentKey, const TString& content, bool requiredInAuto) {
+        if (Settings.MetadataChecksums == EMetadataChecksumMode::Ignore) {
+            return;
+        }
+        const bool required = Settings.MetadataChecksums == EMetadataChecksumMode::Always || requiredInAuto;
+        VerifyChecksum(contentKey, content, required);
+    }
+
     void VerifyChecksum(const TString& contentKey, const TString& content, bool required) {
         const TString sidecar = contentKey + ".sha256";
         if (!Exists(sidecar)) {
@@ -761,7 +780,7 @@ private:
             return;
         }
         if (content.Status == EReadStatus::Missing) {
-            if (expectChecksums) {
+            if (MetadataObjectRequired(expectChecksums)) {
                 Error(key, "file is missing");
             }
             return;
@@ -787,7 +806,7 @@ private:
         if (Stopped()) {
             return;
         }
-        VerifyChecksum(key, content.Content, expectChecksums);
+        VerifyMetadataChecksum(key, content.Content, expectChecksums);
         if (Stopped()) {
             return;
         }
@@ -966,7 +985,7 @@ private:
             if (metadata.Status == EReadStatus::Failed) {
                 Error(metadataKey, TStringBuilder() << "failed to read file: " << metadata.Error);
             } else if (metadata.Status == EReadStatus::Ok) {
-                VerifyChecksum(metadataKey, metadata.Content, checksums);
+                VerifyMetadataChecksum(metadataKey, metadata.Content, checksums);
                 if (!Stopped()) {
                     NJson::TJsonValue json;
                     if (NJson::ReadJsonTree(metadata.Content, &json) && json.IsMap()) {
@@ -975,7 +994,7 @@ private:
                         Error(metadataKey, "metadata.json is not a JSON object");
                     }
                 }
-            } else if (checksums) {
+            } else if (MetadataObjectRequired(checksums)) {
                 Error(metadataKey, "file is missing");
             }
         }
@@ -1185,7 +1204,7 @@ private:
         }
         const bool checksums = checksumAlgo == "sha256";
         if (!Stopped()) {
-            VerifyChecksum(metadataKey, metadataText, checksums);
+            VerifyMetadataChecksum(metadataKey, metadataText, checksums);
         }
         const bool compressed = !JsonString(json, "compression").empty();
         const TMaybe<bool> expectCompressed = compressed;
@@ -1201,7 +1220,7 @@ private:
                 Error(mappingMetaKey, "schema mapping metadata kind must be SchemaMappingV0");
             }
             if (!Stopped()) {
-                VerifyChecksum(mappingMetaKey, *mappingMeta, checksums);
+                VerifyMetadataChecksum(mappingMetaKey, *mappingMeta, checksums);
             }
         }
         if (Stopped()) {
@@ -1218,7 +1237,7 @@ private:
             Error(mappingKey, "SchemaMapping/mapping.json must contain an exportedObjects object");
             return;
         }
-        VerifyChecksum(mappingKey, *mappingText, checksums);
+        VerifyMetadataChecksum(mappingKey, *mappingText, checksums);
         if (mapping["exportedObjects"].GetMap().empty()) {
             Error(mappingKey, "exportedObjects is empty");
         }

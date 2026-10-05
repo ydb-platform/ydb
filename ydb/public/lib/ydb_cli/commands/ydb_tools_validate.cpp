@@ -215,6 +215,20 @@ TMaybe<TVector<TString>> LoadExpectedObjects(const TString& path) {
     }
 }
 
+EMetadataChecksumMode ParseMetadataChecksumMode(const TString& name) {
+    if (name == "always") {
+        return EMetadataChecksumMode::Always;
+    }
+    if (name == "auto") {
+        return EMetadataChecksumMode::Auto;
+    }
+    if (name == "ignore") {
+        return EMetadataChecksumMode::Ignore;
+    }
+    throw TMisuseException() << "Unknown --metadata-checksums value \"" << name
+        << "\"; expected always, auto, or ignore";
+}
+
 EValidateFormat ParseValidateFormat(const TString& name) {
     if (name == "auto") {
         return EValidateFormat::Auto;
@@ -234,7 +248,8 @@ TValidateSettings MakeSettings(
     ui64 threads,
     const TString& encryptionKey,
     const TMaybe<TVector<TString>>& expectedObjects,
-    EValidateFormat format)
+    EValidateFormat format,
+    EMetadataChecksumMode metadataChecksums)
 {
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
@@ -243,6 +258,7 @@ TValidateSettings MakeSettings(
     settings.EncryptionKey = encryptionKey;
     settings.ExpectedObjects = expectedObjects;
     settings.Format = format;
+    settings.MetadataChecksums = metadataChecksums;
     return settings;
 }
 
@@ -302,6 +318,24 @@ void TCommandValidateBase::Config(TConfig& config) {
             {"item", "Treat as an item-style export without SchemaMapping completeness checks"},
         });
 
+    config.Opts->AddLongOption("metadata-checksums",
+            "Checksum sidecars of metadata.json. always (default) requires a sidecar for the backup root, "
+            "SchemaMapping/metadata.json, SchemaMapping/mapping.json, and every exported object. "
+            "auto follows the backup: a full backup requires them when metadata.json has checksum sha256; "
+            "an item export requires an object's metadata checksum when version is greater than 0, "
+            "or when scheme.pb.sha256 or create_view.sql.sha256 is present. "
+            "ignore does not require or read metadata checksum sidecars. "
+            "Scheme and data-file checksums are not affected. "
+            "Supported values: always, auto, ignore.")
+        .RequiredArgument("always|auto|ignore")
+        .DefaultValue(MetadataChecksums)
+        .StoreResult(&MetadataChecksums)
+        .ChoicesWithCompletion({
+            {"always", "Require a checksum sidecar for every metadata.json"},
+            {"auto", "Follow the backup's own checksum declaration"},
+            {"ignore", "Do not check metadata checksum sidecars"},
+        });
+
     config.Opts->AddLongOption("fail-fast",
             "Stop validation at the first error. "
             "By default every error is reported. Warnings do not stop the check.")
@@ -342,6 +376,7 @@ void TCommandValidateBase::Parse(TConfig& config) {
         throw TMisuseException() << "--threads must be greater than zero";
     }
     ParseValidateFormat(Format);
+    ParseMetadataChecksumMode(MetadataChecksums);
     Items = TItem::Parse(config, "item");
 }
 
@@ -456,7 +491,8 @@ int TCommandValidateFromS3::Run(TConfig& config) {
     try {
         TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
         const int code = PrintReport(storage, paths, MakeSettings(
-            SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format)));
+            SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format),
+            ParseMetadataChecksumMode(MetadataChecksums)));
         ShutdownAwsAPI();
         return code;
     } catch (...) {
@@ -506,7 +542,8 @@ int TCommandValidateFromNfs::Run(TConfig& config) {
 
     TFsBackupStorage storage(FsPath, NumberOfRetries);
     return PrintReport(storage, paths, MakeSettings(
-        SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile), ParseValidateFormat(Format)));
+        SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile),
+        ParseValidateFormat(Format), ParseMetadataChecksumMode(MetadataChecksums)));
 }
 
 } // namespace NYdb::NConsoleClient

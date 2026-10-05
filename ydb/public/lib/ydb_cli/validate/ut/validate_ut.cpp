@@ -375,6 +375,28 @@ Y_UNIT_TEST(EncryptedFilesAreRejected) {
     UNIT_ASSERT(HasIssue(withKey, "scheme.pb.enc", "not validated"));
 }
 
+Y_UNIT_TEST(OldItemExportWithoutSchemaMapping) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 2, "a\n", true);
+    AddTable(storage, "dir/t2", 1, "b\n", true);
+    UNIT_ASSERT_C(Run(storage, "dir").Ok(), Issues(Run(storage, "dir")));
+
+    storage.Files["dir/t2/data_00.csv"] = "changed\n";
+    UNIT_ASSERT_C(Run(storage, "dir/t1").Ok(), Issues(Run(storage, "dir/t1")));
+    UNIT_ASSERT(HasIssue(Run(storage, "dir"), "dir/t2/data_00.csv", "checksum mismatch"));
+}
+
+Y_UNIT_TEST(IndexFilesWithoutMetadataEntry) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.PutChecked("t/metadata.json", "{\"version\":1,\"permissions\":0}");
+    AddTable(storage, "t/idx/indexImplTable", 1, "idx\n", true);
+    UNIT_ASSERT_C(Run(storage, "t").Ok(), Issues(Run(storage, "t")));
+
+    storage.Files["t/idx/indexImplTable/data_00.csv"] = "bad\n";
+    UNIT_ASSERT(HasIssue(Run(storage, "t"), "t/idx/indexImplTable/data_00.csv", "checksum mismatch"));
+}
+
 Y_UNIT_TEST(UnknownPath) {
     TMemoryStorage storage;
     storage.Put("readme.txt", "hello");

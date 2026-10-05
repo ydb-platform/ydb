@@ -11,7 +11,11 @@ The `tools validate` command checks integrity of a backup created by [`export s3
 
 ## What is checked {#checks}
 
-The path is a full backup when its `metadata.json` has `"kind": "SimpleExportV0"`. The command then checks `SchemaMapping` and every object listed there. Any other path is treated as one exported object (a table, a view, a topic, and so on). A path to one table checks that table, including indexes and changefeeds recorded in its `metadata.json`. A path to a full backup checks the whole backup.
+The path is a full backup when its `metadata.json` has `"kind": "SimpleExportV0"`. The command then checks `SchemaMapping` and every object listed there. This metadata is written when the export uses `--destination-prefix` or `--fs-path`.
+
+Exports created with `--item src=...,dst=...` do not write that file or `SchemaMapping`. The destination prefix is a directory of exported objects (`scheme.pb`, `create_view.sql`, and the other schema files). The command finds those objects and checks each of them, including index implementation tables stored under a table even when the table metadata does not list indexes. There is no manifest of objects that were never exported.
+
+Any other path is one exported object (a table, a view, a topic, and so on). A path to one table checks that table, including indexes and changefeeds recorded in its `metadata.json` and index tables found under it. A path to a full backup checks the whole backup.
 
 Metadata files (`scheme.pb`, `permissions.pb`, `metadata.json`, changefeed and topic descriptions, schema SQL and proto files, `SchemaMapping`) must be readable and contain the minimum fields required to describe the object. For a table this includes a non-empty column list, a type for every column, and a primary key that is a subset of those columns.
 

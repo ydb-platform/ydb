@@ -40,7 +40,8 @@ struct TValidationReport {
     }
 };
 
-// `path` is either a full backup (metadata.json kind SimpleExportV0) or one schema object.
+// `path` is a full backup (metadata.json kind SimpleExportV0), a directory of exported
+// objects without that metadata (export --item), or one schema object.
 TValidationReport ValidateBackup(const IBackupStorage& storage, const TString& path, const TValidateSettings& settings);
 
 // Lowercase hex SHA-256 of data. Used by tests and checksum sidecars.

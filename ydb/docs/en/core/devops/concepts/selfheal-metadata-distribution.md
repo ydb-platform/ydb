@@ -33,7 +33,7 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
     ```yaml
     config:
         self_management_config:
-            enabled: true # Enabling V2 configuration
+            enabled: true # Indirect indication that V2 configuration is in use
         cms_config:
             sentinel_config:
                 enable: true # Enabling Sentinel
@@ -45,7 +45,7 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
 
     The mechanism requires [V2 configuration](../configuration-management/configuration-v2/index.md) and enabled [CMS Sentinel](../../concepts/glossary.md#cms).
 
-    See also: [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
+    The presence of `self_management_config.enabled: true` indirectly indicates that V2 configuration is in use. Setting this flag alone does not migrate the cluster to V2 configuration. To migrate, follow the steps in [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
 
     {% endnote %}
 

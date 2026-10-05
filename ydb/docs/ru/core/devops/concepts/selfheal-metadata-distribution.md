@@ -33,7 +33,7 @@ SelfHeal подсистем распространения метаданных 
     ```yaml
     config:
         self_management_config:
-            enabled: true # Включение конфигурации V2
+            enabled: true # Косвенный признак использования конфигурации V2
         cms_config:
             sentinel_config:
                 enable: true # Включение Sentinel
@@ -45,7 +45,7 @@ SelfHeal подсистем распространения метаданных 
 
     Для работы механизма требуется [конфигурация V2](../configuration-management/configuration-v2/index.md) и включённый [CMS Sentinel](../../concepts/glossary.md#cms).
 
-    См. подробнее: [Миграция на конфигурацию V2](../configuration-management/migration/migration-to-v2.md).
+    Наличие `self_management_config.enabled: true` косвенно указывает на использование конфигурации V2. Установка этого флага сама по себе не переводит кластер на конфигурацию V2. Для перехода выполните шаги инструкции [Миграция на конфигурацию V2](../configuration-management/migration/migration-to-v2.md).
 
     {% endnote %}
 

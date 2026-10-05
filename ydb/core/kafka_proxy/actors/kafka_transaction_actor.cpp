@@ -201,9 +201,13 @@ namespace NKafka {
             YDB_LOG_WARN(error,
                 {LogPrefix()},
                 {"error", error});
-            const auto errorCode = (ydbStatus == Ydb::StatusIds::OVERLOADED)
-                ? EKafkaErrors::CONCURRENT_TRANSACTIONS
-                : EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+
+            auto errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+            if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
+                errorCode = EKafkaErrors::CONCURRENT_TRANSACTIONS;
+            } else if (ydbStatus == Ydb::StatusIds::ABORTED) {
+                errorCode = EKafkaErrors::PRODUCER_FENCED;
+            }
             FailEndTxnRetryable(ctx, error->data(), errorCode);
             return;
         }

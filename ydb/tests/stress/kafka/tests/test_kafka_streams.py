@@ -29,6 +29,7 @@ class TestYdbTopicWorkload(StressFixture):
             kafka_auto_create_topics=True,
             additional_log_configs={
                 "KAFKA_PROXY": LogLevels.TRACE,
+                "PERSQUEUE": LogLevels.TRACE,
             },
         )
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-{{ ydb-short-name }} CLI can execute parameterized queries. To use parameters, you need to declare them using [the YQL `DECLARE` command](../../yql/reference/syntax/declare.md) in your query text.
+{{ ydb-short-name }} CLI can execute [parameterized queries](../../yql/reference/syntax/lexer.md#query-params). To use parameters, you need to declare them using [the YQL `DECLARE` command](../../yql/reference/syntax/declare.md) in your query text.
 
 The preferred way to run parameterized queries in {{ ydb-short-name }} CLI is to use the [`ydb sql`](sql.md) command.
 

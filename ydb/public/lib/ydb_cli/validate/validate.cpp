@@ -78,6 +78,25 @@ TString ParentKey(const TString& key) {
     return pos == TString::npos ? TString() : key.substr(0, pos);
 }
 
+bool IsSchemaObjectFileName(const TString& name) {
+    static constexpr TStringBuf Names[] = {
+        "scheme.pb",
+        "create_view.sql",
+        "create_topic.pb",
+        "create_async_replication.sql",
+        "create_transfer.sql",
+        "create_external_data_source.sql",
+        "create_external_table.sql",
+        "system_view.pb",
+    };
+    for (const TStringBuf expected : Names) {
+        if (name == expected || (name.EndsWith(".enc") && name.StartsWith(expected) && name.size() == expected.size() + 4)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool IsHex(TStringBuf value) {
     if (value.size() != SHA256_DIGEST_LENGTH * 2) {
         return false;
@@ -229,8 +248,15 @@ public:
                 return Report;
             }
         }
-        if (!ValidateObject(root, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing())) {
+        const bool self = ValidateObject(root, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing());
+        // Exports created with --item have no backup-level metadata.json and no SchemaMapping.
+        // The destination prefix is a directory of objects, and index tables may sit under a table
+        // even when that table's metadata does not list them.
+        const bool nested = ValidateDiscoveredObjects(root);
+        if (!self && !nested) {
             Error(root ? root : ".", "path is neither a full backup nor a schema object");
+        } else if (!self) {
+            Checked(root.empty() ? "backup" : root);
         }
         return Report;
     }
@@ -818,27 +844,34 @@ private:
         Checked(root.empty() ? "backup" : root);
     }
 
-    void CheckUnexpectedObjects(const TString& root) {
-        static constexpr const char* Names[] = {
-            "scheme.pb",
-            "create_view.sql",
-            "create_topic.pb",
-            "create_async_replication.sql",
-            "create_transfer.sql",
-            "create_external_data_source.sql",
-            "create_external_table.sql",
-            "system_view.pb",
-        };
+    bool ValidateDiscoveredObjects(const TString& root) {
+        TVector<TString> dirs;
         for (const auto& key : Storage.List(root)) {
-            const TString name = FileName(key);
-            bool objectFile = false;
-            for (const char* expected : Names) {
-                if (name == expected) {
-                    objectFile = true;
-                    break;
-                }
+            if (!IsSchemaObjectFileName(FileName(key))) {
+                continue;
             }
-            if (!objectFile) {
+            const TString dir = ParentKey(key);
+            if (!Visited.contains(dir)) {
+                dirs.push_back(dir);
+            }
+        }
+        std::sort(dirs.begin(), dirs.end());
+        dirs.erase(std::unique(dirs.begin(), dirs.end()), dirs.end());
+        bool found = false;
+        for (const TString& dir : dirs) {
+            if (Visited.contains(dir)) {
+                continue;
+            }
+            if (ValidateObject(dir, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing())) {
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    void CheckUnexpectedObjects(const TString& root) {
+        for (const auto& key : Storage.List(root)) {
+            if (!IsSchemaObjectFileName(FileName(key))) {
                 continue;
             }
             if (!AllowedObjectDirs.contains(ParentKey(key))) {

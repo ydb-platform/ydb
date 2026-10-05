@@ -1,4 +1,6 @@
 #include <ydb/public/lib/ydb_cli/common/oidc.h>
+#include <ydb/public/lib/ydb_cli/common/oidc_options.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -6,10 +8,13 @@
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 
+#include <future>
+
 namespace NYdb::NConsoleClient {
 namespace {
 
 NOidc::TDeviceAuthInfo MakeDeviceAuthInfo();
+TOidcCliOptions MakeStaticOptions();
 
 NOidc::TDeviceAuthInfo MakeDeviceAuthInfo() {
     return {
@@ -18,6 +23,15 @@ NOidc::TDeviceAuthInfo MakeDeviceAuthInfo() {
         .VerificationUrlComplete = std::nullopt,
         .ExpiresAt = TInstant::Seconds(2'000'000'000),
     };
+}
+
+TOidcCliOptions MakeStaticOptions() {
+    TOidcCliOptions options;
+    options.ResolvedConfig = NOidc::TOidcConfig{
+        .Issuer = "https://issuer.example",
+        .FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "session-token", .ExpiresAt = std::nullopt},
+    };
+    return options;
 }
 
 } // namespace
@@ -61,6 +75,41 @@ Y_UNIT_TEST_SUITE(TOidcCliAcceptor) {
             "Or open https://issuer.example/device?user_code=ABCD\\x0D\n");
     }
 
+    Y_UNIT_TEST(ProviderSurvivesDriverFacilitiesAndFactory) {
+        auto factory = CreateCliOidcCredentialsProviderFactory(MakeStaticOptions());
+        auto probeFacility = CreateSimpleCoreFacility();
+        const auto provider = factory->CreateProvider(probeFacility);
+        auto ready = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(ready.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(ready.GetValueSync(), "Bearer session-token");
+        probeFacility.reset();
+        UNIT_ASSERT(provider->IsValid());
+
+        auto sqlFacility = CreateSimpleCoreFacility();
+        UNIT_ASSERT(provider == factory->CreateProvider(sqlFacility));
+        UNIT_ASSERT(provider == factory->CreateProvider());
+        sqlFacility.reset();
+        factory.reset();
+        UNIT_ASSERT(provider->IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer session-token");
+    }
+
+    Y_UNIT_TEST(ConcurrentCreationReusesOneProvider) {
+        const auto factory = CreateCliOidcCredentialsProviderFactory(MakeStaticOptions());
+        const auto facility = CreateSimpleCoreFacility();
+        auto first = std::async(std::launch::async, [factory] {
+            return factory->CreateProvider();
+        });
+        auto second = std::async(std::launch::async, [factory, facility] {
+            return factory->CreateProvider(facility);
+        });
+        const auto provider = first.get();
+        UNIT_ASSERT(provider == second.get());
+        auto ready = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(ready.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(ready.GetValueSync(), "Bearer session-token");
+    }
+
     Y_UNIT_TEST(CreatesCliCredentialsFromConfig) {
         TTempDir dir;
         TFileOutput((dir.Path() / "token").GetPath()).Write("opaque-access\n");
@@ -73,7 +122,12 @@ static_credentials:
 
         const auto factory = CreateCliOidcCredentialsProviderFactory(path.GetPath());
 
-        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer opaque-access");
+        auto probeFacility = CreateSimpleCoreFacility();
+        const auto provider = factory->CreateProvider(probeFacility);
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer opaque-access");
+        probeFacility.reset();
+        UNIT_ASSERT(provider == factory->CreateProvider());
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer opaque-access");
     }
 } // Y_UNIT_TEST_SUITE(TOidcCliAcceptor)
 

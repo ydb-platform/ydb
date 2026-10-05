@@ -327,9 +327,6 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
 // Default CredentialsGetter that can be overridden in different CLI versions
 void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
     config.CredentialsGetter = [](const TClientCommand::TConfig& config) {
-        if (config.Oidc.IsConfigured()) {
-            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
-        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
@@ -346,6 +343,9 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
             }
         }
 
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
+        }
         return CreateInsecureCredentialsProviderFactory();
     };
 }

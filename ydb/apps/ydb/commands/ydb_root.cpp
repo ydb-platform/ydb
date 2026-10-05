@@ -28,9 +28,6 @@ void TClientCommandRoot::FillConfig(TConfig& config) {
 
 void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
     config.CredentialsGetter = [](const TClientCommand::TConfig& config) {
-        if (config.Oidc.IsConfigured()) {
-            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
-        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
@@ -60,6 +57,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
                 return CreateIamJwtFileCredentialsProviderFactory(
                     { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyFile });
             }
+        }
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
         }
         return CreateInsecureCredentialsProviderFactory();
     };

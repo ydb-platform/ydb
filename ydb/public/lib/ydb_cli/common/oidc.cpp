@@ -1,14 +1,34 @@
 #include "oidc.h"
-#include "oidc_config.h"
-#include "oidc_options.h"
+
+#include <ydb/public/lib/ydb_cli/common/oidc_config.h>
+#include <ydb/public/lib/ydb_cli/common/oidc_options.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <util/stream/output.h>
+#include <util/system/guard.h>
 #include <util/system/mutex.h>
+
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace NYdb::NConsoleClient {
 namespace {
 
 std::string DisplayText(const std::string& text);
+
+class TCliOidcCredentialsProviderFactory final: public ICredentialsProviderFactory {
+public:
+    explicit TCliOidcCredentialsProviderFactory(TCredentialsProviderFactoryPtr factory);
+
+    TCredentialsProviderPtr CreateProvider() const override;
+    std::string GetClientIdentity() const override;
+
+private:
+    const TCredentialsProviderFactoryPtr Factory;
+    mutable TMutex Mutex;
+    mutable TCredentialsProviderPtr Provider;
+};
 
 class TCliAuthAcceptor final: public NOidc::IAuthAcceptor {
 public:
@@ -19,6 +39,24 @@ public:
 private:
     IOutputStream& Output;
 };
+
+TCliOidcCredentialsProviderFactory::TCliOidcCredentialsProviderFactory(TCredentialsProviderFactoryPtr factory)
+    : Factory(std::move(factory))
+{
+}
+
+TCredentialsProviderPtr TCliOidcCredentialsProviderFactory::CreateProvider() const {
+    with_lock (Mutex) {
+        if (Provider == nullptr) {
+            Provider = Factory->CreateProvider();
+        }
+        return Provider;
+    }
+}
+
+std::string TCliOidcCredentialsProviderFactory::GetClientIdentity() const {
+    return Factory->GetClientIdentity();
+}
 
 std::string DisplayText(const std::string& text) {
     static constexpr char Hex[] = "0123456789ABCDEF";
@@ -58,13 +96,14 @@ std::shared_ptr<NOidc::IAuthAcceptor> CreateCliAuthAcceptor(IOutputStream& outpu
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateCliOidcCredentialsProviderFactory(const TString& configPath) {
-    return CreateOidcFileCredentialsProviderFactory(std::string(configPath), CreateCliAuthAcceptor(Cerr));
+    return std::make_shared<TCliOidcCredentialsProviderFactory>(
+        CreateOidcFileCredentialsProviderFactory(std::string(configPath), CreateCliAuthAcceptor(Cerr)));
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateCliOidcCredentialsProviderFactory(const TOidcCliOptions& options) {
     auto config = options.ResolvedConfig.has_value() ? options.ResolvedConfig.value() : options.MakeConfig();
     config.Acceptor(CreateCliAuthAcceptor(Cerr));
-    return NOidc::CreateOidcProviderFactory(config);
+    return std::make_shared<TCliOidcCredentialsProviderFactory>(NOidc::CreateOidcProviderFactory(config));
 }
 
 } // namespace NYdb::NConsoleClient

@@ -3,6 +3,8 @@
 #include "command.h"
 #include "oidc_options.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/common/scope.h>
 
@@ -66,7 +68,7 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         }
     }
 
-    Y_UNIT_TEST(OidcSelectionPrecedesCustomCredentialsGetterAndReusesProvider) {
+    Y_UNIT_TEST(DefaultCredentialsGetterSelectsOidcAndReusesProvider) {
         char name[] = "ydb";
         char* args[] = {name};
         TClientCommand::TConfig config(1, args);
@@ -75,20 +77,54 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
             .Issuer = "https://issuer.example",
             .FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-token", .ExpiresAt = std::nullopt},
         };
-        bool fallbackCalled = false;
-        config.CredentialsGetter = [&fallbackCalled](const TClientCommand::TConfig&) {
-            fallbackCalled = true;
-            return CreateOAuthCredentialsProviderFactory("fallback-token");
+        const auto factory = config.GetSingletonCredentialsProviderFactory();
+        auto probeFacility = CreateSimpleCoreFacility();
+        const auto provider = factory->CreateProvider(probeFacility);
+        auto ready = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(ready.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(ready.GetValueSync(), "Bearer oidc-token");
+        probeFacility.reset();
+
+        const auto sqlFacility = CreateSimpleCoreFacility();
+        UNIT_ASSERT(factory == config.GetSingletonCredentialsProviderFactory());
+        UNIT_ASSERT(provider == factory->CreateProvider(sqlFacility));
+        UNIT_ASSERT(provider == factory->CreateProvider());
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer oidc-token");
+    }
+
+    Y_UNIT_TEST(DefaultCredentialsGetterPrefersSecurityTokenToOidc) {
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.SecurityToken = "legacy-token";
+        config.Oidc.Issuer = "https://issuer.example";
+        config.Oidc.ResolvedConfig = NOidc::TOidcConfig{
+            .Issuer = "https://issuer.example",
+            .FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-token", .ExpiresAt = std::nullopt},
         };
         const auto factory = config.GetSingletonCredentialsProviderFactory();
-        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer oidc-token");
-        UNIT_ASSERT(!fallbackCalled);
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "legacy-token");
+    }
+
+    Y_UNIT_TEST(CustomCredentialsGetterControlsSelectionWithOidcConfigured) {
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.Oidc.Issuer = "https://issuer.example";
+        config.Oidc.ResolvedConfig = NOidc::TOidcConfig{
+            .Issuer = "https://issuer.example",
+            .FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-token", .ExpiresAt = std::nullopt},
+        };
+        size_t calls = 0;
+        config.CredentialsGetter = [&calls](const TClientCommand::TConfig&) {
+            ++calls;
+            return CreateOAuthCredentialsProviderFactory("custom-token");
+        };
+        const auto factory = config.GetSingletonCredentialsProviderFactory();
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "custom-token");
         UNIT_ASSERT(factory == config.GetSingletonCredentialsProviderFactory());
         UNIT_ASSERT(factory->CreateProvider() == factory->CreateProvider());
-        config.Oidc = {};
-        config.SingletonCredentialsProviderFactory = nullptr;
-        UNIT_ASSERT_VALUES_EQUAL(config.GetSingletonCredentialsProviderFactory()->CreateProvider()->GetAuthInfo(), "fallback-token");
-        UNIT_ASSERT(fallbackCalled);
+        UNIT_ASSERT_VALUES_EQUAL(calls, 1);
     }
 
     Y_UNIT_TEST(StaticTokenFileAndProfileContainOnlyPath) {

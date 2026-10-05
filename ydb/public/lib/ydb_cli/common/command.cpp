@@ -105,9 +105,6 @@ TClientCommand::TConfig::TConfig(int argc, char** argv)
     , TabletId(0)
 {
     CredentialsGetter = [](const TClientCommand::TConfig& config) {
-        if (config.Oidc.IsConfigured()) {
-            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
-        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
@@ -115,6 +112,9 @@ TClientCommand::TConfig::TConfig(int argc, char** argv)
             if (config.Oauth2KeyFile) {
                 return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
+        }
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
         }
         return CreateInsecureCredentialsProviderFactory();
     };

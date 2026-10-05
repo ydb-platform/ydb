@@ -37,6 +37,7 @@ SRCS(
     ydb_sql.cpp
     ydb_storage_config.cpp
     ydb_tools_infer.cpp
+    ydb_tools_list_objects.cpp
     ydb_tools_validate.cpp
     ydb_tools.cpp
     ydb_workload.cpp

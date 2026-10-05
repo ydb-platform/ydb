@@ -881,6 +881,17 @@ struct TOpWindowFrame {
                (EndKind == EWindowFrameBound::Preceding) ||
                (EndKind == EWindowFrameBound::Following && EndValue == 0);
     }
+
+    // The frame always holds the current row, so an aggregate over it is NULL only for a NULL input.
+    bool IsNeverEmpty() const {
+        const bool beginsAtOrBefore = BeginKind == EWindowFrameBound::UnboundedPreceding || BeginKind == EWindowFrameBound::Preceding ||
+                                      BeginKind == EWindowFrameBound::CurrentRow ||
+                                      (BeginKind == EWindowFrameBound::Following && BeginValue == 0);
+        const bool endsAtOrAfter = EndKind == EWindowFrameBound::UnboundedFollowing || EndKind == EWindowFrameBound::Following ||
+                                   EndKind == EWindowFrameBound::CurrentRow ||
+                                   (EndKind == EWindowFrameBound::Preceding && EndValue == 0);
+        return beginsAtOrBefore && endsAtOrAfter;
+    }
 };
 
 // Represents a window function.

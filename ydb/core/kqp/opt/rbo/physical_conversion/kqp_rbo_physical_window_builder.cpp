@@ -267,15 +267,46 @@ const TTypeAnnotationNode* TPhysicalWindowBuilder::InputItemType(TInfoUnitId col
     return type;
 }
 
+// Accumulators of sum, min, max and avg are always optional, while a frame that is never empty
+// declares a non-optional result for a non-optional input.
+bool TPhysicalWindowBuilder::IsNonOptionalAggregate(TInfoUnitId column) const {
+    const auto* func = Window.GetWindowFuncs().Find(column);
+    if (!func || func->Kind != EWindowFuncKind::Aggregate || func->Function == "count") {
+        return false;
+    }
+    const auto* type = Window.GetIUType(column, Ctx);
+    Y_ENSURE(type, "Cannot find the window result type for " << Names.Get(column));
+    return !type->IsOptionalOrNull();
+}
+
 TExprNode::TPtr TPhysicalWindowBuilder::BuildOutputRowType() const {
     TVector<const TItemExprType*> fields;
     fields.reserve(OutputLayout.size());
     for (const auto id : OutputLayout) {
         const auto* type = Window.GetIUType(id, Ctx);
         Y_ENSURE(type, "Cannot find the window result type for " << Names.Get(id));
+        if (IsNonOptionalAggregate(id)) {
+            type = Ctx.MakeType<TOptionalExprType>(type);
+        }
         fields.push_back(Ctx.MakeType<TItemExprType>(Names.Get(id), type));
     }
     return ExpandType(Pos, *Ctx.MakeType<TStructExprType>(fields), Ctx);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildUnwrapNonOptionalAggregates(TExprNode::TPtr wideFlow) const {
+    if (std::none_of(Functions.begin(), Functions.end(), [this](TInfoUnitId id) { return IsNonOptionalAggregate(id); })) {
+        return wideFlow;
+    }
+
+    TExprNode::TListType args;
+    TExprNode::TListType results;
+    for (ui32 i = 0; i < OutputLayout.size(); ++i) {
+        auto arg = Ctx.NewArgument(Pos, "win_out_" + ToString(i));
+        args.push_back(arg);
+        results.push_back(IsNonOptionalAggregate(OutputLayout[i]) ? Ctx.NewCallable(Pos, "Unwrap", {arg}) : arg);
+    }
+    auto lambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(results));
+    return Ctx.NewCallable(Pos, "WideMap", {std::move(wideFlow), std::move(lambda)});
 }
 
 TString TPhysicalWindowBuilder::AccumulatorName(ui32 funcIndex) const {
@@ -1559,6 +1590,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format on
     }
 
+    input = BuildUnwrapNonOptionalAggregates(std::move(input));
     input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
         input,
         OutputLayout,

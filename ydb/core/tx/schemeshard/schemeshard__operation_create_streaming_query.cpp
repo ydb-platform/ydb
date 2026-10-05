@@ -148,14 +148,14 @@ class TCreateStreamingQuery : public TSubOperation {
         return true;
     }
 
-    bool IsDescriptionValid(const THolder<TProposeResponse>& result) const {
+    bool IsDescriptionValid(const THolder<TProposeResponse>& result, const TStreamingQueryInfo::TPtr& queryInfo) const {
         const auto& info = Transaction.GetCreateStreamingQuery();
         if (info.HasOperationOwnerActorId() && !ActorIdFromProto(info.GetOperationOwnerActorId())) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
             return false;
         }
 
-        if (const ui64 propertiesSize = Transaction.GetCreateStreamingQuery().GetProperties().ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
+        if (const ui64 propertiesSize = queryInfo->Properties.ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize);
             return false;
         }
@@ -198,7 +198,7 @@ class TCreateStreamingQuery : public TSubOperation {
         }
     }
 
-    void CreateStreamingQueryPathElement(const TPath& dstPath, const TOperationContext& context) const {
+    void CreateStreamingQueryPathElement(const TPath& dstPath, TStreamingQueryInfo::TPtr streamingQueryInfo, const TOperationContext& context) const {
         TPathElement::TPtr streamingQuery = dstPath.Base();
 
         streamingQuery->CreateTxId = OperationId.GetTxId();
@@ -210,13 +210,28 @@ class TCreateStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
+    }
+
+    TStreamingQueryInfo::TPtr GetQueryInfo(const TString& owner, const TOperationContext& context) const {
         const auto& info = Transaction.GetCreateStreamingQuery();
-        const auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
+        auto properties = info.GetProperties();
+        auto& propertiesMap = *properties.MutableProperties();
+        const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
+        propertiesMap["__created_by"] = userSID;
+        propertiesMap["__modified_by"] = userSID;
+        if (const auto runIt = propertiesMap.find("run"); runIt != propertiesMap.end() && runIt->second == "true") {
+            propertiesMap["__started_by"] = userSID;
+        }
+        const TString nowStr = ToString(context.Ctx.Now().MicroSeconds());
+        propertiesMap["__created_at"] = nowStr;
+        propertiesMap["__modified_at"] = nowStr;
+
+        return MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = 1,
-            .Properties = info.GetProperties(),
+            .Properties = std::move(properties),
             .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
         });
-        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 
 public:
@@ -253,14 +268,15 @@ public:
         TPath dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, context));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        RETURN_RESULT_UNLESS(IsDescriptionValid(result));
+        const auto queryInfo = GetQueryInfo(owner, context);
+        RETURN_RESULT_UNLESS(IsDescriptionValid(result, queryInfo));
 
         const auto guard = context.DbGuard();
         const auto newPathId = context.SS->AllocatePathId();
         PersistCreateStreamingQuery(parentPath.Base()->PathId, newPathId, context);
         AddPathIntoSchemeShard(result, dstPath, newPathId, owner, context);
         CreateTransaction(dstPath, context);
-        CreateStreamingQueryPathElement(dstPath, context);
+        CreateStreamingQueryPathElement(dstPath, queryInfo, context);
 
         SetState(NextState());
         return result;

@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
@@ -1089,6 +1090,64 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __LINE__);
         StopFastPathService(env, PartitionTabletId, edge);
         UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(ShouldPublishDiskIdOnCreateAndRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        // This environment does not install a Whiteboard actor by default.
+        auto registerWhiteboard = [&]
+        {
+            const ui32 nodeId = env.Settings.ControllerNodeId;
+            const auto edge =
+                env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            env.Runtime->RegisterService(
+                NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId),
+                edge);
+        };
+        registerWhiteboard();
+        TVector<TString> diskIds;
+        env.Runtime->FilterFunction =
+            [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            using TEvUpdate =
+                NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate;
+            if (ev->GetTypeRewrite() == TEvUpdate::EventType) {
+                const auto& record = ev->Get<TEvUpdate>()->Record;
+                if (record.GetTabletId() == PartitionTabletId &&
+                    record.HasNbsDiskId())
+                {
+                    diskIds.push_back(record.GetNbsDiskId());
+                    UNIT_ASSERT(!record.HasState());
+                    UNIT_ASSERT(!record.HasUserState());
+                }
+            }
+            // The edge stands in for Whiteboard: consume all its events.
+            return ev->Recipient !=
+                   NNodeWhiteboard::MakeNodeWhiteboardServiceId(
+                       env.Settings.ControllerNodeId);
+        };
+        CreatePartitionTablet(env);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(diskIds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(diskIds.back(), "test-volume");
+
+        // The tablet must republish persisted identity after node restart.
+        scopedService.reset();
+        env.RestartNode(env.Settings.ControllerNodeId);
+        registerWhiteboard();
+        env.Sim(TDuration::Seconds(1));
+        scopedService = std::make_unique<TScopedNbsService>(
+            CreateNbsConfig(EWriteMode::DirectWrite));
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(diskIds.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(diskIds.back(), "test-volume");
+        env.Runtime->FilterFunction = {};
     }
 
     Y_UNIT_TEST(MultipleInit)

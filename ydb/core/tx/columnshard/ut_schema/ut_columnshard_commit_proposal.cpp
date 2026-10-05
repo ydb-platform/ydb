@@ -28,7 +28,16 @@ enum class ECommitMode {
     Secondary
 };
 
-void CheckPreparedCommitRetry(ECommitMode mode, bool reboot) {
+enum class EProposalScenario {
+    Retry,
+    Interval,
+    DifferentLock,
+    DifferentKind,
+    FreshBrokenLock,
+    Deadline
+};
+
+void CheckPreparedCommitRetry(ECommitMode mode, bool reboot, EProposalScenario scenario = EProposalScenario::Retry) {
     const bool sync = mode != ECommitMode::Simple;
     const bool secondary = mode == ECommitMode::Secondary;
     TTestBasicRuntime runtime;
@@ -77,29 +86,61 @@ void CheckPreparedCommitRetry(ECommitMode mode, bool reboot) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         const auto* recovered = WaitForShard(*controller.operator->(), runtime)->GetOperationsManager().GetLockOptional(lockId);
         UNIT_ASSERT(recovered && recovered->IsBroken());
+    }
+    if (scenario == EProposalScenario::FreshBrokenLock) {
+        UNIT_ASSERT(reboot);
         auto fresh = request;
         fresh.SetTxId(commitTxId + 1);
         propose(fresh, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
     }
-    auto differentLock = request;
-    differentLock.MutableLocks()->MutableLocks(0)->SetLockId(lockId + 1);
-    propose(differentLock, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-    auto differentKind = request;
-    if (sync) {
-        differentKind.MutableLocks()->ClearSendingShards();
-        differentKind.MutableLocks()->ClearReceivingShards();
-        differentKind.MutableLocks()->ClearArbiterColumnShard();
-    } else {
-        differentKind.MutableLocks()->SetArbiterColumnShard(TTestTxConfig::TxTablet0);
-        differentKind.MutableLocks()->AddSendingShards(TTestTxConfig::TxTablet0);
-        differentKind.MutableLocks()->AddReceivingShards(TTestTxConfig::TxTablet0);
+    if (scenario == EProposalScenario::DifferentLock) {
+        auto differentLock = request;
+        differentLock.MutableLocks()->MutableLocks(0)->SetLockId(lockId + 1);
+        propose(differentLock, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
-    propose(differentKind, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-    runtime.SimulateSleep(TDuration::Seconds(1));
-    for (ui32 retry = 0; retry < 2; ++retry) {
-        const auto result = propose(request, NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMinStep(), prepared.GetMinStep());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMaxStep(), prepared.GetMaxStep());
+    if (scenario == EProposalScenario::DifferentKind) {
+        auto differentKind = request;
+        if (sync) {
+            differentKind.MutableLocks()->ClearSendingShards();
+            differentKind.MutableLocks()->ClearReceivingShards();
+            differentKind.MutableLocks()->ClearArbiterColumnShard();
+        } else {
+            differentKind.MutableLocks()->SetArbiterColumnShard(TTestTxConfig::TxTablet0);
+            differentKind.MutableLocks()->AddSendingShards(TTestTxConfig::TxTablet0);
+            differentKind.MutableLocks()->AddReceivingShards(TTestTxConfig::TxTablet0);
+        }
+        propose(differentKind, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+    }
+    if (scenario == EProposalScenario::Retry || scenario == EProposalScenario::Interval || scenario == EProposalScenario::Deadline) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (ui32 retry = 0; retry < 2; ++retry) {
+            const auto result = propose(request, NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            if (scenario == EProposalScenario::Interval) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetMinStep(), prepared.GetMinStep());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetMaxStep(), prepared.GetMaxStep());
+            }
+        }
+    }
+    if (scenario == EProposalScenario::Deadline) {
+        const auto expiredStep = prepared.GetMaxStep() + 1;
+        const auto aux =
+            ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(99, table.Standalone, table.Schema, table.Pk, {}, 1), 100);
+        PlanSchemaTx(runtime, sender, { Max(aux.Val(), expiredStep), 100 });
+        for (ui32 i = 0; i < 100; ++i) {
+            if (!WaitForShard(*controller.operator->(), runtime)->GetProgressTxController().GetTxInfo(commitTxId, ETxOperatorStatus::Any)) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT(!WaitForShard(*controller.operator->(), runtime)->GetProgressTxController().GetTxInfo(commitTxId, ETxOperatorStatus::Any));
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(!WaitForShard(*controller.operator->(), runtime)->GetProgressTxController().GetTxInfo(commitTxId, ETxOperatorStatus::Any));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, 1, { Max(aux.Val(), expiredStep), 100 });
+        reader.SetReplyColumnIds(TTestSchema::ExtractIds(table.Schema));
+        auto rows = reader.ReadAll();
+        UNIT_ASSERT(!reader.IsError());
+        UNIT_ASSERT_VALUES_EQUAL(rows ? rows->num_rows() : 0, 0);
+        return;
     }
     const bool aborted = sync && reboot;
     bool voted = false;
@@ -156,6 +197,46 @@ Y_UNIT_TEST_SUITE(ColumnShardCommitProposal) {
     }
     Y_UNIT_TEST_DUO(PreparedSecondaryCommitRetry, Reboot) {
         CheckPreparedCommitRetry(ECommitMode::Secondary, Reboot);
+    }
+
+    Y_UNIT_TEST(SimpleCommitPreservesPlanningInterval) {
+        CheckPreparedCommitRetry(ECommitMode::Simple, false, EProposalScenario::Interval);
+    }
+    Y_UNIT_TEST(PrimaryCommitPreservesPlanningInterval) {
+        CheckPreparedCommitRetry(ECommitMode::Primary, false, EProposalScenario::Interval);
+    }
+    Y_UNIT_TEST(SecondaryCommitPreservesPlanningInterval) {
+        CheckPreparedCommitRetry(ECommitMode::Secondary, false, EProposalScenario::Interval);
+    }
+    Y_UNIT_TEST(SimpleCommitRejectsDifferentLock) {
+        CheckPreparedCommitRetry(ECommitMode::Simple, false, EProposalScenario::DifferentLock);
+    }
+    Y_UNIT_TEST(PrimaryCommitRejectsDifferentLock) {
+        CheckPreparedCommitRetry(ECommitMode::Primary, false, EProposalScenario::DifferentLock);
+    }
+    Y_UNIT_TEST(SecondaryCommitRejectsDifferentLock) {
+        CheckPreparedCommitRetry(ECommitMode::Secondary, false, EProposalScenario::DifferentLock);
+    }
+    Y_UNIT_TEST(SimpleCommitRejectsDifferentKind) {
+        CheckPreparedCommitRetry(ECommitMode::Simple, false, EProposalScenario::DifferentKind);
+    }
+    Y_UNIT_TEST(PrimaryCommitRejectsDifferentKind) {
+        CheckPreparedCommitRetry(ECommitMode::Primary, false, EProposalScenario::DifferentKind);
+    }
+    Y_UNIT_TEST(SecondaryCommitRejectsDifferentKind) {
+        CheckPreparedCommitRetry(ECommitMode::Secondary, false, EProposalScenario::DifferentKind);
+    }
+    Y_UNIT_TEST(SimpleCommitExpiresAfterRetry) {
+        CheckPreparedCommitRetry(ECommitMode::Simple, false, EProposalScenario::Deadline);
+    }
+    Y_UNIT_TEST(PrimaryCommitExpiresAfterRetry) {
+        CheckPreparedCommitRetry(ECommitMode::Primary, false, EProposalScenario::Deadline);
+    }
+    Y_UNIT_TEST(SecondaryCommitExpiresAfterRetry) {
+        CheckPreparedCommitRetry(ECommitMode::Secondary, false, EProposalScenario::Deadline);
+    }
+    Y_UNIT_TEST(NewCommitRejectsRecoveredBrokenLock) {
+        CheckPreparedCommitRetry(ECommitMode::Simple, true, EProposalScenario::FreshBrokenLock);
     }
 
     Y_UNIT_TEST(CommitIsRejectedAfterAbortWasQueued) {

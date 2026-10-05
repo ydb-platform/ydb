@@ -68,6 +68,10 @@ public:
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId>
         LastWriteToManyPBuffersDiskIds;
 
+    // Checksums of the last WriteToDDisk, WriteToPBuffer or
+    // WriteToManyPBuffers call.
+    TBlockChecksums LastWriteChecksums;
+
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;
 
@@ -146,6 +150,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     void WriteToManyPBuffers(
@@ -156,6 +161,7 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) override;
 
@@ -164,6 +170,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(

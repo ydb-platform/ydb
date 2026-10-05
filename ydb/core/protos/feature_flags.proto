@@ -353,52 +353,6 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
-<<<<<<< HEAD
-=======
-    optional bool EnableInsecureMirrorFactory = 322 [default = false];
-    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
-    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
-    // size-class slots. Reads of the stripe format work even when this flag is off.
-    optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
-    optional bool EnableCheckpointsCompression = 325 [default = false];
-    optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
-    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = false];
-    optional bool EnableTableBackupAsSql = 329 [default = false];
-    optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
-    // Judges a VDisk write by the space color the disk will be in once the Fresh
-    // it holds has been compacted, rather than by the color it is in while the
-    // write is still cheap.
-    optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
-    // Creates the per-tenant WasmCompileController tablet for new and migrated
-    // databases. Without it nothing compiles WASM modules to native code:
-    // dinodes only ever compile what this tablet assigns them.
-    optional bool EnableWasmCompileController = 332 [default = false];
-    // PDisk chunk-space colors start at 3% free (cyan) on large disks, with
-    // per-color minimum chunk floors so small disks keep a compaction runway.
-    // Applied at PDisk start (Keeper.Reset). ICB PDisk_<id>_ChunkBaseLimitPerMille
-    // still overrides the cyan permille; floors stay on while this flag is on.
-    optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
-    optional bool CollectHourMetric = 334 [default = false];
-    optional bool EnableStreamingQueryReadFrom = 335 [default = false];
-    optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
-    optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
-    // Enables CDC schema records for newly created asynchronous replication streams.
-    // Existing streams retain their legacy data-only protocol.
-    optional bool EnableAsyncReplicationSchemaChanges = 338 [default = false];
-    optional bool EnableColumnshardMoveData = 339 [default = false];
-    optional bool EnableColumnshardCutHistory = 340 [default = false];
-    // Treats a block with generation Max<ui32>() (the complete tablet deletion tombstone written by
-    // Hive) as enough to drop all the tablet's data and barrier records in VDisk and BlobDepot,
-    // without waiting for the hard barrier that follows it. Turning it off after it has been on is
-    // safe, but may leave some garbage of already deleted tablets until it is turned on again.
-    optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
-    optional bool EnableKqpRuntimeStats = 342 [default = false];
-    // Under space pressure, lets PDisk choose which level compaction runs on the disk: one at a time, the one
-    // that frees the most chunks, which then reserves exactly the chunks it will write before writing any.
-    optional bool EnableVDiskPlannedCompaction = 343 [default = false, (RequireRestart) = true];
-    optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
-    optional bool EnableTieringObjectKeyTree = 345 [default = false];
     // Bumps GROUP BY HOP state version to 3
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
 }

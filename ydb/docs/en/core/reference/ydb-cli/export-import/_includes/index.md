@@ -15,6 +15,5 @@
 - [Configuring NFS for backup](../../../../recipes/backup/nfs-backup/nfs-backup.md)
 - [Exporting to NFS `export nfs`](../export-nfs.md)
 - [Importing from NFS `import nfs`](../import-nfs.md)
-- [Validating a backup `tools validate`](../tools-validate.md)
 
 {% include [_includes/options_overlay.md](options_overlay.md) %}

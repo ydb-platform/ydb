@@ -273,6 +273,43 @@ class FederationRecipe(object):
         finally:
             channel.close()
 
+    def _wait_for_cm_tables(self, meta_port, init_daemon, timeout=120):
+        pending = {
+            "/Root/AccountTemplates",
+            "/Root/TopicTemplates",
+            "/Root/ConsumerTemplates",
+            "/Root/Accounts",
+            "/Root/Clusters",
+            "/Root/Quotas",
+        }
+        deadline = time.monotonic() + timeout
+        last_errors = {}
+        cm_log = yatest.common.output_path('config_manager_logs/err.log')
+        driver_config = ydb.DriverConfig(endpoint="localhost:{}".format(meta_port), database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            while pending:
+                if not init_daemon.running:
+                    raise RuntimeError("CM exited before creating tables {}; see {}".format(sorted(pending), cm_log))
+                for path in sorted(pending):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("Timed out waiting for CM tables {}; last errors: {}; see {}".format(
+                            sorted(pending), last_errors, cm_log))
+                    try:
+                        driver.scheme_client.describe_path(
+                            path, settings=ydb.BaseRequestSettings().with_timeout(min(5, remaining)))
+                    except (ydb.SchemeError, ydb.NotFound, ydb.Unavailable, ydb.Overloaded,
+                            ydb.Timeout, ydb.DeadlineExceed, ydb.ConnectionError) as error:
+                        last_errors[path] = str(error)
+                    else:
+                        pending.remove(path)
+                        last_errors.pop(path, None)
+                if pending:
+                    logger.info("Waiting for CM to create tables: %s", sorted(pending))
+                    time.sleep(min(1, max(0, deadline - time.monotonic())))
+        logger.info("CM tables are ready")
+
     def _pre_init_cm(self, meta_port):
         """
         Populate CM and pqdiscovery tables after CM's first run has created them.
@@ -546,11 +583,14 @@ class FederationRecipe(object):
             stderr=self.__cm_stderr_file,
             wait=False,
         )
-        time.sleep(10)
         try:
-            os.kill(init_daemon.process.pid, signal.SIGKILL)
-        except OSError:
-            pass
+            self._wait_for_cm_tables(meta_port, init_daemon)
+        finally:
+            try:
+                os.kill(init_daemon.process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            init_daemon.process.wait(timeout=10)
 
         self._pre_init_cm(meta_port)
 

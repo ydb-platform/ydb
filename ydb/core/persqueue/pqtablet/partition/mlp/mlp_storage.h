@@ -464,6 +464,9 @@ private:
         ui32 UnprocessedCount = 0;
     };
 
+    void PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup);
+    void UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group);
+
     class TMessageGroups {
     public:
         bool UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const;

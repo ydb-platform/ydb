@@ -240,6 +240,8 @@ This means that if you want a vector index to remain 100% consistent, you have t
 
 Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
 
+This temporary limitation is planned to be removed in a future {{ ydb-short-name }} release.
+
 ## Rebuilding a Vector Index {#rebuild}
 
 Rebuilding creates a new cluster tree and redistributes the table's vectors across it. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) when changes in the data distribution reduce search recall or performance:

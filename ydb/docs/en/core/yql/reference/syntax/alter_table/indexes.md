@@ -279,7 +279,7 @@ Replacing the index can invalidate cached query plans. A query using the index m
 
 {% note warning %}
 
-The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, [pause application writes and wait for the rebuild to succeed](../../../../dev/vector-indexes.md#rebuild).
+The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, [pause application writes and wait for the rebuild to succeed](../../../../dev/vector-indexes.md#rebuild). This temporary limitation is planned to be removed in a future {{ ydb-short-name }} release.
 
 {% endnote %}
 

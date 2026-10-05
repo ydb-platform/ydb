@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/common/events.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>

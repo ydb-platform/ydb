@@ -23,7 +23,7 @@ struct TWorkloadManagerEvents {
         EvCleanupRequest,
         EvCleanupResponse,
         EvUpdatePoolInfo,
-        EvGetPoolInfo,
+        EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
         EvWmStateChanged,
         EvWarmupDatabaseInfo,
@@ -52,8 +52,8 @@ struct TEvWmStateChanged : public NActors::TEventLocal<TEvWmStateChanged, TWorkl
 };
 
 
-struct TEvGetPoolInfo : public NActors::TEventLocal<TEvGetPoolInfo, TWorkloadManagerEvents::EvGetPoolInfo> {
-    TEvGetPoolInfo(const TString& databaseId, const TString& poolId)
+struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TWorkloadManagerEvents::EvSubscribeOnPoolChanges> {
+    TEvSubscribeOnPoolChanges(const TString& databaseId, const TString& poolId)
         : DatabaseId(databaseId)
         , PoolId(poolId)
     {}

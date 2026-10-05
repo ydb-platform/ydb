@@ -21,8 +21,6 @@
 
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 
-#include <ydb/services/workload_manager/gateway_internal.h>
-
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
@@ -33,6 +31,10 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
+
+namespace NWorkloadManager::NPrivate {
+    class TWorkloadManagerGateway;
+}
 
 namespace NKikimrServicesInitializers {
 

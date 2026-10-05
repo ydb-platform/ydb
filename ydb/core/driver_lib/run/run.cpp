@@ -76,8 +76,6 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
-
-#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
@@ -164,6 +162,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/services/nbs/classic_grpc_service_factory.h>

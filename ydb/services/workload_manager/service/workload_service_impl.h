@@ -31,7 +31,7 @@ struct TDatabaseState {
 
     TInstant LastUpdateTime = TInstant::Zero();
 
-    void DoGetPoolInfo(TEvGetPoolInfo::TPtr ev) {
+    void DoSubscribeRequest(TEvSubscribeOnPoolChanges::TPtr ev) {
         const TString& poolId = ev->Get()->PoolId;
         auto& subscribers = PendingSubscriptions[poolId];
         if (subscribers.empty()) {

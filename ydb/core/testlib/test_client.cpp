@@ -134,6 +134,7 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>

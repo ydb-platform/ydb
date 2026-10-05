@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
@@ -894,7 +895,7 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
     runtime.Send(
-        MakeServiceId(nodeId),
+        MakeWorkloadManagerStateActorId(nodeId),
         edgeActor,
         new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
         nodeIndex);

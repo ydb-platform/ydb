@@ -12,6 +12,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -51,12 +53,13 @@ struct TFixture {
         Runtime.RegisterService(MakeServiceId(NodeId), ServicesEdge);
 
         StateActor = Runtime.Register(CreateWorkloadManagerStateActor(Gateway));
+        Runtime.EnableScheduleForActor(StateActor);
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         Runtime.DispatchEvents(options);
 
-        // Force ClassifierMetadataInitialized_ regardless of whether the process-wide
+        // Force classifier metadata Ready regardless of whether the process-wide
         // NMetadata::NProvider::TServiceOperator singleton was flipped by a prior test.
         Runtime.Send(new IEventHandle(
             StateActor, Sender,
@@ -83,6 +86,12 @@ struct TFixture {
         });
     }
 
+    void SetResourcePoolsEnabled(bool enabled) {
+        auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        ev->Record.MutableConfig()->MutableFeatureFlags()->SetEnableResourcePools(enabled);
+        Runtime.Send(new IEventHandle(StateActor, Sender, ev.release()));
+    }
+
     void InjectFetchResponse(const TString& databasePath, const TString& databaseId,
                              bool serverless, TPathId pathId,
                              Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
@@ -102,14 +111,16 @@ TString GetNavigatePath(const TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev
 
 Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
 
-    Y_UNIT_TEST(TestEnssureWhenPoolsDisabled) {
+    // Resource pools disabled: EnsureReady returns Disabled for any database.
+    Y_UNIT_TEST(TestEnsureWhenPoolsDisabled) {
         TFixture fx;
         fx.Init(/*enableResourcePools=*/false);
 
         auto info = fx.EnsureReady(TEST_DB);
-        UNIT_ASSERT(info.State == EReadyState::ClassificationDisabled);
+        UNIT_ASSERT(info.State == EReadyState::Disabled);
     }
 
+    // Resource pools enabled, database info fetched: EnsureReady returns Ready.
     Y_UNIT_TEST(TestEnsureWhenPoolsEnabled) {
         TFixture fx;
         fx.Init();
@@ -124,6 +135,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT(info.State == EReadyState::Ready);
     }
 
+    // Warmup for an unknown database: the state actor starts a database info fetch (scheme cache navigate) for the path.
     Y_UNIT_TEST(TestWarmupSpawnsFetcher) {
         TFixture fx;
         fx.Init();
@@ -135,6 +147,9 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_VALUES_EQUAL(GetNavigatePath(ev), "/Root/db1");
     }
 
+    // Repeated warmups. The state actor:
+    // - does not start a second fetch for a path already in flight,
+    // - starts a fetch for a different path.
     Y_UNIT_TEST(TestWarmupDedupsByPath) {
         TFixture fx;
         fx.Init();
@@ -152,6 +167,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
                                     "Second Warmup for the same path should not spawn a fetcher");
     }
 
+    // Warmup with an empty path: the gateway sends nothing, the next valid warmup still fetches.
     Y_UNIT_TEST(TestWarmupIgnoresEmptyPath) {
         TFixture fx;
         fx.Init();
@@ -164,6 +180,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
                                     "Empty-path Warmup should not spawn a fetcher");
     }
 
+    // Subscribe for a database already fetched: the state actor replies SUCCESS at once with the subscriber cookie.
     Y_UNIT_TEST(TestSubscribeWhenAlreadyKnown) {
         TFixture fx;
         fx.Init();
@@ -181,7 +198,10 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_EQUAL(ev->Get()->Status, Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(TestSubscribeWhenNotKnow) {
+    // Subscribe for an unknown database. The state actor:
+    // - starts a database info fetch,
+    // - replies SUCCESS with the subscriber cookie once the fetch succeeds.
+    Y_UNIT_TEST(TestSubscribeWhenNotKnown) {
         TFixture fx;
         fx.Init();
 
@@ -199,6 +219,9 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::SUCCESS);
     }
 
+    // Subscribe, database info fetch fails. The state actor:
+    // - replies with the fetch status and message,
+    // - publishes the database as Failed, so EnsureReady returns Failed.
     Y_UNIT_TEST(TestSubscribeWhenError) {
         TFixture fx;
         fx.Init();
@@ -223,17 +246,21 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_EQUAL(info.FailureStatus, Ydb::StatusIds::NOT_FOUND);
     }
 
+    // Pool subscription requests. The state actor:
+    // - sends TEvAddPool + TEvSubscribeOnPoolChanges for the first request,
+    // - sends nothing for a duplicate while in flight,
+    // - subscribes a different pool.
     Y_UNIT_TEST(TestEnsurePoolSubscribedDedupsWhileInFlight) {
         TFixture fx;
         fx.Init();
 
-        // First EnsurePoolSubscribed fires TEvAddPool + TEvGetPoolInfo.
+        // First EnsurePoolSubscribed fires TEvAddPool + TEvSubscribeOnPoolChanges.
         fx.Runtime.Send(new IEventHandle(
             fx.StateActor, fx.Sender,
             new TEvEnsurePoolSubscribed("/Root/db1", "poolA")));
         auto firstAdd = fx.Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(firstAdd->Get()->PoolId, "poolA");
-        auto firstSub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        auto firstSub = fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(firstSub->Get()->PoolId, "poolA");
 
         // Duplicate EnsurePoolSubscribed for the same key should be deduped;
@@ -248,11 +275,14 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         auto nextAdd = fx.Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(nextAdd->Get()->PoolId, "poolB",
                                     "Duplicate EnsurePoolSubscribed must not fire TEvAddPool");
-        auto nextSub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        auto nextSub = fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(nextSub->Get()->PoolId, "poolB",
-                                    "Duplicate EnsurePoolSubscribed must not fire TEvGetPoolInfo");
+                                    "Duplicate EnsurePoolSubscribed must not fire TEvSubscribeOnPoolChanges");
     }
 
+    // Pool dropped. The state actor:
+    // - resubscribes once on the first nullopt update,
+    // - sends no duplicate resubscribe on the next nullopt.
     Y_UNIT_TEST(TestExpiredPoolDedupsResubscribe) {
         TFixture fx;
         fx.Init();
@@ -261,7 +291,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         fx.Runtime.Send(new IEventHandle(
             fx.StateActor, fx.Sender,
             new TEvEnsurePoolSubscribed("/Root/db1", "poolA")));
-        fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
 
         fx.Runtime.Send(new IEventHandle(
             fx.StateActor, fx.Sender,
@@ -271,7 +301,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         fx.Runtime.Send(new IEventHandle(
             fx.StateActor, fx.Sender,
             new TEvUpdatePoolInfo("/Root/db1", "poolA", std::nullopt, std::nullopt)));
-        auto resub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        auto resub = fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(resub->Get()->PoolId, "poolA");
 
         // Second deletion signal (or duplicate expiration) should not fire another
@@ -283,11 +313,12 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
             fx.StateActor, fx.Sender,
             new TEvEnsurePoolSubscribed("/Root/db1", "poolB")));
 
-        auto next = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        auto next = fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(next->Get()->PoolId, "poolB",
                                     "Repeated deletion signals must not fire duplicate resubscribes");
     }
 
+    // Serverless database, resource pools disabled on serverless: EnsureReady returns Disabled.
     Y_UNIT_TEST(TestEnsureWhenPoolsDisabledOnServerless) {
         TFixture fx;
         fx.Init();
@@ -297,7 +328,87 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT(watch);
 
         auto info = fx.EnsureReady("/Root/db1");
-        UNIT_ASSERT(info.State == EReadyState::ClassificationDisabled);
+        UNIT_ASSERT(info.State == EReadyState::Disabled);
+    }
+
+    // Database info fetch hangs. The state actor:
+    // - releases the subscriber with retryable UNAVAILABLE once the request times out,
+    // - publishes the database as TimedOut, so EnsureReady returns Failed with UNAVAILABLE.
+    Y_UNIT_TEST(TestSubscribeTimesOutToUnavailable) {
+        TFixture fx;
+        fx.Init();
+
+        const TActorId subscriber = fx.Runtime.AllocateEdgeActor();
+        fx.SubscribeOnReady("/Root/db1", subscriber, /*cookie=*/11);
+        auto navigate = fx.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>(fx.SchemeCacheEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT(navigate);
+
+        auto ready = fx.Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, WAIT_TIMEOUT);
+        UNIT_ASSERT(ready);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Cookie, 11u);
+        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::UNAVAILABLE);
+
+        auto info = fx.EnsureReady("/Root/db1");
+        UNIT_ASSERT(info.State == EReadyState::Failed);
+        UNIT_ASSERT_EQUAL(info.FailureStatus, Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    // State actor stopped while a subscriber waits. The state actor:
+    // - releases the subscriber with SUCCESS,
+    // - clears the gateway, so EnsureReady returns Disabled.
+    Y_UNIT_TEST(TestPassAwayReleasesSubscribers) {
+        TFixture fx;
+        fx.Init();
+
+        const TActorId subscriber = fx.Runtime.AllocateEdgeActor();
+        fx.SubscribeOnReady("/Root/db1", subscriber, /*cookie=*/12);
+        fx.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>(fx.SchemeCacheEdge, WAIT_TIMEOUT);
+
+        fx.Runtime.Send(new IEventHandle(fx.StateActor, fx.Sender, new TEvents::TEvPoison()));
+
+        auto ready = fx.Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, WAIT_TIMEOUT);
+        UNIT_ASSERT(ready);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Cookie, 12u);
+        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::SUCCESS);
+
+        auto info = fx.EnsureReady("/Root/db1");
+        UNIT_ASSERT(info.State == EReadyState::Disabled);
+    }
+
+    // Resource pools disabled: the state actor replies SUCCESS to a subscriber at once, without a fetch.
+    Y_UNIT_TEST(TestSubscribeWhenPoolsDisabled) {
+        TFixture fx;
+        fx.Init(/*enableResourcePools=*/false);
+
+        const TActorId subscriber = fx.Runtime.AllocateEdgeActor();
+        fx.SubscribeOnReady("/Root/db1", subscriber, /*cookie=*/13);
+
+        auto ready = fx.Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, WAIT_TIMEOUT);
+        UNIT_ASSERT(ready);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Cookie, 13u);
+        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    // Resource pools switched off while a subscriber waits. The state actor:
+    // - releases the subscriber with SUCCESS,
+    // - publishes pools disabled before the reply, so EnsureReady returns Disabled.
+    Y_UNIT_TEST(TestPoolsDisabledReleasesSubscribers) {
+        TFixture fx;
+        fx.Init();
+
+        const TActorId subscriber = fx.Runtime.AllocateEdgeActor();
+        fx.SubscribeOnReady("/Root/db1", subscriber, /*cookie=*/14);
+        fx.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>(fx.SchemeCacheEdge, WAIT_TIMEOUT);
+
+        fx.SetResourcePoolsEnabled(false);
+
+        auto ready = fx.Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, WAIT_TIMEOUT);
+        UNIT_ASSERT(ready);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Cookie, 14u);
+        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::SUCCESS);
+
+        auto info = fx.EnsureReady("/Root/db1");
+        UNIT_ASSERT(info.State == EReadyState::Disabled);
     }
 }
 

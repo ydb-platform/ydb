@@ -4,6 +4,8 @@
 #include <ydb/core/base/event_filter.h>
 #include <util/generic/hash_set.h>
 
+#include <memory>
+
 class TProgramShouldContinue;
 class IRandomProvider;
 class ITimeProvider;
@@ -127,6 +129,7 @@ namespace NKikimr {
 
     namespace NWorkloadManager {
         class IGateway;
+        using IGatewayPtr = std::shared_ptr<IGateway>;
     }
 }
 
@@ -293,7 +296,7 @@ struct TAppData {
     NKikimrConfig::TDataErasureConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
-    std::shared_ptr<NKikimr::NWorkloadManager::IGateway> WorkloadManagerGateway;
+    NWorkloadManager::IGatewayPtr WorkloadManagerGateway;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;

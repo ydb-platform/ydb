@@ -2,6 +2,8 @@
 
 #include <ydb/services/workload_manager/query_classifier.h>
 
+#include <ydb/core/base/appdata_fwd.h>
+
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -13,10 +15,10 @@
 namespace NKikimr::NWorkloadManager {
 
 enum class EReadyState {
-    Ready,
-    Pending,
-    ClassificationDisabled,
-    Failed,
+    Ready,     // DB info and classifiers are known: classify and admit the query
+    Pending,   // state not known yet: wait via SubscribeOnReady
+    Disabled,  // WLM is off for the database by config (pools off, serverless, unsupported path): run without WLM
+    Failed,    // state could not be obtained (fetch error or timeout): reply with FailureStatus, retryable if UNAVAILABLE
 };
 
 struct TReadyInfo {
@@ -29,6 +31,11 @@ struct TReadyInfo {
 /// Client-side interface for the Workload Manager gateway.
 /// Instance is created at node initialization and stored in
 /// `AppData()->WorkloadManagerGateway`; consumers access it synchronously.
+/// Must be called from an actor handler (uses the activation context).
+/// Callers that can wait use SubscribeOnReady; callers that cannot (e.g. background tablet work) retry later.
+/// The workload manager is never bypassed: if its state cannot be obtained in time, EnsureReady returns Failed (retryable).
+///
+/// TODO: classification context for non-query workloads (compaction, backup).
 ///
 class IGateway {
 public:
@@ -53,7 +60,5 @@ public:
     /// early (e.g. at query entry) so the prefetch overlaps with the caller's own work.
     virtual void Warmup(const TString& databasePath) = 0;
 };
-
-using TGatewayPtr = std::shared_ptr<IGateway>;
 
 }

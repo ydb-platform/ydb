@@ -979,6 +979,52 @@ Y_UNIT_TEST(WorkerExceptionBecomesIssue) {
     UNIT_ASSERT(HasIssue(report, ".", "exists boom"));
 }
 
+Y_UNIT_TEST(IoFailureOutsideWorkerKeepsReport) {
+    class TThrowExists : public TMemoryStorage {
+    public:
+        bool Exists(const TString& key) const override {
+            ythrow yexception() << "exists boom " << key;
+        }
+    };
+
+    TThrowExists early;
+    bool thrown = false;
+    TValidationReport earlyReport;
+    try {
+        earlyReport = Run(early, "");
+    } catch (const std::exception&) {
+        thrown = true;
+    }
+    UNIT_ASSERT(!thrown);
+    UNIT_ASSERT(HasIssue(earlyReport, ".", "internal error while validating"));
+    UNIT_ASSERT(HasIssue(earlyReport, ".", "exists boom"));
+
+    class TThrowDataList : public TMemoryStorage {
+    public:
+        TVector<TString> List(const TString& prefix) const override {
+            if (prefix.Contains("SchemaMapping")) {
+                return {};
+            }
+            ythrow yexception() << "list boom " << prefix;
+        }
+    };
+
+    TThrowDataList storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.Put("t/scheme.pb.sha256", TString(64, 'b') + " scheme.pb\n");
+    thrown = false;
+    TValidationReport report;
+    try {
+        report = Run(storage, "t");
+    } catch (const std::exception&) {
+        thrown = true;
+    }
+    UNIT_ASSERT(!thrown);
+    UNIT_ASSERT(HasIssue(report, "t/scheme.pb", "checksum mismatch"));
+    UNIT_ASSERT(HasIssue(report, "t", "list boom"));
+    UNIT_ASSERT(HasIssue(report, "t", "internal error while validating"));
+}
+
 TValidationReport RunMetadataChecksums(
     const IBackupStorage& storage,
     const TString& path,

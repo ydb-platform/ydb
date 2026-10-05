@@ -311,6 +311,20 @@ public:
 
     TValidationReport Run(const TString& path) {
         RootPath = NormalizeKey(path);
+        // Exists and List outside ParallelFor are not caught by InvokeCheck.
+        // Keep the issues already recorded and report the I/O error in the same result.
+        try {
+            return ValidatePath();
+        } catch (const std::exception& ex) {
+            Error(RootLabel(), TStringBuilder() << "internal error while validating: " << ex.what());
+            return Finish();
+        } catch (...) {
+            Error(RootLabel(), "internal error while validating");
+            return Finish();
+        }
+    }
+
+    TValidationReport ValidatePath() {
         const TString root = RootPath;
         const TString metadataKey = JoinKey(root, "metadata.json");
         const bool forceFull = Settings.Format == EValidateFormat::Full;

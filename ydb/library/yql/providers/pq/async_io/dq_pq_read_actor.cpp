@@ -1118,7 +1118,7 @@ private:
                 Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
                 return;
             }
-            event.Confirm();
+            event.PartitionControl->ConfirmExhausted();
         }
 
         void operator()(NFq::TMessageStreamPartitionStatusEvent& event) {

@@ -28,6 +28,9 @@ struct TValidateSettings {
     // Object names relative to the validated path. Used for backups created with --item,
     // which have no SchemaMapping. Unset means the list was not provided.
     TMaybe<TVector<TString>> ExpectedObjects;
+    // Stop after the first error. By default every independent error is reported.
+    // Warnings do not stop the check.
+    bool FailFast = false;
 };
 
 struct TValidationIssue {

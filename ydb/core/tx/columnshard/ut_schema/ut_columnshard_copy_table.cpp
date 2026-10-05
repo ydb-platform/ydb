@@ -746,9 +746,6 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(copyPathId), false);
         UNIT_ASSERT(internalPathId);
 
-        // Before 37a93ef12d2, DROP persisted the source's drop snapshot in both
-        // metadata tables even while a live copy retained the same internal path.
-        // Reproduce that on-disk state and load it with the current implementation.
         const NOlap::TSnapshot legacyDropSnapshot(planStep.Val() + 1, ++txId);
         const TString query = Sprintf(R"___(
             (
@@ -785,8 +782,6 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         UNIT_ASSERT(!CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId));
 
         // GC must find the path using the remaining source alias's older snapshot.
-        // Without the fix it is registered under the newer copy-drop snapshot,
-        // and TryFinalizeDropPathOnExecute aborts when looking up the older key.
         csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
         const auto advancePlanStep = [&] {
             AdvanceShardPlanStep(runtime, sender, auxTxId, auxWriteId, auxPathId, testTable);

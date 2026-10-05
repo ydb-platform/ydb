@@ -583,6 +583,7 @@ class StaticConfigGenerator(object):
                     mon_address=self.__cluster_details.monitor_address,
                     cert_params=self.__cluster_details.ic_cert_params,
                     use_auth_token_file=self._use_auth_token_file,
+                    grpcs_port=self.__cluster_details.get_service("dynamic_node").get("grpcs_port"),
                 )
 
             return kikimr_cfg_for_dynamic_node(

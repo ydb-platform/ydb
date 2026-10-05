@@ -73,6 +73,7 @@ kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml"
 kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_mon_threads:+ --mon-threads ${kikimr_mon_threads}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpcs_port:+ --grpcs-port ${kikimr_grpcs_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 
 if [ ! -z "${kikimr_mon_address}" ]; then
@@ -706,6 +707,7 @@ def kikimr_cfg_for_dynamic_node_new_style(
     mon_address="",
     cert_params=None,
     use_auth_token_file=False,
+    grpcs_port=None,
 ):
     return "\n".join(
         [
@@ -725,6 +727,7 @@ def kikimr_cfg_for_dynamic_node_new_style(
                 new_style_kikimr_cfg=True,
                 use_auth_token_file=use_auth_token_file,
             ),
+            f'kikimr_grpcs_port="{grpcs_port}"' if grpcs_port else "",
             CUSTOM_CONFIG_INJECTOR,
             NEW_STYLE_DYNAMIC_NODE_CONFIG,
             NODE_BROKER_ARGUMENT,

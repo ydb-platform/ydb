@@ -124,6 +124,7 @@ public:
         explicit TMessage(const TMessageData& data)
             : TMessageData(data)
             , NextMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
+            , PrevMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
         {
         }
 
@@ -161,7 +162,7 @@ public:
 
     private:
         ui64 NextMessageGroupIdOffset_; // not serialized
-        ui64 PrevMessageGroupIdOffset_ = LastMessageGroupIdOffsetSentinel; // not serialized, STD only
+        ui64 PrevMessageGroupIdOffset_; // not serialized, STD only
         static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
     };
 

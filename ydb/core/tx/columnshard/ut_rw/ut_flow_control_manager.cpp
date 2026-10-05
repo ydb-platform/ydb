@@ -2189,6 +2189,29 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT(readySeen);
     }
 
+    // Catches SendToOverloadManager calling TActivationContext::ActorSystem() with no TLS.
+    // That is the ydb-olap-perf shutdown crash: ~TWritesMonitor releases in-flight writes
+    // on the stop thread, and the notify dereferences a null activation context.
+    Y_UNIT_TEST(ReleaseResourcesWithoutActivationContextDoesNotCrash) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(false);
+        runtime.GetAppData(0).ColumnShardConfig.SetWritingInFlightRequestsCountLimit(1);
+
+        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
+                             TRequestReleaseResourcesActor::EMode::RequestOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT(NOverload::TOverloadManagerServiceOperator::IsWriteSideOverloaded());
+        UNIT_ASSERT_VALUES_EQUAL(NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly(), 1);
+
+        // Same situation as mailbox cleanup during TActorSystem::Stop: this thread has no activation context.
+        UNIT_ASSERT(!TlsActivationContext);
+        NOverload::TOverloadManagerServiceOperator::ReleaseResources(1, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly(), 0);
+        UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsWriteSideOverloaded());
+    }
+
     Y_UNIT_TEST(OverloadManagerRefreshesNodesListOnWakeup) {
         TTestBasicRuntime runtime;
         TFlowControlManagerTestEnv env(runtime);

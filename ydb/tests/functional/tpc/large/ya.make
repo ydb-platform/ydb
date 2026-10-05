@@ -13,7 +13,7 @@ ENDIF()
 
 SIZE(LARGE)
 
-REQUIREMENTS(ram:16 cpu:2)
+REQUIREMENTS(ram:16 cpu:1)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 

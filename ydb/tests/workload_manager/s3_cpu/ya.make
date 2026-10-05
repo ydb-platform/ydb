@@ -8,7 +8,7 @@ TEST_SRCS(
     test_s3_cpu_throttle.py
 )
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

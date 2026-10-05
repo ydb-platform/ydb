@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

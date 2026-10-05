@@ -11,7 +11,7 @@ IF (NOT SANITIZER_TYPE)
     )
 
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:1)
 
     DEPENDS(
         )

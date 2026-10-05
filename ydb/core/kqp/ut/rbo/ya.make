@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_rbo_decorrelation_ut.cpp

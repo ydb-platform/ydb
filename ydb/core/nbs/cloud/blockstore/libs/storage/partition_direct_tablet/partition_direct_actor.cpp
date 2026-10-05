@@ -133,17 +133,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         LogTitle.GetWithTime().c_str(),
         SelfId().ToString().data());
 
-    if (!Executor()->GetStats().IsFollower()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Executing InitSchema transaction",
-            LogTitle.GetWithTime().c_str());
-        ExecuteTx(ctx, CreateTx<TInitSchema>());
-    }
-
-    // allow pipes to connect
-    SignalTabletActive(ctx);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Executing InitSchema transaction",
+        LogTitle.GetWithTime().c_str());
+    ExecuteTx(ctx, CreateTx<TInitSchema>());
 }
 
 void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)

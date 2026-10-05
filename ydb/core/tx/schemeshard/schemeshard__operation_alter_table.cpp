@@ -86,9 +86,28 @@ THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& i
 bool CheckIndexNotNullConstraints(const NKikimrSchemeOp::TTableDescription& alter,
         const TPath& indexPath, const TOperationContext& context, TString& errStr)
 {
-    const auto& index = context.SS->Indexes.at(indexPath.Base()->PathId);
-    const auto& baseTable = context.SS->Tables.at(indexPath.Parent().Base()->PathId);
-    const auto requiredColumns = GetColumnNamesWithNonDroppableNotNull(*index, *baseTable);
+    if (!AnyOf(alter.GetColumns(), [](const auto& column) {
+        return !column.HasType() && column.HasNotNull() && !column.GetNotNull();
+    })) {
+        return true;
+    }
+
+    if (!context.SS->IsLocalId(indexPath.Base()->PathId)) {
+        errStr = "Cannot alter migrated index";
+        return false;
+    }
+    const auto indexIt = context.SS->Indexes.find(indexPath.Base()->PathId);
+    if (indexIt == context.SS->Indexes.end()) {
+        errStr = TStringBuilder() << "Index metadata is missing for path: " << indexPath.PathString();
+        return false;
+    }
+    const auto baseTablePath = indexPath.Parent();
+    const auto baseTableIt = context.SS->Tables.find(baseTablePath.Base()->PathId);
+    if (baseTableIt == context.SS->Tables.end()) {
+        errStr = TStringBuilder() << "Table metadata is missing for path: " << baseTablePath.PathString();
+        return false;
+    }
+    const auto requiredColumns = GetColumnNamesWithNonDroppableNotNull(*indexIt->second, *baseTableIt->second);
     for (const auto& column : alter.GetColumns()) {
         if (!column.HasType() && column.HasNotNull() && !column.GetNotNull()
             && requiredColumns.contains(column.GetName()))
@@ -999,6 +1018,13 @@ static ISubOperation::TPtr CheckIndexAlterPath(TOperationId id, const TPath& pat
         return CreateReject(id, NKikimrScheme::StatusMultipleModifications, TStringBuilder()
             << "path is locked by tx " << path.LockedBy() << " (" << path.PathString() << ")");
     }
+    if (path->IsTableIndex()
+        ? !context.SS->Indexes.contains(pathId)
+        : !context.SS->Tables.contains(pathId))
+    {
+        return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+            << "Path metadata is missing: " << path.PathString());
+    }
     // Not every operation with an alter in flight marks the path state
     // (e.g. the finalization of an incremental restore).
     const bool hasAlter = path->IsTableIndex()
@@ -1073,11 +1099,11 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
         }
 
         const TPath indexPath = TPath::Init(childPathId, context.SS);
-        const auto& index = context.SS->Indexes.at(childPathId);
         TString errStr;
         if (!CheckIndexNotNullConstraints(tx.GetAlterTable(), indexPath, context, errStr)) {
             return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, errStr);
         }
+        const auto& index = context.SS->Indexes.at(childPathId);
         bool affectsIndex = false;
         for (const auto& column : columns) {
             const auto columnId = table->GetColumnIdByNameSlow(column);
@@ -1095,8 +1121,13 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
                 continue;
             }
 
+            const auto implTableIt = context.SS->Tables.find(implTablePathId);
+            if (implTableIt == context.SS->Tables.end()) {
+                return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "Table metadata is missing for path: " << implTablePath.PathString());
+            }
+            const auto& implTable = implTableIt->second;
             NKikimrSchemeOp::TTableDescription implTableAlter;
-            const auto& implTable = context.SS->Tables.at(implTablePathId);
             for (const auto& column : columns) {
                 if (implTable->GetColumnIdByNameSlow(column) != TTableInfo::InvalidColumnId) {
                     auto* implColumn = implTableAlter.AddColumns();

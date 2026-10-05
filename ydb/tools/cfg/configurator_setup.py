@@ -24,7 +24,7 @@ def parse_optional_arguments(args):
     kwargs['enable_cores'] = args.enable_cores
     kwargs['enable_modules'] = getattr(args, 'enable_modules', False)
 
-    for cmd_arg in ('ic_port', 'grpc_port', 'mbus_port', 'mon_port', 'cfg_home', 'sqs_port', 'binaries_home'):
+    for cmd_arg in ('ic_port', 'grpc_port', 'grpcs_port', 'mbus_port', 'mon_port', 'cfg_home', 'sqs_port', 'binaries_home'):
         if hasattr(args, cmd_arg) and getattr(args, cmd_arg) is not None:
             kwargs[cmd_arg] = getattr(args, cmd_arg)
 
@@ -70,7 +70,7 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
     parser_cfg.add_argument('--cfg-home', type=str, help='Configuration home directory')
     parser_cfg.add_argument('--binaries-home', type=str, help='Binaries home directory')
     parser_cfg.add_argument('--local-binary-path', type=str, help='Path to kikimr binary current host')
-    for port in ('grpc-port', 'ic-port', 'mon-port', 'mbus-port', 'sqs-port'):
+    for port in ('grpc-port', 'grpcs-port', 'ic-port', 'mon-port', 'mbus-port', 'sqs-port'):
         parser_cfg.add_argument('--%s' % port, type=str, help='Port to be used during KiKiMR server start')
 
     for v in extra_cfg_arguments:

@@ -558,6 +558,9 @@ message TEvGetQueryStatsResponse {
 // cumulative and histogram values may be absolute or diffs depending on the context,
 // except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
+// On the detailed metrics channel (TDetailedTableCounters) slot i is the enum value i of the public
+// metrics of the tablet type (counters_detailed_<type>.proto): Simple is dense, Cumulative holds
+// (slot, delta) pairs, every histogram metric is present, a non-derivative one marked NonDerivative
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
@@ -587,19 +590,28 @@ message TDbTabletCounters {
 
 message TDetailedTableCounters {
     message TLeaf {
+        reserved 3;
+        reserved "Counters";
+
         optional uint64 TabletId = 1;
         optional uint32 FollowerId = 2;
-        optional TDbTabletCounters Counters = 3;
+        optional TDbCounters Metrics = 4;
     }
+
+    reserved 5;
+    reserved "TableCounters";
 
     optional string TablePath = 3;
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
 
-    // Set iff Level == MetricsLevelTable
-    optional TDbTabletCounters TableCounters = 5;
-
     // Set iff Level == MetricsLevelPartition
     repeated TLeaf Leaves = 6;
+
+    // Set iff Level == MetricsLevelTable
+    optional TDbCounters TableMetrics = 7;
+
+    // Defines the slots of TableMetrics and TLeaf.Metrics, an entry without it is ignored
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 8;
 }
 
 message TDbGRpcCounters {

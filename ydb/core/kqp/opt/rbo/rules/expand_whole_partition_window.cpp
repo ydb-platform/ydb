@@ -74,7 +74,9 @@ TIntrusivePtr<IOperator> TExpandWholePartitionWindowRule::SimpleMatchAndApply(co
         const auto aggregated = registry.AddCopy(output);
         aggregations.Add(aggregated, TOpAggregationTraits{rebindings.At(argument), func.Function});
 
-        // Window aggregates other than count are always optional, a grouped aggregate over a non-optional input is not.
+        // The New RBO types window aggregates other than count as optional even over a never empty frame,
+        // unlike YQL (see the disabled not null test). A grouped aggregate over a non-optional input is not
+        // optional, so wrap it to keep the window type. Replace with Unwrap of scalar aggregates once that is fixed.
         auto value = MakeColumnAccess(aggregated, pos, &ctx, &props);
         if (func.Function != "count" && grouped && !IsNullableIU(windowInput, argument, ctx)) {
             value = MakeUnaryCallable("Just", value);

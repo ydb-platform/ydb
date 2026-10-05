@@ -254,6 +254,31 @@ struct TSameChannelIdTest : public TSessionTest {
     }
 };
 
+// A freed node session unsubscribes from the interconnect session (#54894). A debug session subscribes with its
+// own discovery, so the sensor counts it under the session actor's activity
+struct TUnsubscribeTest : public TSessionTest {
+
+    void Prepare() override {
+        UseDebugSessions = true;
+        TSessionTest::Prepare();
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        const TStringBuf activity = "DebugNodeSessionActor";
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInterconnectSubscribers(NodeIndex0, activity) == 1; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the node session did not subscribe, subscribers=" << GetInterconnectSubscribers(NodeIndex0, activity));
+
+        Debug0->Terminating.store(true);
+        Service0->FreeNodeSession(Runtime->GetNodeId(1), Debug0->NodeActorId);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInterconnectSubscribers(NodeIndex0, activity) == 0; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the dead node session is still subscribed, subscribers=" << GetInterconnectSubscribers(NodeIndex0, activity));
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20Session) {
 
     Y_UNIT_TEST(IdleSessionDestroyed2n) {
@@ -308,6 +333,12 @@ Y_UNIT_TEST_SUITE(Channels20Session) {
     Y_UNIT_TEST(SameChannelIdNewActors1n) {
         TSameChannelIdTest test;
         test.Local = true;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreedSessionUnsubscribes2n) {
+        TUnsubscribeTest test;
+        test.Local = false;
         test.Run();
     }
 

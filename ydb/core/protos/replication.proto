@@ -300,6 +300,8 @@ message TWorkerIdentity {
 
 message TEvHandshake {
     optional TControllerIdentity Controller = 1;
+    // Older controllers compare complete serialized schema reports.
+    optional bool SupportsIndexMetadata = 2 [default = false];
 }
 
 message TEvStatus {
@@ -311,10 +313,47 @@ message TRemoteTopicReaderSettings {
     optional string TopicPath = 2;
     optional uint64 TopicPartitionId = 3;
     optional string ConsumerName = 4;
+    // Source index streams may disappear before the base-table DROP snapshot.
+    optional bool RetryOnSchemeError = 5 [default = false];
+}
+
+message TIndexBuildProgress {
+    optional uint64 Offset = 1;
+    optional NKikimrProto.TRowVersion MaxVersion = 2;
+    optional uint64 SwitchOffset = 3;
+    optional NKikimrProto.TRowVersion Heartbeat = 4;
+}
+
+message TIndexBuildState {
+    enum EPhase {
+        FILLING = 0;
+        JOINING = 1;
+        MAKING_READY = 2;
+        READY = 3;
+        CANCELLING = 4;
+        CANCELLED = 5;
+    }
+    message TAssignment {
+        optional NKikimrProto.TRowVersion Version = 1;
+        optional uint64 WriteTxId = 2;
+    }
+    optional EPhase Phase = 1;
+    optional NKikimrProto.TRowVersion JoinVersion = 2;
+    repeated TAssignment Assignments = 3;
+    optional uint64 ReadyTxId = 4;
+    optional uint64 SnapshotTxId = 5;
+}
+
+message TEvIndexBuildProgress {
+    optional TControllerIdentity Controller = 1;
+    optional TWorkerIdentity Worker = 2;
+    optional TIndexBuildProgress Progress = 3;
 }
 
 message TLocalTableWriterSettings {
     optional NKikimrProto.TPathID PathId = 1;
+    optional bool IndexBuild = 2 [default = false];
+    optional TIndexBuildProgress IndexBuildProgress = 3;
 }
 
 message TTransferWriterSettings {
@@ -421,16 +460,19 @@ message TEvWorkerDataEnd {
 
 message TEvGetTxId {
     repeated NKikimrProto.TRowVersion Versions = 1;
+    optional TWorkerIdentity Worker = 2;
 }
 
 message TEvTxIdResult {
     message TVersionTxId {
         optional NKikimrProto.TRowVersion Version = 1;
         optional uint64 TxId = 2;
+        optional NKikimrProto.TRowVersion Begin = 3;
     }
 
     optional TControllerIdentity Controller = 1;
     repeated TVersionTxId VersionTxIds = 2;
+    optional TWorkerIdentity Worker = 3;
 }
 
 message TEvHeartbeat {
@@ -467,12 +509,25 @@ message TSchemaChange {
         optional ECacheMode CacheMode = 4;
     }
 
+    message TIndex {
+        optional string Name = 1;
+        optional string Type = 2;
+        repeated string IndexColumns = 3;
+        repeated string DataColumns = 4;
+    }
+
+    message TIndexes {
+        repeated TIndex Items = 1;
+    }
+
     optional NKikimrProto.TRowVersion Version = 1;
     optional uint64 SourceSchemaVersion = 2;
     repeated TColumn Columns = 3;
     repeated string PrimaryKeyColumnNames = 4;
     // Empty for records written before family metadata was introduced.
     repeated TFamily Families = 5;
+    // Presence distinguishes a known empty set from legacy snapshots.
+    optional TIndexes Indexes = 6;
 }
 
 message TEvSchemaChangeReport {

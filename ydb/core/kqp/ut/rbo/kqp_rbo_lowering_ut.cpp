@@ -18,6 +18,8 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
     Y_UNIT_TEST(UpsertKeepsDefaultColumnsThroughLowering) {
         NTests::TIdTestContext f;
+        // Exercise RBO lowering regardless of the DML fallback default.
+        f.Config->SetEnableFallbackOnDML(false);
         auto& ctx = f.ExprCtx;
         const auto pos = f.Pos;
         auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
@@ -650,6 +652,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
 
     Y_UNIT_TEST(StageAssignmentAndLivenessDistinguishReplicateEdgesToOneJoin) {
         NTests::TIdTestContext f;
+        f.Config->SetEnableQueryServiceSpilling(true);
+        f.Config->_KqpEnableSpilling = true;
+        f.QueryCtx->Type = EKikimrQueryType::Query;
         const auto a = f.Id("left"), b = f.Id("right");
         auto hub = TReplicate::Create(f.Read({a, b}), f.Pos, f.Props.InfoUnitRegistry);
         auto discarded = hub->AddOutput();

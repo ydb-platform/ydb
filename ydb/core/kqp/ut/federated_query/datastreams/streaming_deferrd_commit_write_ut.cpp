@@ -14,6 +14,7 @@ using namespace fmt::literals;
 using namespace NFederatedQueryTest;
 using namespace NTestUtils;
 using namespace NYdb;
+using namespace NYdb::NFederatedTopic;
 using namespace NYdb::NTopic;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
@@ -53,19 +54,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         }
 
         TTopicClientSettings settings;
+        TFederatedTopicClientSettings federatedSettings;
         settings.Database(TEST_DATABASE);
+        federatedSettings.Database(TEST_DATABASE);
         if constexpr (LocalTopics) {
-            settings.CredentialsProviderFactory(NYql::CreateStructuredTokenCredentialsFactory()->Create(
+            const auto credentials = NYql::CreateStructuredTokenCredentialsFactory()->Create(
                 NYql::ComposeStructuredTokenJsonForTransientTokenAuth(NACLib::TUserToken(testUser, {}).SerializeAsString())
-            ));
+            );
+            settings.CredentialsProviderFactory(credentials);
+            federatedSettings.CredentialsProviderFactory(credentials);
         } else {
             settings.Database(YDB_DATABASE);
             settings.DiscoveryEndpoint(YDB_ENDPOINT);
             settings.AuthToken(testUser);
+            federatedSettings.Database(YDB_DATABASE);
+            federatedSettings.DiscoveryEndpoint(YDB_ENDPOINT);
+            federatedSettings.AuthToken(testUser);
         }
 
         const TIntrusivePtr<NYql::IPqGateway> pqGateway = SetupRealPqGateway();
-        const NYql::ITopicClient::TPtr topicClient = pqGateway->GetTopicClient(*PqGatewayDriver, settings);
+        const auto federatedClient = pqGateway->GetFederatedTopicClient(*PqGatewayDriver, federatedSettings);
         const NYql::IDeferredPublishClient::TPtr publishClient = pqGateway->GetDeferredPublishClient(*PqGatewayDriver, settings);
 
         {
@@ -117,9 +125,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 0);
         }
 
-        const auto writeSession = topicClient->CreateWriteSession(TWriteSessionSettings()
+        const auto writeSession = federatedClient->CreateWriteSession(TFederatedWriteSessionSettings(TWriteSessionSettings()
             .Codec(ECodec::RAW)
-            .Path(outputTopicName));
+            .Path(outputTopicName)));
         const auto disposition = TInstant::Now();
 
         bool dataWritten = false;

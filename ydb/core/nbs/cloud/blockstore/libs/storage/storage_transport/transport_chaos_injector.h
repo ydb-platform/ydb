@@ -56,6 +56,7 @@ public:
         ui64 lsn,
         NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     // Sends the request unless the coordinator is disabled. Replies from
@@ -68,6 +69,7 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) override;
 
@@ -77,6 +79,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     // Synchronizes a PBuffer with a DDisk or returns undelivery when either

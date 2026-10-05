@@ -6,9 +6,11 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing/events
     ydb/core/fq/libs/graph_params/proto
     ydb/library/accessor
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
+    ydb/library/yql/dq/runtime
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/proto
     ydb/library/yql/providers/pq/task_meta

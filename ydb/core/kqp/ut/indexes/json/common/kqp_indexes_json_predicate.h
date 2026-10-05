@@ -19,6 +19,8 @@ struct TPredicateBuilderOptions {
     // Syntax extensions
     bool EnablePassingVariables = false;
     bool EnableSqlParameters = false;
+    // Json-typed SQL parameters used by JSON_EXISTS / JSON_VALUE PASSING variables
+    bool EnableJsonParameters = false;
 
     // Comparison operators
     bool EnableRangeComparisons = false;
@@ -45,6 +47,12 @@ struct TPredicateBuilderOptions {
     bool EnableComplexJsonPathFilters = false;
 };
 
+enum class EJsonParameterFunction : uint8_t {
+    None,
+    JsonExists,
+    JsonValue,
+};
+
 // A single SQL predicate for the WHERE clause
 struct TBuiltPredicate {
     std::string Sql;
@@ -55,6 +63,17 @@ struct TBuiltPredicate {
     // If true, the VIEW json_idx query must fail with an extract error.
     bool ExpectExtractError = false;
     std::string ExpectedErrorSubstr = "Failed to extract jsonpath tokens from the predicate";
+
+    // If true, both the primary-table and json_idx queries must fail.
+    bool ExpectBothPathError = false;
+    std::string ExpectedBothPathErrorSubstr;
+    // If set, json_idx is expected to fail with a different diagnostic than PRIMARY KEY.
+    std::string ExpectedIndexErrorSubstr;
+
+    // Coverage metadata for mandatory Json-parameter corpus predicates.
+    std::optional<EJsonShape> JsonParameterShape;
+    EJsonParameterFunction JsonParameterFunction = EJsonParameterFunction::None;
+    bool IsJsonParameterComposition = false;
 };
 
 // Produces a batch of SQL JSON_* predicates

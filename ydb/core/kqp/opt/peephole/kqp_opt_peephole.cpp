@@ -674,7 +674,7 @@ private:
             status = InstantTransform(*TxTransformer, expr, ctx);
 
             if (ValidateConstraints && status == TStatus::Ok) {
-                status = KqpBuildStreamingFlow(txIdx, TKqpPhysicalTx(expr), expr, streamingTxResults, *KqpCtx->Config, *KqpCtx->Tables, KqpCtx->Cluster, ctx);
+                status = KqpBuildStreamingFlow(txIdx, TKqpPhysicalTx(expr), expr, streamingTxResults, *KqpCtx->Config, *KqpCtx->Tables, KqpCtx->Cluster, KqpCtx->UserRequestContext.Get(), ctx);
 
                 if (status == TStatus::Repeat) {
                     TxTransformer->Rewind();
@@ -739,6 +739,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
 )
 {
+    YQL_ENSURE(kqpCtx);
+    YQL_ENSURE(config);
     return new TKqpTxsPeepholeTransformer(typesCtx, config, kqpCtx);
 }
 

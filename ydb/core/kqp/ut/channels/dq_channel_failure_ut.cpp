@@ -645,6 +645,127 @@ struct TNullModeTest : public TOutboundTest {
     }
 };
 
+// An early finish before the peer is known must not use up the interconnect subscription (#54893): a disconnect
+// reaches both node sessions
+struct TEarlyFinishSubscribeTest : public TSessionTest {
+
+    void Prepare() override {
+        ExpectReconciliation = true;
+        TSessionTest::Prepare();
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        // not started: no discovery yet
+        Debug0 = Service0->CreateDebugNodeState(Runtime->GetNodeId(1));
+        Debug1 = Service1->CreateDebugNodeState(Runtime->GetNodeId(0));
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 10, .MinMessageSize = 10, .MaxMessageSize = 100, .ExpectEarlyFinished = true };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true };
+
+        auto producer = Runtime->Register(new TProducerActor(Service0, 1, ProducerSettings, OutputQuotaManager), NodeIndex0);
+        auto consumer = Runtime->Register(new TConsumerActor(Service1, 1, ConsumerSettings, InputQuotaManager), NodeIndex1);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
+        UNIT_ASSERT_C(WaitFor([&]() {
+            auto descriptor = FindInputDescriptor(Debug1, 1);
+            return descriptor && descriptor->EarlyFinished.load();
+        }, TDuration::Seconds(10)), "the consumer did not early-finish");
+
+        Debug0->StartSession();
+        Debug1->StartSession();
+        UNIT_ASSERT_C(WaitFor([&]() {
+            auto descriptor = FindOutputDescriptor(Debug0, 1);
+            return descriptor && descriptor->EarlyFinished.load();
+        }, TDuration::Seconds(10)), "the early finish did not reach the output side");
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0 && Debug1->Reconciliation.load() == 0; },
+            TDuration::Seconds(5)), TStringBuilder() << "the sessions did not reconcile, log0=" << GetReconciliationLog(Debug0)
+            << ", log1=" << GetReconciliationLog(Debug1));
+
+        for (auto [from, to, control] : {std::tuple(NodeIndex0, NodeIndex1, Control0), std::tuple(NodeIndex1, NodeIndex0, Control1)}) {
+            Runtime->Send(new NActors::IEventHandle(Runtime->GetInterconnectProxy(from, to), control,
+                new NActors::TEvInterconnect::TEvPoisonSession()), from, true);
+        }
+        UNIT_ASSERT_C(WaitFor([&]() {
+            return GetReconciliationLog(Debug0).Contains("D") && GetReconciliationLog(Debug1).Contains("D");
+        }, TDuration::Seconds(10)), TStringBuilder() << "the interconnect disconnect did not reach both node sessions, log0="
+            << GetReconciliationLog(Debug0) << ", log1=" << GetReconciliationLog(Debug1));
+
+        Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
+        WaitChannel([&]() { return TStringBuilder() << "log0=" << GetReconciliationLog(Debug0) << ", log1=" << GetReconciliationLog(Debug1); });
+        CheckSensors();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// A retried discovery is answered twice, and the 2nd reply may come after the reconciliation. Here it reports
+// a resent message whose ack is lost, the queue front: a confirmation like any other
+struct TLateDiscoveryReplyTest : public TOutboundTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto details = [&]() {
+            return TStringBuilder() << SessionDetails() << ", SeqNos=" << JoinSeq(",", GetQueueSeqNos(Debug0))
+                << ", ConfirmedSeqNo=" << GetConfirmedSeqNo(Debug1) << ", pending=" << Debug1->PendingDataCount.load();
+        };
+
+        // the messages and the finish wait at the receiver
+        const int messageCount = 4;
+        const ui32 batch = messageCount + 1;
+        ProducerSettings = TWorkerSettings{ .MessageCount = messageCount, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        Debug1->PauseChannelData();
+        auto channel = StartChannel(1, false);
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->PendingDataCount.load() >= batch; }, TDuration::Seconds(10)), details());
+        auto seqNos = GetQueueSeqNos(Debug0);
+        UNIT_ASSERT_VALUES_EQUAL_C(seqNos.size(), batch, details());
+        auto genMajor = GetGenMajor(Debug0);
+        auto genMinor = GetGenMinor(Debug0);
+
+        // a minor reconciliation: its 1st reply waits at the sender, its retry in the channel service of the receiver
+        Debug0->PauseChannelAck();
+        Runtime->Send(Debug0->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(Runtime->GetNodeId(1)), NodeIndex0, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->OutputNodeGenMinor.load() == genMinor + 1; }, TDuration::Seconds(5)), details());
+        std::unique_lock serviceLock(Service1->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReconciliationCount(Debug0), 1, details());
+        UNIT_ASSERT_C(WaitFor([&]() { return GetReconciliationCount(Debug0) >= 2; }, TDuration::Seconds(5)), details());
+        auto log = GetReconciliationLog(Debug0);
+
+        // the 1st reply ends the reconciliation and the batch is resent, the acks of its 1st two messages are lost
+        Debug0->DropOkAckUpToSeqNo.store(seqNos[1]);
+        Debug0->ResumeChannelAck();
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0 && Debug1->PendingDataCount.load() >= 2 * batch; },
+            TDuration::Seconds(10)), details());
+
+        // the stale copies are dropped, the 1st two resent messages are confirmed
+        Debug1->ProcessPending(batch + 2);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetConfirmedSeqNo(Debug1) == seqNos[1] && Debug1->PendingDataCount.load() == batch - 2; },
+            TDuration::Seconds(5)), details());
+
+        // the retry is answered: RESEND, SeqNo seqNos[1]
+        auto activity = Debug1->LastPeerActivity.load();
+        serviceLock.unlock();
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->LastPeerActivity.load() > activity; }, TDuration::Seconds(5)), details());
+
+        Debug1->ResumeChannelData();
+        StartConsumer(channel);
+        WaitChannel(details);
+        WaitSettled(Debug0);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMajor(Debug0), genMajor, details());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMinor(Debug0), genMinor + 1, details());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReconciliationLog(Debug0), log, details());
+        CheckSensors();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     void LossTest(int count, const TFailureSettings& failures, bool expectResend = true) {
@@ -752,6 +873,18 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     Y_UNIT_TEST(NullModeSenderOnly2n) {
         TNullModeTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(EarlyFinishBeforeDiscoveryKeepsSubscription2n) {
+        TEarlyFinishSubscribeTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(LateDiscoveryReply2n) {
+        TLateDiscoveryReplyTest test;
         test.Local = false;
         test.Run();
     }

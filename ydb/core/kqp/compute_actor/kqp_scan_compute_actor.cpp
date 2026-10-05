@@ -40,6 +40,7 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions sched
     , BlockTrackingMode(mode)
 {
     ComputeCtx.SetQueryContext(database, std::move(userToken));
+    ComputeCtx.SetCheckpointContext(CheckpointContext);
     InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());

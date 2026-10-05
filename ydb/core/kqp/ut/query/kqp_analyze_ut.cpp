@@ -326,10 +326,10 @@ Y_UNIT_TEST(AnalyzeError) {
     }
 }
 
-Y_UNIT_TEST_TWIN(AnalyzeSampling, QueryService) {
+Y_UNIT_TEST_QUAD(AnalyzeSampling, QueryService, ColumnShard) {
     TTestEnv env(1, 1, false);
     CreateDatabase(env, "Database");
-    const auto table = PrepareMultiColumnTable(env, "Database", "Table", true);
+    const auto table = PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
     TTableClient client(env.GetDriver());
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
@@ -367,9 +367,16 @@ Y_UNIT_TEST_TWIN(AnalyzeSampling, QueryService) {
             UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(2).bytes_value()));
             const auto& metadata = payload.GetSampling();
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetRequestedRate(), 0.5);
-            UNIT_ASSERT_VALUES_EQUAL(metadata.GetEligibleUnits(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(metadata.GetSelectedUnits(), 2);
-            UNIT_ASSERT(metadata.GetSampleRows() > 0 && metadata.GetSampleRows() < ColumnTableRowsNumber);
+            if constexpr (ColumnShard) {
+                UNIT_ASSERT_VALUES_EQUAL(metadata.GetEligibleUnits(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(metadata.GetSelectedUnits(), 2);
+                UNIT_ASSERT(metadata.GetSampleRows() > 0 && metadata.GetSampleRows() < ColumnTableRowsNumber);
+            } else {
+                UNIT_ASSERT(metadata.GetMethod() == NKikimrStat::TSamplingStatistics::PK_UNIT_BERNOULLI);
+                UNIT_ASSERT(metadata.HasSeed());
+                UNIT_ASSERT(!metadata.HasEligibleUnits() && !metadata.HasSelectedUnits());
+                UNIT_ASSERT(metadata.GetSampleRows() <= ColumnTableRowsNumber);
+            }
             NKikimrStat::TSimpleColumnStatistics statistics;
             UNIT_ASSERT(statistics.ParseFromString(payload.GetData()));
             UNIT_ASSERT_VALUES_EQUAL(statistics.GetCount(), metadata.GetSampleRows());
@@ -399,11 +406,11 @@ Y_UNIT_TEST_TWIN(AnalyzeSampling, QueryService) {
     UNIT_ASSERT_VALUES_EQUAL(fullRequests, 3);
 }
 
-Y_UNIT_TEST(AnalyzeSamplingServerless) {
+Y_UNIT_TEST_TWIN(AnalyzeSamplingServerless, ColumnShard) {
     TTestEnv env(1, 1, false);
     CreateDatabase(env, "Shared", 1, true);
     CreateServerlessDatabase(env, "Database", "/Root/Shared");
-    PrepareMultiColumnTable(env, "Database", "Table", true);
+    PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
     TVector<double> requestedRates;
     auto observer = env.GetServer().GetRuntime()->AddObserver<TEvStatistics::TEvAnalyze>([&](auto& ev) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TablesSize(), 1);
@@ -425,28 +432,12 @@ Y_UNIT_TEST(AnalyzeSamplingServerless) {
     UNIT_ASSERT_VALUES_EQUAL(requestedRates[1], 1.0);
 }
 
-Y_UNIT_TEST(AnalyzeSamplingRequiresColumnTable) {
-    TTestEnv env(1, 1, false);
-    CreateDatabase(env, "Database");
-    CreateEmptyTable(env, "Database", "Table", false);
-    TTableClient client(env.GetDriver());
-    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
-    const auto execute = [&](const TString& query) {
-        return env.RunInThreadPool([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
-    };
-    const auto result = execute("ANALYZE `Root/Database/Table` SAMPLE 0.5;");
-    UNIT_ASSERT(!result.IsSuccess());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ANALYZE SAMPLE is supported only for column tables");
-    const auto full = execute("ANALYZE `Root/Database/Table` SAMPLE 1;");
-    UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
-}
-
-Y_UNIT_TEST(AnalyzeSamplingDisabled) {
+Y_UNIT_TEST_TWIN(AnalyzeSamplingDisabled, ColumnShard) {
     TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
         settings.FeatureFlags.SetEnableAnalyzeSampling(false);
     });
     CreateDatabase(env, "Database");
-    CreateEmptyTable(env, "Database", "Table", true);
+    CreateEmptyTable(env, "Database", "Table", ColumnShard);
     TTableClient client(env.GetDriver());
     auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
     const auto execute = [&](const TString& query) {
@@ -459,11 +450,11 @@ Y_UNIT_TEST(AnalyzeSamplingDisabled) {
     UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
 }
 
-Y_UNIT_TEST(RetryPreservesSampleRate) {
+Y_UNIT_TEST_TWIN(RetryPreservesSampleRate, ColumnShard) {
     TTestEnv env(1, 1, false);
     auto& runtime = *env.GetServer().GetRuntime();
     CreateDatabase(env, "Database");
-    const auto table = PrepareColumnTable(env, "Database", "Table", 4);
+    const auto table = PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
     size_t attempts = 0;
     auto forwards = runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
         if (ev->Get()->Ev->Type() != TEvStatistics::TEvAnalyze::EventType || ++attempts != 1) {

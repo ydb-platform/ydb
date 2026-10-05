@@ -152,6 +152,9 @@ namespace NKikimr {
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
+            // Pools whose leading-disk override changed. Their VDisk service-set records are resent
+            // without touching group generation.
+            THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -379,6 +382,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TUpdateStoragePoolSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);

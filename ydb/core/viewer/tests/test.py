@@ -665,6 +665,7 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'UserChunkPoolSize',
                                     'PDiskUsage',
                                     })
 
@@ -1117,6 +1118,25 @@ class TestViewer(object):
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
+
+    @pytest.mark.parametrize('node_ids', ['1,1', '1,2,1', '0,1,.'])
+    # Node 2 is absent in this cluster; 0 and '.' refer to the HTTP server's node 1.
+    def test_viewer_sysinfo_duplicate_node_ids(self, node_ids):
+        url = 'http://localhost:%s/viewer/sysinfo' % self.cluster.nodes[1].mon_port
+
+        # Viewer returns HTTP 200 even on its timeout, so the client must time out first.
+        try:
+            response = self._make_request(requests.get, url, params={
+                'node_id': node_ids,
+                'timeout': 10000,  # Viewer timeout in milliseconds.
+            }, timeout=5)  # HTTP client timeout in seconds.
+        except requests.exceptions.Timeout:
+            pytest.fail('Viewer did not respond within 5 seconds for node_id=%s' % node_ids)
+
+        response.raise_for_status()
+        result = response.json()
+
+        assert sorted(node['NodeId'] for node in result['SystemStateInfo']) == [1], result
 
     @classmethod
     def test_viewer_vdiskinfo(cls):

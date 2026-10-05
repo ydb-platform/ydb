@@ -492,6 +492,8 @@ public:                                                                         
                     VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
                 }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
+                COUNTER_INIT(HeapAllocatorSizeClass, false);
+                COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
@@ -505,6 +507,18 @@ public:                                                                         
             }
 
             COUNTER_DEF(VDiskLocalRecoveryState);
+            COUNTER_DEF(HeapAllocatorSizeClass);
+            COUNTER_DEF(HeapAllocatorStripe);
+
+            void SetHeapAllocatorStripe(bool stripe) {
+                HeapAllocatorSizeClass() = stripe ? 0 : 1;
+                HeapAllocatorStripe() = stripe ? 1 : 0;
+            }
+
+            void ClearHeapAllocatorMode() {
+                HeapAllocatorSizeClass() = 0;
+                HeapAllocatorStripe() = 0;
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

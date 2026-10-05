@@ -39,6 +39,7 @@ void TPartitionActor::CompleteStoreVolumeConfig(
     TTxPartition::TStoreVolumeConfig& args)
 {
     VolumeConfig = args.VolumeConfig;
+    ReportDiskId(ctx);
     Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
 
     AllocateDDiskBlockGroup(ctx);

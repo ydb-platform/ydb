@@ -34,6 +34,7 @@ protected:
     ui32 NumberOfRetries = 10;
     bool SchemeOnly = false;
     bool FailFast = false;
+    ui64 Threads = 0;
     TString EncryptionKey;
     TString EncryptionKeyFile;
     TString ExpectedObjectsFile;

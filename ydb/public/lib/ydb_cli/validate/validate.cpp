@@ -23,6 +23,11 @@
 #include <util/string/strip.h>
 
 #include <algorithm>
+#include <atomic>
+#include <exception>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -290,11 +295,16 @@ i64 JsonInteger(const NJson::TJsonValue& value) {
     return value.IsInteger() ? value.GetInteger() : static_cast<i64>(value.GetUInteger());
 }
 
+// Nested parallel loops run inline. A worker that is already validating an object
+// must not wait for another pool, or the two levels deadlock.
+thread_local bool InValidateWorker = false;
+
 class TValidator {
 public:
     TValidator(const IBackupStorage& storage, const TValidateSettings& settings)
         : Storage(storage)
         , Settings(settings)
+        , Threads(settings.Threads == 0 ? DefaultValidateThreads() : settings.Threads)
     {
     }
 
@@ -342,25 +352,102 @@ public:
 private:
     const IBackupStorage& Storage;
     const TValidateSettings& Settings;
+    const ui64 Threads = 1;
     TValidationReport Report;
     THashSet<TString> AllowedObjectDirs;
     THashSet<TString> Visited;
+    mutable std::mutex Mu;
 
     void Error(const TString& path, const TString& message) {
+        std::lock_guard<std::mutex> lock(Mu);
         Report.Issues.push_back({path, message});
     }
 
     void Warning(const TString& path, const TString& message) {
+        std::lock_guard<std::mutex> lock(Mu);
         Report.Warnings.push_back({path, message});
     }
 
     // Fail-fast stops on errors only. Warnings are still collected until that point.
     bool Stopped() const {
-        return Settings.FailFast && !Report.Issues.empty();
+        if (!Settings.FailFast) {
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(Mu);
+        return !Report.Issues.empty();
     }
 
     void Checked(const TString& path) {
+        std::lock_guard<std::mutex> lock(Mu);
         Report.Checked.push_back(path);
+    }
+
+    bool TryVisit(const TString& dir) {
+        std::lock_guard<std::mutex> lock(Mu);
+        return Visited.insert(dir).second;
+    }
+
+    bool WasVisited(const TString& dir) const {
+        std::lock_guard<std::mutex> lock(Mu);
+        return Visited.contains(dir);
+    }
+
+    void AllowDir(const TString& dir) {
+        std::lock_guard<std::mutex> lock(Mu);
+        AllowedObjectDirs.insert(dir);
+    }
+
+    bool IsAllowed(const TString& dir) const {
+        std::lock_guard<std::mutex> lock(Mu);
+        return AllowedObjectDirs.contains(dir);
+    }
+
+    // Runs fn(0) .. fn(count-1). At most Threads calls are in progress.
+    // With one thread, calls are in order and stop after the first error when fail-fast is set.
+    void ParallelFor(size_t count, const std::function<void(size_t)>& fn) {
+        if (count == 0) {
+            return;
+        }
+        if (InValidateWorker || Threads <= 1 || count == 1) {
+            for (size_t i = 0; i < count; ++i) {
+                if (Stopped()) {
+                    return;
+                }
+                fn(i);
+            }
+            return;
+        }
+        const size_t workers = std::min(static_cast<size_t>(Threads), count);
+        std::atomic<size_t> next{0};
+        std::exception_ptr error;
+        std::mutex errorMu;
+        std::vector<std::thread> pool;
+        pool.reserve(workers);
+        for (size_t worker = 0; worker < workers; ++worker) {
+            pool.emplace_back([&] {
+                InValidateWorker = true;
+                try {
+                    while (!Stopped()) {
+                        const size_t index = next.fetch_add(1, std::memory_order_relaxed);
+                        if (index >= count) {
+                            return;
+                        }
+                        fn(index);
+                    }
+                } catch (...) {
+                    std::lock_guard<std::mutex> lock(errorMu);
+                    if (!error) {
+                        error = std::current_exception();
+                    }
+                }
+            });
+        }
+        for (std::thread& thread : pool) {
+            thread.join();
+        }
+        if (error) {
+            std::rethrow_exception(error);
+        }
     }
 
     bool Exists(const TString& key) const {
@@ -472,10 +559,10 @@ private:
         TMaybe<bool> expectChecksums,
         void (TValidator::*check)(const TString& dir, const TString& content, bool expectChecksums))
     {
-        if (!Visited.insert(dir).second) {
+        if (!TryVisit(dir)) {
             return;
         }
-        AllowedObjectDirs.insert(dir);
+        AllowDir(dir);
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString key = JoinKey(dir, fileName);
         auto content = ReadPlainFile(key);
@@ -654,15 +741,14 @@ private:
             Error(JoinKey(dir, "metadata.json"), "changefeeds must be an array");
             return;
         }
-        for (const auto& changefeed : changefeeds.GetArray()) {
-            if (Stopped()) {
-                return;
-            }
+        const auto& changefeedItems = changefeeds.GetArray();
+        ParallelFor(changefeedItems.size(), [&](size_t index) {
+            const auto& changefeed = changefeedItems[index];
             if (!changefeed.IsMap() || !changefeed["prefix"].IsString() || !changefeed["name"].IsString()
                 || !changefeed["prefix"].GetString() || !changefeed["name"].GetString())
             {
                 Error(JoinKey(dir, "metadata.json"), "changefeed entry must have prefix and name");
-                continue;
+                return;
             }
             const TString prefix = changefeed["prefix"].GetString();
             const TString name = changefeed["name"].GetString();
@@ -681,7 +767,7 @@ private:
                 }
             }
             if (Stopped()) {
-                continue;
+                return;
             }
             const TString topicKey = JoinKey(cfDir, "topic_description.pb");
             auto topic = ReadPlainFile(topicKey);
@@ -694,7 +780,7 @@ private:
                     VerifyChecksum(topicKey, *topic, expectChecksums);
                 }
             }
-        }
+        });
     }
 
     void ValidateIndexes(const TString& dir, const NJson::TJsonValue& json, bool expectChecksums) {
@@ -706,27 +792,26 @@ private:
             Error(JoinKey(dir, "metadata.json"), "indexes must be an array");
             return;
         }
-        for (const auto& index : indexes.GetArray()) {
-            if (Stopped()) {
-                return;
-            }
-            if (!index.IsMap() || !index["export_prefix"].IsString() || !index["impl_table_prefix"].IsString()
-                || !index["export_prefix"].GetString() || !index["impl_table_prefix"].GetString())
+        const auto& indexItems = indexes.GetArray();
+        ParallelFor(indexItems.size(), [&](size_t index) {
+            const auto& item = indexItems[index];
+            if (!item.IsMap() || !item["export_prefix"].IsString() || !item["impl_table_prefix"].IsString()
+                || !item["export_prefix"].GetString() || !item["impl_table_prefix"].GetString())
             {
                 Error(JoinKey(dir, "metadata.json"), "index entry must have export_prefix and impl_table_prefix");
-                continue;
+                return;
             }
-            const TString indexDir = JoinKey(dir, index["export_prefix"].GetString());
-            AllowedObjectDirs.insert(indexDir);
+            const TString indexDir = JoinKey(dir, item["export_prefix"].GetString());
+            AllowDir(indexDir);
             ValidateTable(indexDir, expectChecksums, Nothing(), false);
-        }
+        });
     }
 
     void ValidateTable(const TString& dir, TMaybe<bool> expectChecksums, TMaybe<bool> expectCompressed, bool followIndexes) {
-        if (!Visited.insert(dir).second) {
+        if (!TryVisit(dir)) {
             return;
         }
-        AllowedObjectDirs.insert(dir);
+        AllowDir(dir);
         if (Stopped()) {
             return;
         }
@@ -915,22 +1000,20 @@ private:
         if (!Settings.SchemeOnly && !verifyChecksums) {
             Error(dir, "data file checksums are absent; content integrity cannot be verified");
         }
-        for (const auto& part : parts) {
-            if (Stopped()) {
-                return;
-            }
+        ParallelFor(parts.size(), [&](size_t index) {
+            const TDataPart& part = parts[index];
             if (part.Encrypted) {
-                continue;
+                return;
             }
             const TString plainKey = JoinKey(dir, part.PlainName);
             if (Settings.SchemeOnly) {
                 if (!verifyChecksums) {
-                    continue;
+                    return;
                 }
                 const TString sidecar = plainKey + ".sha256";
                 if (!Exists(sidecar)) {
                     Error(sidecar, "checksum sidecar is missing");
-                    continue;
+                    return;
                 }
                 try {
                     const TString expected = ChecksumToken(Storage.Read(sidecar));
@@ -940,17 +1023,17 @@ private:
                 } catch (const std::exception& ex) {
                     Error(sidecar, TStringBuilder() << "failed to read checksum: " << ex.what());
                 }
-                continue;
+                return;
             }
             if (!verifyChecksums) {
-                continue;
+                return;
             }
             try {
                 const TString digest = HashStoredFile(Storage, part.Key, part.Compressed);
                 const TString sidecar = plainKey + ".sha256";
                 if (!Exists(sidecar)) {
                     Error(sidecar, "checksum sidecar is missing");
-                    continue;
+                    return;
                 }
                 const TString expected = ChecksumToken(Storage.Read(sidecar));
                 if (!IsHex(expected)) {
@@ -961,7 +1044,7 @@ private:
             } catch (const std::exception& ex) {
                 Error(part.Key, TStringBuilder() << "failed to read data file: " << ex.what());
             }
-        }
+        });
     }
 
     void ValidateFullBackup(const TString& root, const TString& metadataKey, const TString& metadataText, const NJson::TJsonValue& json) {
@@ -1035,15 +1118,13 @@ private:
         std::sort(objects.begin(), objects.end(), [](const TMappedObject& a, const TMappedObject& b) {
             return a.Prefix < b.Prefix;
         });
-        for (const TMappedObject& object : objects) {
-            if (Stopped()) {
-                return;
-            }
+        ParallelFor(objects.size(), [&](size_t index) {
+            const TMappedObject& object = objects[index];
             const TString objectDir = JoinKey(root, object.Prefix);
             if (!ValidateObject(objectDir, checksums, expectCompressed)) {
                 Error(objectDir, TStringBuilder() << "schema object \"" << object.Source << "\" has no recognized schema file");
             }
-        }
+        });
         if (Stopped()) {
             return;
         }
@@ -1095,25 +1176,22 @@ private:
                 continue;
             }
             const TString dir = ParentKey(key);
-            if (!Visited.contains(dir)) {
+            if (!WasVisited(dir)) {
                 dirs.push_back(dir);
             }
         }
         std::sort(dirs.begin(), dirs.end());
         dirs.erase(std::unique(dirs.begin(), dirs.end()), dirs.end());
-        bool found = false;
-        for (const TString& dir : dirs) {
-            if (Stopped()) {
-                break;
+        std::atomic<bool> found{false};
+        ParallelFor(dirs.size(), [&](size_t index) {
+            if (WasVisited(dirs[index])) {
+                return;
             }
-            if (Visited.contains(dir)) {
-                continue;
+            if (ValidateObject(dirs[index], /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing())) {
+                found.store(true);
             }
-            if (ValidateObject(dir, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing())) {
-                found = true;
-            }
-        }
-        return found;
+        });
+        return found.load();
     }
 
     void CheckUnexpectedObjects(const TString& root) {
@@ -1122,7 +1200,7 @@ private:
             if (!IsSchemaObjectFileName(FileName(key))) {
                 continue;
             }
-            if (!AllowedObjectDirs.contains(ParentKey(key))) {
+            if (!IsAllowed(ParentKey(key))) {
                 unexpected.push_back(key);
             }
         }
@@ -1137,6 +1215,11 @@ private:
 };
 
 } // namespace
+
+ui64 DefaultValidateThreads() {
+    const unsigned processors = std::thread::hardware_concurrency();
+    return processors > 1 ? static_cast<ui64>(processors) - 1 : 1;
+}
 
 TVector<TString> ParseExpectedObjects(TStringBuf text) {
     TVector<TString> names;

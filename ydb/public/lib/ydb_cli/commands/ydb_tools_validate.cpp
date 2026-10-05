@@ -230,12 +230,14 @@ TMaybe<TVector<TString>> LoadExpectedObjects(const TString& path) {
 TValidateSettings MakeSettings(
     bool schemeOnly,
     bool failFast,
+    ui64 threads,
     const TString& encryptionKey,
     const TMaybe<TVector<TString>>& expectedObjects)
 {
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
     settings.FailFast = failFast;
+    settings.Threads = threads;
     settings.EncryptionKey = encryptionKey;
     settings.ExpectedObjects = expectedObjects;
     return settings;
@@ -283,6 +285,13 @@ void TCommandValidateBase::Config(TConfig& config) {
             "By default every error is reported. Warnings do not stop the check.")
         .StoreTrue(&FailFast);
 
+    Threads = DefaultValidateThreads();
+    config.Opts->AddLongOption("threads",
+            "Maximum number of threads used to validate data and metadata. "
+            "If omitted, one less than the number of available processors, but at least 1. "
+            "Same default as import file csv.")
+        .RequiredArgument("NUM").StoreResult(&Threads).DefaultValue(Threads);
+
     config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
         .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
         .Env("YDB_ENCRYPTION_KEY", false)
@@ -302,6 +311,9 @@ void TCommandValidateBase::Config(TConfig& config) {
 
 void TCommandValidateBase::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+    if (Threads == 0) {
+        throw TMisuseException() << "--threads must be greater than zero";
+    }
     Items = TItem::Parse(config, "item");
 }
 
@@ -414,7 +426,7 @@ int TCommandValidateFromS3::Run(TConfig& config) {
     InitAwsAPI();
     try {
         TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
-        const int code = PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, EncryptionKey, expectedObjects));
+        const int code = PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects));
         ShutdownAwsAPI();
         return code;
     } catch (...) {
@@ -462,7 +474,7 @@ int TCommandValidateFromNfs::Run(TConfig& config) {
     }
 
     TFsBackupStorage storage(FsPath, NumberOfRetries);
-    return PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile)));
+    return PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile)));
 }
 
 } // namespace NYdb::NConsoleClient

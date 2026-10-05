@@ -3,6 +3,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/system/types.h>
 
 #include <functional>
 
@@ -40,7 +41,13 @@ struct TValidateSettings {
     // Stop after the first error. By default every independent error is reported.
     // Warnings do not stop the check.
     bool FailFast = false;
+    // Maximum number of threads for object and data-file checks.
+    // 0 means DefaultValidateThreads(), the same rule as `ydb import file csv`.
+    ui64 Threads = 0;
 };
+
+// hardware_concurrency() - 1 when that is positive, otherwise 1.
+ui64 DefaultValidateThreads();
 
 struct TValidationIssue {
     TString Path;

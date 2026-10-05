@@ -29,7 +29,7 @@ Content validation requires those sidecars. Exports created with checksums (the 
 
 Encrypted backups (`.enc` objects or an `encryption` field in the backup metadata) are detected and rejected. The command accepts the same encryption key options as `import`, but it does not decrypt backup files.
 
-By default the command keeps going after an error and prints every error it finds. `--fail-fast` stops at the first error, including the remaining `--item` paths. A warning does not stop the check. The process exits with code 1 when at least one error was reported.
+By default the command keeps going after an error and prints every error it finds. `--fail-fast` stops at the first error, including the remaining `--item` paths. Work already running on other `--threads` can still finish. A warning does not stop the check. The process exits with code 1 when at least one error was reported.
 
 ## Command line parameters {#pars}
 
@@ -39,6 +39,7 @@ By default the command keeps going after an error and prints every error it find
 | --- | --- |
 | `--scheme-only` | Check file composition and metadata structure only. Do not read data file contents. |
 | `--fail-fast` | Stop at the first error. By default every error is reported. Warnings do not stop the check. |
+| `--threads NUM` | Maximum number of threads used to validate data and metadata. Several objects are checked at once, and within one object several data files are checked at once. Default: one less than the number of available processors, but at least 1. Same rule as [`import file csv`](./import-file.md). |
 | `--retries NUM` | Attempts to read a backup file after an I/O error. Default: `10`. |
 | `--encryption-key-file PATH` | Path to the encryption key file, same encoding as [`import s3`](./import-s3.md) / [`import nfs`](./import-nfs.md). The key can also be passed in `YDB_ENCRYPTION_KEY` as a hexadecimal string, or the file path in `YDB_ENCRYPTION_KEY_FILE`. Encrypted files are still rejected. |
 | `--item PROPERTY=VALUE,...` | Object to validate. Can be repeated. Properties: `source` (`src`, `s`) is the backup path; `destination` (`dst`, `d`) is accepted for compatibility with `import` and ignored. |

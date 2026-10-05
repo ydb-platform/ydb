@@ -1323,7 +1323,8 @@ void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const 
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
-    // The move re-arms on the driver's turn, not the tablet's.
+    SetupMetadata();
+    // The move keeps its own queue, so it re-arms on the driver's turn rather than on this one.
     if (!!MoveDataDriverId) {
         ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
     }

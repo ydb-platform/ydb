@@ -12,6 +12,7 @@
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data.
 * Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
 * Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
+* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check integrity of a full backup or a single exported table without restoring it.
 
 ## 2.35.0 ##
 

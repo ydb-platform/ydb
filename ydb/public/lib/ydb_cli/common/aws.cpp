@@ -6,6 +6,8 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/s3/S3Client.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #endif
 
@@ -96,6 +98,49 @@ public:
         }
         if (response.GetResult().GetIsTruncated()) {
             result.NextToken = TString(response.GetResult().GetNextContinuationToken());
+        }
+        return result;
+    }
+
+    bool ObjectExists(const TString& key) override {
+        auto response = Client->HeadObject(Aws::S3::Model::HeadObjectRequest()
+            .WithBucket(Bucket)
+            .WithKey(key));
+        if (response.IsSuccess()) {
+            return true;
+        }
+        const auto& error = response.GetError();
+        if (error.GetResponseCode() == Aws::Http::HttpResponseCode::NOT_FOUND
+            || error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY
+            || error.GetErrorType() == Aws::S3::S3Errors::RESOURCE_NOT_FOUND)
+        {
+            return false;
+        }
+        throw TMisuseException() << "HeadObject error: " << error.GetMessage();
+    }
+
+    TString GetObject(const TString& key) override {
+        auto response = Client->GetObject(Aws::S3::Model::GetObjectRequest()
+            .WithBucket(Bucket)
+            .WithKey(key));
+        if (!response.IsSuccess()) {
+            throw TMisuseException() << "GetObject error: " << response.GetError().GetMessage();
+        }
+        auto& body = response.GetResult().GetBody();
+        TString result;
+        char buf[1 << 16];
+        while (body) {
+            body.read(buf, sizeof(buf));
+            const auto read = body.gcount();
+            if (read > 0) {
+                result.append(buf, static_cast<size_t>(read));
+            }
+            if (body.eof()) {
+                break;
+            }
+            if (!body) {
+                throw TMisuseException() << "GetObject error: failed to read object body";
+            }
         }
         return result;
     }

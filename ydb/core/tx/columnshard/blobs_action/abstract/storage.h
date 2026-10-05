@@ -151,6 +151,10 @@ public:
         return result;
     }
 
+    bool HasUnfinishedGC() const {
+        return CurrentGCAction && !CurrentGCAction->IsCleanupFinished();
+    }
+
     void StartGC(const std::shared_ptr<IBlobsGCAction>& action) {
         AFL_VERIFY(CurrentGCAction == action);
         AFL_VERIFY(!!action && action->IsInProgress());

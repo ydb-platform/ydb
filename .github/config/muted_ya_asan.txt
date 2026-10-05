@@ -441,6 +441,7 @@ ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/library/yaml_config/ut YamlConfigValidation.ManyValuesOfOneLabelConvergeToNonBaseConfig
 ydb/library/yaml_config/ut YamlConfigValidation.ManyValuesOfOneLabelWithRedundantSelectors
+ydb/library/yaml_config/ut YamlConfigValidation.RegionReclamationPreservesCorrelationsAndRules
 ydb/library/yaml_config/ut unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout

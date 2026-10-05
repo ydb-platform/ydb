@@ -1,6 +1,6 @@
 # Parameterized queries and recompilation
 
-{{ ydb-short-name }} caches compilation results on a cluster [node](../../concepts/glossary.md#node): the [compile cache](../../concepts/glossary.md#compile-cache) reuses them only when the query **text matches exactly**. If your application builds YQL with string concatenation or formatting, each new set of values produces a **different text**, and the server recompiles it even when the SQL structure is the same.
+Query compilation takes time and resources, so {{ ydb-short-name }} provides a [compile cache](../../concepts/glossary.md#compile-cache). The compilation result is stored in the cache on a cluster [node](../../concepts/glossary.md#node) and reused only when the query **text matches exactly**. If your application builds YQL with string concatenation or formatting, each new set of values produces a **different text**, and the server recompiles it even when the SQL structure is the same.
 
 Consequences:
 

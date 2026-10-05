@@ -25,9 +25,12 @@ public:
 
     TRateLimiterRequest(IRequestOpCtx* msg)
         : TBase(msg)
-        , CoordinationNodePath(this->Request_->NormalizePath(
-            this->GetProtoRequest()->coordination_node_path()))
     {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        CoordinationNodePath_ = this->Request_->GetDatabaseRelativePath(this->GetProtoRequest()->coordination_node_path());
+    }
 
     static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         static const TSet<TString> supportedFields{
@@ -103,9 +106,14 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
-
-        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
+        const auto rawDatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
+        const auto databaseName = CanonizePath(rawDatabaseName);
+        const auto coordinationNodePath = CanonizePath(GetCoordinationNodePath());
+        const bool insideDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? databaseName.empty() || coordinationNodePath == databaseName
+                || coordinationNodePath.StartsWith(databaseName + '/')
+            : GetCoordinationNodePath().StartsWith(rawDatabaseName);
+        if (!insideDatabase) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()
@@ -118,11 +126,11 @@ public:
 
 protected:
     const TString& GetCoordinationNodePath() const {
-        return CoordinationNodePath;
+        return CoordinationNodePath_;
     }
 
 private:
-    const TString CoordinationNodePath;
+    TString CoordinationNodePath_;
 };
 
 template <class TEvRequest>

@@ -491,8 +491,8 @@ protected:
 class TCommandWithPath {
 protected:
     // Get path from free argument and adjust it
-    void ParsePath(const TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional = false);
-    void AdjustPath(const TClientCommand::TConfig& config);
+    void ParsePath(TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional = false);
+    void AdjustPath(TClientCommand::TConfig& config);
 
     TString Path;
 };

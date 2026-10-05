@@ -265,13 +265,14 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
 
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
     {
-        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        auto exportSettings = traits.MakeExportSettings(f, "RecursiveFolderProcessing");
         exportSettings
                 .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
                 .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
@@ -315,9 +316,9 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     }
 
     {
-        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        auto importSettings = traits.MakeImportSettings(f, "RestorePrefix");
         importSettings
-                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
+                .AppendItem(traits.MakeImportItem("Table123", "dir1/dir2//Table2"))
                 .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table321", "Table0"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
@@ -358,11 +359,12 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExplicitDuplicatedItemsImpl(TBackupTestFixture& f, bool /*isOlap*/) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
         .AppendItem(typename TExportSettings::TItem{.Src = "dir2"})
-        .AppendItem(typename TExportSettings::TItem{.Src = "/dir2"})
+        .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2"})
         .AppendItem(typename TExportSettings::TItem{.Src = "dir2/"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::BAD_REQUEST);
@@ -370,6 +372,7 @@ void ExplicitDuplicatedItemsImpl(TBackupTestFixture& f, bool /*isOlap*/) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
@@ -730,6 +733,68 @@ void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportWithSiblingPrefixOutsideCommonSourcePathImpl(TBackupTestFixture& f) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    TBackupTraits<TExportSettings> traits;
+
+    auto createResult = f.YdbQueryClient().ExecuteQuery(R"sql(
+        CREATE TABLE `/Root/RecursiveFolderProcessing2/Table0` (
+            key Uint32 NOT NULL,
+            PRIMARY KEY (key)
+        );
+        CREATE TABLE `/Root/RecursiveFolderProcessing/Root/RecursiveFolderProcessing2/Table0` (
+            key Uint32 NOT NULL,
+            PRIMARY KEY (key)
+        );
+    )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+
+    auto writeResult = f.YdbQueryClient().ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/RecursiveFolderProcessing/Table0` (key) VALUES (1u);
+        UPSERT INTO `/Root/RecursiveFolderProcessing2/Table0` (key) VALUES (2u);
+    )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+    auto exportSettings = traits.MakeExportSettings(f, "RecursiveFolderProcessing");
+    exportSettings
+        .AppendItem(typename TExportSettings::TItem{.Src = "Table0"})
+        .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing2/Table0"});
+    f.WaitOpSuccess(traits.Export(f, exportSettings));
+
+    // The outside path keeps its full database path in the backup mapping.
+    auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+    f.WaitOpSuccess(traits.Import(f, importSettings));
+    f.ValidateHasYdbTables({
+        "/Root/RestorePrefix/Table0",
+        "/Root/RestorePrefix/Root/RecursiveFolderProcessing2/Table0",
+    });
+
+    auto readResult = f.YdbQueryClient().ExecuteQuery(R"sql(
+        SELECT key FROM `/Root/RestorePrefix/Table0`;
+        SELECT key FROM `/Root/RestorePrefix/Root/RecursiveFolderProcessing2/Table0`;
+    )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(readResult.IsSuccess(), readResult.GetIssues().ToString());
+    for (ui32 i = 0; i < 2; ++i) {
+        auto resultSet = readResult.GetResultSetParser(i);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint32(), i + 1);
+    }
+    for (bool explicitDestination : {false, true}) {
+        auto collision = traits.MakeExportSettings(f, "RecursiveFolderProcessing");
+        collision
+            .AppendItem(typename TExportSettings::TItem{
+                .Src = "Root/RecursiveFolderProcessing2/Table0", .Dst = explicitDestination ? "first" : ""})
+            .AppendItem(typename TExportSettings::TItem{
+                .Src = "/Root/RecursiveFolderProcessing2/Table0", .Dst = explicitDestination ? "second" : ""});
+        auto operation = f.WaitOpStatus(traits.Export(f, collision), EStatus::CANCELLED);
+        UNIT_ASSERT(operation);
+        UNIT_ASSERT_STRING_CONTAINS(operation->Status().GetIssues().ToString(), "Duplicate backup source path");
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -975,7 +1040,7 @@ void EmptyDirectoryIsOkImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1/dir2");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table2"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2"})
             .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/dir3"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
@@ -1101,6 +1166,7 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
     const TString prefix = traits.FilePrefix();
@@ -1180,7 +1246,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     {
         auto exportSettings = traits.MakeExportSettingsNoPrefix(f, "/Root/RecursiveFolderProcessing/dir1");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table1", .Dst = "Prefix/t1"});
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/Table1", .Dst = "Prefix/t1"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 
@@ -1525,6 +1591,7 @@ void ExportWholeDatabaseWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void EncryptedExportWithExplicitDestinationPathImpl(TBackupTestFixture& f, bool isOlap) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
     const TString encExt = traits.EncryptedFileExtension();
@@ -2025,6 +2092,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ExportWithCommonSourcePath) {
         ExportWithCommonSourcePathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ExportWithSiblingPrefixOutsideCommonSourcePath) {
+        ExportWithSiblingPrefixOutsideCommonSourcePathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this);
+    }
     Y_UNIT_TEST(ExportWithExcludeRegexps) {
         ExportWithExcludeRegexpsImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2098,6 +2168,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportWithCommonSourcePath, IsOlap) {
         ExportWithCommonSourcePathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST(ExportWithSiblingPrefixOutsideCommonSourcePath) {
+        ExportWithSiblingPrefixOutsideCommonSourcePathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportWithExcludeRegexps, IsOlap) {

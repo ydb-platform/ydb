@@ -3258,6 +3258,15 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
+            if (params.Dlq) {
+                auto recreated = fixture.CreateQueue({
+                    {"QueueName", std::format("{}@{}", topicName.c_str(), consumerName(0))},
+                    {"Attributes", NJson::TJsonMap{
+                        {"FifoQueue", params.Fifo ? "true" : "false"},
+                        {"RedrivePolicy", json["Attributes"]["RedrivePolicy"]}}}
+                });
+                UNIT_ASSERT_VALUES_EQUAL(GetPathFromQueueUrlMap(recreated), resultQueueUrl + (params.Fifo ? ".fifo" : ""));
+            }
         }
 
         {
@@ -3372,6 +3381,33 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionShrinked, TFixture) {
         TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueAttributesAbsoluteDlq, TFixture) {
+        auto driver = MakeDriver(*this);
+        UNIT_ASSERT(CreateDlqTopic(driver));
+        NYdb::NTopic::TCreateTopicSettings settings;
+        auto& consumer = settings.BeginAddSharedConsumer("consumer");
+        auto&& dlq = consumer.BeginDeadLetterPolicy();
+        dlq.Enable();
+        dlq.BeginCondition().MaxProcessingAttempts(5).EndCondition();
+        dlq.MoveAction("/Root/DeadLetterQueue");
+        dlq.EndDeadLetterPolicy();
+        consumer.EndAddConsumer();
+        UNIT_ASSERT(CreateTopic(driver, "topic", settings));
+
+        for (bool enableRelativePaths : {false, true}) {
+            ActorRuntime->GetAppData().FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+            auto json = GetQueueAttributes({
+                {"QueueUrl", "/v1/5//Root/5/topic/8/consumer"},
+                {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}},
+            });
+            NJson::TJsonValue policy;
+            UNIT_ASSERT(NJson::ReadJsonTree(json["Attributes"]["RedrivePolicy"].GetString(), &policy));
+            UNIT_ASSERT_VALUES_EQUAL(policy["deadLetterTargetArn"].GetString(), enableRelativePaths
+                ? "yrn:yc:ymq:ru-central1::/v1/5//Root/15/DeadLetterQueue/8/consumer"
+                : "yrn:yc:ymq:ru-central1::/v1/5//Root/21//Root/DeadLetterQueue/8/consumer");
+        }
     }
 
     Y_UNIT_TEST_F(TestCreateQueue, TFixture) {

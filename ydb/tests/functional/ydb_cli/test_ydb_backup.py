@@ -1484,6 +1484,8 @@ class TestRestoreNoData(BaseTestBackupInFiles):
 
 
 class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
+    enable_relative_paths = False
+
     @classmethod
     def setup_class(cls):
         cls.cluster = cls._start_cluster(KikimrConfigGenerator(
@@ -1491,7 +1493,7 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
                 "enable_database_admin"
-            ],
+            ] + (["enable_relative_paths"] if cls.enable_relative_paths else []),
             domain_login_only=False,
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
@@ -1568,10 +1570,10 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
         )
 
     @classmethod
-    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[]):
+    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[], database=None):
         cls.create_backup(
             [
-                "--database", cls.database,
+                "--database", cls.database if database is None else database,
                 "--user", "dbadmin1", "--no-password",
                 "admin", "database", "dump",
             ],
@@ -1629,7 +1631,7 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
     def test_database_backup(self):
         self.setup_sample_data()
 
-        self.create_database_backup(expected_files=[
+        expected_files = [
             # database metadata
             "database.pb",
             "permissions.pb",
@@ -1702,7 +1704,16 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
             ".sys/udf_modules/system_view.pb",
             ".sys/udf_modules/permissions.pb",
-        ])
+        ]
+        slashless_database = (
+            os.path.relpath(self.database, self.root_dir) if self.enable_relative_paths else self.database.lstrip("/")
+        )
+        for index, database in enumerate((self.database, slashless_database)):
+            self.create_database_backup(expected_files, output=f"backup_files_dir_{index}", database=database)
+
+
+class TestDatabaseBackupRelativePaths(TestDatabaseBackup):
+    enable_relative_paths = True
 
 
 class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
@@ -1926,13 +1937,13 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
 
 class TestRestoreReplaceOption(BaseTestBackupInFiles):
-    def ydb_cli(self, args):
+    def ydb_cli(self, args, database="/Root"):
         return yatest.common.execute(
             [
                 backup_bin(),
                 "-vvv",
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
+                "--database", database,
             ]
             + args
         )
@@ -2059,6 +2070,22 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
         )
+
+        # A relative destination is resolved against the database.
+        source_path = "/Root/table"
+        restored_path = "/Root/relative_restoration/point/table"
+        self.ydb_cli([
+            "tools", "restore", "--path", "relative_restoration/point", "--input", backup_files_dir,
+        ], database="/Root")
+        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
+
+        self.delete_some_rows(session, restored_path)
+        # A slashless cluster-root prefix is another relative path component.
+        restored_path = "/Root/Root/relative_restoration/point/table"
+        self.ydb_cli([
+            "tools", "restore", "--path", "Root/relative_restoration/point", "--input", backup_files_dir, "--replace",
+        ], database="/Root")
+        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
 
 
 class TestReplaceSysACLOption(BaseTestBackupInFiles):

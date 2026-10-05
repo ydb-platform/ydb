@@ -1,9 +1,9 @@
 #include "check_dlq_topics.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -41,10 +41,6 @@ TString GetSchemeDlqTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consum
         return {};
     }
     return dlq;
-}
-
-TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
-    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 bool IsCdcDlqTarget(const NDescriber::TTopicInfo& info) {
@@ -105,6 +101,7 @@ public:
                     NACLib::EAccessRights::UpdateRow
                 ),
                 .ForceSyncVersion = true,
+                .EnableRelativePaths = Settings.EnableRelativePaths,
             }
         ));
     }
@@ -199,13 +196,15 @@ private:
 
 absl::flat_hash_set<TString> CollectDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database
+    const TString& database,
+    bool enableRelativePaths
 ) {
     absl::flat_hash_set<TString> result;
     for (const auto& consumer : config.GetConsumers()) {
         const auto dlq = GetSchemeDlqTopicPath(consumer);
         if (!dlq.empty()) {
-            result.insert(NormalizeDlqTopicPath(dlq, database));
+            result.insert(NormalizeDlqTopicPath(dlq, database,
+                enableRelativePaths && HasAppData() && AppData()->FeatureFlags.GetEnableRelativePaths()));
         }
     }
     return result;
@@ -214,10 +213,11 @@ absl::flat_hash_set<TString> CollectDlqTopicPaths(
 absl::flat_hash_set<TString> CollectNewDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& newConfig,
     const NKikimrPQ::TPQTabletConfig& oldConfig,
-    const TString& database
+    const TString& database,
+    bool enableRelativePaths
 ) {
-    auto result = CollectDlqTopicPaths(newConfig, database);
-    for (const auto& path : CollectDlqTopicPaths(oldConfig, database)) {
+    auto result = CollectDlqTopicPaths(newConfig, database, enableRelativePaths);
+    for (const auto& path : CollectDlqTopicPaths(oldConfig, database, enableRelativePaths)) {
         result.erase(path);
     }
     return result;
@@ -230,7 +230,7 @@ IActor* CreateCheckDlqTopicsActorIfNeeded(
     const NKikimrPQ::TPQTabletConfig& oldConfig,
     const TCheckDlqTopicsSettings& settings
 ) {
-    auto dlqPaths = CollectNewDlqTopicPaths(newConfig, oldConfig, databasePath);
+    auto dlqPaths = CollectNewDlqTopicPaths(newConfig, oldConfig, databasePath, settings.EnableRelativePaths);
     if (dlqPaths.empty()) {
         return nullptr;
     }

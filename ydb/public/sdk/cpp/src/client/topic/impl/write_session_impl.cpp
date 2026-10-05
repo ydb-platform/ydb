@@ -1,6 +1,7 @@
 #include "write_session_impl.h"
 
 #include "deferred_publication_ack_tracker.h"
+#include "topic_path.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
@@ -333,7 +334,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
 }
 
 std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
-    if (topic.starts_with(dbPath)) {
+    if (!dbPath.starts_with('/') || topic.starts_with('/')) {
         return std::string(topic);
     }
     std::string full;
@@ -341,9 +342,6 @@ std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
     full.append(dbPath);
     if (!full.ends_with('/')) {
         full.push_back('/');
-    }
-    if (topic.starts_with('/')) {
-        topic = topic.substr(1);
     }
     full.append(topic);
     return full;

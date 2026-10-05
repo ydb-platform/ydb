@@ -2,6 +2,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/base/statestorage.h>
@@ -12,6 +13,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 
 
 using namespace NKikimr;
@@ -553,6 +555,18 @@ namespace NKafka::NTests {
     }
 
     Y_UNIT_TEST_SUITE(RequestUtilityActors) {
+        Y_UNIT_TEST_TWIN(TopicPathsRespectRelativePathsFlag, enableRelativePaths) {
+            TActorSystemStub actorSystem;
+            actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+            UNIT_ASSERT_VALUES_EQUAL(NKafka::NormalizePath("/Root/db", "topic"), "/Root/db/topic");
+            UNIT_ASSERT_VALUES_EQUAL(NKafka::NormalizePath("/Root/db", "Root/db/topic"),
+                "/Root/db/Root/db/topic");
+            UNIT_ASSERT_VALUES_EQUAL(NKafka::NormalizePath("/Root/db", "/Root/other/topic"),
+                enableRelativePaths ? "/Root/other/topic" : "/Root/db/Root/other/topic");
+            UNIT_ASSERT_VALUES_EQUAL(NKafka::GetTopicNameWithoutDb("/Root/db", "/Root/other/topic"),
+                enableRelativePaths ? "/Root/other/topic" : "Root/other/topic");
+        }
+
         Y_UNIT_TEST(DescribeConfigs) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
 

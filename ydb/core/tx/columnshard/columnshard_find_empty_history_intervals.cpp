@@ -276,7 +276,7 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
             auto it = scan.Intervals.upper_bound({ id.Channel(), id.Generation() });
             if (it != scan.Intervals.begin()) {
                 --it;
-                const auto& [key, interval] = *it;
+                const auto [key, interval] = *it;
                 if (key.Channel == id.Channel() && id.Generation() < interval.To && blob.GetDsGroup() == interval.Group) {
                     scan.Intervals.erase(it);
                 }

@@ -809,6 +809,7 @@ message TDDiskTabletListResponse {
         // Maximum underlying DDisk owner occupancy across all assigned DDisks.
         // Absent if any assigned DDisk has no valid, available monitoring sample.
         optional double DiskUsage = 8;
+        optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
     }
 
     reserved 2;
@@ -858,6 +859,9 @@ message TDDiskDiskListResponse {
         optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
         optional uint32 DDiskTabletCount = 8;
         optional uint32 PersistentBufferTabletCount = 9;
+        optional string StoragePoolName = 10;
+        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string PersistentBufferId = 12; // stable service actor ID
 
     }
 

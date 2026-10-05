@@ -1,5 +1,6 @@
 #include "testlib/storage_transport_test_fixture.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/fake_direct_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
@@ -81,7 +82,8 @@ TGuardedSgList MakeSgList(TString& buffer)
 void CheckDirectWriteChecksums(
     TStorageTransportTestFixture& fixture,
     bool directSession,
-    bool enableChecksums)
+    bool enableChecksums,
+    const TBlockChecksums& suppliedChecksums = {})
 {
     auto executor = fixture.MakeExecutor();
     auto transport = std::make_shared<TICStorageTransportTestAdapter>(
@@ -110,7 +112,7 @@ void CheckDirectWriteChecksums(
     ui32 writeRequests = 0;
     TString observedPayload;
     TVector<ui64> observedChecksums;
-    fixture.Runtime->SetObserverFunc(
+    const auto previousObserver = fixture.Runtime->SetObserverFunc(
         [&](TAutoPtr<NActors::IEventHandle>& ev)
         {
             if (ev->GetTypeRewrite() == NDDisk::TEvWrite::EventType) {
@@ -124,12 +126,18 @@ void CheckDirectWriteChecksums(
             }
             return NActors::TTestActorRuntime::EEventAction::PROCESS;
         });
+    // Fixture TearDown drains the runtime after this function returns.
+    Y_DEFER
+    {
+        fixture.Runtime->SetObserverFunc(previousObserver);
+    };
 
     auto future = transport->WriteToDDisk(
         connection,
         NDDisk::TBlockSelector{0, 0, DefaultBlockSize * 2},
         NDDisk::TWriteInstruction(0),
         MakeSgList(writeBuf),
+        suppliedChecksums,
         nullptr);
     fixture.WaitFuture(executor, future, WaitTimeout);
 
@@ -138,17 +146,151 @@ void CheckDirectWriteChecksums(
         NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
     UNIT_ASSERT_VALUES_EQUAL(observedPayload, writeBuf);
-    if (enableChecksums) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            observedChecksums.size(),
-            expectedChecksums.size());
-        for (size_t i = 0; i < expectedChecksums.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(
-                observedChecksums[i],
-                expectedChecksums[i]);
+    TVector<ui64> expected;
+    if (!suppliedChecksums.empty()) {
+        expected = suppliedChecksums;
+        // The supplied values must not be the real hashes, so a transport
+        // that recomputes them fails this check.
+        bool differsFromPayload = false;
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), expectedChecksums.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            if (expected[i] != expectedChecksums[i]) {
+                differsFromPayload = true;
+            }
         }
+        UNIT_ASSERT(differsFromPayload);
+    } else if (enableChecksums) {
+        expected.assign(expectedChecksums.begin(), expectedChecksums.end());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(observedChecksums.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], expected[i]);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(
+        transport->GetFakeDirectSessionSentEventCount(),
+        directSession ? 1u : 0u);
+}
+
+enum class EBufferWrite
+{
+    // One TEvWritePersistentBuffer.
+    OneBuffer,
+
+    // One TEvWritePersistentBuffers covering every stub PBuffer.
+    ManyBuffers,
+};
+
+// Sends an 8 KiB PBuffer write with checksums {1, 2} and checks that the
+// DDisk event carries those values rather than hashes of the payload.
+void CheckSuppliedPBufferChecksums(
+    TStorageTransportTestFixture& fixture,
+    bool directSession,
+    EBufferWrite write)
+{
+    auto executor = fixture.MakeExecutor();
+    auto transport = std::make_shared<TICStorageTransportTestAdapter>(
+        fixture.Runtime.get(),
+        /*enableChecksums=*/true);
+    if (directSession) {
+        transport->EnableFakeDirectSession();
+    }
+
+    const auto& pbufferId = transport->GetPBufferIds()[0];
+    auto connect = transport->Connect(MakePBufferConnection(pbufferId));
+    fixture.WaitFuture(executor, connect.ConnectFuture, WaitTimeout);
+    UNIT_ASSERT(
+        connect.ConnectFuture.GetValueSync().GetStatus() ==
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+    auto connection = MakePBufferConnection(
+        pbufferId,
+        connect.ConnectFuture.GetValueSync().GetDDiskInstanceGuid());
+
+    TString writeBuf =
+        TString(DefaultBlockSize, 'A') + TString(DefaultBlockSize, 'B');
+    const TBlockChecksums supplied{1, 2};
+    const auto realChecksums =
+        NDDisk::CalculatePayloadChecksums(TRope(writeBuf));
+    UNIT_ASSERT_VALUES_EQUAL(realChecksums.size(), supplied.size());
+    const bool differsFromPayload =
+        realChecksums[0] != supplied[0] || realChecksums[1] != supplied[1];
+    UNIT_ASSERT(differsFromPayload);
+
+    const auto eventType = write == EBufferWrite::OneBuffer
+                               ? NDDisk::TEvWritePersistentBuffer::EventType
+                               : NDDisk::TEvWritePersistentBuffers::EventType;
+
+    ui32 writeRequests = 0;
+    TVector<ui64> observedChecksums;
+    const auto previousObserver = fixture.Runtime->SetObserverFunc(
+        [&](TAutoPtr<NActors::IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() != eventType) {
+                return NActors::TTestActorRuntime::EEventAction::PROCESS;
+            }
+            ++writeRequests;
+            if (write == EBufferWrite::OneBuffer) {
+                auto* msg = ev->Get<NDDisk::TEvWritePersistentBuffer>();
+                observedChecksums.assign(
+                    msg->Record.GetChecksums().begin(),
+                    msg->Record.GetChecksums().end());
+            } else {
+                auto* msg = ev->Get<NDDisk::TEvWritePersistentBuffers>();
+                observedChecksums.assign(
+                    msg->Record.GetChecksums().begin(),
+                    msg->Record.GetChecksums().end());
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+    // Fixture TearDown drains the runtime after this function returns.
+    Y_DEFER
+    {
+        fixture.Runtime->SetObserverFunc(previousObserver);
+    };
+
+    if (write == EBufferWrite::OneBuffer) {
+        auto future = transport->WriteToPBuffer(
+            connection,
+            NDDisk::TBlockSelector{0, 0, DefaultBlockSize * 2},
+            /*lsn=*/7,
+            NDDisk::TWriteInstruction(0),
+            MakeSgList(writeBuf),
+            supplied,
+            nullptr);
+        fixture.WaitFuture(executor, future, WaitTimeout);
+        UNIT_ASSERT(
+            future.GetValueSync().GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     } else {
-        UNIT_ASSERT(observedChecksums.empty());
+        auto done = NewPromise<void>();
+        transport->WriteToManyPBuffers(
+            connection,
+            NDDisk::TBlockSelector{0, 0, DefaultBlockSize * 2},
+            /*lsn=*/7,
+            NDDisk::TWriteInstruction(0),
+            ToProto(transport->GetPBufferIds()),
+            TDuration::Seconds(1),
+            MakeSgList(writeBuf),
+            supplied,
+            nullptr,
+            [&](const auto& result, auto)
+            {
+                for (const auto& single: result.GetResult()) {
+                    UNIT_ASSERT(
+                        single.GetResult().GetStatus() ==
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                }
+                if (!done.HasValue()) {
+                    done.SetValue();
+                }
+            });
+        fixture.WaitFuture(executor, done.GetFuture(), WaitTimeout);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(observedChecksums.size(), supplied.size());
+    for (size_t i = 0; i < supplied.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], supplied[i]);
     }
     UNIT_ASSERT_VALUES_EQUAL(
         transport->GetFakeDirectSessionSentEventCount(),
@@ -188,6 +330,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(buffer),
+            /*checksums=*/{},
             nullptr);
         WaitFuture(executor, future, WaitTimeout);
         UNIT_ASSERT(
@@ -235,6 +378,70 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             /*enableChecksums=*/false);
     }
 
+    // {1, 2} are not the XXH3 hashes of the payload. Both paths must forward
+    // them verbatim, including when the transport's own checksum flag is off.
+    Y_UNIT_TEST_F(
+        ActorPathForwardsSuppliedWriteChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/false,
+            /*enableChecksums=*/true,
+            TBlockChecksums{1, 2});
+    }
+
+    Y_UNIT_TEST_F(
+        DirectSessionForwardsSuppliedWriteChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/true,
+            /*enableChecksums=*/false,
+            TBlockChecksums{1, 2});
+    }
+
+    Y_UNIT_TEST_F(
+        ActorPathForwardsSuppliedPBufferChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckSuppliedPBufferChecksums(
+            *this,
+            /*directSession=*/false,
+            EBufferWrite::OneBuffer);
+    }
+
+    Y_UNIT_TEST_F(
+        DirectSessionForwardsSuppliedPBufferChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckSuppliedPBufferChecksums(
+            *this,
+            /*directSession=*/true,
+            EBufferWrite::OneBuffer);
+    }
+
+    Y_UNIT_TEST_F(
+        ActorPathForwardsSuppliedWriteToManyChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckSuppliedPBufferChecksums(
+            *this,
+            /*directSession=*/false,
+            EBufferWrite::ManyBuffers);
+    }
+
+    Y_UNIT_TEST_F(
+        DirectSessionForwardsSuppliedWriteToManyChecksums,
+        TStorageTransportTestFixture)
+    {
+        CheckSuppliedPBufferChecksums(
+            *this,
+            /*directSession=*/true,
+            EBufferWrite::ManyBuffers);
+    }
+
     // With a fake IDirectSession injected, WriteToDDisk / ReadFromDDisk go
     // through the direct-session Send + cookie-demux path and echo payload.
     Y_UNIT_TEST_F(DirectPathWriteAndRead, TStorageTransportTestFixture)
@@ -261,6 +468,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr);
         WaitFuture(executor, writeFuture, WaitTimeout);
         UNIT_ASSERT(
@@ -304,6 +512,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr);
         UNIT_ASSERT(future.HasValue());
         UNIT_ASSERT(
@@ -335,6 +544,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             /*lsn=*/42,
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr);
         WaitFuture(executor, writeFuture, WaitTimeout);
         UNIT_ASSERT(
@@ -393,6 +603,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             protoIds,
             TDuration::Seconds(1),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr,
             [&](const auto& result, auto)
             {
@@ -454,6 +665,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             protoIds,
             TDuration::Seconds(1),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr,
             [&](const auto& result, auto)
             {
@@ -523,6 +735,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeBuf),
+            /*checksums=*/{},
             nullptr);
         WaitFuture(executor, future, WaitTimeout);
         UNIT_ASSERT(
@@ -663,6 +876,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeA),
+            /*checksums=*/{},
             nullptr);
         WaitFuture(executor, writeAFuture, WaitTimeout);
 
@@ -675,6 +889,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NDDisk::TBlockSelector{0, DefaultBlockSize, DefaultBlockSize},
             NDDisk::TWriteInstruction(0),
             MakeSgList(writeB),
+            /*checksums=*/{},
             nullptr);
 
         TString readA(DefaultBlockSize, '\0');

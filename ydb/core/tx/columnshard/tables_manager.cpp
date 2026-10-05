@@ -478,8 +478,7 @@ void TTablesManager::DropTable(
     } else {
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
     }
-    // GC looks up this key using the remaining aliases' maximum drop snapshot.
-    // Register it after removing the dropped alias, which may change that maximum.
+    // Removing the path can change GetDropVersionVerified(), so register the table for cleanup afterward.
     if (table->IsDropped()) {
         AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
     }

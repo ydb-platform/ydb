@@ -77,7 +77,7 @@ message TTableServiceConfig {
         // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
         // As with every field of this section, a dynamic config item that carries the section without the field
         // resets it to the default.
-        optional bool EnableMemoryArena = 35 [default = true];
+        optional bool EnableMemoryArena = 35 [default = false];
         // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
         // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
         // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
@@ -415,7 +415,7 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
-    optional bool AllowMultiBroadcasts = 79 [default = false, (InvalidateCompileCache) = true];
+    optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = true, (InvalidateCompileCache) = true];
 
@@ -444,7 +444,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -453,7 +453,7 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 , (InvalidateCompileCache) = true];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 , (InvalidateCompileCache) = true];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true, (InvalidateCompileCache) = true];
 
@@ -490,7 +490,7 @@ message TTableServiceConfig {
 
     optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
-    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
@@ -498,7 +498,7 @@ message TTableServiceConfig {
     optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216]; // deprecated
     optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864]; // deprecated
 
-    optional uint32 DqChannelVersion = 114 [ default = 1, (InvalidateCompileCache) = true];
+    optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
 
     optional bool EnableDiscardSelect = 115 [default = true, (InvalidateCompileCache) = true];
 
@@ -571,7 +571,7 @@ message TTableServiceConfig {
         // Channels tell their consumers and producers what changed, rather than being polled: a union of inputs
         // visits the channels which have something for it, and a compute actor checks its output channels for
         // finish only once one of them has. Kill switch: off, the channels are polled as before
-        optional bool EnableChannelNotifications = 10 [default = true];
+        optional bool EnableChannelNotifications = 10 [default = false];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
@@ -596,7 +596,7 @@ message TTableServiceConfig {
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableSmallComputeMemoryAllocations = 143 [default = false];
+    optional bool EnableSmallComputeMemoryAllocations = 143 [default = true];
 
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = true];
@@ -621,8 +621,8 @@ message TTableServiceConfig {
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];
 
     // Fallback to legacy optimizer on data manipulation queries
-    optional bool EnableFallbackOnDML = 150 [default = false];
+    optional bool EnableFallbackOnDML = 150 [default = true, (InvalidateCompileCache) = true];
 
     // Fallback to legacy optimizer on multiple statements in a query
-    optional bool EnableFallbackOnMultipleStatements = 151 [default = false];
+    optional bool EnableFallbackOnMultipleStatements = 151 [default = true, (InvalidateCompileCache) = true];
 };

@@ -15,7 +15,5 @@ items:
   href: export-nfs.md
 - name: Загрузка из NFS
   href: import-nfs.md
-- name: Проверка резервной копии
-  href: tools-validate.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md

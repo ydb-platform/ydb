@@ -1,0 +1,9 @@
+LIBRARY()
+SRCS(provider.cpp)
+PEERDIR(
+    yql/essentials/core
+    yql/essentials/providers/common/structured_token
+    library/cpp/threading/future
+)
+END()
+RECURSE_FOR_TESTS(ut)

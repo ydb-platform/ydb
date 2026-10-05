@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
+#include <ydb/library/yql/providers/common/message_stream/partition.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
@@ -13,27 +14,7 @@ namespace NYql::NDq::NInternal {
 
 class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
-    struct TPartitionInfo {
-        std::optional<ui64> Offset;             // offset of next event.
-        std::optional<ui64> EndOffset;          // end offset in topic on start.
-        TMaybe<TInstant> EndWriteTime;          // from predicate.
-        TInstant LastMessageWriteTime;
-
-        bool IsFinishedInTableMode() {
-            if (!EndOffset                      // Not connected yet.
-                && !EndWriteTime) {
-                return false;
-            }
-            bool endByOffset =
-                EndOffset
-                && (*EndOffset == 0             // No data in partition on start.
-                    || (Offset && *EndOffset <= *Offset));
-            if (endByOffset) {
-                return true;
-            }
-            return EndWriteTime && *EndWriteTime <= LastMessageWriteTime;
-        }
-    };
+    using TPartitionInfo = NMessageStream::TPartitionProgress;
 
     const ui64 InputIndex = 0;
     THashMap<TPartitionKey, TPartitionInfo> Partitions;

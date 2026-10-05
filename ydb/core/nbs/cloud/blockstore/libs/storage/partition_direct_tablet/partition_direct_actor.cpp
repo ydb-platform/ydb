@@ -240,15 +240,15 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
     Die(ctx);
 }
 
-void TPartitionActor::ReportTabletState(const TActorContext& ctx)
+void TPartitionActor::ReportDiskId(const TActorContext& ctx)
 {
     auto service =
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
     auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(),
-        STATE_WORK);
+        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+    request->Record.SetTabletId(TabletID());
+    request->Record.SetNbsDiskId(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }

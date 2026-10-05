@@ -142,7 +142,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return true;
     }
 
-    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
+    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TString& owner, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         AFL_ENSURE(oldStreamingQueryInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
 
@@ -153,11 +153,65 @@ class TAlterStreamingQuery : public TSubOperation {
             .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
         });
 
+        auto& properties = *streamingQueryInfo->Properties.MutableProperties();
+
         if (!Transaction.GetReplaceIfExists()) {
-            auto& properties = *streamingQueryInfo->Properties.MutableProperties();
             for (const auto& [property, value] : oldStreamingQueryInfo->Properties.GetProperties()) {
                 properties.emplace(property, value);
             }
+        }
+
+        // Always preserve the original creator and track who last modified the query
+        const auto& oldProperties = oldStreamingQueryInfo->Properties.GetProperties();
+        if (const auto it = oldProperties.find("__created_by"); it != oldProperties.end()) {
+            properties["__created_by"] = it->second;
+        }
+        const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
+        const bool isFinalization = oldStreamingQueryInfo->OperationOwnerActorId && !info.HasOperationOwnerActorId();
+        if (isFinalization) {
+            // Completing an operation must not replace its user's attribution with the service identity.
+            if (const auto it = oldProperties.find("__modified_by"); it != oldProperties.end()) {
+                properties["__modified_by"] = it->second;
+            } else {
+                properties.erase("__modified_by");
+            }
+        } else {
+            properties["__modified_by"] = userSID;
+        }
+
+        // Preserve original creation time and keep modification time unchanged during finalization.
+        if (const auto it = oldProperties.find("__created_at"); it != oldProperties.end()) {
+            properties["__created_at"] = it->second;
+        }
+        if (isFinalization) {
+            if (const auto it = oldProperties.find("__modified_at"); it != oldProperties.end()) {
+                properties["__modified_at"] = it->second;
+            } else {
+                properties.erase("__modified_at");
+            }
+        } else {
+            properties["__modified_at"] = ToString(context.Ctx.Now().MicroSeconds());
+        }
+
+        // Preserve both sides of the run history even when replacing all user properties.
+        for (const char* key : {"__started_by", "__stopped_by"}) {
+            if (const auto it = oldProperties.find(key); it != oldProperties.end()) {
+                properties[key] = it->second;
+            }
+        }
+
+        // Detect run → stop and stop → run transitions to track who started/stopped
+        const auto oldRunIt = oldProperties.find("run");
+        const bool oldRun = oldRunIt != oldProperties.end() && oldRunIt->second == "true";
+        const auto newRunIt = properties.find("run");
+        const bool newRun = newRunIt != properties.end() && newRunIt->second == "true";
+
+        if (!oldRun && newRun) {
+            // Query is being started
+            properties["__started_by"] = userSID;
+        } else if (oldRun && !newRun) {
+            // Query is being stopped
+            properties["__stopped_by"] = userSID;
         }
 
         return streamingQueryInfo;
@@ -227,8 +281,6 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
-        Y_UNUSED(owner);
-
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();
@@ -249,7 +301,7 @@ public:
 
         const auto oldInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldInfo);
-        const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
+        const auto queryInfo = GetAlteredQueryInfo(dstPath, owner, context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, oldInfo, queryInfo));
 
         // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter

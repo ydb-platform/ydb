@@ -659,10 +659,15 @@ namespace NKikimr::NBsController {
 
         if (!cmd.GetSuppressGroups()) {
             TGroupInfo::TGroupFinder finder = [&](TGroupId groupId) { return Groups.Find(groupId); };
+            const auto& pools = StoragePools.Get();
 
             Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
-                   Serialize(pb->AddGroup(), groupInfo, finder, BridgeInfo.get());
+                    auto* group = pb->AddGroup();
+                    Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (const auto pool = pools.find(groupInfo.StoragePoolId); pool != pools.end()) {
+                        group->SetStoragePoolName(pool->second.Name);
+                    }
                 }
             });
         }

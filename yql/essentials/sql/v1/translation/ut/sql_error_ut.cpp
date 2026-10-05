@@ -1357,52 +1357,48 @@ Y_UNIT_TEST(YsonFuncWithoutArgs) {
 }
 
 Y_UNIT_TEST(CanNotUseOrderByInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input order by key\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseLimitInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input limit 1\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseDiscardInNonFirstSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input\n"
                "union all\n"
                "discard select * from Input;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseIntoResultInNonLastSelectInUnionAllChain) {
     auto req = "use plato;\n"
-               "pragma AnsiOrderByLimitInUnionAll;\n"
                "\n"
-               "select * from Input\n"
+               "select * from Input into result aaa\n"
                "union all\n"
-               "discard select * from Input;";
+               "select * from Input;";
 
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: INTO RESULT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(YsonStrictInvalidPragma) {

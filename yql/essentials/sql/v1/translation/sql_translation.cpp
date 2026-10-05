@@ -727,7 +727,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
-        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" ||
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "HNSW" || subType == "FULLTEXT_PLAIN" ||
             subType == "FULLTEXT_RELEVANCE" || subType == "JSON") {
             if (isLocalIndex || indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
@@ -736,6 +736,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
             if (subType == "VECTOR_KMEANS_TREE") {
                 indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "HNSW") {
+                indexes.back().Type = TIndexDescription::EType::GlobalHnsw;
             } else if (subType == "FULLTEXT_PLAIN") {
                 indexes.back().Type = TIndexDescription::EType::GlobalFulltextPlain;
             } else if (subType == "FULLTEXT_RELEVANCE") {
@@ -5781,7 +5783,10 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
+    if (useTablePrefix || Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        return TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+    }
+    return TDeferredAtom(Ctx_.Pos(), objectId);
 }
 
 TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context) {

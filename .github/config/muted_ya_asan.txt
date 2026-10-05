@@ -66,6 +66,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.DistinctShuffleEliminationTPCHQ4+CompositePartitionKey
 ydb/core/kqp/ut/rbo KqpRboYql.DistinctShuffleEliminationTPCHQ4-CompositePartitionKey
 ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
+ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL

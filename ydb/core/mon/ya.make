@@ -30,6 +30,7 @@ END()
 
 RECURSE(
     audit
+    metric_chart
     ut_utils
 )
 

@@ -150,19 +150,19 @@ public:
 
     void PushToParser(ui64 offset, const TString& data) {
         ExpectedBatches++;
-        Parser->ParseMessages({GetMessage(offset, data)});
+        Parser->ParseRecords({GetRecord(offset, data)});
     }
 
     void CheckColumnError(const TString& data, ui64 columnId, TStatusCode statusCode, const TString& message) {
         ExpectedBatches++;
         ParserHandler->ExpectColumnError(columnId, statusCode, message);
-        Parser->ParseMessages({GetMessage(ParserHandler->CurrentOffset, data)});
+        Parser->ParseRecords({GetRecord(ParserHandler->CurrentOffset, data)});
     }
 
     void CheckBatchError(const TString& data, TStatusCode statusCode, const TString& message) {
         ExpectedBatches++;
         ParserHandler->ExpectCommonError(statusCode, message);
-        Parser->ParseMessages({GetMessage(ParserHandler->CurrentOffset, data)});
+        Parser->ParseRecords({GetRecord(ParserHandler->CurrentOffset, data)});
     }
 
 protected:
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         Config.BatchSize = 4_KB;
         CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
         with_lock(Alloc) {
-            UNIT_ASSERT_EXCEPTION(Parser->ParseMessages({GetMessage(FIRST_OFFSET, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({GetRecord(FIRST_OFFSET, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
             UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
         }
         PushToParser(FIRST_OFFSET, R"({"a":true})");
@@ -312,9 +312,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT(!result[0][1].template Get<bool>());
         }));
 
-        Parser->ParseMessages({GetMessage(FIRST_OFFSET, R"({"a":true})")});
-        UNIT_ASSERT_EXCEPTION(Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
-        Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, R"({"a":false})")});
+        Parser->ParseRecords({GetRecord(FIRST_OFFSET, R"({"a":true})")});
+        UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+        Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, R"({"a":false})")});
         UNIT_ASSERT_VALUES_EQUAL(ParserHandler->NumberBatches, 0);
         ExpectedBatches = 1;
         Parser->Refresh(true);
@@ -332,13 +332,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+        TVector<TMessageStreamRecord> records;
         for (size_t i = 0; i < 5; ++i) {
-            messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));
+            records.push_back(GetRecord(FIRST_OFFSET + i, R"({"a":true})"));
         }
         ExpectedBatches = 3;
         with_lock(Alloc) {
-            Parser->ParseMessages(messages);
+            Parser->ParseRecords(records);
             UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
         }
     }
@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         with_lock(Alloc) {
             // Grow and parse once, then leave data buffered for destruction.
             PushToParser(FIRST_OFFSET, TString(128_KB, ' ') + "{}");
-            Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, "{}")});
+            Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, "{}")});
             UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
         }
 
@@ -525,14 +525,14 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         );
         CheckSuccess(Parser->ChangeConsumer(ParserHandler));
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
-        messages.reserve(rows);
+        TVector<TMessageStreamRecord> records;
+        records.reserve(rows);
         for (size_t i = 0; i < rows; ++i) {
-            messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));
+            records.push_back(GetRecord(FIRST_OFFSET + i, R"({"a":true})"));
         }
         manager->Requests = 0;
         ExpectedBatches = 1;
-        Parser->ParseMessages(messages);
+        Parser->ParseRecords(records);
         UNIT_ASSERT_LT(manager->Requests, 32);
 
         Parser.Reset();
@@ -592,9 +592,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -610,10 +610,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
         });
     }
 
@@ -638,10 +638,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101  , "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": null, "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101  , "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": null, "event": "event3"})")
         });
     }
 
@@ -665,11 +665,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"key": "value"}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key1", "key2"]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": "some string"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": 123456})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"key": "value"}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key1", "key2"]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": "some string"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": 123456})")
         });
     }
 
@@ -702,11 +702,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", "key2"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": []})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", "key2"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": []})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -741,11 +741,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", 12, true]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key2"]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", 12, true]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key2"]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -770,11 +770,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": []})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["foobar", 123, true, null]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": []})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["foobar", 123, true, null]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -809,11 +809,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"a":"key1", "b": 12}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": {"a":"key2"}})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"a":"key1", "b": 12}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": {"a":"key2"}})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -861,12 +861,12 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello5", TString(result[1][4].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": [{"hello1": [10], "hello2": null},"foo"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": [{"hello2": []},42]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a1": "hello5", "nested": [{}, {}]})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": [{"hello1": [10], "hello2": null},"foo"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": [{"hello2": []},42]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a1": "hello5", "nested": [{}, {}]})"),
         });
     }
 
@@ -881,9 +881,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false})")
         });
     }
 
@@ -898,9 +898,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
 
         CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
@@ -917,9 +917,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         )));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
 
         CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
@@ -934,9 +934,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         )));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
     }
 
@@ -952,9 +952,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -970,9 +970,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -987,9 +987,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         ParserHandler->ExpectColumnError(1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a2' with type [DataType; Uint64], buffered offsets: ");
         ParserHandler->ExpectColumnError(0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a1' with type [DataType; Uint64], buffered offsets: ");
         ExpectedBatches++;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})")
         });
     }
 
@@ -1004,8 +1004,8 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             dummy << R"(,"a1":)" << t;
         }
         dummy << "}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, dummy),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, dummy),
         });
     }
 
@@ -1014,9 +1014,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         ParserHandler->ExpectColumnError(1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a1");
         ParserHandler->ExpectColumnError(0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a2");
         ExpectedBatches++;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1":{"a1": 101, "a1": 102}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": {"a2":103, "a2": 104}})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1":{"a1": 101, "a1": 102}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": {"a2":103, "a2": 104}})")
         });
     }
 
@@ -1113,10 +1113,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
                 UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 1);
             }, false));
         ++ExpectedBatches;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"value":1e100})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"value":1.5})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"value":-1e100})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"value":1e100})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"value":1.5})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"value":-1e100})")
         });
     }
 
@@ -1183,10 +1183,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
         ExpectedBatches++;
         ParserHandler->CurrentOffset = FIRST_OFFSET + 2;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": 105, "a2": 106})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": 105, "a2": 106})")
         });
     }
 
@@ -1255,10 +1255,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 999, "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 999, "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
         });
     }
 
@@ -1273,9 +1273,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})")
         });
     }
 
@@ -1285,13 +1285,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 1, "\x80"),
-            GetMessage(FIRST_OFFSET + 2, R"(})"),
-            GetMessage(FIRST_OFFSET + 3, R"(lalala)"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a1": "hello2", "a2": "102"})"),
-            GetMessage(FIRST_OFFSET + 5, "\x80"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),
+            GetRecord(FIRST_OFFSET + 1, "\x80"),
+            GetRecord(FIRST_OFFSET + 2, R"(})"),
+            GetRecord(FIRST_OFFSET + 3, R"(lalala)"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a1": "hello2", "a2": "102"})"),
+            GetRecord(FIRST_OFFSET + 5, "\x80"),
         });
     }
 
@@ -1315,13 +1315,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT(!result[2][1]);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100", "a3": ["a", "b"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 101})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello2", "a2": "100", "a3": 123})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "100", "a3": [123]})"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a2": "102"})"),
-            GetMessage(FIRST_OFFSET + 5, R"({"a1": "hello2", "a2": "100", "a3": {}})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100", "a3": ["a", "b"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 101})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello2", "a2": "100", "a3": 123})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "100", "a3": [123]})"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a2": "102"})"),
+            GetRecord(FIRST_OFFSET + 5, R"({"a1": "hello2", "a2": "100", "a3": {}})"),
         });
     }
 
@@ -1331,11 +1331,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hel)"),
-            GetMessage(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello1", "a2": "101"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hel)"),
+            GetRecord(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello1", "a2": "101"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
         });
     }
 }
@@ -1378,10 +1378,10 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
             i++;
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, data[0]),
-            GetMessage(FIRST_OFFSET + 1, data[1]),
-            GetMessage(FIRST_OFFSET + 2, data[2])
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, data[0]),
+            GetRecord(FIRST_OFFSET + 1, data[1]),
+            GetRecord(FIRST_OFFSET + 2, data[2])
         });
     }
 

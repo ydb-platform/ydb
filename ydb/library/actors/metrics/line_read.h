@@ -9,6 +9,7 @@
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace NActors {
     struct TChunk;
@@ -55,13 +56,35 @@ namespace NActors {
         std::span<const TLineLabelView> Labels;
     };
 
+    // Type-erased numeric reads are for diagnostics/export. Values keep integer
+    // precision; unsupported producer types are represented by monostate.
+    using TLineNumericValue = std::variant<std::monostate, ui64, i64, double, bool>;
+
+    template<class TValue>
+    TLineNumericValue MakeLineNumericValue(const TValue& value) {
+        if constexpr (std::is_same_v<TValue, bool>) {
+            return value;
+        } else if constexpr (std::is_integral_v<TValue> && std::is_unsigned_v<TValue>) {
+            return static_cast<ui64>(value);
+        } else if constexpr (std::is_integral_v<TValue>) {
+            return static_cast<i64>(value);
+        } else if constexpr (std::is_floating_point_v<TValue>) {
+            return static_cast<double>(value);
+        } else {
+            return std::monostate{};
+        }
+    }
+
     struct TLineFrontendOps {
         using TInvokeValue = void (*)(void*, TInstant, const void*);
         using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeValue);
+        using TInvokeNumericValues = void (*)(void*, TInstant, std::span<const TLineNumericValue>);
+        using TReadNumericRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeNumericValues);
 
         TStringBuf Name;
         TReadRange ReadRange = nullptr;
         std::span<const TLineFieldMeta> Fields;
+        TReadNumericRange ReadNumericRange = nullptr;
     };
 
     struct TLineMeta {
@@ -83,6 +106,10 @@ namespace NActors {
         TLineSnapshot& operator=(const TLineSnapshot&) = delete;
         TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
         ~TLineSnapshot();
+
+        size_t GetChunkCount() const noexcept {
+            return ChunkCount;
+        }
 
         template<class TValueType>
         TDeque<TGenericRecordView<TValueType>> ReadRecordsAs() const {

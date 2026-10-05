@@ -202,11 +202,17 @@ namespace NKafka {
                 {LogPrefix()},
                 {"error", error});
 
-            auto errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
-            if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
-                errorCode = EKafkaErrors::CONCURRENT_TRANSACTIONS;
-            } else if (ydbStatus == Ydb::StatusIds::ABORTED) {
-                errorCode = EKafkaErrors::PRODUCER_FENCED;
+            EKafkaErrors errorCode;
+            switch (ydbStatus) {
+                case Ydb::StatusIds::OVERLOADED:
+                    errorCode = EKafkaErrors::CONCURRENT_TRANSACTIONS;
+                    break;
+                case Ydb::StatusIds::ABORTED:
+                    errorCode = EKafkaErrors::PRODUCER_FENCED;
+                    break;
+                default:
+                    errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+                    break;
             }
             FailEndTxnRetryable(ctx, error->data(), errorCode);
             return;

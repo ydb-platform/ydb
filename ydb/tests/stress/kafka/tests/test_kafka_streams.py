@@ -4,7 +4,6 @@ import pytest
 import library.python.port_manager
 import yatest
 
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.stress.fixtures import StressFixture
 
 
@@ -27,10 +26,6 @@ class TestYdbTopicWorkload(StressFixture):
             kafka_api_port=self.kafka_api_port,
             extra_feature_flags=extra_feature_flags,
             kafka_auto_create_topics=True,
-            additional_log_configs={
-                "KAFKA_PROXY": LogLevels.TRACE,
-                "PERSQUEUE": LogLevels.TRACE,
-            },
         )
 
     def get_kafka_api_ports(self):

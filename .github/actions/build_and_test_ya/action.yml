@@ -142,28 +142,28 @@ runs:
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
-        # A boolean false forwarded into this nested action is dropped and the
-        # inner default applies. run_tests would become true, save_test_graph
-        # would stay false, and the graph would be saved without -A.
-        run_tests: ${{ inputs.run_tests == true && 'true' || 'false' }}
-        increment: ${{ inputs.increment == true && 'true' || 'false' }}
+        # Composite inputs are strings. A nested boolean false is dropped and
+        # the inner default applies, so always emit 'true' or 'false'. Compare
+        # to the string 'true': `== true` is false for "true".
+        run_tests: ${{ inputs.run_tests == 'true' && 'true' || 'false' }}
+        increment: ${{ inputs.increment == 'true' && 'true' || 'false' }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache == true && 'true' || 'false' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache == 'true' && 'true' || 'false' }}
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
-        add_vcs_info: ${{ inputs.add_vcs_info == true && 'true' || 'false' }}
+        add_vcs_info: ${{ inputs.add_vcs_info == 'true' && 'true' || 'false' }}
         telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).YDBOT_TELEGRAM_BOT_TOKEN || '' }}
         telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps != 'false' }}
         pull_number: ${{ inputs.pull_number }}
-        save_test_graph: ${{ inputs.save_test_graph == true && 'true' || 'false' }}
-        skip_graph_compare: ${{ inputs.skip_graph_compare == true && 'true' || 'false' }}
+        save_test_graph: ${{ inputs.save_test_graph == 'true' && 'true' || 'false' }}
+        skip_graph_compare: ${{ inputs.skip_graph_compare == 'true' && 'true' || 'false' }}
         prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
         prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
-        publish_github_status: ${{ inputs.publish_github_status == true && 'true' || 'false' }}
+        publish_github_status: ${{ inputs.publish_github_status == 'true' && 'true' || 'false' }}

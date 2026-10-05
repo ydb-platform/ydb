@@ -757,8 +757,8 @@ runs:
           GH_ALERTS_TG_LOGINS="$INPUT_TELEGRAM_ALERT_LOGINS" \
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
-            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
-            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --output-file "$CURRENT_PUBLIC_DIR/ram_report.html" \
+            --output-file-url "$CURRENT_PUBLIC_DIR_URL/ram_report.html" \
             --ram-usage-file ram_usage.txt \
             --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
             --chat-id "$INPUT_TELEGRAM_ALERT_CHAT" \

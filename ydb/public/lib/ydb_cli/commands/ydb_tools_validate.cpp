@@ -15,20 +15,6 @@
 namespace NYdb::NConsoleClient {
 namespace {
 
-template <typename TFn>
-auto RetryIo(ui32 retries, TFn&& fn) -> decltype(fn()) {
-    const ui32 attempts = retries == 0 ? 1 : retries;
-    for (ui32 attempt = 1;; ++attempt) {
-        try {
-            return fn();
-        } catch (const std::exception&) {
-            if (attempt >= attempts) {
-                throw;
-            }
-        }
-    }
-}
-
 class TFsBackupStorage : public IBackupStorage {
 public:
     TFsBackupStorage(const TString& root, ui32 retries)
@@ -41,12 +27,14 @@ public:
     }
 
     bool Exists(const TString& key) const override {
-        const TFsPath path = ToPath(key);
-        return path.Exists() && path.IsFile();
+        return RetryValidateIo(Retries, [&] {
+            const TFsPath path = ToPath(key);
+            return path.Exists() && path.IsFile();
+        });
     }
 
     TVector<TString> List(const TString& prefix) const override {
-        return RetryIo(Retries, [&] {
+        return RetryValidateIo(Retries, [&] {
             TVector<TString> keys;
             const TFsPath dir = ToPath(prefix);
             if (dir.Exists() && dir.IsDirectory()) {
@@ -70,7 +58,7 @@ public:
         const std::function<void()>& beginAttempt,
         const std::function<void(TStringBuf)>& onChunk) const override
     {
-        RetryIo(Retries, [&] {
+        RetryValidateIo(Retries, [&] {
             beginAttempt();
             const TFsPath path = ToPath(key);
             if (!path.Exists() || !path.IsFile()) {
@@ -132,13 +120,13 @@ public:
     }
 
     bool Exists(const TString& key) const override {
-        return RetryIo(Retries, [&] {
+        return RetryValidateIo(Retries, [&] {
             return Client->ObjectExists(key);
         });
     }
 
     TVector<TString> List(const TString& prefix) const override {
-        return RetryIo(Retries, [&] {
+        return RetryValidateIo(Retries, [&] {
             TVector<TString> keys;
             const TString listPrefix = prefix ? prefix + "/" : TString();
             std::optional<TString> token;
@@ -169,7 +157,7 @@ public:
         const std::function<void()>& beginAttempt,
         const std::function<void(TStringBuf)>& onChunk) const override
     {
-        RetryIo(Retries, [&] {
+        RetryValidateIo(Retries, [&] {
             beginAttempt();
             Client->GetObject(key, onChunk);
         });
@@ -227,12 +215,26 @@ TMaybe<TVector<TString>> LoadExpectedObjects(const TString& path) {
     }
 }
 
+EValidateFormat ParseValidateFormat(const TString& name) {
+    if (name == "auto") {
+        return EValidateFormat::Auto;
+    }
+    if (name == "full") {
+        return EValidateFormat::Full;
+    }
+    if (name == "item") {
+        return EValidateFormat::Item;
+    }
+    throw TMisuseException() << "Unknown --format value \"" << name << "\"; expected auto, full, or item";
+}
+
 TValidateSettings MakeSettings(
     bool schemeOnly,
     bool failFast,
     ui64 threads,
     const TString& encryptionKey,
-    const TMaybe<TVector<TString>>& expectedObjects)
+    const TMaybe<TVector<TString>>& expectedObjects,
+    EValidateFormat format)
 {
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
@@ -240,13 +242,16 @@ TValidateSettings MakeSettings(
     settings.Threads = threads;
     settings.EncryptionKey = encryptionKey;
     settings.ExpectedObjects = expectedObjects;
+    settings.Format = format;
     return settings;
 }
 
 } // namespace
 
 TCommandValidate::TCommandValidate()
-    : TClientCommandTree("validate", {}, "Validate integrity of a full backup or one exported schema object")
+    : TClientCommandTree("validate", {},
+        "Check byte-level integrity of a full backup or exported schema objects without restoring them. "
+        "A successful result does not prove that the backup can be imported.")
 {
     AddCommand(std::make_unique<TCommandValidateFromS3>());
     AddCommand(std::make_unique<TCommandValidateFromNfs>());
@@ -275,10 +280,25 @@ void TCommandValidateBase::Config(TConfig& config) {
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
     config.Opts->AddLongOption("scheme-only",
-            "Validate file composition and metadata structure only. "
-            "Data file bytes are not read and their checksums are not compared. "
-            "Without this option, file composition, metadata structure, and data file contents are validated.")
+            "Check file composition, metadata structure, and checksum sidecars only. "
+            "Data file bytes are not read. This is not a restore dry run: CSV and Parquet rows "
+            "are not parsed against the table schema.")
         .StoreTrue(&SchemeOnly);
+
+    config.Opts->AddLongOption("format",
+            "Expected backup layout. auto (default) treats the path as a full backup when "
+            "metadata.json has kind SimpleExportV0 or SchemaMapping is present, otherwise as an "
+            "item-style export. full requires a full backup with SimpleExportV0 metadata. "
+            "item scans schema objects and does not use SchemaMapping for completeness. "
+            "Supported values: auto, full, item.")
+        .RequiredArgument("auto|full|item")
+        .DefaultValue(Format)
+        .StoreResult(&Format)
+        .ChoicesWithCompletion({
+            {"auto", "Detect a full backup from SimpleExportV0 metadata or SchemaMapping"},
+            {"full", "Require a full backup with SchemaMapping"},
+            {"item", "Treat as an item-style export without SchemaMapping completeness checks"},
+        });
 
     config.Opts->AddLongOption("fail-fast",
             "Stop validation at the first error. "
@@ -292,7 +312,10 @@ void TCommandValidateBase::Config(TConfig& config) {
             "Same default as import file csv.")
         .RequiredArgument("NUM").StoreResult(&Threads).DefaultValue(Threads);
 
-    config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
+    config.Opts->AddLongOption("encryption-key-file",
+            "Accepted for compatibility with ydb import. Encrypted backup files are not validated; "
+            "the key is not used. File path that contains the encryption key, or env that contains "
+            "a hex encoded key value.")
         .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
         .Env("YDB_ENCRYPTION_KEY", false)
         .FileName("encryption key file").RequiredArgument("PATH")
@@ -305,7 +328,9 @@ void TCommandValidateBase::Config(TConfig& config) {
             "An object found in the backup and absent from the file is a warning. "
             "An object listed in the file and absent from the backup is an error. "
             "Index implementation tables stored under a listed object are part of that object. "
-            "The option does not apply to backups that contain SchemaMapping.")
+            "The option does not apply to backups that contain SchemaMapping. "
+            "Without this file, an item-style export is not checked for missing objects; "
+            "success means the objects found in the prefix are intact.")
         .RequiredArgument("PATH").StoreResult(&ExpectedObjectsFile);
 }
 
@@ -314,6 +339,7 @@ void TCommandValidateBase::Parse(TConfig& config) {
     if (Threads == 0) {
         throw TMisuseException() << "--threads must be greater than zero";
     }
+    ParseValidateFormat(Format);
     Items = TItem::Parse(config, "item");
 }
 
@@ -330,8 +356,9 @@ bool TCommandValidateBase::DecodeEncryptionKey() {
 }
 
 TCommandValidateFromS3::TCommandValidateFromS3()
-    : TCommandValidateBase("s3", "Validate a backup stored in S3-compatible storage. "
-        "The backup is read by this command; a YDB connection is not required.")
+    : TCommandValidateBase("s3", "Check byte-level integrity of a backup stored in S3-compatible storage. "
+        "The backup is read by this command; a YDB connection is not required. "
+        "Success does not prove that the backup can be imported.")
 {
     TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix of a full backup or one exported object", true}},
@@ -426,7 +453,8 @@ int TCommandValidateFromS3::Run(TConfig& config) {
     InitAwsAPI();
     try {
         TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
-        const int code = PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects));
+        const int code = PrintReport(storage, paths, MakeSettings(
+            SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format)));
         ShutdownAwsAPI();
         return code;
     } catch (...) {
@@ -436,8 +464,9 @@ int TCommandValidateFromS3::Run(TConfig& config) {
 }
 
 TCommandValidateFromNfs::TCommandValidateFromNfs()
-    : TCommandValidateBase("nfs", "Validate a backup stored on a local or mounted filesystem. "
-        "The backup is read by this command; a YDB connection is not required.")
+    : TCommandValidateBase("nfs", "Check byte-level integrity of a backup stored on a local or mounted filesystem. "
+        "The backup is read by this command; a YDB connection is not required. "
+        "Success does not prove that the backup can be imported.")
 {
     TItemNfs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path of a full backup or one exported object, relative to --fs-path", true}},
@@ -474,7 +503,8 @@ int TCommandValidateFromNfs::Run(TConfig& config) {
     }
 
     TFsBackupStorage storage(FsPath, NumberOfRetries);
-    return PrintReport(storage, paths, MakeSettings(SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile)));
+    return PrintReport(storage, paths, MakeSettings(
+        SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile), ParseValidateFormat(Format)));
 }
 
 } // namespace NYdb::NConsoleClient

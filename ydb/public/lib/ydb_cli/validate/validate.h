@@ -1,11 +1,16 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/random/random.h>
+#include <util/system/thread.h>
 #include <util/system/types.h>
 
+#include <exception>
 #include <functional>
+#include <utility>
 
 namespace NYdb::NConsoleClient {
 
@@ -30,10 +35,17 @@ public:
         const std::function<void(TStringBuf)>& onChunk) const = 0;
 };
 
+enum class EValidateFormat {
+    Auto = 0,
+    Full,
+    Item,
+};
+
 struct TValidateSettings {
     // Check backup layout and metadata only. Data file bytes are not read.
     bool SchemeOnly = false;
     // Raw encryption key bytes, same encoding as `ydb import`.
+    // Encrypted files are not validated; a supplied key is unused.
     TString EncryptionKey;
     // Object names relative to the validated path. Used for backups created with --item,
     // which have no SchemaMapping. Unset means the list was not provided.
@@ -44,10 +56,45 @@ struct TValidateSettings {
     // Maximum number of threads for object and data-file checks.
     // 0 means DefaultValidateThreads(), the same rule as `ydb import file csv`.
     ui64 Threads = 0;
+    // auto: full backup if kind is SimpleExportV0 or SchemaMapping is present.
+    // full: require a full backup. item: scan schema objects, skip SchemaMapping completeness.
+    EValidateFormat Format = EValidateFormat::Auto;
 };
 
 // hardware_concurrency() - 1 when that is positive, otherwise 1.
 ui64 DefaultValidateThreads();
+
+// Delay before the retry that follows `failedAttempt` failed tries (1-based).
+// 100ms, 200ms, 400ms, ... capped at 2s. Jitter is added by RetryValidateIo.
+TDuration ValidateRetryBackoff(ui32 failedAttempt);
+
+// Retries `fn` after an exception. `retries` is the number of attempts (1 means no retry).
+template <typename TFn, typename TSleep>
+auto RetryValidateIo(ui32 retries, TFn&& fn, TSleep&& sleep) -> decltype(fn()) {
+    const ui32 attempts = retries == 0 ? 1 : retries;
+    for (ui32 attempt = 1;; ++attempt) {
+        try {
+            return fn();
+        } catch (const std::exception&) {
+            if (attempt >= attempts) {
+                throw;
+            }
+            const TDuration backoff = ValidateRetryBackoff(attempt);
+            ui64 jitterMs = 0;
+            if (backoff.MilliSeconds() > 0) {
+                jitterMs = RandomNumber<ui64>(backoff.MilliSeconds() / 2 + 1);
+            }
+            sleep(backoff + TDuration::MilliSeconds(jitterMs));
+        }
+    }
+}
+
+template <typename TFn>
+auto RetryValidateIo(ui32 retries, TFn&& fn) -> decltype(fn()) {
+    return RetryValidateIo(retries, std::forward<TFn>(fn), [](TDuration delay) {
+        Sleep(delay);
+    });
+}
 
 struct TValidationIssue {
     TString Path;
@@ -68,8 +115,9 @@ struct TValidationReport {
 // One object name per line. Empty lines are skipped. Names are not normalized here.
 TVector<TString> ParseExpectedObjects(TStringBuf text);
 
-// `path` is a full backup (metadata.json kind SimpleExportV0), a directory of exported
-// objects without that metadata (export --item), or one schema object.
+// Checks byte-level integrity and file layout. Success does not mean the backup can be imported.
+// `path` is a full backup (metadata.json kind SimpleExportV0 or SchemaMapping), a directory of
+// exported objects without that metadata (export --item), or one schema object.
 TValidationReport ValidateBackup(const IBackupStorage& storage, const TString& path, const TValidateSettings& settings);
 
 // Lowercase hex SHA-256 of data. Used by tests and checksum sidecars.

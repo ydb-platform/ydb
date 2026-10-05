@@ -4,7 +4,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
@@ -487,7 +489,7 @@ Y_UNIT_TEST(EncryptedFilesAreRejected) {
     TMemoryStorage storage;
     storage.Put("scheme.pb.enc", "cipher");
     const TValidationReport noKey = Run(storage, "");
-    UNIT_ASSERT(HasIssue(noKey, "scheme.pb.enc", "--encryption-key-file"));
+    UNIT_ASSERT(HasIssue(noKey, "scheme.pb.enc", "not validated"));
 
     const TValidationReport withKey = Run(storage, "", false, "key-bytes");
     UNIT_ASSERT(HasIssue(withKey, "scheme.pb.enc", "not validated"));
@@ -749,6 +751,202 @@ Y_UNIT_TEST(CompressionFlagMustMatchDataFiles) {
     storage.PutChecked("SchemaMapping/mapping.json", "{\"exportedObjects\":{\"/t\":{\"exportPrefix\":\"t\"}}}");
     AddTable(storage, "t", 1, "row\n", true, false);
     UNIT_ASSERT(HasIssue(Run(storage, ""), "t", "requests compression"));
+}
+
+void PutFullBackup(TMemoryStorage& storage) {
+    storage.PutChecked("metadata.json", "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    storage.PutChecked("SchemaMapping/metadata.json", "{\"kind\":\"SchemaMappingV0\"}");
+    storage.PutChecked("SchemaMapping/mapping.json", "{\"exportedObjects\":{\"/t\":{\"exportPrefix\":\"t\"}}}");
+    AddTable(storage, "t", 1, "a\n", true);
+}
+
+Y_UNIT_TEST(MissingRootMetadataWithSchemaMappingIsError) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    storage.Files.erase("metadata.json");
+    const TValidationReport report = Run(storage, "");
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "SchemaMapping"));
+    UNIT_ASSERT(HasIssue(report, "metadata.json.sha256", "without metadata.json"));
+    UNIT_ASSERT(!report.Ok());
+}
+
+Y_UNIT_TEST(UnknownBackupKindIsError) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    storage.PutChecked("metadata.json", "{\"kind\":\"OtherExport\",\"checksum\":\"sha256\"}");
+    const TValidationReport withMapping = Run(storage, "");
+    UNIT_ASSERT(HasIssue(withMapping, "metadata.json", "unsupported backup kind"));
+    UNIT_ASSERT(!withMapping.Ok());
+
+    TMemoryStorage noMapping;
+    noMapping.PutChecked("metadata.json", "{\"kind\":\"Nope\"}");
+    AddTable(noMapping, "t", 1, "a\n", true);
+    const TValidationReport report = Run(noMapping, "");
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "unsupported backup kind"));
+    UNIT_ASSERT(!report.Ok());
+}
+
+Y_UNIT_TEST(RootMetadataReadFailureIsNotAbsence) {
+    class TReadFailsStorage : public TMemoryStorage {
+    public:
+        TString Read(const TString& key) const override {
+            if (key == "metadata.json" || key.EndsWith("/metadata.json")) {
+                ythrow yexception() << "injected read failure";
+            }
+            return TMemoryStorage::Read(key);
+        }
+    };
+
+    TReadFailsStorage storage;
+    PutFullBackup(storage);
+    const TValidationReport full = Run(storage, "");
+    UNIT_ASSERT(HasIssue(full, "metadata.json", "failed to read file"));
+    UNIT_ASSERT(HasIssue(full, "metadata.json", "injected read failure"));
+    UNIT_ASSERT(!full.Ok());
+
+    TReadFailsStorage table;
+    AddTable(table, "t", 1, "row\n", true);
+    const TValidationReport object = Run(table, "t");
+    UNIT_ASSERT(HasIssue(object, "t/metadata.json", "failed to read file"));
+    UNIT_ASSERT(!HasIssue(object, "t/metadata.json", "file is missing"));
+    UNIT_ASSERT(!object.Ok());
+}
+
+Y_UNIT_TEST(FormatFullAndItem) {
+    TMemoryStorage item;
+    AddTable(item, "t", 1, "a\n", true);
+    TValidateSettings fullSettings;
+    fullSettings.Format = EValidateFormat::Full;
+    UNIT_ASSERT(HasIssue(ValidateBackup(item, "", fullSettings), "metadata.json", "missing metadata.json"));
+
+    TMemoryStorage full;
+    PutFullBackup(full);
+    TValidateSettings itemSettings;
+    itemSettings.Format = EValidateFormat::Item;
+    const TValidationReport asItem = ValidateBackup(full, "", itemSettings);
+    UNIT_ASSERT_C(asItem.Ok(), Issues(asItem));
+    UNIT_ASSERT(HasWarning(asItem, "metadata.json", "--format=item"));
+}
+
+Y_UNIT_TEST(ItemExportWarnsWithoutExpectedObjects) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 1, "a\n", true);
+    AddTable(storage, "dir/t2", 1, "b\n", true);
+    const TValidationReport report = Run(storage, "dir");
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(HasWarning(report, "dir", "--expected-objects"));
+
+    const TValidationReport one = Run(storage, "dir/t1");
+    UNIT_ASSERT_C(one.Ok(), Issues(one));
+    UNIT_ASSERT(!HasWarning(one, "dir/t1", "--expected-objects"));
+}
+
+Y_UNIT_TEST(UnusedEncryptionKeyIsWarning) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    TValidateSettings settings;
+    settings.EncryptionKey = "key-bytes";
+    const TValidationReport report = ValidateBackup(storage, "t", settings);
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(HasWarning(report, "t", "unused"));
+}
+
+Y_UNIT_TEST(IndexPrefixMismatchIsWarning) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.PutChecked("t/metadata.json",
+        "{\"version\":1,\"permissions\":0,\"changefeeds\":[],"
+        "\"indexes\":[{\"export_prefix\":\"000\",\"impl_table_prefix\":\"idx/indexImplTable\"}]}");
+    AddTable(storage, "t/000", 1, "idx\n", true);
+    const TValidationReport report = Run(storage, "t");
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT(HasWarning(report, "t/metadata.json", "impl_table_prefix"));
+}
+
+Y_UNIT_TEST(ParquetDataFileChecksum) {
+    TMemoryStorage storage;
+    storage.PutChecked("scheme.pb", Scheme(1));
+    storage.PutChecked("metadata.json", TableMetadata(true));
+    const TString payload = "parquet-bytes";
+    storage.Put("data_00.parquet", payload);
+    storage.Put("data_00.parquet.sha256", MakeChecksumSidecar(payload, "data_00.parquet"));
+    UNIT_ASSERT_C(Run(storage, "").Ok(), Issues(Run(storage, "")));
+
+    storage.Files["data_00.parquet"] = "changed";
+    UNIT_ASSERT(HasIssue(Run(storage, ""), "data_00.parquet", "checksum mismatch"));
+}
+
+Y_UNIT_TEST(FailFastWithMultipleThreadsReportsError) {
+    TMemoryStorage storage;
+    AddTable(storage, "a", 1, "a\n", true);
+    AddTable(storage, "b", 1, "b\n", true);
+    storage.Files["a/data_00.csv"] = "changed-a\n";
+    storage.Files["b/data_00.csv"] = "changed-b\n";
+    TValidateSettings settings;
+    settings.FailFast = true;
+    settings.Threads = 2;
+    const TValidationReport report = ValidateBackup(storage, "", settings);
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(report.Issues.size() >= 1);
+}
+
+Y_UNIT_TEST(WorkerExceptionBecomesIssue) {
+    class TThrowExists : public TMemoryStorage {
+    public:
+        bool Exists(const TString& key) const override {
+            if (key.EndsWith("/scheme.pb") && (key.StartsWith("a/") || key.StartsWith("b/"))) {
+                ythrow yexception() << "exists boom";
+            }
+            return TMemoryStorage::Exists(key);
+        }
+    };
+
+    TThrowExists storage;
+    AddTable(storage, "a", 1, "a\n", true);
+    AddTable(storage, "b", 1, "b\n", true);
+    TValidateSettings settings;
+    settings.Threads = 2;
+    const TValidationReport report = ValidateBackup(storage, "", settings);
+    UNIT_ASSERT(HasIssue(report, ".", "internal error while validating"));
+    UNIT_ASSERT(HasIssue(report, ".", "exists boom"));
+}
+
+Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(1).MilliSeconds(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(2).MilliSeconds(), 200);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(5).MilliSeconds(), 1600);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(6).MilliSeconds(), 2000);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(10).MilliSeconds(), 2000);
+
+    ui32 calls = 0;
+    ui32 sleeps = 0;
+    const bool ok = RetryValidateIo(3, [&] {
+        ++calls;
+        if (calls < 3) {
+            ythrow yexception() << "transient";
+        }
+        return true;
+    }, [&](TDuration) {
+        ++sleeps;
+    });
+    UNIT_ASSERT(ok);
+    UNIT_ASSERT_VALUES_EQUAL(calls, 3);
+    UNIT_ASSERT_VALUES_EQUAL(sleeps, 2);
+
+    ui32 failedCalls = 0;
+    bool thrown = false;
+    try {
+        RetryValidateIo(2, [&] {
+            ++failedCalls;
+            ythrow yexception() << "still failing";
+            return true;
+        }, [&](TDuration) {});
+    } catch (const yexception& ex) {
+        thrown = true;
+        UNIT_ASSERT_STRING_CONTAINS(ex.what(), "still failing");
+    }
+    UNIT_ASSERT(thrown);
+    UNIT_ASSERT_VALUES_EQUAL(failedCalls, 2);
 }
 
 } // Y_UNIT_TEST_SUITE(ValidateBackup)

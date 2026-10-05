@@ -1319,7 +1319,7 @@ namespace {
             const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
             ui64 rows = 0;
             for (const ui64 shardId : sharding.GetColumnShards()) {
-                NTxUT::TShardReader reader(Runtime(), shardId, pathId, NOlap::TSnapshot(0, 0));
+                NTxUT::TShardReader reader(Runtime(), shardId, pathId, ::NKikimr::NOlap::TSnapshot(0, 0));
                 reader.SetReplyColumnIds({1});
                 const auto batch = reader.ReadAll();
                 UNIT_ASSERT(reader.IsCorrectlyFinished());

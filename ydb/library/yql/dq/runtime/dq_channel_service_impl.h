@@ -617,8 +617,8 @@ public:
     // under QueueMutex: marked where data is queued or the channel finishes, before the consumer is notified
     TDqInputReadyHook ReadyHook;
     // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
-    // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
-    // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
+    // discovery or an idle ping), and a flip of MemoryPressure overtaken by the previous state would stick on the
+    // sender. Taken under TNodeState::Mutex by ResendUpdates, takes only TNodeState::SubscribeMutex itself
     std::mutex UpdateMutex;
 
     bool IsMemoryPressureReported() const {
@@ -821,10 +821,15 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl), plus
-    // FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    // the innermost lock: orders a subscribing update off the session thread before the unsubscribe of HandlePoison
+    std::mutex SubscribeMutex;
+    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl)
+    static ui32 TrackFlags(ui32 icChannel) {
+        return NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
+    }
+    // TrackFlags, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
     ui32 SendFlags(ui32 icChannel) {
-        ui32 flags = NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
+        ui32 flags = TrackFlags(icChannel);
         // a load first: a locked exchange on every event would bounce the line between the sending threads
         if (!Subscribed.load() && !Subscribed.exchange(true)) {
             flags |= NActors::IEventHandle::FlagSubscribeOnSession;
@@ -960,7 +965,7 @@ public:
     // Lose the acks confirming up to this SeqNo, 0 for none. Only an OK one: a RESEND is what the peer is
     // waiting for, and losing it would stall the session rather than the channel
     std::atomic<ui64> DropOkAckUpToSeqNo = 0;
-    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    // Data parked on arrival and not taken out for delivery yet, for a test to wait on.
     std::atomic<ui64> PendingDataCount = 0;
     std::atomic<bool> HoldWaiterDequeue = false;
     std::atomic<bool> WaiterDequeueHeld = false;
@@ -1608,10 +1613,11 @@ public:
         // session is paused; a running queue drains its remainder below.
         if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                auto delivered = DeliverChannelData(PendingChannelData.front());
+                // off the count before the delivery, whose ack lets the peer send the next message
+                auto pending = std::move(PendingChannelData.front());
                 PendingChannelData.pop();
                 NodeState->PendingDataCount--;
-                if (delivered && maxCount && --maxCount == 0) {
+                if (DeliverChannelData(pending) && maxCount && --maxCount == 0) {
                     break;
                 }
             }

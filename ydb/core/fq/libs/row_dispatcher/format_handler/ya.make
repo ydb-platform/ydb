@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/memory
 
     ydb/library/actors/core
+    ydb/library/yql/providers/abstract/message_stream
     ydb/library/actors/util
 
     ydb/library/yql/dq/common

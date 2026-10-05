@@ -63,12 +63,16 @@ public:
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
-        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight, ui32 groupSizeInUnits = 0) {
+        ChunkTracker.AddOwner(owner, vdiskId, weight, groupSizeInUnits);
     }
 
     void SetOwnerWeight(TOwner owner, ui32 weight) {
         ChunkTracker.SetOwnerWeight(owner, weight);
+    }
+
+    void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
+        ChunkTracker.SetOwnerSettings(owner, weight, groupSizeInUnits);
     }
 
     void RemoveOwner(TOwner owner) {

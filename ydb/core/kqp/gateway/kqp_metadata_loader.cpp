@@ -1193,7 +1193,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, externalSourceFactory = settings.ExternalSourceFactory, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([externalDataSourceMetadata, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult value = result.GetValue();
                                         if (!value.EntryType) {
                                             NYql::TIssue rootIssue("Couldn't determine external YDB entity type");
@@ -1209,20 +1209,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            if (!externalSourceFactory || !externalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
-                                                TTableMetadataResult result;
-                                                result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
-                                                result.AddIssue(NYql::TIssue("External source with type YdbTopics is disabled"));
-                                                promise.SetValue(result);
-                                                return;
-                                            }
-                                            externalDataSourceMetadata.Metadata->ExternalDataSource().SetYdbTopicType();
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::Topic);
                                         } else if (routing == EYdbDataSourceRouting::Ydb) {
                                             TTableMetadataResult result;
                                             result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                             result.AddIssue(NYql::TIssue("External YDB entity is not a topic, and its database is not configured for connector table access"));
                                             promise.SetValue(result);
                                             return;
+                                        } else {
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::Table);
                                         }
                                         f(externalDataSourceMetadata);
                                     });

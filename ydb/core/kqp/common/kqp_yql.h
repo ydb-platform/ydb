@@ -179,11 +179,23 @@ public:
     static constexpr TStringBuf TabletIdName = "TabletId";
     static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
     static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
+    static constexpr TStringBuf SamplingRateSettingName = "SamplingRate";
+    static constexpr TStringBuf SamplingSeedSettingName = "SamplingSeed";
+    static constexpr TStringBuf SamplingMemtableStrideSettingName = "SamplingMemtableStride";
     static constexpr TStringBuf VectorTopKColumnSettingName = "VectorTopKColumn";
     static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
     static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
     static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
 
+    struct TSampling {
+        double Rate = 1.0;
+        ui64 Seed = 0;
+        ui32 MemtableStride = 64;
+
+        bool operator == (const TSampling&) const = default;
+    };
+
+    TMaybe<TSampling> Sampling;
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     TMaybe<ui64> SequentialInFlight;

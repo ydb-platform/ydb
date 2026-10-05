@@ -116,6 +116,7 @@ struct TEvPrivate {
 
     struct TEvCreateStreamResult: public TGenericYdbProxyResult<TEvCreateStreamResult, EvCreateStreamResult> {
         using TBase::TBase;
+        bool SchemaChanges = false;
     };
 
     struct TEvDropStreamResult: public TGenericYdbProxyResult<TEvDropStreamResult, EvDropStreamResult> {
@@ -248,6 +249,7 @@ struct TEvPrivate {
         : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
     {
         const ui64 DstAlterTxId;
+        bool RequiresTargetFlush = false;
 
         explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});

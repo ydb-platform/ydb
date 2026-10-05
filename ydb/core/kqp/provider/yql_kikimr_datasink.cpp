@@ -1062,10 +1062,11 @@ public:
 
         YQL_ENSURE(ExternalSourceFactory);
         if (metadata.IsExternalDataSource()) {
-            const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+            const auto& dataSource = metadata.ExternalDataSource();
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), providerName))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()

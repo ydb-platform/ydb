@@ -101,14 +101,14 @@ public:
         (*ClusterConfigs)[cluster.GetName()] = cluster;
     }
 
-    ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const TDriver& driver, const TTopicClientSettings& settings) final {
         const bool hasEndpoint = HasEndpoint(driver, settings);
         if (!hasEndpoint && LocalTopicClientFactory) {
-            return LocalTopicClientFactory->CreateTopicClient(settings);
+            return LocalTopicClientFactory->CreateTopicClient(stream, settings);
         }
 
         Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
-        return CreateExternalTopicClient(driver, settings);
+        return CreateExternalTopicClient(stream, driver, settings);
     }
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {

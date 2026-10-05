@@ -21,6 +21,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/library/benchmarks/queries/tpch
+    ydb/library/plan2svg
     ydb/public/lib/ut_helpers
     ydb/library/yql/udfs/statistics_internal
     ydb/core/kqp/ut/olap/helpers

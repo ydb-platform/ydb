@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
@@ -530,58 +531,73 @@ private:
 };
 
 class TMockPqGateway final : public IMockPqGateway {
-    class TMockTopicClient final : public NYql::ITopicClient {
+    class TMockTopicClient final : public NFq::IMessageStreamClient {
     public:
-        explicit TMockTopicClient(TMockPqGateway* const self)
-            : Self(self)
-            , Topics(self->Settings.Topics)
-        {}
+        TMockTopicClient(const TString& stream, TMockPqGateway* const self)
+            : Stream(stream)
+            , Gateway(self)
+        {
+            if (Stream.empty()) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::InvalidArgument) << "Stream name must be nonempty";
+            }
+        }
 
-        NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& path, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
+        const TString& GetStream() const override {
+            return Stream;
+        }
+
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
             TMockPqGatewaySettings::TTopicInfo settings;
-            if (const auto it = Topics.find(path); it != Topics.end()) {
+            if (const auto it = Gateway->Settings.Topics.find(Stream); it != Gateway->Settings.Topics.end()) {
                 settings = it->second;
             }
 
-            Ydb::Topic::DescribeTopicResult describe;
-            for (ui64 i = 0; i < settings.PartitionCount; ++i) {
-                auto* partition = describe.add_partitions();
-                partition->set_partition_id(i);
+            NFq::TMessageStreamDescription description;
+            for (ui64 id = 0; id < settings.PartitionCount; ++id) {
+                description.Partitions.push_back({.PartitionId = {id}});
             }
-
-            return NThreading::MakeFuture(NYdb::NTopic::TDescribeTopicResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(describe)));
+            return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamDescription>::Success(std::move(description)));
         }
 
-        NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString& /*path*/, const TString& /*consumer*/, const NYdb::NTopic::TDescribeConsumerSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+            const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override
+        {
+            return Unsupported<NFq::TMessageStreamConsumerDescription>("DescribeConsumer");
         }
 
-        NYdb::NTopic::TAsyncDescribePartitionResult DescribePartition(const TString& /*path*/, i64 /*partitionId*/, const NYdb::NTopic::TDescribePartitionSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(NFq::TMessageStreamPartitionId) override {
+            return Unsupported<NFq::TMessageStreamPartitionDescription>("DescribePartition");
         }
 
-        std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) final {
-            Y_ENSURE(settings.Topics_.size() == 1, "Expected only one topic to read, but got " << settings.Topics_.size());
-            const auto& topic = settings.Topics_.front();
-            Y_ENSURE(topic.PartitionIds_.size() == 1, "Expected only one partition to read, but got " << topic.PartitionIds_.size());
-            return Self->CreateReadSession(topic.Path_, topic.PartitionIds_.front());
+        std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
+            settings.Validate();
+            if (settings.OffsetResetPolicy != NFq::EMessageStreamOffsetResetPolicy::Earliest) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                    << "Mock supports only Earliest offset reset policy";
+            }
+            if (settings.PartitionIds.size() != 1) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                    << "Mock stream " << Stream << " requires exactly one explicitly assigned partition";
+            }
+            return NYql::WrapYdbReadSession(Gateway->CreateReadSession(Stream, settings.PartitionIds.front().Value));
         }
 
-        std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const NYdb::NTopic::TWriteSessionSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) final {
-            return Self->CreateWriteSession(settings.Path_);
-        }
-
-        NYdb::TAsyncStatus CommitOffset(const TString& /*path*/, ui64 /*partitionId*/, const TString& /*consumerName*/, ui64 /*offset*/, const NYdb::NTopic::TCommitOffsetSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
+            NFq::TMessageStreamPartitionId, const TString&, ui64) override
+        {
+            return Unsupported<NFq::TMessageStreamConsumerPosition>("CommitPosition");
         }
 
     private:
-        TMockPqGateway* const Self = nullptr;
-        const std::unordered_map<TString, TMockPqGatewaySettings::TTopicInfo> Topics;
+        template <class TValue>
+        NThreading::TFuture<NFq::TMessageStreamResult<TValue>> Unsupported(const TString& operation) const {
+            return NThreading::MakeFuture(NFq::TMessageStreamResult<TValue>::Failure(NFq::EMessageStreamStatus::Unsupported,
+                {NYql::TIssue(TStringBuilder() << operation << " is not implemented for mock stream " << Stream)}));
+        }
+
+        const TString Stream;
+        // The gateway does not retain clients, so this ownership has no cycle.
+        const TIntrusivePtr<TMockPqGateway> Gateway;
     };
 
     class TMockFederatedTopicClient final : public NYql::IFederatedTopicClient {
@@ -613,7 +629,7 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
     private:
-        TMockPqGateway* Self;
+        const TIntrusivePtr<TMockPqGateway> Self;
     };
 
     class TMockDeferredPublishClient final : public IMockPqDeferredPublishClient, public NYql::IDeferredPublishClient {
@@ -922,8 +938,8 @@ public:
     void UpdateClusterConfigs(const NYql::TPqGatewayConfigPtr& /*config*/) final {
     }
 
-    NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) final {
-        return MakeIntrusive<TMockTopicClient>(this);
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) final {
+        return std::make_shared<TMockTopicClient>(stream, this);
     }
 
     NYql::IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& /*settings*/) final {

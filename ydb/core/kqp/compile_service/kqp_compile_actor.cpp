@@ -348,6 +348,8 @@ private:
             default:
                 YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
         }
+
+        EnableNewRBO = Config->GetEnableNewRBO();
     }
 
     void Continue(const TActorContext &ctx) {

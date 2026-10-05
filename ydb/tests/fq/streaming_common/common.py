@@ -79,6 +79,12 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_updating_partitions_on_streaming_query_restart",
     }
     disabled_feature_flags = []
+    for flag in ("enable_streaming_aggregation", "enable_streaming_aggregation_advanced"):
+        if flag in param:
+            if param[flag]:
+                extra_feature_flags.add(flag)
+            else:
+                disabled_feature_flags.append(flag)
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     else:
@@ -129,11 +135,12 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
+        additional_log_configs=param.get("log_levels"),
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
         query_service_config={
-            "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
+            "available_external_data_sources": ["ObjectStorage", "Ydb"],
             "enable_match_recognize": True,
         },
         table_service_config={

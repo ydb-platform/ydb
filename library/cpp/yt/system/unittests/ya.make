@@ -7,6 +7,7 @@ SRCS(
     copyable_atomic_ut.cpp
     count_down_latch_ut.cpp
     env_ut.cpp
+    local_host_ut.cpp
     recursive_spin_lock_ut.cpp
     rw_spin_lock_ut.cpp
     spin_lock_count_ut.cpp

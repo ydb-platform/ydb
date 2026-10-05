@@ -12,6 +12,7 @@ SRCS(
     fork_aware_rw_spin_lock.cpp
     fork_aware_spin_lock.cpp
     futex.cpp
+    local_host.cpp
     notification_handle.cpp
     process_id.cpp
     recursive_spin_lock.cpp

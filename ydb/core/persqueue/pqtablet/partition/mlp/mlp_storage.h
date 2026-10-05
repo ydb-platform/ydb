@@ -378,12 +378,6 @@ private:
     void UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
     void UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
     void UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message);
-    // STD-mode (KeepMessageOrder == false) counterparts. They maintain the doubly-linked
-    // per-group chain and UnprocessedCount-based eligibility, allowing many in-flight per group.
-    void StdUpdateMessageGroupForNewMessage(ui64 offset, TMessage& message);
-    void StdUpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
-    void StdUpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
-    void StdUnlinkMessageFromGroup(ui64 offset, const TMessage& message);
     void UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
     void BuildAndLinkMessageGroups();
 

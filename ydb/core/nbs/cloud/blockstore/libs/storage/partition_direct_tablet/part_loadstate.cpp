@@ -189,6 +189,7 @@ void TPartitionActor::CompleteLoadState(
 {
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
+        ReportDiskId(ctx);
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;

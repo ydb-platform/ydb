@@ -1,5 +1,7 @@
 #include "kqp_rules_include.h"
 
+#include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -13,7 +15,9 @@ TIntrusivePtr<IOperator> CopyProducer(TOpReplicate& port, TExprContext& ctx, TPl
         renames.Add(source, bindings.At(source));
     }
     auto copy = producer.Copy(props, renames);
-    Y_ENSURE(copy, "Cannot expand shared " << producer.GetExplainName() << " without channel spilling");
+    if (!copy) {
+        return nullptr;
+    }
     // A copied read keeps its column names, so it may turn down a port ID.
     TMapIUs copies;
     for (const auto source : producer.GetOutputIUs()) {
@@ -44,11 +48,14 @@ bool TExpandReplicateRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCo
     }
     // The primary port keeps the producer until the others have their copies.
     auto& port = CastOperator<TOpReplicate>(*input);
-    if (port.IsPrimary()) {
+    if (port.IsPrimary() || !CanDuplicateSubtree(*port.GetInput(), props.Subplans)) {
         return false;
     }
-    // Without channel spilling every remaining consumer needs its own producer.
-    input = CopyProducer(port, ctx.ExprCtx, props);
+    auto copy = CopyProducer(port, ctx.ExprCtx, props);
+    if (!copy) {
+        return false;
+    }
+    input = std::move(copy);
     return true;
 }
 

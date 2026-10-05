@@ -1,5 +1,7 @@
 #include "kqp_rbo_test_helpers.h"
 
+#include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
@@ -36,6 +38,106 @@ void AssertSortKeys(const TSortIUs& original, const TSortIUs& copy, const TSubst
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpRboCopy) {
+    Y_UNIT_TEST(DuplicationRejectsVolatileExpressionsAndOpaqueFunctions) {
+        for (const TString callable : {"Random", "RandomNumber", "RandomUuid", "Now", "CurrentUtcDate",
+                "CurrentUtcDatetime", "CurrentUtcTimestamp", "CurrentTzDate", "CurrentTzDatetime",
+                "CurrentTzTimestamp", "Udf", "ScriptUdf", "SqlCall"}) {
+            TIdTestContext f;
+            const auto source = f.Id(), result = f.Id();
+            TMapIUs definitions;
+            definitions.Add(result, MakeUnaryCallable(callable, f.Column(source)));
+            auto map = MakeIntrusive<TOpMap>(f.Read({source}), f.Pos, std::move(definitions));
+            UNIT_ASSERT_C(!CanDuplicateOperator(*map), callable);
+            auto empty = MakeIntrusive<TOpEmptySource>(f.Pos, map->GetMapElements().At(result).GetExpression().Node);
+            UNIT_ASSERT_C(!CanDuplicateOperator(*empty), callable);
+        }
+    }
+
+    Y_UNIT_TEST(DuplicationChecksAggregateNamesWithoutTypes) {
+        for (const auto& [function, allowed] : TVector<std::pair<TString, bool>>{
+                {"count", true}, {"distinct", true}, {"sum", true}, {"min", true}, {"max", true},
+                {"avg", false}, {"variance_1_1", false}, {"some", false}, {"unknown_aggregate", false}}) {
+            TIdTestContext f;
+            const auto source = f.Id(), result = f.Id();
+            auto input = f.Read({source});
+            UNIT_ASSERT(!input->Type);
+            TAggregationIUs functions;
+            functions.Add(result, TOpAggregationTraits{source, function});
+            auto aggregate = MakeIntrusive<TOpAggregate>(input, std::move(functions), TOrderedIUs<>{},
+                EOpPhase::Undefined, false, f.Pos);
+            UNIT_ASSERT_VALUES_EQUAL_C(CanDuplicateOperator(*aggregate), allowed, function);
+            UNIT_ASSERT_VALUES_EQUAL_C(CanDuplicateSubtree(*aggregate, f.Props.Subplans), allowed, function);
+        }
+    }
+
+    Y_UNIT_TEST(DuplicatingOneOperatorDoesNotRequireDuplicatingItsInputs) {
+        TIdTestContext f;
+        const auto source = f.Id(), random = f.Id();
+        TMapIUs definitions;
+        definitions.Add(random, MakeUnaryCallable("RandomNumber", f.Column(source)));
+        auto map = MakeIntrusive<TOpMap>(f.Read({source}), f.Pos, std::move(definitions));
+        auto filter = MakeIntrusive<TOpFilter>(map, f.Pos, MakeBinaryPredicate("==", f.Column(source), f.Constant()));
+        UNIT_ASSERT(CanDuplicateOperator(*filter));
+        UNIT_ASSERT(!CanDuplicateSubtree(*filter, f.Props.Subplans));
+        auto read = f.Read({source});
+        UNIT_ASSERT(CanDuplicateOperator(*read));
+        read->Limit = f.Constant().Node;
+        UNIT_ASSERT(!CanDuplicateOperator(*read));
+    }
+
+    Y_UNIT_TEST(PushedReadProgramsCannotBeCopied) {
+        for (const bool savedPredicate : {false, true}) {
+            TIdTestContext f;
+            const auto source = f.Id();
+            auto read = f.Read({source});
+            const auto predicate = MakeBinaryPredicate("==", f.Column(source), f.Constant());
+            if (savedPredicate) {
+                read->OriginalPredicate = predicate;
+            } else {
+                const auto row = f.ExprCtx.NewArgument(f.Pos, "row");
+                read->OlapFilterLambda = f.ExprCtx.NewLambda(f.Pos,
+                    f.ExprCtx.NewArguments(f.Pos, {row}), TExprNode::TPtr(row));
+            }
+
+            UNIT_ASSERT(!CanDuplicateOperator(*read));
+            const auto size = f.Props.InfoUnitRegistry.Size();
+            TSubstitutions renames;
+            UNIT_ASSERT(!read->Copy(f.Props, renames));
+            UNIT_ASSERT_VALUES_EQUAL(f.Props.InfoUnitRegistry.Size(), size);
+            UNIT_ASSERT(renames.Keys().Empty());
+        }
+    }
+
+    Y_UNIT_TEST(ReadRangesMustBeRepeatableEvenWithoutAnOlapProgram) {
+        for (const bool points : {false, true}) {
+            TIdTestContext f;
+            auto read = f.Read({f.Id()});
+            read->RangeInfo.emplace();
+            auto& expression = points ? read->RangeInfo->Points : read->RangeInfo->ComputeNode;
+            expression = f.Constant().Node;
+            UNIT_ASSERT(CanDuplicateOperator(*read));
+            expression = f.ExprCtx.NewCallable(f.Pos, "RandomNumber", {});
+            UNIT_ASSERT(!CanDuplicateOperator(*read));
+        }
+    }
+
+    Y_UNIT_TEST(DuplicationChecksNestedSubplansAndCountsThemInTheBudget) {
+        for (const bool random : {false, true}) {
+            TIdTestContext f;
+            const auto innerCall = f.Id(), outerCall = f.Id(), value = f.Id(), nested = f.Id(), result = f.Id();
+            TMapIUs definitions;
+            definitions.Add(value, random ? MakeUnaryCallable("RandomNumber", f.Constant()) : f.Constant());
+            auto inner = MakeIntrusive<TOpMap>(MakeIntrusive<TOpEmptySource>(f.Pos), f.Pos, std::move(definitions));
+            f.Props.Subplans.Add(innerCall, inner, ESubplanType::EXPR, {}, value);
+            auto outer = f.Copies(MakeIntrusive<TOpEmptySource>(f.Pos), {{nested, innerCall}});
+            f.Props.Subplans.Add(outerCall, outer, ESubplanType::EXPR, {}, nested);
+            auto producer = f.Copies(MakeIntrusive<TOpEmptySource>(f.Pos), {{result, outerCall}});
+
+            UNIT_ASSERT_VALUES_EQUAL(CanDuplicateSubtree(*producer, f.Props.Subplans, 6), !random);
+            UNIT_ASSERT(!CanDuplicateSubtree(*producer, f.Props.Subplans, 5));
+        }
+    }
+
     Y_UNIT_TEST(CopiesSharedProducerOnceIncludingSecondaryFirstTraversal) {
         for (const bool secondaryFirst : {false, true}) {
             TIdTestContext f;
@@ -319,7 +421,7 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         UNIT_ASSERT(effect->GetOutputIUs() == TUnorderedIUs{result});
     }
 
-    Y_UNIT_TEST(ReplicateExpansionCopiesEffects) {
+    Y_UNIT_TEST(ReplicateExpansionDoesNotDuplicateEffects) {
         TIdTestContext f;
         f.Config->_KqpEnableSpilling = false;
         const auto key = f.Id("Key"), result = f.Id("result");
@@ -328,7 +430,6 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
             TEffectOptions{}, TOrderedIUs<TString>{{key, "Key"}}, TOrderedIUs<TString>{{result, "Key"}});
         auto hub = TReplicate::Create(effect, f.Pos, f.Props.InfoUnitRegistry);
         auto left = hub->AddOutput(), right = hub->AddOutput();
-        const auto rightResult = right->GetRebindings().At(result);
         auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{});
         auto root = f.Root(join, {{result, "result"}});
         TVector<std::unique_ptr<IRule>> rules;
@@ -336,13 +437,9 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
 
         TRuleBasedStage("Expand Replicate", std::move(rules)).RunStage(*root, f.RboCtx);
 
-        UNIT_ASSERT(join->GetLeftInput() == effect);
-        UNIT_ASSERT(join->GetRightInput() != effect);
-        UNIT_ASSERT(join->GetRightInput()->Kind == EOperator::TableEffect);
-        UNIT_ASSERT(join->GetRightInput()->GetOutputIUs() == TUnorderedIUs{rightResult});
-        for (const auto& item : *root) {
-            UNIT_ASSERT(item.Current->Kind != EOperator::Replicate);
-        }
+        UNIT_ASSERT(join->GetLeftInput() == left);
+        UNIT_ASSERT(join->GetRightInput() == right);
+        UNIT_ASSERT(hub->GetInput() == effect);
         NTests::AssertIdInvariants(*root, root->PlanProps);
     }
 

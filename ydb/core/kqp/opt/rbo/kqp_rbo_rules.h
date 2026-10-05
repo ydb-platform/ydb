@@ -11,9 +11,9 @@ namespace NKikimr {
 namespace NKqp {
 
 // A Replicate becomes a stage with several outputs, which needs channel spilling.
-// Give each non-primary port its own copy of the producer; the last port then
-// reads the producer itself. The pipeline enables this rule without channel
-// spilling, after decorrelation and before read pushdown.
+// Give each non-primary port a copy when separate evaluation is safe; the last
+// port reads the producer itself. Enable after logical rewrites and pruning,
+// before read pushdown. Stage assignment rejects remaining sharing without spilling.
 class TExpandReplicateRule final: public IRule {
 public:
     TExpandReplicateRule()

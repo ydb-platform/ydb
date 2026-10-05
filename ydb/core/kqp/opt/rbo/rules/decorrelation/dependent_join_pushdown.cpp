@@ -1,6 +1,7 @@
 #include "dependent_join_pushdown.h"
 
 #include "../kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -98,52 +99,6 @@ TIntrusivePtr<TOpDependentJoin> PushIntoCopy(const TIntrusivePtr<IOperator>& pus
         domainColumns.Add(iu, columns.At(dependentJoin->GetDomainColumn(iu)));
     }
     return MakeIntrusive<TOpDependentJoin>(domain, newInput, dependentJoin->Dependencies, dependentJoin->Pos, std::move(domainColumns));
-}
-
-bool IsDeterministic(const TExpression& expression) {
-    static const THashSet<TStringBuf> nondeterministic = {
-        "Random", "RandomNumber", "RandomUuid", "Now",
-        "CurrentUtcDate", "CurrentUtcDatetime", "CurrentUtcTimestamp",
-        "CurrentTzDate", "CurrentTzDatetime", "CurrentTzTimestamp",
-        // Nothing says which UDFs are deterministic.
-        "Udf", "ScriptUdf", "SqlCall",
-    };
-    return !FindNode(expression.GetLambda(), [](const TExprNode::TPtr& node) {
-        return node->IsCallable() && nondeterministic.contains(node->Content());
-    });
-}
-
-bool IsDeterministicAggregation(const TString& function) {
-    static const THashSet<TStringBuf> deterministic = {"count", "sum", "min", "max", "avg", "distinct", "variance_1_1"};
-    return deterministic.contains(function);
-}
-
-// A Replicate gives every consumer the same rows, but a copy is evaluated on its own.
-// So only an operator that returns the same rows for the same input can be copied.
-bool CanCopyForConsumer(const IOperator& op) {
-    for (const auto& expression : op.GetExpressions()) {
-        if (!IsDeterministic(expression)) {
-            return false;
-        }
-    }
-
-    switch (op.Kind) {
-        case EOperator::Replicate:
-        case EOperator::AddDependencies:
-        case EOperator::Filter:
-        case EOperator::Map:
-        case EOperator::UnionAll:
-        case EOperator::Join:
-            return true;
-        case EOperator::Aggregate:
-            return std::ranges::all_of(CastOperator<TOpAggregate>(op).GetAggregationTraits().Items() | std::views::values,
-                                       [](const TOpAggregationTraits& traits) { return IsDeterministicAggregation(traits.AggFunction); });
-        // Without a total order a limit can take other rows in every copy.
-        case EOperator::Sort:
-            return !CastOperator<TOpSort>(op).LimitCond;
-        default:
-            return false;
-    }
 }
 
 TSortIUs SubstituteSortKeys(const TSortIUs& keys, const TSubstitutions& substitutions) {
@@ -716,7 +671,10 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughReplicateRule::SimpleMatchAndA
     if (TOpReplicate::TryCollapse(body, ctx.ExprCtx, props)) {
         return PushInto(dependentJoin, body);
     }
-    if (!CanCopyForConsumer(*port->GetReplicate().GetInput())) {
+    const auto& producer = *port->GetReplicate().GetInput();
+    // CopyWithInputs does not clone subplan call bindings and their captures.
+    // Full subtree copying can handle them; this shallow-copy path cannot.
+    if (!producer.GetSubplanIUs(props.Subplans).Empty() || !CanDuplicateOperator(producer)) {
         return input;
     }
 

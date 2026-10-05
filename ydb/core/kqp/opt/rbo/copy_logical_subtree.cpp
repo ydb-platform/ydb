@@ -1,7 +1,66 @@
-#include "kqp_operator.h"
+#include "copy_logical_subtree.h"
+
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NKikimr::NKqp {
 namespace {
+
+bool IsRepeatable(const TExprNode::TPtr& expression) {
+    return !expression || !FindNode(expression, [](const TExprNode::TPtr& node) {
+        return NYql::NNodes::TCoNonDeterministicBase::Match(node.Get())
+            || node->IsCallable({"Udf", "ScriptUdf", "SqlCall"});
+    });
+}
+
+bool CanDuplicateAggregation(const TOpAggregate& aggregate) {
+    // Deliberately ignore input types and reduction-order differences.
+    for (const auto& [output, traits] : aggregate.GetAggregationTraits().Items()) {
+        Y_UNUSED(output);
+        const auto& function = traits.AggFunction;
+        if (function != "count" && function != "distinct" && function != "sum"
+            && function != "min" && function != "max") {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsRepeatable(const IOperator& op) {
+    for (const auto& expression : op.GetExpressions()) {
+        if (!IsRepeatable(expression.get().Node)) {
+            return false;
+        }
+    }
+    switch (op.Kind) {
+        case EOperator::Replicate:
+        case EOperator::AddDependencies:
+        case EOperator::Filter:
+        case EOperator::Map:
+        case EOperator::UnionAll:
+        case EOperator::Join:
+            return true;
+        case EOperator::Source: {
+            const auto& read = CastOperator<TOpRead>(op);
+            return !read.Limit && (!read.RangeInfo ||
+                (IsRepeatable(read.RangeInfo->ComputeNode) && IsRepeatable(read.RangeInfo->Points)));
+        }
+        case EOperator::EmptySource:
+            return IsRepeatable(CastOperator<TOpEmptySource>(op).Input);
+        case EOperator::Aggregate:
+            return CanDuplicateAggregation(CastOperator<TOpAggregate>(op));
+        case EOperator::Sort:
+            return !CastOperator<TOpSort>(op).LimitCond;
+        // Conservatively reject operators without an explicit repeatability check.
+        default:
+            return false;
+    }
+}
+
+// Embedded programs need column-ID and row-schema rebinding in CopyImpl.
+bool CanCopyRead(const TOpRead& read) {
+    return !read.OlapFilterLambda && !read.OriginalPredicate;
+}
 
 TInfoUnitId CopyDefinition(TInfoUnitId id, TInfoUnitRegistry& registry, TSubstitutions& renames) {
     if (const auto* renamed = renames.Find(id)) {
@@ -38,6 +97,33 @@ T CopyDefinitions(const T& definitions, TInfoUnitRegistry& registry, TSubstituti
 }
 
 } // namespace
+
+bool CanDuplicateOperator(const IOperator& op) {
+    return (op.Kind != EOperator::Source || CanCopyRead(CastOperator<TOpRead>(op)))
+        && IsRepeatable(op);
+}
+
+bool CanDuplicateSubtree(const IOperator& root, const TSubplans& subplans, size_t maxOperators) {
+    THashSet<const IOperator*> visited;
+    TVector<const IOperator*> pending{&root};
+    while (!pending.empty()) {
+        const auto* op = pending.back();
+        pending.pop_back();
+        if (!visited.insert(op).second) {
+            continue;
+        }
+        if (visited.size() > maxOperators || !CanDuplicateOperator(*op)) {
+            return false;
+        }
+        for (const auto* child : op->GetChildren()) {
+            pending.push_back(child);
+        }
+        for (const auto call : op->GetSubplanIUs(subplans)) {
+            pending.push_back(subplans.At(call).Plan.Get());
+        }
+    }
+    return true;
+}
 
 // Each invocation owns a separate graph copy. Definitions are allocated before
 // any uses are rebound, including captures of definitions visited later.
@@ -175,8 +261,8 @@ TIntrusivePtr<IOperator> TOpEmptySource::CopyImpl(TInfoUnitRegistry& registry, T
 }
 
 TIntrusivePtr<IOperator> TOpRead::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {
-    if (OlapFilterLambda || OriginalPredicate) {
-        return nullptr; // Embedded physical programs require their own rebinding.
+    if (!CanCopyRead(*this)) {
+        return nullptr;
     }
     return MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
         TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos);

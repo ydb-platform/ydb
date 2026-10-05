@@ -105,6 +105,11 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
     } else if (input->Kind == EOperator::Replicate) {
         auto& hub = CastOperator<TOpReplicate>(*input).GetReplicate();
         auto& producer = *hub.GetInput();
+        // Match the compiler's AllowWithSpilling setting for multi-output stages.
+        const auto& kqpCtx = ctx.KqpCtx;
+        Y_ENSURE(kqpCtx.Config->GetEnableQueryServiceSpilling()
+            && (kqpCtx.IsGenericQuery() || kqpCtx.IsScanQuery()) && kqpCtx.Config->SpillingEnabled(),
+            "Cannot execute shared " << producer.GetExplainName() << " with channel spilling disabled");
         input->Props.StageId = producer.Props.StageId;
         // A Replicate over a port needs a row stream, not its producer's variant.
         if (producer.Kind == EOperator::Replicate) {

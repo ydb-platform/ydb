@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/volume)
 SRCS(
     volume_actor_ut.cpp
     volume_database_ut.cpp
+    volume_ut.cpp
 )
 
 PEERDIR(

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PROVIDES(
     yql_pg_sql_translator
@@ -14,7 +14,5 @@ PEERDIR(
 SRCS(
     pg_sql_dummy.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -250,6 +250,17 @@ struct TConsumerEnv {
         return state;
     }
 
+    std::vector<ui64> LockedOffsets() {
+        std::vector<ui64> offsets;
+        auto state = GetState();
+        for (const auto& message : state->Messages) {
+            if (message.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+                offsets.push_back(message.Offset);
+            }
+        }
+        return offsets;
+    }
+
     void AssertStatus(ui64 offset, TStorage::EMessageStatus status) {
         auto state = GetState();
         for (const auto& message : state->Messages) {
@@ -421,15 +432,38 @@ Y_UNIT_TEST(ReadQueuedDuringWriteLocksNextMessageAfterKv) {
 
     env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
     auto firstLockKv = env.GrabKvRequest();
+    auto locked = env.LockedOffsets();
+    UNIT_ASSERT_VALUES_EQUAL(locked.size(), 1);
+    const ui64 firstLocked = locked[0];
+
     env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
     env.ReplyKv(*firstLockKv);
 
-    env.AssertPersisted(1, TStorage::EMessageStatus::Locked,
-        "A read queued in StateWrite must lock the next message after KV completes");
-    env.AssertStatus(0, TStorage::EMessageStatus::Locked);
+    auto secondKv = env.ExpectPersist("A read queued in StateWrite must lock another message after KV completes");
+    locked = env.LockedOffsets();
+    UNIT_ASSERT_VALUES_EQUAL(locked.size(), 2);
+    const ui64 secondLocked = locked[0] == firstLocked ? locked[1] : locked[0];
+    UNIT_ASSERT_VALUES_UNEQUAL(secondLocked, firstLocked);
+    env.ReplyKv(*secondKv);
 
-    env.SendCommit(0);
-    env.AssertQueueStillProcessesAfterCommit(0, 1);
+    env.SendCommit(firstLocked);
+    env.AssertPersisted(firstLocked, TStorage::EMessageStatus::Committed, "queued commit must be applied");
+    env.DropProcessingWakeups = false;
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    auto nextKv = env.ExpectPersist("queue must still serve a later read");
+    locked = env.LockedOffsets();
+    bool secondStillLocked = false;
+    size_t otherLocked = 0;
+    for (ui64 offset : locked) {
+        if (offset == secondLocked) {
+            secondStillLocked = true;
+        } else {
+            ++otherLocked;
+        }
+    }
+    UNIT_ASSERT(secondStillLocked);
+    UNIT_ASSERT_VALUES_EQUAL(otherLocked, 1);
+    env.ReplyKv(*nextKv);
 }
 
 Y_UNIT_TEST(DelayedFetchServesAlreadyQueuedRead) {

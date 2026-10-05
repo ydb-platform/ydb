@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datashard.h
@@ -162,6 +162,7 @@ JOIN_SRCS(
     all_datashard_read.cpp
     datashard__read_columns.cpp
     datashard__read_iterator.cpp
+    read_iterator_sampling.cpp
 )
 
 JOIN_SRCS(
@@ -497,8 +498,6 @@ PEERDIR(
     ydb/core/io_formats/json
 )
 
-YQL_LAST_ABI_VERSION()
-
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS
@@ -509,7 +508,15 @@ ELSE()
         export_s3_buffer.cpp
         export_s3_uploader.cpp
         export_ydb_dump.cpp
+        import_data_parser_csv.cpp
+        import_data_parser_parquet.cpp
+        import_parquet_s3_file.cpp
         import_s3.cpp
+        import_s3_engine.cpp
+    )
+    PEERDIR(
+        contrib/libs/apache/arrow
+        ydb/core/formats/arrow
     )
 ENDIF()
 
@@ -530,6 +537,7 @@ RECURSE_FOR_TESTS(
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan
+    ut_import_s3_engine
     ut_init
     ut_keys
     ut_kqp

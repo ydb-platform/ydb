@@ -208,6 +208,11 @@ private:
                     auto it = properties.find("total_memory_limit_percent_per_node");
                     return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
                 }});
+                insert({TSchema::TotalCpuGuaranteePercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("total_cpu_guarantee_percent_per_node");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
+                }});
             }
         };
         static TExtractorsMap extractors;

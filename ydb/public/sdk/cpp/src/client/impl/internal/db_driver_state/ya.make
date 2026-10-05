@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    authenticator.cpp
     endpoint_pool.cpp
     state.cpp
 )

@@ -102,6 +102,8 @@
 /ydb/core/kqp/finalize_script_service/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
+/ydb/core/kqp/opt/peephole/kqp_opt_peephole_streaming.cpp @ydb-platform/fq
+/ydb/core/kqp/provider/yql_kikimr_provider_streaming_ut.cpp @ydb-platform/fq
 /ydb/core/kqp/proxy_service/proto/result_set_meta.proto @ydb-platform/fq
 /ydb/core/kqp/proxy_service/script_executions_utils/ @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions_impl.h @ydb-platform/fq
@@ -145,6 +147,8 @@
 /ydb/library/yql/dq/actors/compute/ut/dq_sync_compute_actor_ut.cpp @ydb-platform/fq
 /ydb/library/yql/dq/actors/compute/ut/mock_lookup_factory.* @ydb-platform/fq
 /ydb/library/yql/dq/comp_nodes/dq_watermark_generator.* @ydb-platform/fq
+/ydb/library/yql/dq/comp_nodes/ut/dq_multihopping_saveload_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/comp_nodes/ut/dq_watermark_generator_ut.cpp @ydb-platform/fq
 /ydb/library/yql/dq/opt/dq_opt_hopping.* @ydb-platform/fq
 /ydb/library/yql/dq/proto/dq_state_load_plan.proto @ydb-platform/fq
 /ydb/library/yql/dq/runtime/streaming/ @ydb-platform/fq
@@ -157,6 +161,7 @@
 /ydb/library/yql/providers/pq/ @ydb-platform/fq
 /ydb/library/yql/providers/s3/ @ydb-platform/fq
 /ydb/library/yql/providers/solomon/ @ydb-platform/fq
+/ydb/library/yql/providers/yt/ @ydb-platform/fq
 /ydb/library/yql/tests/sql/suites/solomon/ @ydb-platform/fq
 /ydb/library/yql/tools/solomon_emulator/ @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/ @ydb-platform/fq

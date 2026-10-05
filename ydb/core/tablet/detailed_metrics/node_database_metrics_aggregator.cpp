@@ -110,17 +110,24 @@ namespace NKikimr {
             }
 
             void Pack(NKikimrSysView::TDbTabletCounters& out) {
-                // The absolute snapshot becomes the retained delta baseline below.
+                // The full current values become the retained delta baseline below.
                 NProfiling::TMemoryTagScope memoryScope(NodeMemoryTag());
                 RecalcAll();
 
+                // Non-derivative histograms (the current state rather than increments) travel
+                // as their full current values: the receiver replaces them, so a receiver
+                // that lost its state recovers with the very next report
                 NKikimrSysView::TDbTabletCounters current;
                 current.SetType(TabletType);
                 if (ExecutorCounters.IsInitialized) {
                     ExecutorCounters.ToProto(*current.MutableExecutorCounters(), *current.MutableMaxExecutorCounters());
+                    NSysView::MarkHistogramsNonDerivative(current.MutableExecutorCounters(),
+                        ExecutorCounters.GetNonDerivativeHistogramIndices());
                 }
                 if (AppCounters.IsInitialized) {
                     AppCounters.ToProto(*current.MutableAppCounters(), *current.MutableMaxAppCounters());
+                    NSysView::MarkHistogramsNonDerivative(current.MutableAppCounters(),
+                        AppCounters.GetNonDerivativeHistogramIndices());
                 }
 
                 {
@@ -361,7 +368,7 @@ namespace NKikimr {
             void RetireBucket(const TString& tablePath, const TBucketKey& key, TCountersBucket& bucket) {
                 NProfiling::TMemoryTagScope memoryScope(NodeMemoryTag());
                 // Forget has removed the last source. Pack retains unsent cumulative history
-                // and cancels the old live histogram before its baseline is destroyed.
+                // and reports the non-derivative histograms empty before the bucket is destroyed.
                 NKikimrSysView::TDbTabletCounters final;
                 bucket.Pack(final);
                 auto [it, inserted] = PendingCounters.try_emplace(TContributionKey{tablePath, key});

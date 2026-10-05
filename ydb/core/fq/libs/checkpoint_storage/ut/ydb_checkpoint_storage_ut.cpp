@@ -41,6 +41,15 @@ public:
     size_t CleanupCalls = 0;
     std::function<NThreading::TFuture<NYql::TIssues>(const TVector<TCleanupGraphSink>&, std::optional<ui64>)> CleanupHandler;
 
+    TStringBuf GetSourceName() const override {
+        return {};
+    }
+
+    NThreading::TFuture<NYql::TIssues> PrepareSourceRecovery(TVector<TPrepareSource>&&) override {
+        UNIT_FAIL("Unexpected source recovery in checkpoint storage tests");
+        return {};
+    }
+
     TStringBuf GetSinkName() const override {
         return SinkName;
     }

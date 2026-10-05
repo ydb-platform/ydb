@@ -46,16 +46,25 @@ public:
             {"rid", rid},
             {"pathId", pathId});
 
+        const auto initialState = record.GetConfig().GetSkipInitialScan()
+            ? TReplication::EState::Paused : TReplication::EState::Ready;
+
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::Replications::PathLocalId>(pathId.LocalPathId),
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
-            NIceDb::TUpdate<Schema::Replications::Database>(record.GetDatabase())
+            NIceDb::TUpdate<Schema::Replications::Database>(record.GetDatabase()),
+            NIceDb::TUpdate<Schema::Replications::State>(initialState),
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(initialState)
         );
         if (record.HasLocation()) {
             record.MutableConfig()->MutableLocation()->CopyFrom(record.GetLocation());
         }
         Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()), std::move(record.GetDatabase()));
+        if (initialState == TReplication::EState::Paused) {
+            Replication->SetState(initialState);
+            Replication->SetDesiredState(initialState);
+        }
 
         Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::SUCCESS);
         return true;

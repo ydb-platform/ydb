@@ -16,6 +16,31 @@
 
 namespace NKikimr::NDDisk {
 
+void TDDiskActor::InitMemoryMetrics() {
+    if (auto* metrics = GetMetricSystem()) {
+        const std::array<TLabel, 3> labels = {{
+            {.Name = "pdisk", .Value = ToString(BaseInfo.PDiskId)},
+            {.Name = "slot", .Value = ToString(BaseInfo.VDiskSlotId)},
+            {.Name = "incarnation", .Value = SelfId().ToString()},
+        }};
+        MemoryMetric = metrics->CreateLine("ddisk.memory.checksum_cache_estimated_bytes", labels);
+        CollectMemoryMetrics();
+    }
+}
+
+void TDDiskActor::CollectMemoryMetrics() {
+    if (Stopping || !MemoryMetric) {
+        return;
+    }
+    // Before PDisk initialization the enabled checksum cache size is not known yet.
+    if (!Config.EnableChecksums) {
+        MemoryMetric.Append(0);
+    } else if (IntegrityManager) {
+        MemoryMetric.Append(IntegrityManager->CachedBlockStates() * TIntegrityManager::BlockStateApproxBytes);
+    }
+    Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(EWakeupTag::WakeupCollectMemoryMetrics));
+}
+
 namespace {
 
 TString FormatDuration(TDuration v) {
@@ -190,9 +215,12 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
 
         // --- Section 4: Chunks ------------------------------------------------------
         ui64 dataChunksInUse = 0;
-        for (const auto& [tabletId, perTablet] : ChunkRefs) {
+        ui64 tabletsWithChunks = 0;
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& perTablet = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             dataChunksInUse += perTablet.size();
+            tabletsWithChunks += !perTablet.empty();
         }
         const ui64 reservedFree = ChunkReserve.size();
         const ui64 commitsInFlight = ChunkMapIncrementsInFlight.size();
@@ -204,7 +232,7 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "Reserve refill in flight"; } TABLED() { str << (ReserveInFlight ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Committed (data)"; } TABLED() { str << dataChunksInUse; } }
                 TABLER() { TABLED() { str << "Commits in flight"; } TABLED() { str << commitsInFlight; } }
-                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << ChunkRefs.size(); } }
+                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << tabletsWithChunks; } }
                 TABLER() { TABLED() { str << "Pending chunk allocations"; } TABLED() { str << ChunkAllocateQueue.size(); } }
                 TABLER() {
                     TABLED() { str << "Committed data bytes"; }

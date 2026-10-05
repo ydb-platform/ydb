@@ -620,6 +620,67 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             << " mismatches# " << FormatList(mismatches));
     }
 
+    // Heap-mode gauges {SizeClass, Stripe} of each running VDisk of the static group, keyed by order number.
+    THashMap<ui32, std::pair<i64, i64>> StaticGroupHeapModes(TTestBasicRuntime& runtime) {
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        THashMap<ui32, std::pair<i64, i64>> modes;
+        for (ui32 orderNumber = 0; orderNumber < 8; ++orderNumber) {
+            auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "vdisks");
+            const std::pair<TString, TString> chain[] = {
+                {"storagePool", "static"},
+                {"group", Sprintf("%09" PRIu32, groupId)},
+                {"orderNumber", Sprintf("%02" PRIu32, orderNumber)},
+                {"pdisk", Sprintf("%09" PRIu32, 0)},
+            };
+            for (const auto& [name, value] : chain) {
+                if (counters) {
+                    counters = counters->FindSubgroup(name, value);
+                }
+            }
+            if (!counters) {
+                continue; // the VDisk is not running
+            }
+            counters->EnumerateSubgroups([&](const TString& name, const TString& media) {
+                const auto state = counters->FindSubgroup(name, media)->FindSubgroup("subsystem", "state");
+                UNIT_ASSERT(state);
+                modes[orderNumber] = {state->GetCounter("HeapAllocatorSizeClass")->Val(),
+                    state->GetCounter("HeapAllocatorStripe")->Val()};
+            });
+        }
+        return modes;
+    }
+
+    // Block-4-2 static group: eight VDisks, order number equals the domain index.
+    // N = 1 enables only order 0. Poisoning that disk drops both gauges.
+    CUSTOM_UNIT_TEST(StaticGroupHeapAllocatorNumLeadingDisks) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, "", nullptr, {}, [&](ui32, TNodeWardenConfig& config) {
+            config.FeatureFlags->SetEnableVDiskHeapAllocator(true);
+            config.BlobStorageConfig->SetVDiskHeapAllocatorNumLeadingDisks(1);
+        }, false);
+
+        const auto modes = StaticGroupHeapModes(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(modes.size(), 8);
+        for (const auto& [orderNumber, mode] : modes) {
+            const bool stripe = orderNumber == 0;
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.first, stripe ? 0 : 1, orderNumber);
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.second, stripe ? 1 : 0, orderNumber);
+        }
+
+        runtime.Send(new IEventHandle(MakeBlobStorageVDiskID(runtime.GetNodeId(0), 0, 0), {}, new TEvents::TEvPoisonPill()), 0);
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::TSystem::Gone));
+        runtime.DispatchEvents(options);
+
+        const auto after = StaticGroupHeapModes(runtime);
+        UNIT_ASSERT_C(!after.contains(0), "order 0 gauges survived VDisk termination");
+        UNIT_ASSERT_VALUES_EQUAL(after.size(), 7);
+        for (const auto& [orderNumber, mode] : after) {
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.first, 1, orderNumber);
+            UNIT_ASSERT_VALUES_EQUAL_C(mode.second, 0, orderNumber);
+        }
+    }
+
     void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored,
             NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
         auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max());
@@ -1257,6 +1318,30 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     }
 
+    CUSTOM_UNIT_TEST(UseFixedVDiskSlotSizeInference) {
+        auto config = MakeIntrusive<TPDiskConfig>("fake_drive", ui64{0}, ui32{0}, ui64{0});
+        for (const auto& [driveSize, expectedSlots, expectedUnits] : std::vector<std::tuple<ui64, ui32, ui32>>{
+                {999, 0, 1}, {1000, 1, 1}, {1500, 1, 1}, {7900, 7, 1}, {16000, 16, 1},
+                {24000, 16, 1}, {38000, 16, 2}, {48000, 16, 3}, {77000, 16, 4}}) {
+            NStorage::TNodeWarden::InferPDiskSlotCount(config, driveSize, 1000, 16, false);
+            const ui32 originalSlots = config->ExpectedSlotCount;
+            const ui32 originalUnits = config->SlotSizeInUnits;
+            for (bool enabled : {true, false, true, false}) {
+                NStorage::TNodeWarden::InferPDiskSlotCount(config, driveSize, 1000, 16, enabled);
+                UNIT_ASSERT_VALUES_EQUAL(config->ExpectedSlotCount, enabled ? expectedSlots : originalSlots);
+                UNIT_ASSERT_VALUES_EQUAL(config->ExpectedSlotSize, enabled ? 1000 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(config->SlotSizeInUnits, enabled ? expectedUnits : originalUnits);
+            }
+        }
+        // 7.6 TB / 200 GB: the control changes 10 four-unit slots to 16 two-unit slots.
+        NStorage::TNodeWarden::InferPDiskSlotCount(config, 7'600'000'000'000, 200'000'000'000, 16, false);
+        UNIT_ASSERT_VALUES_EQUAL(config->ExpectedSlotCount, 10);
+        UNIT_ASSERT_VALUES_EQUAL(config->SlotSizeInUnits, 4);
+        NStorage::TNodeWarden::InferPDiskSlotCount(config, 7'600'000'000'000, 200'000'000'000, 16, true);
+        UNIT_ASSERT_VALUES_EQUAL(config->ExpectedSlotCount, 16);
+        UNIT_ASSERT_VALUES_EQUAL(config->SlotSizeInUnits, 2);
+    }
+
     CUSTOM_UNIT_TEST(TestInferPDiskSlotCountPureFunction) {
         TestInferPDiskSlotCount(7900, 1000, 16, 8, 1u, 0.0125);
         TestInferPDiskSlotCount(8000, 1000, 16, 8, 1u, std::numeric_limits<double>::epsilon());
@@ -1299,7 +1384,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
             TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
             std::optional<ui64> expectedSlotSize = std::nullopt,
-            TDuration simTimeout = TDuration::Seconds(10)) {
+            TDuration simTimeout = TDuration::Seconds(10), bool waitForSettings = false) {
         const int maxAttempts = 10;
         for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
             // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
@@ -1310,6 +1395,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskId(), pdiskId);
             if (pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
                 UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
+                continue;
+            }
+            if (waitForSettings && (pdiskInfo.GetExpectedSlotCount() != expectedSlotCount
+                    || pdiskInfo.GetSlotSizeInUnits() != expectedSlotSizeInUnits
+                    || pdiskInfo.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach Whiteboard");
                 continue;
             }
             UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
@@ -1342,17 +1433,24 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
                 continue;
             }
+            if (waitForSettings && (metrics.GetExpectedSlotCount() != expectedSlotCount
+                    || metrics.GetSlotSizeInUnits() != expectedSlotSizeInUnits
+                    || metrics.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach NodeWarden metrics");
+                continue;
+            }
             // metrics are replaced as a whole on the receiving side, so zero values are
-            // reported by omitting the field
-            UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0);
+            // reported by omitting the field, except ExpectedSlotCount with fixed quotas.
+            UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0 || expectedSlotSize.value_or(0) != 0);
             UNIT_ASSERT(metrics.HasSlotSizeInUnits());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            if (expectedSlotSize) {
+            if (expectedSlotSize.value_or(0)) {
                 UNIT_ASSERT(metrics.HasExpectedSlotSize());
                 UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), *expectedSlotSize);
             } else {
                 UNIT_ASSERT(!metrics.HasExpectedSlotSize());
+                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), 0);
             }
             UNIT_ASSERT(metrics.HasPDiskUsage());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
@@ -1362,7 +1460,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     }
 
-    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime) {
+    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false) {
         // Setup logging
         SetupLogging(runtime);
         runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
@@ -1373,6 +1471,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
         app.AddHive(0);
         SetupPDiskSubsystem(&runtime, false);
+        app.InitIcb(runtime.GetNodeCount());
+        RegisterSharedControl(app.Icb[0]->PDiskControls.UseFixedVDiskSlotSize,
+            0, 0, 1, useFixedVDiskSlotSize);
         runtime.Initialize(app.Unwrap());
 
         // Setup BSNodeWarden
@@ -2283,6 +2384,49 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TStringStream out;
         httpInfoRes->Get()->Output(out);
         UNIT_ASSERT_C(out.Str().Contains("Drive is smaller than ExpectedSlotSize"), out.Str());
+    }
+
+    CUSTOM_UNIT_TEST(UseFixedVDiskSlotSizeRuntimeSwitch) {
+        for (bool initiallyEnabled : {false, true}) {
+            TTestBasicRuntime runtime(1, false);
+            const TActorId warden = SetupNodeWardenOnly(runtime, initiallyEnabled);
+            UpdateInferPDiskSlotCountSettings(runtime, warden, 100_GB, 16, false);
+            const ui32 nodeId = runtime.GetNodeId(0);
+            const ui32 pdiskId = 1002;
+            const auto fakeNodeWarden = runtime.AllocateEdgeActor();
+            runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+            const auto whiteboard = runtime.AllocateEdgeActor();
+            runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), whiteboard);
+
+            auto checkSettings = [&](ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
+                    std::optional<ui64> expectedSlotSize = std::nullopt) {
+                CheckInferredPDiskSettings(runtime, whiteboard, fakeNodeWarden, pdiskId,
+                    expectedSlotCount, expectedSlotSizeInUnits, expectedSlotSize, TDuration::Seconds(10), true);
+            };
+
+            NKikimrBlobStorage::TPDiskConfig config;
+            CreatePDisk(runtime, 0, "SectorMap:UseFixedVDiskSlotSizeRuntimeSwitch:2400", 0, pdiskId, 0, &config, warden);
+            if (initiallyEnabled) {
+                checkSettings(16, 1, 100_GB);
+            } else {
+                checkSettings(12, 2);
+            }
+
+            auto setControl = [&](bool enabled) {
+                TControlBoard::SetValue(enabled, runtime.GetAppData().Icb->PDiskControls.UseFixedVDiskSlotSize);
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            };
+            setControl(true);
+            checkSettings(16, 1, 100_GB);
+            UpdateInferPDiskSlotCountSettings(runtime, warden, 700_GB, 16, false);
+            checkSettings(3, 1, 700_GB);
+            setControl(false);
+            checkSettings(3, 1);
+            setControl(true);
+            checkSettings(3, 1, 700_GB);
+            setControl(false);
+            checkSettings(3, 1);
+        }
     }
 
     CUSTOM_UNIT_TEST(TestInferPDiskSlotCountWithRealNodeWarden) {

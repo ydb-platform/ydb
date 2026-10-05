@@ -91,7 +91,8 @@ TSqlColumnRefMatch ResolveSqlColumnRef(
     const TInputs& inputs,
     const THashSet<TString>& possibleAliases,
     bool scanColumnsOnly,
-    bool projectionRefsResolved = false);
+    bool projectionRefsResolved = false,
+    bool allowProjection = true);
 
 bool ScanColumns(
     TExprNode::TPtr root,
@@ -105,7 +106,8 @@ bool ScanColumns(
     bool scanColumnsOnly,
     bool hasEmitPgStar = false,
     THashMap<TString, TString> usedInUsing = {},
-    bool projectionRefsResolved = false);
+    bool projectionRefsResolved = false,
+    bool allowProjection = true);
 
 bool ScanColumnsForSublinks(
     bool& needRebuildSubLinks,
@@ -306,7 +308,8 @@ TSqlColumnRefMatch ResolveSqlColumnRef(
     const TInputs& inputs,
     const THashSet<TString>& possibleAliases,
     bool scanColumnsOnly,
-    bool projectionRefsResolved)
+    bool projectionRefsResolved,
+    bool allowProjection)
 {
     YQL_ENSURE(node.IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"}));
 
@@ -325,6 +328,9 @@ TSqlColumnRefMatch ResolveSqlColumnRef(
     ui32 matchedAliasICount = 0;
 
     for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
+        if (priority == TInput::Projection && !allowProjection) {
+            continue;
+        }
         ui32 matches = 0;
         const TInput* matchedInput = nullptr;
         TMaybe<ui32> matchedPosition;
@@ -414,11 +420,18 @@ bool ScanColumns(
     bool scanColumnsOnly,
     bool hasEmitPgStar,
     THashMap<TString, TString> usedInUsing,
-    bool projectionRefsResolved)
+    bool projectionRefsResolved,
+    bool allowProjection)
 {
     bool isError = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
+            return false;
+        } else if (allowProjection && node->IsCallable({"YqlAgg", "PgAgg"})) {
+            if (!ScanColumns(node, inputs, possibleAliases, hasStar, hasColumnRef, refs, qualifiedRefs,
+                ctx, scanColumnsOnly, hasEmitPgStar, usedInUsing, projectionRefsResolved, /*allowProjection=*/false)) {
+                isError = true;
+            }
             return false;
         } else if (node->IsCallable({"YqlStar", "PgStar"})) {
             if (!hasStar) {
@@ -503,7 +516,7 @@ bool ScanColumns(
             }
 
             hasColumnRef = true;
-            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, scanColumnsOnly, projectionRefsResolved);
+            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, scanColumnsOnly, projectionRefsResolved, allowProjection);
             const auto deferred = columnOrType && match.Status != ESqlColumnRefStatus::AmbiguousTable;
             auto lcase = to_lower(TString(node->Tail().Content()));
             if (const auto it = usedInUsing.find(lcase);
@@ -735,7 +748,7 @@ TMaybe<bool> ScanExprForMatchedGroup(
         return false;
     }
 
-    if (!groupingDepth || *groupingDepth == 1) {
+    if (!exprs.empty() && (!groupingDepth || *groupingDepth == 1)) {
         ui64 hash = CalculateExprHash(root, hashVisited);
         for (ui32 i = 0; i < exprs.size(); ++i) {
             if (exprs[i].Hash != hash) {
@@ -918,6 +931,119 @@ bool ReplaceProjectionRefs(
     return status != IGraphTransformer::TStatus::Error;
 }
 
+TInput BuildProjectionInput(const TProjectionOrders& projectionOrders, const THashSet<ui32>& aliases,
+    TVector<ui32>& positions, bool caseSensitive, TExprContext& ctx)
+{
+    // Alias resolution needs names before projection expressions have been type-checked.
+    TColumnOrder order;
+    TVector<const TItemExprType*> items;
+    ui32 position = 0;
+    for (ui32 index = 0; index < projectionOrders.size(); ++index) {
+        for (const auto& column : projectionOrders[index]->first) {
+            if (aliases.contains(index)) {
+                const auto name = order.AddColumn(column.LogicalName);
+                items.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TVoidExprType>()));
+                positions.push_back(position);
+            }
+            ++position;
+        }
+    }
+    return TInput{ .Alias="", .Type=ctx.MakeType<TStructExprType>(items), .Order=std::move(order),
+        .Priority=TInput::Projection, .UsedExternalColumns={}, .CaseSensitive=caseSensitive };
+}
+
+TExprNode::TPtr MakeNamedProjectionRef(const TExprNode::TPtr& node, const TInputs& inputs,
+    TArrayRef<const ui32> positions, TExprContext& ctx)
+{
+    if (!node->IsCallable("YqlColumnRef") || node->ChildrenSize() != 1) {
+        return node;
+    }
+    const auto match = ResolveSqlColumnRef(*node, inputs, {}, /*scanColumnsOnly=*/false);
+    if (match.Status == ESqlColumnRefStatus::Ambiguous) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+        return nullptr;
+    }
+    if (match.Status != ESqlColumnRefStatus::Found) {
+        return node;
+    }
+    const auto name = match.Input->Type->GetItems()[*match.Position]->GetName();
+    const auto& order = *match.Input->Order;
+    const auto column = FindIf(order, [&](const auto& item) { return item.PhysicalName == name; });
+    YQL_ENSURE(column != order.end(), "Resolved projection column is missing from its order");
+    return ctx.NewCallable(node->Pos(), "PgProjectionRef", {ctx.NewAtom(node->Pos(), ToString(positions[column - order.begin()]))});
+}
+
+bool ReplaceHavingProjectionRefs(TExprNode::TPtr& lambda, const TProjectionOrders& projectionOrders,
+    const TExprNode::TPtr& result, const TExprNode& aliasIndexes, bool caseSensitive, TExprContext& ctx)
+{
+    THashSet<ui32> aliases;
+    for (const auto& item : aliasIndexes.Children()) {
+        ui32 index;
+        if (!TryFromString(item->Content(), index) || index >= projectionOrders.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(item->Pos()), "Invalid projection index in having_projection_aliases"));
+            return false;
+        }
+        aliases.insert(index);
+    }
+    TVector<ui32> positions;
+    const TInputs inputs = {BuildProjectionInput(projectionOrders, aliases, positions, caseSensitive, ctx)};
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChecker = [](const TExprNode& node) {
+        return !node.IsCallable({"YqlAgg", "PgAgg", "YqlSubLink", "PgSubLink"});
+    };
+    auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+        return MakeNamedProjectionRef(node, inputs, positions, ctx);
+    }, ctx, settings);
+    return status != IGraphTransformer::TStatus::Error &&
+        ReplaceProjectionRefs(lambda, "HAVING", projectionOrders, result, ctx);
+}
+
+bool ValidateAggregates(const TExprNode::TPtr& root, bool allowAggregates, TStringBuf scope, TExprContext& ctx) {
+    bool valid = true;
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (!valid || node->IsCallable({"YqlSubLink", "PgSubLink"})) {
+            return false;
+        }
+        if (!node->IsCallable({"YqlAgg", "PgAgg"})) {
+            return true;
+        }
+        if (!allowAggregates) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Aggregate functions are not allowed in " << scope));
+            valid = false;
+            return false;
+        }
+        for (const auto& child : node->Children()) {
+            if (!ValidateAggregates(child, /*allowAggregates=*/false, "aggregate arguments", ctx)) {
+                valid = false;
+                break;
+            }
+        }
+        return false;
+    });
+    return valid;
+}
+
+bool ValidateGroupedColumns(const TExprNode& lambda, TExprContext& ctx, const TStructExprType* projectionType = nullptr) {
+    bool valid = true;
+    VisitExpr(lambda.TailPtr(), [&](const TExprNode::TPtr& node) {
+        if (!valid || node->IsCallable({"YqlAgg", "PgAgg", "YqlGroupRef", "PgGroupRef", "YqlSubLink", "PgSubLink"})) {
+            return false;
+        }
+        if (node->IsCallable("Member") && node->Child(0) == lambda.Head().Child(0)) {
+            if (projectionType && projectionType->FindItem(node->Tail().Content())) {
+                return false;
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Column " << node->Tail().Content() << " must appear in GROUP BY or be used in an aggregate function"));
+            valid = false;
+            return false;
+        }
+        return true;
+    });
+    return valid;
+}
+
 const TItemExprType* RenameOnOrder(TExprContext& ctx, TColumnOrder& order, const TItemExprType* item) {
     if (auto newName = order.AddColumn(TString(item->GetName())); newName != item->GetName()) {
         return ctx.MakeType<TItemExprType>(newName, item->GetItemType());
@@ -1051,8 +1177,57 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     TExtContext& ctx,
     THashMap<TString, TString> usedInUsing = {},
     bool projectionRefsResolved = false,
-    const TExprNode* windows = nullptr)
+    const TExprNode* windows = nullptr);
+
+TExprNode::TPtr RebuildAggregateColumns(
+    const TExprNode::TPtr& root, const TExprNode::TPtr& argNode, const TInputs& inputs,
+    TExtContext& ctx, const THashMap<TString, TString>& usedInUsing)
 {
+    TInputs aggregateInputs;
+    for (const auto& input : inputs) {
+        if (input.Priority != TInput::Projection) {
+            aggregateInputs.push_back(input);
+        }
+    }
+    TNodeOnNodeOwnedMap replacements;
+    bool hasError = false;
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
+            return false;
+        }
+        if (node->IsCallable({"YqlAgg", "PgAgg"})) {
+            TExprNode::TPtr rebuilt;
+            if (RebuildLambdaColumns(node, argNode, rebuilt, aggregateInputs, /*expandedColumns=*/nullptr, ctx, usedInUsing) == IGraphTransformer::TStatus::Error) {
+                hasError = true;
+            } else {
+                replacements.emplace(node.Get(), std::move(rebuilt));
+            }
+            return false;
+        }
+        return true;
+    });
+    return hasError ? nullptr : ctx.Expr.ReplaceNodes(TExprNode::TPtr(root), replacements);
+}
+
+IGraphTransformer::TStatus RebuildLambdaColumns(
+    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& argNode,
+    TExprNode::TPtr& newRoot,
+    const TInputs& inputs,
+    TExprNode::TPtr* expandedColumns,
+    TExtContext& ctx,
+    THashMap<TString, TString> usedInUsing,
+    bool projectionRefsResolved,
+    const TExprNode* windows)
+{
+    auto resolvedRoot = root;
+    if (AnyOf(inputs, [](const auto& input) { return input.Priority == TInput::Projection; })) {
+        resolvedRoot = RebuildAggregateColumns(root, argNode, inputs, ctx, usedInUsing);
+        if (!resolvedRoot) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
     bool hasExternalInput = false;
     for (const auto& i : inputs) {
         if (i.Priority == TInput::External) {
@@ -1074,7 +1249,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
         return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
-    return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+    auto status = OptimizeExpr(resolvedRoot, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
         if (node->IsCallable("YqlAgg") && node->ChildrenSize() > 2U && node->Child(2U)->IsCallable("Void")) {
             return ctx.Expr.ChangeChild(*node, 2U, TExprNode::TPtr(argNode));
         }
@@ -1302,6 +1477,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
 
         return node;
     }, ctx.Expr, optSettings);
+    return status == IGraphTransformer::TStatus::Ok && resolvedRoot != root ? IGraphTransformer::TStatus::Repeat : status;
 }
 
 IGraphTransformer::TStatus RebuildSubLinks(
@@ -1614,6 +1790,9 @@ bool ValidateSort(
     isUniversal = false;
     for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
         auto oneSort = data.Child(index);
+        if (!ValidateAggregates(oneSort->Child(1)->TailPtr(), /*allowAggregates=*/true, "ORDER BY", ctx.Expr)) {
+            return false;
+        }
 
         TNodeSet sublinks;
         ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks, isUniversal);
@@ -1719,6 +1898,15 @@ bool ValidateSort(
 
             auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
             if (!ret) {
+                return false;
+            }
+            const TStructExprType* projectionType = nullptr;
+            for (const auto& item : inputs) {
+                if (item.Priority == TInput::Projection) {
+                    projectionType = item.Type;
+                }
+            }
+            if (!ValidateGroupedColumns(*ret, ctx.Expr, projectionType)) {
                 return false;
             }
 
@@ -2725,6 +2913,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     bool scanColumnsOnly = true;
     const bool allowDuplicateColumns = isYql && HasSetting(options, "allow_duplicate_columns");
     const bool caseSensitive = isYql && !HasSetting(options, "case_insensitive_columns");
+    const auto havingProjectionAliases = isYql ? GetSetting(options, "having_projection_aliases") : nullptr;
     const TStructExprType* outputRowType;
     bool hasAggregations = false;
     TProjectionOrders projectionOrders;
@@ -2794,6 +2983,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                 }
                 else if (optionName == "allow_duplicate_columns" || optionName == "case_insensitive_columns") {
                     if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+                else if (optionName == "having_projection_aliases") {
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr) || !EnsureTupleOfAtoms(option->Tail(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
                 }
@@ -3237,6 +3431,9 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         }
 
                         for (const auto& column : data.Children()) {
+                            if (!ValidateAggregates(column->TailPtr(), /*allowAggregates=*/true, "SELECT", ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
                             bool isUniversal;
                             ScanAggregations(column->TailPtr(), hasAggregations, isUniversal);
                             if (isUniversal) {
@@ -3252,6 +3449,9 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 const auto& column = *data.Child(index);
                                 auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                                 if (!ret) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
+                                if (!ValidateGroupedColumns(*ret, ctx.Expr)) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
 
@@ -3521,10 +3721,18 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     }
 
                     if (data.Child(0)->IsCallable("Void")) {
+                        auto newLambda = data.ChildPtr(1);
+                        if (!ValidateAggregates(newLambda->TailPtr(), optionName == "having", optionName, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (optionName == "having" && havingProjectionAliases &&
+                            !ReplaceHavingProjectionRefs(newLambda, projectionOrders, result, havingProjectionAliases->Tail(), caseSensitive, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
                         // no effective type yet, scan lambda body
                         bool isUniversal;
                         TNodeSet sublinks;
-                        ScanSublinks(data.Child(1)->TailPtr(), sublinks, isUniversal);
+                        ScanSublinks(newLambda->TailPtr(), sublinks, isUniversal);
                         if (isUniversal) {
                             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                             return IGraphTransformer::TStatus::Ok;
@@ -3533,7 +3741,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         bool hasColumnRef = false;
                         THashSet<TString> refs;
                         THashMap<TString, THashSet<TString>> qualifiedRefs;
-                        if (!ScanColumns(data.Child(1)->TailPtr(), joinInputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
+                        if (!ScanColumns(newLambda->TailPtr(), joinInputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
                             refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -3554,7 +3762,6 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             }
 
                             auto typeNode = ExpandType(data.Pos(), *effectiveType, ctx.Expr);
-                            auto newLambda = data.ChildPtr(1);
                             bool hasChanges = false;
                             auto newChildren = data.ChildrenList();
 
@@ -3617,6 +3824,9 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     if (!scanColumnsOnly && optionName == "having" && groupExprs) {
                         auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                         if (!ret) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!ValidateGroupedColumns(*ret, ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -4634,6 +4844,12 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    if (!GetSetting(options, "group_exprs")) {
+        if (auto sort = GetSetting(options, "sort"); sort && !ValidateAggregates(sort->TailPtr(), /*allowAggregates=*/false, "ORDER BY of a non-aggregate query", ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
     input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputRowType));
     return IGraphTransformer::TStatus::Ok;
 }
@@ -4684,7 +4900,7 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     }
 
     if (isYql) {
-        output = ctx.Expr.NewCallable(input->Pos(), "AsListStrict", std::move(input->ChildrenList()));
+        output = ctx.Expr.NewCallable(input->Pos(), "AsList", std::move(input->ChildrenList()));
         return IGraphTransformer::TStatus::Repeat;
     }
 

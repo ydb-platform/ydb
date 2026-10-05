@@ -124,11 +124,11 @@ For operations where both [access control lists](../concepts/glossary.md#access-
 
 ### Access level hierarchy
 
-Access level lists form a hierarchy used in [Embedded UI](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions (ordered from least to most privileges):
+Access level lists form a hierarchy used in [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions (ordered from least to most privileges):
 
 - `database_allowed_sids` (`Database`) - access to operations in the context of a specific database.
 - `viewer_allowed_sids` (`Viewer`) - access to viewing cluster-wide state.
-- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in Embedded UI.
+- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in {{ ydb-ui-name }}.
 - `administration_allowed_sids` (`Administration`) - administrative actions on the cluster and databases.
 
 A higher level automatically includes all lower ones, so a subject only needs to be present in one list. For example, being in `administration_allowed_sids` automatically grants privileges `monitoring`, `viewer`, and `database`.
@@ -143,9 +143,9 @@ Additionally, there are two separate access level lists for specific operations:
 
 Access level lists are configured in the [security configuration](../reference/configuration/security_config.md#security-access-levels) and define privileges for:
 
-- **Database** (included in `database_allowed_sids`) — access only in the context of a specific database. You can open Embedded UI and work with the data of this database, but you cannot run cluster-wide queries (for example, view the list of cluster nodes). Queries without specifying a database are prohibited.
-- **Viewer** (included in `viewer_allowed_sids`) — read-only access to the cluster-wide state: you can view [Embedded UI](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostic information, but you cannot run actions that change the system state.
-- **Monitoring** (included in `monitoring_allowed_sids`) — access to operational actions in Embedded UI, including actions that can change the system state. For example, starting a backup, restoring a database, or running YQL queries through Embedded UI.
+- **Database** (included in `database_allowed_sids`) — access only in the context of a specific database. You can open {{ ydb-ui-name }} and work with the data of this database, but you cannot run cluster-wide queries (for example, view the list of cluster nodes). Queries without specifying a database are prohibited.
+- **Viewer** (included in `viewer_allowed_sids`) — read-only access to the cluster-wide state: you can view [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostic information, but you cannot run actions that change the system state.
+- **Monitoring** (included in `monitoring_allowed_sids`) — access to operational actions in {{ ydb-ui-name }}, including actions that can change the system state. For example, starting a backup, restoring a database, or running YQL queries through {{ ydb-ui-name }}.
 - **Administration** (included in `administration_allowed_sids`) — grants the right to perform administrative actions on databases or the cluster. Full administrative access to the cluster and its databases. Also used for changing configuration, schema operations that require administrative rights, and other administrative checks.
 - **Register node** (included in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for registering dynamic nodes in the cluster. It does not automatically grant `database`/`viewer`/`monitoring`/`administration` rights. For technical reasons, if the list is specified (not empty), it must include `root@builtin`.
 - **Bootstrap** (included in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster initialization operations. Used in an uninitialized state when the authentication subsystem is not yet functioning. Initialization is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`, while `bootstrap` itself does not grant full administrative privileges.

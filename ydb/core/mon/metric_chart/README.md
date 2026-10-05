@@ -125,26 +125,20 @@ Pointer positions use the Canvas plot overlay and Yagr's coordinate conversion.
 Layout width is measured before replacing content, to avoid measuring the
 temporary disappearance of a page scrollbar during redraw.
 
-### Updating the bundled engine
+### Bundled engine
 
-`vendor/entry.js` mounts ChartKit with its Yagr plugin behind the plain JavaScript
-chart API. It retains our exact-value tooltip, legend, cursor groups and range
-selection. ChartKit assets are lazy-loaded on the first nonempty chart.
+The prebuilt `chartkit.js` and `chartkit.css` resources contain ChartKit with
+its Yagr plugin, React and styles. The JavaScript bundle exports `mountChartKit`
+behind the plain JavaScript embedding API. The adapter retains exact-value
+tooltips, legends, cursor groups and range selection. ChartKit assets are
+lazy-loaded on the first nonempty chart.
+
 The adapter aligns independent histories to one timeline, retaining both sides
 of on-change transitions and null gaps. Stacked areas use explicit Canvas bands
-so positive and negative layers remain separate; tooltip and statistics still
-read original samples. The existing client limits apply before alignment.
+so positive and negative layers remain separate; tooltips and statistics read
+original samples. The existing client limits apply before alignment.
 
-To regenerate the checked-in resources:
-
-```bash
-cd ydb/core/mon/metric_chart/vendor
-npm ci
-npm run build
-node --test ../tests/chart_data.test.mjs
-```
-
-Commit `chartkit.js`, `chartkit.css`, their `.LEGAL.txt` notices and
-`vendor/THIRD_PARTY_LICENSES.txt` together with the entry, build script and lockfile.
-The C++ build embeds these assets directly and does not invoke npm or require
-network access to build the bundle.
+Build sources, package manifests and lockfiles for this bundle are not kept in
+this repository. When replacing the prebuilt resources, update
+`chartkit.js.LEGAL.txt` and `THIRD_PARTY_LICENSES.txt` to match the included
+libraries. The C++ build embeds these assets directly without invoking npm.

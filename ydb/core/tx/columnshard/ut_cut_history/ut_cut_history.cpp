@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         auto manager = std::dynamic_pointer_cast<NOlap::TBlobManager>(storage->GetBlobsTracker());
         UNIT_ASSERT(manager);
         f.Drive();
-        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!storage->HasUnfinishedGC());
         UNIT_ASSERT(!NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to));
         f.Controller->DisableBackground(EBackground::GC);
         const auto& index = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         }
         UNIT_ASSERT(oldBlobQueued);
         UNIT_ASSERT(NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to));
-        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!storage->HasUnfinishedGC());
         UNIT_ASSERT(shard->GetSharingSessionsManager()->CanCutHistory());
         UNIT_ASSERT(!storage->GetSharedBlobs()->HasBlobsInRange(FirstDataChannel, 0, to));
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
@@ -409,11 +409,11 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to));
         f.Controller->EnableBackground(EBackground::GC);
         for (ui32 i = 0; i < 60 && (NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to) ||
-                                       storage->HasGCInFlight());
+                                       storage->HasUnfinishedGC());
              ++i) {
             f.Drive(1);
         }
-        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!storage->HasUnfinishedGC());
         UNIT_ASSERT(!NOlap::HasPendingGCBlobsInRange(manager->GetPendingGCBlobGenerations(), FirstDataChannel, 0, to));
         holdScan = false;
         f.Runtime.Send(continuation.Release(), 0, true);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "GC drained before the scan finishes must not require another reboot");
     }
 
-    Y_UNIT_TEST(ScanFinishedDuringGCResumesAfterGC) {
+    Y_UNIT_TEST_TWIN(ScanFinishedDuringGC, abortGC) {
         TFixture f;
         f.Schema();
         f.Restart(NewGroup);
@@ -445,12 +445,17 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!gcResults.empty());
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        if (abortGC) {
+            const auto storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
+            storage->Stop();
+            UNIT_ASSERT(storage->HasUnfinishedGC());
+        }
         holdGC = false;
         for (auto& result : gcResults) {
             f.Runtime.Send(result.Release(), 0, true);
         }
         f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, abortGC ? 0u : 1u);
     }
 
     Y_UNIT_TEST(JournalCommitDoesNotWaitForUnrelatedGC) {
@@ -495,12 +500,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
         f.Controller->EnableBackground(EBackground::GC);
         f.Drive();
-        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasGCInFlight());
+        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasUnfinishedGC());
         f.Runtime.Send(commit.Release(), 0, true);
         f.Drive();
         UNIT_ASSERT(!gcResults.empty());
         UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "GroupID: " + ToString(OldGroup));
-        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasGCInFlight());
+        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasUnfinishedGC());
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
         UNIT_ASSERT_VALUES_EQUAL(cuttable->Val(), 1u);
         holdGC = false;

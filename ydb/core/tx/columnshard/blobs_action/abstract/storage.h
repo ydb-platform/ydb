@@ -151,8 +151,8 @@ public:
         return result;
     }
 
-    bool HasGCInFlight() const {
-        return CurrentGCAction && CurrentGCAction->IsInProgress();
+    bool HasUnfinishedGC() const {
+        return CurrentGCAction && !CurrentGCAction->IsCleanupFinished();
     }
 
     void StartGC(const std::shared_ptr<IBlobsGCAction>& action) {

@@ -309,7 +309,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
     AFL_VERIFY(storage);
-    EmptyHistoryIntervalsScan->WaitingForGC = storage->HasGCInFlight();
+    EmptyHistoryIntervalsScan->WaitingForGC = storage->HasUnfinishedGC();
     if (EmptyHistoryIntervalsScan->WaitingForGC) {
         return;
     }

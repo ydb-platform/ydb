@@ -44,8 +44,8 @@ public:
     }
 
     bool CanCutHistory(const TPendingGCBlobGenerations& generations, const ui32 channel, const ui32 from, const ui32 to) const {
-        // BuildGCTask moves blobs out of BlobsToKeep/BlobsToDelete before GC completes, so empty queues alone do not permit cutting history.
-        return !HasGCInFlight() && !HasPendingGCBlobsInRange(generations, channel, from, to) &&
+        // GC owns blobs removed from the queues until cleanup commits; abort does not complete cleanup.
+        return !HasUnfinishedGC() && !HasPendingGCBlobsInRange(generations, channel, from, to) &&
                !GetSharedBlobs()->HasBlobsInRange(channel, from, to);
     }
 

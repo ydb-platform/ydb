@@ -2,18 +2,18 @@
 
 The resource broker is an [actor service](../../concepts/glossary.md#actor-service) that controls resource consumption on {{ ydb-short-name }} [nodes](../../concepts/glossary.md#node), such as:
 
-- `CPU` — number of threads
+- ``CPU`` — number of threads
 - `Memory` — RAM
 
 Different types of activities (background operations, [TTL](../../concepts/ttl.md) data deletion, etc.) run in different resource broker *queues*. Each queue has a limited number of resources:
 
-| Queue name                | CPU | Memory | Description                                         |
+| Queue name                | `CPU` | Memory | Description                                         |
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | [TTL](../../concepts/ttl.md) data deletion operations.                |
 | `queue_backup`            | 2 | — | [Backup](../../devops/backup-and-recovery/index.md#s3) operations.                |
 | `queue_restore`           | 10 | — | [Restore from backup](../../devops/backup-and-recovery/index.md#s3) operations.     |
 | `queue_build_index`       | 10 | — | [Online secondary index creation](../../concepts/query_execution/secondary_indexes.md#index-add) operations.   |
-| `queue_cdc_initial_scan` | 2 | — | [Initial table scan](../../concepts/cdc.md#initial-scan) operations.             |
+| `queue_cdc_initial_scan` | 2 | — | [Initial table scan](../../concepts/cdc.md#initial-scan).             |
 
 {% note info %}
 
@@ -26,7 +26,7 @@ Example of extending the resource broker configuration with a custom limit for t
 ```yaml
 resource_broker_config: !inherit
   queues: !append
-  - name: queue_ttl
+  - name: `queue_ttl`
     limit:
       cpu: 4
 ```

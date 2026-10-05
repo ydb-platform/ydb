@@ -197,6 +197,14 @@ bool IsJsonInteger(const NJson::TJsonValue& value) {
     return value.IsInteger() || value.IsUInteger();
 }
 
+// GetStringRobust turns a missing field into "null", so only real strings count.
+TString JsonString(const NJson::TJsonValue& json, const char* name) {
+    if (!json.IsMap() || !json.Has(name) || !json[name].IsString()) {
+        return {};
+    }
+    return json[name].GetString();
+}
+
 i64 JsonInteger(const NJson::TJsonValue& value) {
     return value.IsInteger() ? value.GetInteger() : static_cast<i64>(value.GetUInteger());
 }
@@ -760,18 +768,16 @@ private:
     }
 
     void ValidateFullBackup(const TString& root, const TString& metadataKey, const TString& metadataText, const NJson::TJsonValue& json) {
-        if (json.Has("checksum")) {
-            const TString algo = json["checksum"].GetStringRobust();
-            if (algo != "sha256") {
-                Error(metadataKey, TStringBuilder() << "unsupported checksum algorithm \"" << algo << "\"");
-            }
+        const TString checksumAlgo = JsonString(json, "checksum");
+        if (json.Has("checksum") && checksumAlgo != "sha256") {
+            Error(metadataKey, TStringBuilder() << "unsupported checksum algorithm \"" << checksumAlgo << "\"");
         }
-        if (json["encryption"].GetStringRobust()) {
+        if (JsonString(json, "encryption")) {
             RejectEncrypted(metadataKey);
         }
-        const bool checksums = json["checksum"].GetStringRobust() == "sha256";
+        const bool checksums = checksumAlgo == "sha256";
         VerifyChecksum(metadataKey, metadataText, checksums);
-        const bool compressed = !json["compression"].GetStringRobust().empty();
+        const bool compressed = !JsonString(json, "compression").empty();
         const TMaybe<bool> expectCompressed = compressed;
 
         const TString mappingMetaKey = JoinKey(root, "SchemaMapping/metadata.json");
